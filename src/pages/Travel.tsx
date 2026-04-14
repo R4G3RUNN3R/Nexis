@@ -11,13 +11,12 @@ import { askCiel } from "../lib/ciel-system";
 import mapImage from "../assets/maps/nexis-world-map.png";
 import "../styles/world-map-ui.css";
 
-// City art — keyed by worldMapData city id
 const CITY_IMAGES: Record<string, string> = {
-  nexis:  "/images/cities/city_nexis.png",
-  north:  "/images/cities/city_aethermoor.png",   // Silverbough Arcane Enclave
-  east:   "/images/cities/city_torvhal.png",      // Akai Tetsu War Dojo
-  west:   "/images/cities/city_westmarch.png",    // Blackharbor Shadow Port
-  south:  "/images/cities/city_embervale.png",    // Spiritwood Sacred Isle
+  nexis: "/images/cities/city_nexis.png",
+  north: "/images/cities/city_aethermoor.png",
+  east: "/images/cities/city_torvhal.png",
+  west: "/images/cities/city_westmarch.png",
+  south: "/images/cities/city_embervale.png",
 };
 
 function getPinClass(region: WorldCity["region"]) {
@@ -44,17 +43,14 @@ export default function TravelPage() {
   );
 
   const selectedRoutes = useMemo(
-    () =>
-      worldRoutes.filter(
-        (route) => route.from === selectedCity.id || route.to === selectedCity.id
-      ),
+    () => worldRoutes.filter((route) => route.from === selectedCity.id || route.to === selectedCity.id),
     [selectedCity]
   );
 
   return (
     <AppShell
       title="Travel"
-      hint="Large world map, clear destination card, minimal clutter. CIEL handles the deeper explanation."
+      hint="Large world map, clear destination card, minimal clutter. CIEL remains available through the global bubble and destination interactions."
     >
       <div className="travel-layout">
         <section className="travel-panel travel-panel--map">
@@ -139,13 +135,6 @@ export default function TravelPage() {
             </div>
 
             <div className="travel-actions">
-              <button
-                type="button"
-                className="travel-action-button"
-                onClick={() => askCiel("travel_destination", selectedCity)}
-              >
-                Ask CIEL
-              </button>
               <button
                 type="button"
                 className="travel-action-button travel-action-button--primary"
