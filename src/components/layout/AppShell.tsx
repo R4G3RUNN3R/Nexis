@@ -13,21 +13,21 @@ type AppShellProps = {
 };
 
 const core: Array<[string, string]> = [
-  ["Home",      "/home"],
+  ["Home", "/home"],
   ["Inventory", "/inventory"],
   ["Education", "/education"],
-  ["Jobs",      "/jobs"],
-  ["Arena",     "/arena"],
-  ["Travel",    "/travel"],
-  ["Housing",   "/housing"],
+  ["Adventure", "/adventure"],
+  ["Arena", "/arena"],
+  ["Travel", "/travel"],
+  ["Housing", "/housing"],
 ];
 
 const world: Array<[string, string]> = [
-  ["City",                "/city"],
-  ["City Board",          "/city-board"],
-  ["Hospital",            "/hospital"],
-  ["Guilds / Consortiums","/guild"],
-  ["Life Paths",          "/life-paths"],
+  ["City", "/city"],
+  ["City Board", "/city-board"],
+  ["Civic Jobs", "/civic-jobs"],
+  ["Hospital", "/hospital"],
+  ["Guilds / Consortiums", "/guild"],
 ];
 
 function SidebarSection({
@@ -61,7 +61,6 @@ function SidebarSection({
   );
 }
 
-/** Format gold with comma separators and "gp" suffix */
 function formatGold(amount: number): string {
   return amount.toLocaleString("en-US") + " gp";
 }
@@ -82,7 +81,6 @@ export function AppShell({ title, hint, children }: AppShellProps) {
     navigate("/login", { replace: true });
   }
 
-  // Condition display
   let conditionLabel = "Normal";
   let conditionClass = "player-condition";
   if (isHospitalized) {
@@ -103,13 +101,11 @@ export function AppShell({ title, hint, children }: AppShellProps) {
       <TopBar />
       <div className="app-main">
         <aside className="sidebar">
-          {/* ── Logo ─────────────────────────────────────────────── */}
           <div className="sidebar-logo">
             <div className="sidebar-logo__title">Nexis</div>
             <div className="sidebar-logo__subtitle">Online realm of adventure</div>
           </div>
 
-          {/* ── Player Info Card ──────────────────────────────────── */}
           <div className="player-card">
             <div className="player-card__name">
               <span className="player-card__username">{displayNameWithPublicId}</span>
@@ -131,7 +127,6 @@ export function AppShell({ title, hint, children }: AppShellProps) {
                 <span className="player-card__key">Days</span>
                 <span className="player-card__val">{player.daysPlayed}</span>
               </div>
-              {/* ── Gold display ────────────────────────────────── */}
               <div className="player-card__row player-card__row--gold">
                 <span className="player-card__key">Gold</span>
                 <span className="player-card__val player-card__val--gold">
@@ -143,14 +138,11 @@ export function AppShell({ title, hint, children }: AppShellProps) {
             <div className={conditionClass}>{conditionLabel}</div>
           </div>
 
-          {/* ── Stat Bars ─────────────────────────────────────────── */}
           <StatBars />
 
-          {/* ── Navigation ───────────────────────────────────────── */}
           <SidebarSection title="Core" links={core} />
           <SidebarSection title="World" links={world} />
 
-          {/* ── Logout ──────────────────────────────────────────── */}
           <div className="sidebar-logout">
             <button
               type="button"

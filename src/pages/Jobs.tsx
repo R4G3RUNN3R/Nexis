@@ -16,15 +16,11 @@ import {
 import { jobCategories, type JobCategory, type SubJob } from "../data/jobsData";
 import "../styles/jobs.css";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type OutcomeEntry = {
   subJobId: string;
   result: JobOutcomeResult;
   timestamp: number;
 };
-
-// ─── Outcome Panel ────────────────────────────────────────────────────────────
 
 function OutcomePanel({
   entry,
@@ -85,8 +81,7 @@ function OutcomePanel({
               <div className="jobs-outcome__row">
                 <span className="jobs-outcome__row-label">Chain streak</span>
                 <span className="jobs-outcome__row-value jobs-outcome__row-value--chain">
-                  ×{result.chainCount} —{" "}
-                  {Math.min(150, Math.round((1 + result.chainCount * 0.02) * 100))}% gold
+                  ×{result.chainCount} — {Math.min(150, Math.round((1 + result.chainCount * 0.02) * 100))}% gold
                 </span>
               </div>
             )}
@@ -140,9 +135,6 @@ function OutcomePanel({
   );
 }
 
-// ─── Category XP Bar ─────────────────────────────────────────────────────────
-// Shown in the category header — the ONE bar for the entire category.
-
 function CategoryXpBar({ progress }: { progress: CategoryProgress }) {
   const isMax = progress.level >= 100;
   const pct = isMax
@@ -167,9 +159,6 @@ function CategoryXpBar({ progress }: { progress: CategoryProgress }) {
   );
 }
 
-// ─── Sub-job Card ─────────────────────────────────────────────────────────────
-// Clean — stats + Attempt button only. No XP bar here.
-
 function SubJobCard({
   categoryId,
   subJob,
@@ -193,7 +182,7 @@ function SubJobCard({
   const successRate = computeSuccessRate(
     subJob.baseFailChance,
     subJob.baseCritFailChance,
-    categoryLevel,  // ← use category level for success rate
+    categoryLevel,
   );
 
   const blocked =
@@ -213,7 +202,6 @@ function SubJobCard({
         </div>
 
         <div className="jobs-subjob-card__right">
-          {/* Attempt button — no level badge here */}
           <button
             type="button"
             className="jobs-attempt-btn"
@@ -225,18 +213,15 @@ function SubJobCard({
         </div>
       </div>
 
-      {/* Stats row */}
       <div className="jobs-subjob-card__stats">
         <span className="jobs-stat-chip jobs-stat-chip--stamina">
-          <span className="jobs-stat-chip__label">Stamina:</span>{" "}
-          {subJob.staminaCost}
+          <span className="jobs-stat-chip__label">Stamina:</span> {subJob.staminaCost}
         </span>
         <span className="jobs-stat-chip jobs-stat-chip--success">
           <span className="jobs-stat-chip__label">Success:</span> {successRate}%
         </span>
         <span className="jobs-stat-chip jobs-stat-chip--gold">
-          <span className="jobs-stat-chip__label">Gold:</span>{" "}
-          {subJob.baseGoldMin}–{subJob.baseGoldMax}
+          <span className="jobs-stat-chip__label">Gold:</span> {subJob.baseGoldMin}–{subJob.baseGoldMax}
         </span>
         {hasDrops && (
           <span className="jobs-stat-chip jobs-stat-chip--drops">
@@ -250,7 +235,6 @@ function SubJobCard({
         )}
       </div>
 
-      {/* Outcome panel */}
       {outcome && (
         <OutcomePanel
           entry={outcome}
@@ -260,8 +244,6 @@ function SubJobCard({
     </div>
   );
 }
-
-// ─── Category Sidebar Card ────────────────────────────────────────────────────
 
 function CategoryCard({
   category,
@@ -295,8 +277,6 @@ function CategoryCard({
     </button>
   );
 }
-
-// ─── Jobs Page ────────────────────────────────────────────────────────────────
 
 export default function JobsPage() {
   const jobs = useJobs();
@@ -360,9 +340,11 @@ export default function JobsPage() {
   }, []);
 
   return (
-    <AppShell title="Jobs">
+    <AppShell
+      title="Adventure"
+      hint="Contracts, expeditions, and active field work. Civic employment now lives in Civic Jobs."
+    >
       <div className="jobs-page">
-        {/* Status banners */}
         {isHospitalized && (
           <div className="jobs-status-banner">
             <span className="jobs-status-banner__icon">🏥</span>
@@ -392,7 +374,6 @@ export default function JobsPage() {
         )}
 
         <div className="jobs-body">
-          {/* ── Left: Category list ── */}
           <div className="jobs-categories">
             {jobCategories.map((cat) => (
               <CategoryCard
@@ -404,11 +385,9 @@ export default function JobsPage() {
             ))}
           </div>
 
-          {/* ── Right: Category detail + sub-job list ── */}
           <div className="jobs-main">
             {selectedCategory && (
               <>
-                {/* Category header with XP bar */}
                 <div className="jobs-category-header">
                   <div className="jobs-category-header__top">
                     <span className="jobs-category-header__icon">
@@ -427,11 +406,9 @@ export default function JobsPage() {
                     )}
                   </div>
 
-                  {/* THE shared XP bar for this category */}
                   <CategoryXpBar progress={categoryProgress} />
                 </div>
 
-                {/* Sub-job cards */}
                 <div className="jobs-list">
                   {selectedCategory.subJobs.map((subJob) => (
                     <SubJobCard

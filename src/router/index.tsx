@@ -24,6 +24,7 @@ import TavernPage from "../pages/Tavern";
 import CityPage from "../pages/City";
 import InventoryPage from "../pages/Inventory";
 import ArenaPage from "../pages/Arena";
+import CivicJobsV2Page from "../pages/CivicJobsV2";
 
 function OwnProfileRedirect() {
   const { player } = usePlayer();
@@ -52,7 +53,9 @@ export default function AppRouter() {
       <Route path="/tavern" element={<TavernPage />} />
 
       <Route path="/education" element={<RouteGuard><EducationPage /></RouteGuard>} />
-      <Route path="/jobs" element={<RouteGuard><JobsPage /></RouteGuard>} />
+      <Route path="/adventure" element={<RouteGuard><JobsPage /></RouteGuard>} />
+      <Route path="/jobs" element={<Navigate to="/adventure" replace />} />
+      <Route path="/civic-jobs" element={<RouteGuard><CivicJobsV2Page /></RouteGuard>} />
       <Route path="/arena" element={<RouteGuard><ArenaPage /></RouteGuard>} />
       <Route path="/travel" element={<RouteGuard><TravelPage /></RouteGuard>} />
       <Route path="/city" element={<RouteGuard><CityPage /></RouteGuard>} />

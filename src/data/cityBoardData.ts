@@ -24,7 +24,7 @@ export const CITY_BOARD_LISTINGS: CityBoardListing[] = [
     summary: "Steady civic work for recruits willing to patrol, report, and survive the public.",
     rewardLabel: "Daily wages + job points",
     requirementLabel: "Basic combat aptitude",
-    route: "/jobs",
+    route: "/civic-jobs",
   },
   {
     id: "job_medical_hiring",
@@ -33,7 +33,7 @@ export const CITY_BOARD_LISTINGS: CityBoardListing[] = [
     summary: "Support the hospital, tend the injured, and learn to tolerate blood professionally.",
     rewardLabel: "Daily wages + recovery bonuses",
     requirementLabel: "Basic literacy or medical knowledge",
-    route: "/jobs",
+    route: "/civic-jobs",
   },
   {
     id: "notice_market_rules",

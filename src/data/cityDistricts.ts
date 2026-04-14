@@ -79,6 +79,12 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
         description: "The Nexis public board for jobs, notices, and opportunities.",
       },
       {
+        id: "civic_jobs",
+        name: "Civic Jobs",
+        route: "/civic-jobs",
+        description: "Structured civic employment with ranks, requirements, and daily gains.",
+      },
+      {
         id: "hospital",
         name: "Hospital",
         route: "/hospital",
@@ -102,7 +108,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
       {
         id: "adventure_board",
         name: "Adventure",
-        route: "/jobs",
+        route: "/adventure",
         description: "Contracts, expeditions, and active adventure content.",
       },
       {
