@@ -9,6 +9,7 @@ import { AppShell } from "../components/layout/AppShell";
 import { usePlayer } from "../state/PlayerContext";
 import { getPropertyById } from "../data/propertyData";
 import { formatPlayerNameWithPublicId, formatPlayerPublicId, getProfileRoute, parsePlayerPublicId } from "../lib/publicIds";
+import { formatTravelDuration, getCityName, getTravelProgress, resolveTravelState } from "../lib/travelState";
 import "../styles/character-profile.css";
 
 type PanelSectionProps = {
@@ -54,13 +55,16 @@ export default function ProfilePage() {
   const { player } = usePlayer();
   const { publicId: publicIdParam } = useParams();
 
-  const displayName = player.lastName
-    ? `${player.name} ${player.lastName}`
-    : player.name || "Unknown";
+  const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
   const displayNameWithPublicId = formatPlayerNameWithPublicId(displayName, player.publicId);
   const profileRoute = getProfileRoute(player.publicId);
   const requestedPublicId = parsePlayerPublicId(publicIdParam);
   const isCurrentCitizenRoute = publicIdParam === undefined || requestedPublicId === player.publicId;
+  const travelState = resolveTravelState(player.internalId);
+  const travelProgress = getTravelProgress(travelState, Date.now());
+  const travelStatus = travelProgress.active
+    ? `${getCityName(travelState.originCityId)} → ${getCityName(travelState.destinationCityId)} • ${formatTravelDuration(travelProgress.remainingMs)}`
+    : getCityName(travelState.currentCityId);
 
   const property = getPropertyById(player.property.current);
   const propertyName = property?.name ?? "None";
@@ -192,22 +196,10 @@ export default function ProfilePage() {
 
             <PanelSection title="Current Status">
               <div className="stat-table">
-                <StatRow
-                  label="Education"
-                  value={player.current.education?.name ?? "None"}
-                />
-                <StatRow
-                  label="Adventure"
-                  value={player.current.job ?? "No active contract"}
-                />
-                <StatRow
-                  label="Civic Jobs"
-                  value="Open Civic Jobs board"
-                />
-                <StatRow
-                  label="Traveling"
-                  value={player.current.travel ?? "No"}
-                />
+                <StatRow label="Education" value={player.current.education?.name ?? "None"} />
+                <StatRow label="Adventure" value={player.current.job ?? "No active contract"} />
+                <StatRow label="Civic Jobs" value="Open Civic Jobs board" />
+                <StatRow label="Travel" value={travelStatus} />
               </div>
             </PanelSection>
 

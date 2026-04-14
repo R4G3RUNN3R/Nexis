@@ -3,6 +3,7 @@ import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { usePlayer } from "../state/PlayerContext";
 import { formatPlayerNameWithPublicId } from "../lib/publicIds";
+import { formatTravelDuration, getCityName, getTravelProgress, resolveTravelState } from "../lib/travelState";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -29,15 +30,18 @@ function QuickLinkRow({ label, to }: { label: string; to: string }) {
 export default function HomePage() {
   const { player, isHospitalized, hospitalRemainingLabel } = usePlayer();
   const currentEducation = player.current.education;
-  const displayName = player.lastName
-    ? `${player.name} ${player.lastName}`
-    : player.name || "Unknown";
+  const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
   const displayNameWithPublicId = formatPlayerNameWithPublicId(displayName, player.publicId);
+  const travelState = resolveTravelState(player.internalId);
+  const travelProgress = getTravelProgress(travelState, Date.now());
+  const travelStatus = travelProgress.active
+    ? `${getCityName(travelState.originCityId)} → ${getCityName(travelState.destinationCityId)} • ${formatTravelDuration(travelProgress.remainingMs)}`
+    : getCityName(travelState.currentCityId);
 
   return (
     <AppShell
       title="Home"
-      hint="Control panel. Civic employment now sits separately from adventure work, because structure is better than chaos pretending to be design."
+      hint="Control panel. Civic employment now sits separately from adventure work, and travel reflects real in-transit state instead of decorative nonsense."
     >
       <div className="nexis-grid">
         <div className="nexis-column">
@@ -73,13 +77,10 @@ export default function HomePage() {
           <ContentPanel title="Current Activity">
             <div className="info-list">
               <Row label="Education" value={currentEducation ? currentEducation.name : "None"} />
-              <Row label="Travel" value={player.current.travel ?? "None"} />
+              <Row label="Travel" value={travelStatus} />
               <Row label="Adventure" value={player.current.job ?? "No active contract"} />
               <Row label="Civic Jobs" value="Open Civic Jobs board" />
-              <Row
-                label="Recovery"
-                value={isHospitalized ? `Hospitalized • ${hospitalRemainingLabel}` : "Normal"}
-              />
+              <Row label="Recovery" value={isHospitalized ? `Hospitalized • ${hospitalRemainingLabel}` : "Normal"} />
             </div>
           </ContentPanel>
 
@@ -116,10 +117,7 @@ export default function HomePage() {
             <div className="info-list">
               <Row label="State" value={isHospitalized ? "Hospitalized" : "Healthy"} />
               <Row label="Remaining" value={isHospitalized ? hospitalRemainingLabel : "0m 0s"} />
-              <Row
-                label="Education"
-                value={currentEducation ? "Continues while hospitalized" : "No active course"}
-              />
+              <Row label="Education" value={currentEducation ? "Continues while hospitalized" : "No active course"} />
             </div>
           </ContentPanel>
         </div>
