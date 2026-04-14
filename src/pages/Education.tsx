@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
-import { askCiel } from "../lib/ciel-system";
 import {
   educationCategories,
   educationCourseMap,
@@ -14,17 +13,6 @@ import {
 } from "../state/EducationContext";
 import "../styles/education-ui.css";
 
-// ─── Learn Button ─────────────────────────────────────────────────────────────
-
-/**
- * Renders the appropriate action area for a course based on its state:
- *
- * - Completed        → green "Completed ✓" badge
- * - This course active → countdown "Learning... HH:MM:SS remaining" + Cancel
- * - Different course active → disabled "Learn" with tooltip
- * - Locked (prereqs) → disabled "Learn" with tooltip listing requirements
- * - Available        → enabled "Learn" button
- */
 function CourseLearnArea({
   courseId,
   categoryId,
@@ -34,21 +22,14 @@ function CourseLearnArea({
 }) {
   const education = useEducation();
   const course = educationCourseMap[courseId];
-
-  // Live countdown state (ticked by a 1-second interval when this course is active)
-  const [remainingMs, setRemainingMs] = useState<number>(() =>
-    education.getRemainingMs(),
-  );
+  const [remainingMs, setRemainingMs] = useState<number>(() => education.getRemainingMs());
   const intervalRef = useRef<number | null>(null);
 
-  const isThisCourseActive =
-    education.activeCourse?.courseId === courseId;
-  const isAnotherCourseActive =
-    !!education.activeCourse && !isThisCourseActive;
+  const isThisCourseActive = education.activeCourse?.courseId === courseId;
+  const isAnotherCourseActive = !!education.activeCourse && !isThisCourseActive;
   const isCompleted = education.isCourseCompleted(courseId);
   const isLocked = !isCompleted && education.isCourseLocked(course);
 
-  // Run countdown interval only while this course is active
   useEffect(() => {
     if (!isThisCourseActive) {
       if (intervalRef.current !== null) {
@@ -58,7 +39,6 @@ function CourseLearnArea({
       return;
     }
 
-    // Initial sync
     setRemainingMs(education.getRemainingMs());
 
     intervalRef.current = window.setInterval(() => {
@@ -72,10 +52,8 @@ function CourseLearnArea({
         intervalRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isThisCourseActive]);
+  }, [education, isThisCourseActive]);
 
-  // ── Completed ──────────────────────────────────────────────────────────────
   if (isCompleted) {
     return (
       <div className="edu-action-area">
@@ -86,7 +64,6 @@ function CourseLearnArea({
     );
   }
 
-  // ── This course is active: show countdown + cancel ─────────────────────────
   if (isThisCourseActive) {
     return (
       <div className="edu-action-area">
@@ -104,11 +81,8 @@ function CourseLearnArea({
     );
   }
 
-  // ── Another course is active: disabled with tooltip ────────────────────────
   if (isAnotherCourseActive) {
-    const activeName =
-      educationCourseMap[education.activeCourse!.courseId]?.name ??
-      "another course";
+    const activeName = educationCourseMap[education.activeCourse!.courseId]?.name ?? "another course";
     return (
       <div className="edu-action-area">
         <button
@@ -126,7 +100,6 @@ function CourseLearnArea({
     );
   }
 
-  // ── Locked (unmet prerequisites) ───────────────────────────────────────────
   if (isLocked) {
     const prereqNames = (course.prerequisites ?? [])
       .filter((id) => !education.isCourseCompleted(id))
@@ -150,7 +123,6 @@ function CourseLearnArea({
     );
   }
 
-  // ── Available: start the course ────────────────────────────────────────────
   return (
     <div className="edu-action-area">
       <button
@@ -159,7 +131,6 @@ function CourseLearnArea({
         onClick={() => {
           const result = education.startCourse(categoryId, courseId);
           if (!result.ok) {
-            // Could show a toast; for now log
             console.warn("[Education] startCourse failed:", result.message);
           }
         }}
@@ -170,29 +141,17 @@ function CourseLearnArea({
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 export default function Education() {
   const education = useEducation();
-  const [selectedCategoryId, setSelectedCategoryId] = useState(
-    educationCategories[0]?.id ?? "",
-  );
-  const selectedCategory =
-    educationCategories.find((c) => c.id === selectedCategoryId) ??
-    educationCategories[0];
-
-  const [selectedCourseId, setSelectedCourseId] = useState(
-    selectedCategory?.courses[0]?.id ?? "",
-  );
+  const [selectedCategoryId, setSelectedCategoryId] = useState(educationCategories[0]?.id ?? "");
+  const selectedCategory = educationCategories.find((c) => c.id === selectedCategoryId) ?? educationCategories[0];
+  const [selectedCourseId, setSelectedCourseId] = useState(selectedCategory?.courses[0]?.id ?? "");
 
   const selectedCourse = useMemo(() => {
     return educationCourseMap[selectedCourseId] ?? selectedCategory.courses[0];
   }, [selectedCourseId, selectedCategory]);
 
-  // ── Banner: show active-course countdown in real time ──────────────────────
-  const [bannerRemainingMs, setBannerRemainingMs] = useState(() =>
-    education.getRemainingMs(),
-  );
+  const [bannerRemainingMs, setBannerRemainingMs] = useState(() => education.getRemainingMs());
   useEffect(() => {
     if (!education.activeCourse) {
       setBannerRemainingMs(0);
@@ -202,16 +161,13 @@ export default function Education() {
       setBannerRemainingMs(education.getRemainingMs());
     }, 1000);
     return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!education.activeCourse]);
+  }, [education]);
 
   const activeCourseName = education.activeCourse
     ? educationCourseMap[education.activeCourse.courseId]?.name ?? "Current course"
     : null;
 
-  const bannerSubtitle = education.activeCourse
-    ? formatRemaining(bannerRemainingMs)
-    : "No active course";
+  const bannerSubtitle = education.activeCourse ? formatRemaining(bannerRemainingMs) : "No active course";
 
   return (
     <AppShell>
@@ -220,8 +176,7 @@ export default function Education() {
           <div className="edu-banner__icon">i</div>
           <div>
             <div className="edu-banner__title">
-              EDUCATION{" "}
-              <span>{activeCourseName ? `• ${activeCourseName}` : ""}</span>
+              EDUCATION <span>{activeCourseName ? `• ${activeCourseName}` : ""}</span>
             </div>
             <div className="edu-banner__subtitle">{bannerSubtitle}</div>
           </div>
@@ -234,25 +189,13 @@ export default function Education() {
             >
               Leave Course
             </button>
-            <button
-              type="button"
-              className="edu-banner__button"
-              onClick={() => askCiel("page_explain")}
-            >
-              Ask CIEL
-            </button>
           </div>
         </div>
 
         <div className="edu-category-grid">
           {educationCategories.map((category) => {
-            const progress = getCategoryProgress(
-              category.id,
-              education.completedCourses,
-            );
-            const percentage = progress.total
-              ? Math.round((progress.completed / progress.total) * 100)
-              : 0;
+            const progress = getCategoryProgress(category.id, education.completedCourses);
+            const percentage = progress.total ? Math.round((progress.completed / progress.total) * 100) : 0;
             const isSelected = category.id === selectedCategory.id;
 
             return (
@@ -269,14 +212,9 @@ export default function Education() {
                 <div className="edu-category-card__image" />
                 <div className="edu-category-card__footer">
                   <div className="edu-category-card__progress">
-                    <div
-                      className="edu-category-card__progress-fill"
-                      style={{ width: `${percentage}%` }}
-                    />
+                    <div className="edu-category-card__progress-fill" style={{ width: `${percentage}%` }} />
                   </div>
-                  <div className="edu-category-card__count">
-                    {progress.completed}/{progress.total}
-                  </div>
+                  <div className="edu-category-card__count">{progress.completed}/{progress.total}</div>
                 </div>
               </button>
             );
@@ -296,11 +234,7 @@ export default function Education() {
                   <button
                     key={course.id}
                     type="button"
-                    className={`edu-course-row edu-course-row--${state}${
-                      selectedCourse.id === course.id
-                        ? " edu-course-row--selected"
-                        : ""
-                    }`}
+                    className={`edu-course-row edu-course-row--${state}${selectedCourse.id === course.id ? " edu-course-row--selected" : ""}`}
                     onClick={() => setSelectedCourseId(course.id)}
                   >
                     <span className="edu-course-row__bullet" />
@@ -325,17 +259,11 @@ export default function Education() {
               ) : null}
 
               <div className="edu-detail-card__body">
-                <div className="edu-detail-card__course-title">
-                  {selectedCourse.name}
-                </div>
-                <div className="edu-detail-card__description">
-                  {selectedCourse.description}
-                </div>
+                <div className="edu-detail-card__course-title">{selectedCourse.name}</div>
+                <div className="edu-detail-card__description">{selectedCourse.description}</div>
 
                 <div className="edu-detail-section">
-                  <div className="edu-detail-section__label">
-                    Learning outcome:
-                  </div>
+                  <div className="edu-detail-section__label">Learning outcome:</div>
                   <ul className="edu-detail-list">
                     {selectedCourse.summaryLines.map((line) => (
                       <li key={line}>{line}</li>
@@ -359,11 +287,7 @@ export default function Education() {
                       {selectedCourse.prerequisites.map((item) => (
                         <li
                           key={item}
-                          className={
-                            education.isCourseCompleted(item)
-                              ? "edu-prereq--met"
-                              : "edu-prereq--unmet"
-                          }
+                          className={education.isCourseCompleted(item) ? "edu-prereq--met" : "edu-prereq--unmet"}
                         >
                           {educationCourseMap[item]?.name ?? item}
                           {education.isCourseCompleted(item) ? " ✓" : ""}
@@ -371,27 +295,14 @@ export default function Education() {
                       ))}
                     </ul>
                   ) : (
-                    <div className="edu-detail-card__plain">
-                      No prerequisites.
-                    </div>
+                    <div className="edu-detail-card__plain">No prerequisites.</div>
                   )}
                 </div>
 
                 <div className="edu-detail-section">
                   <div className="edu-detail-section__label">Actions:</div>
                   <div className="edu-detail-card__actions">
-                    {/* ── Smart Learn Button ── */}
-                    <CourseLearnArea
-                      courseId={selectedCourse.id}
-                      categoryId={selectedCategory.id}
-                    />
-                    <button
-                      type="button"
-                      className="edu-action-button"
-                      onClick={() => askCiel("page_explain")}
-                    >
-                      Ask CIEL
-                    </button>
+                    <CourseLearnArea courseId={selectedCourse.id} categoryId={selectedCategory.id} />
                   </div>
                 </div>
               </div>
@@ -401,26 +312,20 @@ export default function Education() {
                   <div className="edu-passive-strip__label">Passive bonuses</div>
                   <div className="edu-passive-strip__value">
                     {Object.keys(education.passiveBonuses).length
-                      ? Object.entries(education.passiveBonuses)
-                          .map(([key, value]) => `${key} +${value}%`)
-                          .join(" • ")
+                      ? Object.entries(education.passiveBonuses).map(([key, value]) => `${key} +${value}%`).join(" • ")
                       : "None yet"}
                   </div>
                 </div>
                 <div className="edu-passive-strip__block">
                   <div className="edu-passive-strip__label">Active unlocks</div>
                   <div className="edu-passive-strip__value">
-                    {education.activeUnlocks.length
-                      ? education.activeUnlocks.join(" • ")
-                      : "None yet"}
+                    {education.activeUnlocks.length ? education.activeUnlocks.join(" • ") : "None yet"}
                   </div>
                 </div>
                 <div className="edu-passive-strip__block">
                   <div className="edu-passive-strip__label">System unlocks</div>
                   <div className="edu-passive-strip__value">
-                    {education.systemUnlocks.length
-                      ? education.systemUnlocks.join(" • ")
-                      : "None yet"}
+                    {education.systemUnlocks.length ? education.systemUnlocks.join(" • ") : "None yet"}
                   </div>
                 </div>
               </div>
