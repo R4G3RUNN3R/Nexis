@@ -120,7 +120,6 @@ export default function ProfilePage() {
         </header>
 
         <div className="character-layout">
-          {/* ── Column 1: Identity + Basic Info + General ── */}
           <div className="character-column">
             <PanelSection title="User Information">
               <div className="stat-table">
@@ -144,7 +143,6 @@ export default function ProfilePage() {
             </PanelSection>
           </div>
 
-          {/* ── Column 2: Working Stats + Battle Stats ── */}
           <div className="character-column">
             <PanelSection title="Working Stats">
               <div className="stat-table">
@@ -172,7 +170,6 @@ export default function ProfilePage() {
             </PanelSection>
           </div>
 
-          {/* ── Column 3: Inventory + Status ── */}
           <div className="character-column">
             <PanelSection title="Inventory Snapshot">
               {inventoryCount === 0 ? (
@@ -200,8 +197,12 @@ export default function ProfilePage() {
                   value={player.current.education?.name ?? "None"}
                 />
                 <StatRow
-                  label="Job"
-                  value={player.current.job ?? "None"}
+                  label="Adventure"
+                  value={player.current.job ?? "No active contract"}
+                />
+                <StatRow
+                  label="Civic Jobs"
+                  value="Open Civic Jobs board"
                 />
                 <StatRow
                   label="Traveling"

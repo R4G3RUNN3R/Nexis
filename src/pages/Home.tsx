@@ -37,7 +37,7 @@ export default function HomePage() {
   return (
     <AppShell
       title="Home"
-      hint="Control panel. Hospital now works as a real player condition and education continues in the background."
+      hint="Control panel. Civic employment now sits separately from adventure work, because structure is better than chaos pretending to be design."
     >
       <div className="nexis-grid">
         <div className="nexis-column">
@@ -74,7 +74,8 @@ export default function HomePage() {
             <div className="info-list">
               <Row label="Education" value={currentEducation ? currentEducation.name : "None"} />
               <Row label="Travel" value={player.current.travel ?? "None"} />
-              <Row label="Job" value={player.current.job ?? "None"} />
+              <Row label="Adventure" value={player.current.job ?? "No active contract"} />
+              <Row label="Civic Jobs" value="Open Civic Jobs board" />
               <Row
                 label="Recovery"
                 value={isHospitalized ? `Hospitalized • ${hospitalRemainingLabel}` : "Normal"}
@@ -86,9 +87,10 @@ export default function HomePage() {
             <div className="info-list">
               <QuickLinkRow label="Education" to="/education" />
               <QuickLinkRow label="City" to="/city" />
-              <QuickLinkRow label="Jobs" to="/jobs" />
+              <QuickLinkRow label="Adventure" to="/adventure" />
+              <QuickLinkRow label="Civic Jobs" to="/civic-jobs" />
               <QuickLinkRow label="Travel" to="/travel" />
-              <QuickLinkRow label="Hospital" to="/hospital" />
+              <QuickLinkRow label="City Board" to="/city-board" />
             </div>
           </ContentPanel>
         </div>
