@@ -10,6 +10,8 @@ import { usePlayer } from "../state/PlayerContext";
 import { getPropertyById } from "../data/propertyData";
 import { formatPlayerNameWithPublicId, formatPlayerPublicId, getProfileRoute, parsePlayerPublicId } from "../lib/publicIds";
 import { formatTravelDuration, getCityName, getTravelProgress, resolveTravelState } from "../lib/travelState";
+import { getConsortiumSummary, getGuildSummary } from "../lib/organizations";
+import { resolveDisplayTitle } from "../lib/titleAccess";
 import "../styles/character-profile.css";
 
 type PanelSectionProps = {
@@ -23,11 +25,7 @@ function PanelSection({ title, defaultOpen = true, children }: PanelSectionProps
 
   return (
     <section className="character-panel">
-      <button
-        type="button"
-        className="character-panel__header"
-        onClick={() => setOpen((value) => !value)}
-      >
+      <button type="button" className="character-panel__header" onClick={() => setOpen((value) => !value)}>
         <span>{title}</span>
         <span className="character-panel__toggle">{open ? "−" : "+"}</span>
       </button>
@@ -65,10 +63,12 @@ export default function ProfilePage() {
   const travelStatus = travelProgress.active
     ? `${getCityName(travelState.originCityId)} → ${getCityName(travelState.destinationCityId)} • ${formatTravelDuration(travelProgress.remainingMs)}`
     : getCityName(travelState.currentCityId);
+  const guildSummary = getGuildSummary(player.internalId);
+  const consortiumSummary = getConsortiumSummary(player.internalId);
+  const displayTitle = resolveDisplayTitle(player.title, player.publicId);
 
   const property = getPropertyById(player.property.current);
   const propertyName = property?.name ?? "None";
-
   const inventoryCount = Object.values(player.inventory).reduce((a, b) => a + b, 0);
   const inventoryTypes = Object.keys(player.inventory).length;
 
@@ -79,9 +79,7 @@ export default function ProfilePage() {
           <section className="character-panel">
             <div className="character-panel__body">
               <h2 style={{ marginTop: 0 }}>Citizen Record Unavailable</h2>
-              <p>
-                Citizen {formatPlayerPublicId(requestedPublicId)} is not mirrored into this local Nexis shard yet.
-              </p>
+              <p>Citizen {formatPlayerPublicId(requestedPublicId)} is not mirrored into this local Nexis shard yet.</p>
               <Link className="inline-route-link" to={profileRoute}>Open your own profile</Link>
             </div>
           </section>
@@ -100,7 +98,7 @@ export default function ProfilePage() {
               <h1>{displayNameWithPublicId}</h1>
               <div className="character-hero__meta">
                 <span>{formatPlayerPublicId(player.publicId)}</span>
-                <span>{player.title === "0" ? "The Absolute" : player.title}</span>
+                <span>{displayTitle}</span>
                 <span>Level {player.level}</span>
                 <span>{player.rank === "0" ? "Unranked" : player.rank}</span>
               </div>
@@ -131,7 +129,7 @@ export default function ProfilePage() {
                 <StatRow label="Public ID" value={formatPlayerPublicId(player.publicId)} />
                 <StatRow label="Level" value={player.level} />
                 <StatRow label="Rank" value={player.rank === "0" ? "Unranked" : player.rank} />
-                <StatRow label="Title" value={player.title === "0" ? "The Absolute" : player.title} />
+                <StatRow label="Title" value={displayTitle} />
                 <StatRow label="Days Played" value={player.daysPlayed} />
               </div>
             </PanelSection>
@@ -185,11 +183,7 @@ export default function ProfilePage() {
                   {Object.entries(player.inventory).slice(0, 8).map(([id, qty]) => (
                     <StatRow key={id} label={id} value={`×${qty}`} />
                   ))}
-                  {inventoryTypes > 8 && (
-                    <div style={{ color: "#6a7a8a", fontSize: 12, paddingTop: 4 }}>
-                      …and {inventoryTypes - 8} more
-                    </div>
-                  )}
+                  {inventoryTypes > 8 && <div style={{ color: "#6a7a8a", fontSize: 12, paddingTop: 4 }}>…and {inventoryTypes - 8} more</div>}
                 </div>
               )}
             </PanelSection>
@@ -200,19 +194,17 @@ export default function ProfilePage() {
                 <StatRow label="Adventure" value={player.current.job ?? "No active contract"} />
                 <StatRow label="Civic Jobs" value="Open Civic Jobs board" />
                 <StatRow label="Travel" value={travelStatus} />
+                <StatRow label="Guild" value={guildSummary} />
+                <StatRow label="Consortium" value={consortiumSummary} />
               </div>
             </PanelSection>
 
             <PanelSection title="Achievements" defaultOpen={false}>
-              <div style={{ color: "#6a7a8a", fontSize: 13 }}>
-                No achievements recorded yet.
-              </div>
+              <div style={{ color: "#6a7a8a", fontSize: 13 }}>No achievements recorded yet.</div>
             </PanelSection>
 
             <PanelSection title="Legacy" defaultOpen={false}>
-              <div style={{ color: "#6a7a8a", fontSize: 13 }}>
-                No legacy entries recorded yet.
-              </div>
+              <div style={{ color: "#6a7a8a", fontSize: 13 }}>No legacy entries recorded yet.</div>
             </PanelSection>
           </div>
         </div>

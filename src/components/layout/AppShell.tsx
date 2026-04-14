@@ -5,6 +5,7 @@ import { usePlayer } from "../../state/PlayerContext";
 import { useAuth } from "../../state/AuthContext";
 import { StatBars } from "./StatBars";
 import { formatPlayerNameWithPublicId, formatPlayerPublicId } from "../../lib/publicIds";
+import { resolveDisplayTitle } from "../../lib/titleAccess";
 
 type AppShellProps = {
   title?: string;
@@ -30,13 +31,7 @@ const world: Array<[string, string]> = [
   ["Guilds / Consortiums", "/guild"],
 ];
 
-function SidebarSection({
-  title,
-  links,
-}: {
-  title: string;
-  links: Array<[string, string]>;
-}) {
+function SidebarSection({ title, links }: { title: string; links: Array<[string, string]> }) {
   if (!links.length) return null;
 
   return (
@@ -48,9 +43,7 @@ function SidebarSection({
             key={to}
             to={to}
             end={to === "/home"}
-            className={({ isActive }) =>
-              `sidebar-link${isActive ? " sidebar-link--active" : ""}`
-            }
+            className={({ isActive }) => `sidebar-link${isActive ? " sidebar-link--active" : ""}`}
           >
             <span>{label}</span>
             <span className="sidebar-link__arrow">›</span>
@@ -66,13 +59,7 @@ function formatGold(amount: number): string {
 }
 
 export function AppShell({ title, hint, children }: AppShellProps) {
-  const {
-    player,
-    isHospitalized,
-    hospitalRemainingLabel,
-    isJailed,
-    jailRemainingLabel,
-  } = usePlayer();
+  const { player, isHospitalized, hospitalRemainingLabel, isJailed, jailRemainingLabel } = usePlayer();
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -91,10 +78,9 @@ export function AppShell({ title, hint, children }: AppShellProps) {
     conditionClass = "player-condition player-condition--jail";
   }
 
-  const displayName = player.lastName
-    ? `${player.name} ${player.lastName}`
-    : player.name || "Unknown";
+  const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
   const displayNameWithPublicId = formatPlayerNameWithPublicId(displayName, player.publicId);
+  const displayTitle = resolveDisplayTitle(player.title, player.publicId);
 
   return (
     <div className="app-shell">
@@ -119,9 +105,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
               </div>
               <div className="player-card__row">
                 <span className="player-card__key">Title</span>
-                <span className="player-card__val">
-                  {player.title === "0" ? "The Absolute" : player.title}
-                </span>
+                <span className="player-card__val">{displayTitle}</span>
               </div>
               <div className="player-card__row">
                 <span className="player-card__key">Days</span>
@@ -129,9 +113,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
               </div>
               <div className="player-card__row player-card__row--gold">
                 <span className="player-card__key">Gold</span>
-                <span className="player-card__val player-card__val--gold">
-                  {formatGold(player.gold)}
-                </span>
+                <span className="player-card__val player-card__val--gold">{formatGold(player.gold)}</span>
               </div>
             </div>
 
@@ -144,11 +126,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
           <SidebarSection title="World" links={world} />
 
           <div className="sidebar-logout">
-            <button
-              type="button"
-              className="sidebar-logout__btn"
-              onClick={handleLogout}
-            >
+            <button type="button" className="sidebar-logout__btn" onClick={handleLogout}>
               Log Out
             </button>
           </div>
@@ -159,12 +137,8 @@ export function AppShell({ title, hint, children }: AppShellProps) {
             <div className="page-banner">
               <div className="page-banner__title">{title}</div>
               <div className="page-banner__actions">
-                <button type="button" className="page-banner__action">
-                  Personal stats
-                </button>
-                <button type="button" className="page-banner__action">
-                  Log
-                </button>
+                <button type="button" className="page-banner__action">Personal stats</button>
+                <button type="button" className="page-banner__action">Log</button>
               </div>
             </div>
           ) : null}

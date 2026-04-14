@@ -6,6 +6,7 @@
 
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, useCallback } from "react";
 import { useAuth, playerStorageKey } from "./AuthContext";
+import { sanitizeStoredTitle } from "../lib/titleAccess";
 
 type Condition =
   | { type: "normal";       until: null;   reason: null }
@@ -57,9 +58,9 @@ type PlayerState = {
     dexterity: number;
   };
   property: {
-    current: string;          // propertyTier id (e.g. "shack", "cottage")
+    current: string;
     comfortProvided: number;
-    installedUpgrades: string[];  // upgrade ids installed on current property
+    installedUpgrades: string[];
   };
   current: {
     education: CurrentEducation;
@@ -72,60 +73,37 @@ type PlayerState = {
 type PlayerContextValue = {
   player: PlayerState;
   now: number;
-
-  // Registration / Auth
   isRegistered: boolean;
   registerPlayer: (firstName: string, lastName: string) => void;
-  resetPlayer: () => void;       // wipe to blank state (logout)
-
-  // Hospital
+  resetPlayer: () => void;
   isHospitalized: boolean;
   hospitalRemainingMs: number;
   hospitalRemainingLabel: string;
   hospitalizeFor: (minutes: number, reason?: string) => void;
   recoverFromHospital: () => void;
-
-  // Jail
   isJailed: boolean;
   jailRemainingMs: number;
   jailRemainingLabel: string;
   jailFor: (minutes: number, reason?: string) => void;
   releaseFromJail: () => void;
-
-  // Stats
   setHealth: (value: number, reason?: string) => void;
   spendEnergy: (amount: number) => void;
   spendStamina: (amount: number) => void;
   spendNerve: (amount: number) => void;
-
-  // Gold & property
   addGold: (amount: number) => void;
-  spendGold: (amount: number) => boolean;   // returns false if insufficient
+  spendGold: (amount: number) => boolean;
   purchaseProperty: (tierId: string, cost: number) => boolean;
   installUpgrade: (upgradeId: string, cost: number) => boolean;
-
-  // Inventory
   addItem: (itemId: string, qty: number) => void;
-
-  // Battle stats (from Arena training)
   addBattleStat: (stat: "strength" | "defense" | "speed" | "dexterity", amount: number) => void;
-
-  // Education
   startEducation: (id: string, name: string, durationMs: number) => void;
   quitEducation: () => void;
-
-  // Levelling
-  addLevel: (amount?: number) => void;   // increments player level; maxStamina auto-recalculates
+  addLevel: (amount?: number) => void;
 };
 
-// ─── Stamina scaling ─────────────────────────────────────────────────────────
-// maxStamina starts at 10 and gains +1 for every 5 levels earned.
-// Level 0 = 10, Level 5 = 11, Level 10 = 12 ... Level 100 = 30.
 export function maxStaminaForLevel(level: number): number {
   return 10 + Math.floor(level / 5);
 }
-
-// ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const LEGACY_STORAGE_KEY = "nexis_player";
 
@@ -134,7 +112,7 @@ const basePlayer: PlayerState = {
   publicId: null,
   name: "",
   lastName: "",
-  title: "0",
+  title: "",
   level: 0,
   rank: "0",
   daysPlayed: 0,
@@ -171,7 +149,6 @@ type StoredPlayerState = Partial<PlayerState> & {
 function mergePlayer(stored: StoredPlayerState, identity?: { internalPlayerId: string; publicId: number }): PlayerState {
   const level = stored.level ?? basePlayer.level;
   const mergedStats = { ...basePlayer.stats, ...(stored.stats ?? {}) };
-  // Always recalculate maxStamina from level on load — never trust a stale stored value
   mergedStats.maxStamina = maxStaminaForLevel(level);
   mergedStats.stamina = Math.min(mergedStats.stamina, mergedStats.maxStamina);
   const internalId =
@@ -182,11 +159,13 @@ function mergePlayer(stored: StoredPlayerState, identity?: { internalPlayerId: s
   const publicId =
     identity?.publicId ??
     (typeof stored.publicId === "number" ? stored.publicId : basePlayer.publicId);
+  const title = sanitizeStoredTitle(typeof stored.title === "string" ? stored.title : basePlayer.title, publicId);
   return {
     ...basePlayer,
     ...stored,
     internalId,
     publicId,
+    title,
     level,
     stats: mergedStats,
     workingStats: { ...basePlayer.workingStats, ...(stored.workingStats ?? {}) },
@@ -216,8 +195,6 @@ function writeStoredPlayer(state: PlayerState, storageKey: string): void {
   window.localStorage.setItem(storageKey, JSON.stringify(state));
 }
 
-// ─── Format helpers ────────────────────────────────────────────────────────────
-
 function formatDuration(ms: number): string {
   if (ms <= 0) return "0m 0s";
   const totalSeconds = Math.floor(ms / 1000);
@@ -236,39 +213,26 @@ function formatClock(ms: number): string {
 
 export { formatClock };
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
 const PlayerContext = createContext<PlayerContextValue | null>(null);
-
-// Tick intervals (ms)
-const ENERGY_INTERVAL_MS  = 5  * 60 * 1000;   // +1 every 5 min
-const HEALTH_INTERVAL_MS  = 3  * 60 * 1000;   // +1 every 3 min
-const STAMINA_INTERVAL_MS = 15 * 60 * 1000;   // +1 every 15 min
-const COMFORT_INTERVAL_MS = 10 * 60 * 1000;   // +1 every 10 min
+const ENERGY_INTERVAL_MS  = 5  * 60 * 1000;
+const HEALTH_INTERVAL_MS  = 3  * 60 * 1000;
+const STAMINA_INTERVAL_MS = 15 * 60 * 1000;
+const COMFORT_INTERVAL_MS = 10 * 60 * 1000;
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const { activeAccount, serverHydrationVersion } = useAuth();
-
-  // Derive the storage key from the active account
-  const storageKey = activeAccount
-    ? playerStorageKey(activeAccount.email)
-    : LEGACY_STORAGE_KEY;
+  const storageKey = activeAccount ? playerStorageKey(activeAccount.email) : LEGACY_STORAGE_KEY;
 
   const [player, setPlayer] = useState<PlayerState>(() =>
     readStoredPlayer(
       storageKey,
-      activeAccount
-        ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId }
-        : undefined,
+      activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined,
     ),
   );
   const [now, setNow] = useState<number>(() => Date.now());
 
-  // When the active account changes (login/logout/switch), reload player data
   useLayoutEffect(() => {
-    const identity = activeAccount
-      ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId }
-      : undefined;
+    const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined;
     const loaded = readStoredPlayer(storageKey, identity);
 
     if (activeAccount) {
@@ -289,37 +253,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [storageKey, activeAccount]);
 
   useEffect(() => {
-    const identity = activeAccount
-      ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId }
-      : undefined;
+    const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined;
     setPlayer(readStoredPlayer(storageKey, identity));
   }, [storageKey, activeAccount, serverHydrationVersion]);
 
-  // 1-second tick: regen + auto-clear hospital/jail
   useEffect(() => {
     let lastTick = Date.now();
-
     const timer = window.setInterval(() => {
       const tickNow = Date.now();
       const elapsed = tickNow - lastTick;
       lastTick = tickNow;
-
       setNow(tickNow);
-
       setPlayer((prev) => {
         let next = prev;
-
-        // Fractional regen based on elapsed time
         const energyRegen  = elapsed / ENERGY_INTERVAL_MS;
         const healthRegen  = elapsed / HEALTH_INTERVAL_MS;
         const staminaRegen = elapsed / STAMINA_INTERVAL_MS;
         const comfortRegen = elapsed / COMFORT_INTERVAL_MS;
-
         const newEnergy  = Math.min(prev.stats.maxEnergy,  prev.stats.energy  + energyRegen);
         const newHealth  = Math.min(prev.stats.maxHealth,  prev.stats.health  + healthRegen);
         const newStamina = Math.min(prev.stats.maxStamina, prev.stats.stamina + staminaRegen);
         const newComfort = Math.min(prev.stats.maxComfort, prev.stats.comfort + comfortRegen);
-
         next = {
           ...next,
           stats: {
@@ -330,8 +284,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             comfort: parseFloat(newComfort.toFixed(4)),
           },
         };
-
-        // Auto-clear hospitalized
         if (prev.condition.type === "hospitalized" && prev.condition.until <= tickNow) {
           next = {
             ...next,
@@ -339,23 +291,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             condition: { type: "normal", until: null, reason: null },
           };
         }
-
-        // Auto-clear jailed
         if (prev.condition.type === "jailed" && prev.condition.until <= tickNow) {
           next = {
             ...next,
             condition: { type: "normal", until: null, reason: null },
           };
         }
-
         return next;
       });
     }, 1000);
-
     return () => window.clearInterval(timer);
   }, []);
 
-  // Recompute maxStamina whenever player level changes
   useEffect(() => {
     const correctMax = maxStaminaForLevel(player.level);
     if (player.stats.maxStamina !== correctMax) {
@@ -364,41 +311,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         stats: {
           ...prev.stats,
           maxStamina: correctMax,
-          // clamp current stamina if it exceeds the new max
           stamina: Math.min(prev.stats.stamina, correctMax),
         },
       }));
     }
   }, [player.level, player.stats.maxStamina]);
 
-  // Persist on every change
   useEffect(() => {
     writeStoredPlayer(player, storageKey);
   }, [player, storageKey]);
 
   const isHospitalized = player.condition.type === "hospitalized";
   const isJailed = player.condition.type === "jailed";
-
-  const hospitalRemainingMs = isHospitalized
-    ? Math.max(0, (player.condition as { until: number }).until - now)
-    : 0;
-
-  const jailRemainingMs = isJailed
-    ? Math.max(0, (player.condition as { until: number }).until - now)
-    : 0;
+  const hospitalRemainingMs = isHospitalized ? Math.max(0, (player.condition as { until: number }).until - now) : 0;
+  const jailRemainingMs = isJailed ? Math.max(0, (player.condition as { until: number }).until - now) : 0;
 
   const value = useMemo<PlayerContextValue>(() => {
-    // ── Registration ─────────────────────────────────────────────────────────
     function registerPlayer(firstName: string, lastName: string) {
-      setPlayer((prev) => ({
-        ...prev,
-        name: firstName.trim(),
-        lastName: lastName.trim(),
-        isRegistered: true,
-      }));
+      setPlayer((prev) => ({ ...prev, name: firstName.trim(), lastName: lastName.trim(), isRegistered: true }));
     }
 
-    // ── Hospital ──────────────────────────────────────────────────────────────
     function hospitalizeFor(minutes: number, reason = "Combat defeat") {
       const until = Date.now() + minutes * 60 * 1000;
       setPlayer((prev) => ({
@@ -417,7 +349,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }));
     }
 
-    // ── Jail ──────────────────────────────────────────────────────────────────
     function jailFor(minutes: number, reason = "Arrested") {
       const until = Date.now() + minutes * 60 * 1000;
       setPlayer((prev) => ({
@@ -428,13 +359,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
 
     function releaseFromJail() {
-      setPlayer((prev) => ({
-        ...prev,
-        condition: { type: "normal", until: null, reason: null },
-      }));
+      setPlayer((prev) => ({ ...prev, condition: { type: "normal", until: null, reason: null } }));
     }
 
-    // ── Stats ─────────────────────────────────────────────────────────────────
     function setHealth(value: number, reason = "Combat defeat") {
       setPlayer((prev) => {
         const nextHealth = Math.max(0, Math.min(prev.stats.maxHealth, value));
@@ -452,24 +379,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
 
     function spendEnergy(amount: number) {
-      setPlayer((prev) => ({
-        ...prev,
-        stats: { ...prev.stats, energy: Math.max(0, prev.stats.energy - amount) },
-      }));
+      setPlayer((prev) => ({ ...prev, stats: { ...prev.stats, energy: Math.max(0, prev.stats.energy - amount) } }));
     }
 
     function spendStamina(amount: number) {
-      setPlayer((prev) => ({
-        ...prev,
-        stats: { ...prev.stats, stamina: Math.max(0, prev.stats.stamina - amount) },
-      }));
+      setPlayer((prev) => ({ ...prev, stats: { ...prev.stats, stamina: Math.max(0, prev.stats.stamina - amount) } }));
     }
 
     function spendNerve(amount: number) {
-      setPlayer((prev) => ({
-        ...prev,
-        stats: { ...prev.stats, nerve: Math.max(0, prev.stats.nerve - amount) },
-      }));
+      setPlayer((prev) => ({ ...prev, stats: { ...prev.stats, nerve: Math.max(0, prev.stats.nerve - amount) } }));
     }
 
     function addGold(amount: number) {
@@ -491,11 +409,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setPlayer((prev) => {
         if (prev.gold < cost) return prev;
         success = true;
-        return {
-          ...prev,
-          gold: prev.gold - cost,
-          property: { current: tierId, comfortProvided: 100, installedUpgrades: [] },
-        };
+        return { ...prev, gold: prev.gold - cost, property: { current: tierId, comfortProvided: 100, installedUpgrades: [] } };
       });
       return success;
     }
@@ -503,17 +417,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     function addItem(itemId: string, qty: number) {
       setPlayer((prev) => ({
         ...prev,
-        inventory: {
-          ...prev.inventory,
-          [itemId]: (prev.inventory[itemId] ?? 0) + qty,
-        },
+        inventory: { ...prev.inventory, [itemId]: (prev.inventory[itemId] ?? 0) + qty },
       }));
     }
 
-    function addBattleStat(
-      stat: "strength" | "defense" | "speed" | "dexterity",
-      amount: number,
-    ) {
+    function addBattleStat(stat: "strength" | "defense" | "speed" | "dexterity", amount: number) {
       setPlayer((prev) => ({
         ...prev,
         battleStats: {
@@ -532,16 +440,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         return {
           ...prev,
           gold: prev.gold - cost,
-          property: {
-            ...prev.property,
-            installedUpgrades: [...prev.property.installedUpgrades, upgradeId],
-          },
+          property: { ...prev.property, installedUpgrades: [...prev.property.installedUpgrades, upgradeId] },
         };
       });
       return success;
     }
 
-    // ── Levelling ─────────────────────────────────────────────────────────────
     function addLevel(amount = 1) {
       setPlayer((prev) => {
         const newLevel = prev.level + amount;
@@ -552,50 +456,38 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           stats: {
             ...prev.stats,
             maxStamina: newMaxStamina,
-            // Don't reduce current stamina on level-up — only cap at new max
             stamina: Math.min(prev.stats.stamina, newMaxStamina),
           },
         };
       });
     }
 
-    // ── Education ─────────────────────────────────────────────────────────────
     function startEducation(id: string, name: string, durationMs: number) {
       setPlayer((prev) => ({
         ...prev,
-        current: {
-          ...prev.current,
-          education: { id, name, startedAt: Date.now(), durationMs },
-        },
+        current: { ...prev.current, education: { id, name, startedAt: Date.now(), durationMs } },
       }));
     }
 
     function quitEducation() {
-      setPlayer((prev) => ({
-        ...prev,
-        current: { ...prev.current, education: null },
-      }));
+      setPlayer((prev) => ({ ...prev, current: { ...prev.current, education: null } }));
     }
 
     return {
       player,
       now,
-
       isRegistered: player.isRegistered,
       registerPlayer,
-
       isHospitalized,
       hospitalRemainingMs,
       hospitalRemainingLabel: formatDuration(hospitalRemainingMs),
       hospitalizeFor,
       recoverFromHospital,
-
       isJailed,
       jailRemainingMs,
       jailRemainingLabel: formatDuration(jailRemainingMs),
       jailFor,
       releaseFromJail,
-
       setHealth,
       spendEnergy,
       spendStamina,
@@ -606,11 +498,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       installUpgrade,
       addItem,
       addBattleStat,
-
       resetPlayer() {
         setPlayer(basePlayer);
       },
-
       addLevel,
       startEducation,
       quitEducation,
