@@ -87,8 +87,10 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
       {
         id: "jail",
         name: "Jail",
-        route: "/jail",
-        description: "Punishment, detention, and future legal systems.",
+        route: "/hospital",
+        description: "Detention, penalties, and future legal systems.",
+        locked: true,
+        lockReason: "Jail systems are not fully opened to public routing yet.",
       },
     ],
   },
