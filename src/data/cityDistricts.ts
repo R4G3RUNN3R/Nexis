@@ -5,12 +5,14 @@ export interface CityDestination {
   description: string;
   locked?: boolean;
   lockReason?: string;
+  image?: string;
 }
 
 export interface CityDistrict {
   id: string;
   name: string;
   summary: string;
+  image?: string;
   destinations: CityDestination[];
 }
 
@@ -19,6 +21,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
     id: "academic",
     name: "Academic District",
     summary: "Learning, archives, and the kind of silence that judges you.",
+    image: "/images/districts/academic-district.png",
     destinations: [
       {
         id: "academy",
@@ -44,6 +47,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
     id: "commercial",
     name: "Commercial District",
     summary: "Money, goods, and people pretending prices are morally neutral.",
+    image: "/images/districts/commercial-district.png",
     destinations: [
       {
         id: "market",
@@ -60,7 +64,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
       {
         id: "black_market",
         name: "Black Market",
-        route: "/market",
+        route: "/black-market",
         description: "Restricted trade for players who unlock shady access later.",
         locked: true,
         lockReason: "Requires Shadowcraft or black market access unlocks.",
@@ -71,6 +75,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
     id: "civic",
     name: "Civic District",
     summary: "Administration, law, healing, and institutional disappointment.",
+    image: "/images/districts/civic-district.png",
     destinations: [
       {
         id: "city_board",
@@ -94,9 +99,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
         id: "jail",
         name: "Jail",
         route: "/hospital",
-        description: "Detention, penalties, and future legal systems.",
-        locked: true,
-        lockReason: "Jail systems are not fully opened to public routing yet.",
+        description: "Detention, penalties, busting, and inmate tracking.",
       },
     ],
   },
@@ -104,6 +107,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
     id: "adventure",
     name: "Adventure District",
     summary: "Risk, violence, contracts, and generally poor survival planning.",
+    image: "/images/districts/adventure-district.png",
     destinations: [
       {
         id: "adventure_board",
@@ -115,7 +119,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
         id: "arena",
         name: "Arena",
         route: "/arena",
-        description: "Combat-facing content, rival encounters, and future ranking hooks.",
+        description: "Combat training, stat growth, and future ranking hooks.",
       },
       {
         id: "tavern",
@@ -129,6 +133,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
     id: "faction",
     name: "Faction District",
     summary: "Power blocs, group identity, and cooperation until the loot appears.",
+    image: "/images/districts/faction-district.png",
     destinations: [
       {
         id: "guilds",
@@ -148,6 +153,7 @@ export const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
     id: "residential",
     name: "Residential District",
     summary: "Properties, comfort, security, and expensive ways to sleep better.",
+    image: "/images/districts/residential-district.png",
     destinations: [
       {
         id: "housing",
