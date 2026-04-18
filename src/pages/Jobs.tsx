@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
+import { ContentPanel } from "../components/layout/ContentPanel";
 import { usePlayer } from "../state/PlayerContext";
 import {
   useJobs,
@@ -14,6 +15,7 @@ import {
   type CategoryProgress,
 } from "../state/JobsContext";
 import { jobCategories, type JobCategory, type SubJob } from "../data/jobsData";
+import { cielPageCopy } from "../data/cielPageCopy";
 import "../styles/jobs.css";
 
 type OutcomeEntry = {
@@ -287,6 +289,7 @@ export default function JobsPage() {
     isJailed,
     jailRemainingLabel,
   } = usePlayer();
+  const pageCopy = cielPageCopy.jobs;
 
   const [selectedCategoryId, setSelectedCategoryId] = useState(
     jobCategories[0]?.id ?? "",
@@ -323,8 +326,18 @@ export default function JobsPage() {
   return (
     <AppShell
       title="Adventure"
-      hint="Contracts, expeditions, and active field work. Civic employment now lives in Civic Jobs."
+      hint={pageCopy.flavor}
     >
+      <div className="page-intro-grid">
+        <ContentPanel title="Work & Opportunity">
+          <p className="page-intro__lead">{pageCopy.flavor}</p>
+          <p className="page-intro__body">{pageCopy.alt}</p>
+        </ContentPanel>
+        <ContentPanel title="CIEL">
+          <p className="page-intro__body">{pageCopy.ciel}</p>
+        </ContentPanel>
+      </div>
+
       <div className="jobs-page">
         {isHospitalized && (
           <div className="jobs-status-banner">
