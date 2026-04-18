@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
+import { ContentPanel } from "../components/layout/ContentPanel";
 import { worldCities, worldRoutes, type WorldCity, type WorldCityId, worldMapTitle } from "../data/worldMapData";
+import { cielCityCopy, cielPageCopy } from "../data/cielPageCopy";
 import { askCiel } from "../lib/ciel-system";
 import {
   cancelTravel,
@@ -69,12 +71,14 @@ export default function TravelPage() {
     [selectedCity],
   );
 
+  const pageCopy = cielPageCopy.travel;
+  const cityCopy = cielCityCopy[selectedCity.id] ?? cielPageCopy.city;
   const progress = getTravelProgress(travelState, now);
   const isTraveling = progress.active;
   const destinationName = getCityName(travelState.destinationCityId);
   const originName = getCityName(travelState.originCityId);
   const canTravel = !isTraveling && selectedCity.id !== travelState.currentCityId;
-  const academyLabel = selectedCity.academy ?? (selectedCity.id === "nexis" ? "Nexis Academy of Commerce & Civil Arts" : "None");
+  const academyLabel = selectedCity.academy ?? (selectedCity.id === "nexis" ? "Ashen Crown Academy of Commerce & Civil Arts" : "None");
 
   function handleTravel() {
     if (!canTravel) return;
@@ -93,13 +97,23 @@ export default function TravelPage() {
   return (
     <AppShell
       title="Travel"
-      hint="Travel now respects residence bonuses, in-transit lockouts, and return journeys instead of pretending a horse is decorative."
+      hint={pageCopy.flavor}
     >
+      <div className="page-intro-grid">
+        <ContentPanel title="Travel Office">
+          <p className="page-intro__lead">{pageCopy.flavor}</p>
+          <p className="page-intro__body">{pageCopy.alt}</p>
+        </ContentPanel>
+        <ContentPanel title="CIEL">
+          <p className="page-intro__body">{pageCopy.ciel}</p>
+        </ContentPanel>
+      </div>
+
       <div className="travel-layout">
         <section className="travel-panel travel-panel--map">
           <div className="travel-panel__header">{worldMapTitle}</div>
           <div className="travel-map-frame">
-            <img src={mapImage} alt="The world map of Nexis" className="travel-map-image" />
+            <img src={mapImage} alt="The world map of Ashen Crown" className="travel-map-image" />
             {worldCities.map((city) => (
               <button
                 key={city.id}
@@ -131,6 +145,11 @@ export default function TravelPage() {
 
             <div className="travel-card__title">{selectedCity.name}</div>
             <div className="travel-card__subtitle">{selectedCity.subtitle}</div>
+
+            <div className="travel-card__copy-block">
+              <p className="page-intro__lead">{cityCopy.flavor}</p>
+              <p className="page-intro__body">{cityCopy.ciel}</p>
+            </div>
 
             <div className="travel-card__grid">
               <div className="travel-info">
