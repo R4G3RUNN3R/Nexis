@@ -9,11 +9,13 @@ import { ArenaProvider } from "./state/ArenaContext";
 import Ciel from "./components/ciel/Ciel";
 import { BackendStateBridge } from "./components/state/BackendStateBridge";
 
+const PUBLIC_PATHS = new Set(["/login", "/register", "/news", "/rules", "/contact", "/credits"]);
+
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoggedIn } = useAuth();
   const location = useLocation();
 
-  if (location.pathname === "/register" || location.pathname === "/login") {
+  if (PUBLIC_PATHS.has(location.pathname)) {
     return <>{children}</>;
   }
 
