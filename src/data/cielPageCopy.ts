@@ -86,6 +86,27 @@ export const cielPageCopy: Record<string, CielPageCopy> = {
       "The Black Market remains restricted until Shadowcraft access exists. Which is the city’s polite way of saying not everyone earns entry to its more interesting hypocrisies.",
     alt: "Restricted, hidden, profitable, and morally untidy. Naturally, people are fascinated.",
   },
+  hospital: {
+    flavor:
+      "Healing is not softness. Recovery is simply the price extracted by reality when confidence outpaces preparation.",
+    ciel:
+      "Hospital and jail are where consequences become measurable. Time, damage, sentences, and the uncomfortable fact that poor decisions are rarely free.",
+    alt: "Restoration is useful. Humility would have been cheaper.",
+  },
+  bank: {
+    flavor:
+      "Coin stored is not idle. It is future leverage waiting for discipline.",
+    ciel:
+      "The banking hall will eventually handle deposits, reserves, interest tiers, and treasury movement. In simpler terms: controlled money instead of loose pockets and wishful arithmetic.",
+    alt: "Wealth kept well becomes power. Wealth handled badly becomes a lesson.",
+  },
+  contacts: {
+    flavor:
+      "No one rises without witnesses, rivals, helpers, debtors, and the occasional person who should never have been trusted twice.",
+    ciel:
+      "Contacts are where memory becomes utility. Friends, enemies, useful names, and social gravity all deserve structure before they become chaos.",
+    alt: "Networks are simply ambition arranged into people.",
+  },
 };
 
 export const cielCityCopy: Record<string, CielPageCopy> = {
