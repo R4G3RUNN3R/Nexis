@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
+import { ContentPanel } from "../components/layout/ContentPanel";
 import {
   educationCategories,
   educationCourseMap,
   getCourseState,
 } from "../data/educationData";
+import { cielPageCopy } from "../data/cielPageCopy";
 import {
   formatCountdown,
   formatRemaining,
@@ -224,6 +226,7 @@ function CourseLearnArea({
 
 export default function Education() {
   const education = useEducation();
+  const pageCopy = cielPageCopy.education;
   const [selectedCategoryId, setSelectedCategoryId] = useState(educationCategories[0]?.id ?? "");
   const selectedCategory =
     educationCategories.find((category) => category.id === selectedCategoryId) ?? educationCategories[0];
@@ -260,7 +263,17 @@ export default function Education() {
   const bannerSubtitle = education.activeCourse ? formatRemaining(bannerRemainingMs) : "No active course";
 
   return (
-    <AppShell title="Education" hint="Structured education now follows visible roots instead of reading like a tax return.">
+    <AppShell title="Education" hint={pageCopy.flavor}>
+      <div className="page-intro-grid">
+        <ContentPanel title="Discipline & Study">
+          <p className="page-intro__lead">{pageCopy.flavor}</p>
+          <p className="page-intro__body">{pageCopy.alt}</p>
+        </ContentPanel>
+        <ContentPanel title="CIEL">
+          <p className="page-intro__body">{pageCopy.ciel}</p>
+        </ContentPanel>
+      </div>
+
       <div className="education-page">
         <div className="edu-banner">
           <div className="edu-banner__icon">i</div>
