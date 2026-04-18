@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
+import { ContentPanel } from "../components/layout/ContentPanel";
 import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
 import { getPropertyById } from "../data/propertyData";
@@ -97,9 +98,22 @@ export default function ProfilePage() {
     };
   }, [serverSessionToken, targetPublicId]);
 
+  const flavor = "A profile is reputation given structure: title, record, condition, affiliation, and the evidence of what a life has actually become.";
+  const ciel = "This is where identity stops being abstract. Public standing, private holdings, affiliations, and visible condition all gather here. Incompetence also leaves traces, though usually less flattering ones.";
+  const alt = "Names matter. Records matter more.";
+
   if (loading) {
     return (
-      <AppShell title="Character Profile">
+      <AppShell title="Character Profile" hint={flavor}>
+        <div className="page-intro-grid">
+          <ContentPanel title="Profile Ledger">
+            <p className="page-intro__lead">{flavor}</p>
+            <p className="page-intro__body">{alt}</p>
+          </ContentPanel>
+          <ContentPanel title="CIEL">
+            <p className="page-intro__body">{ciel}</p>
+          </ContentPanel>
+        </div>
         <div className="character-profile-page">
           <section className="character-panel">
             <div className="character-panel__body">Loading citizen record...</div>
@@ -111,7 +125,16 @@ export default function ProfilePage() {
 
   if (!profile || error) {
     return (
-      <AppShell title="Character Profile">
+      <AppShell title="Character Profile" hint={flavor}>
+        <div className="page-intro-grid">
+          <ContentPanel title="Profile Ledger">
+            <p className="page-intro__lead">{flavor}</p>
+            <p className="page-intro__body">{alt}</p>
+          </ContentPanel>
+          <ContentPanel title="CIEL">
+            <p className="page-intro__body">{ciel}</p>
+          </ContentPanel>
+        </div>
         <div className="character-profile-page">
           <section className="character-panel">
             <div className="character-panel__body">
@@ -135,7 +158,17 @@ export default function ProfilePage() {
   const consortiumLabel = publicProfile.consortium ? `${publicProfile.consortium.name} [C${String(publicProfile.consortium.publicId).padStart(7, "0")}]` : "Independent";
 
   return (
-    <AppShell title="Character Profile">
+    <AppShell title="Character Profile" hint={flavor}>
+      <div className="page-intro-grid">
+        <ContentPanel title="Profile Ledger">
+          <p className="page-intro__lead">{flavor}</p>
+          <p className="page-intro__body">{alt}</p>
+        </ContentPanel>
+        <ContentPanel title="CIEL">
+          <p className="page-intro__body">{ciel}</p>
+        </ContentPanel>
+      </div>
+
       <div className="character-profile-page">
         <header className="character-hero">
           <div className="character-hero__identity">
