@@ -1,8 +1,4 @@
-const ABSOLUTE_RESERVED_PUBLIC_ID = 1_000_000;
-
-export function isAbsoluteOwner(publicId: number | null | undefined) {
-  return publicId === ABSOLUTE_RESERVED_PUBLIC_ID;
-}
+import { isAbsoluteOwner } from "./adminAccess";
 
 export function resolveDisplayTitle(rawTitle: string | null | undefined, publicId: number | null | undefined) {
   const title = (rawTitle ?? "").trim();

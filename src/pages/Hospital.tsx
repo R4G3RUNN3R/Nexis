@@ -1,15 +1,23 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Nexis — Hospital Page
-// Full condition system: status display, countdown timer, restrictions list,
-// revive mechanic, jail section, and dev prototype controls.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { usePlayer } from "../state/PlayerContext";
+import { useAuth } from "../state/AuthContext";
+import { isStaffOrAdmin } from "../lib/adminAccess";
 import "../styles/hospital.css";
 import "../styles/hosp-full.css";
+
+type StoredPlayerSnapshot = {
+  internalId?: string;
+  name?: string;
+  lastName?: string;
+  publicId?: number | null;
+  condition?: {
+    type?: string;
+    until?: number | null;
+    reason?: string | null;
+  };
+};
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -20,306 +28,185 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-// ─── Blocked pages while hospitalized ────────────────────────────────────────
-const BLOCKED_PAGES = ["Jobs", "Travel", "City", "Market", "Bank", "Academies", "Life Paths", "City Board (active events)"];
-const ALLOWED_PAGES = ["Hospital", "Profile", "Housing", "Guilds / Consortiums", "Achievements"];
+function formatRemaining(ms: number) {
+  if (ms <= 0) return "0m";
+  const totalMinutes = Math.ceil(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
 
-// ─── Blocked pages while jailed ──────────────────────────────────────────────
-const JAIL_BLOCKED   = ["Jobs", "Travel", "City", "Market", "Bank", "Hospital", "Academies"];
-const JAIL_ALLOWED   = ["Jail (this page)", "Profile", "Housing", "Guilds / Consortiums", "Achievements"];
+function readConditionRoster(conditionType: "hospitalized" | "jailed", activeInternalId: string) {
+  if (typeof window === "undefined") return [];
+
+  const roster: Array<{
+    internalId: string;
+    name: string;
+    reason: string;
+    remainingLabel: string;
+  }> = [];
+
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key || !key.startsWith("nexis_player__")) continue;
+
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null") as StoredPlayerSnapshot | null;
+      if (!parsed?.condition || parsed.condition.type !== conditionType) continue;
+
+      const internalId = parsed.internalId ?? key;
+      if (internalId === activeInternalId) continue;
+
+      const name = [parsed.name, parsed.lastName].filter(Boolean).join(" ").trim() || "Unknown";
+      const until = typeof parsed.condition.until === "number" ? parsed.condition.until : Date.now();
+      roster.push({
+        internalId,
+        name,
+        reason: parsed.condition.reason ?? "No reason recorded",
+        remainingLabel: formatRemaining(Math.max(0, until - Date.now())),
+      });
+    } catch {
+      // Ignore broken snapshots.
+    }
+  }
+
+  return roster;
+}
 
 export default function HospitalPage() {
   const location = useLocation() as { state?: { redirectedFrom?: string } };
   const {
     player,
-    now,
     isHospitalized,
     isJailed,
-    hospitalRemainingMs,
     hospitalRemainingLabel,
-    jailRemainingMs,
     jailRemainingLabel,
     hospitalizeFor,
     recoverFromHospital,
     releaseFromJail,
     setHealth,
     jailFor,
-    startEducation,
-    quitEducation,
   } = usePlayer();
+  const { activeAccount } = useAuth();
 
-  const healthPct = player.stats.maxHealth > 0
-    ? Math.round((Math.floor(player.stats.health) / player.stats.maxHealth) * 100)
-    : 0;
-
-  const hospitalTimerPct = isHospitalized && player.condition.type === "hospitalized"
-    ? Math.min(100, 100 - (hospitalRemainingMs / ((player.condition.until - (player.condition.until - hospitalRemainingMs))) * 100))
-    : 100;
-
-  // Determine the display condition
   const activeCondition = isHospitalized ? "hospitalized" : isJailed ? "jailed" : "normal";
+  const canUsePrototypeControls = isStaffOrAdmin(activeAccount ?? player.publicId);
+  const roster = activeCondition === "hospitalized"
+    ? readConditionRoster("hospitalized", player.internalId)
+    : activeCondition === "jailed"
+    ? readConditionRoster("jailed", player.internalId)
+    : [];
+
+  const pageTitle = activeCondition === "jailed" ? "Jail" : "Hospital";
+  const timerLabel = activeCondition === "hospitalized" ? hospitalRemainingLabel : activeCondition === "jailed" ? jailRemainingLabel : "0m";
 
   return (
     <AppShell
-      title="Hospital"
-      hint="Active condition system. Recovery is tracked in real time."
+      title={pageTitle}
+      hint={activeCondition === "normal" ? "No active condition." : "Your current condition updates here in real time. Everything else can stop pretending to be accessible."}
     >
       <div className="nexis-grid">
-
-        {/* ── Column 1: Current Condition ─────────────────────────────────── */}
         <div className="nexis-column">
-          <ContentPanel title="Your Condition">
+          <ContentPanel title="Current Status">
             <div className="hosp-status-block">
-              <div
-                className={`hosp-status-badge hosp-status-badge--${activeCondition}`}
-              >
+              <div className={`hosp-status-badge hosp-status-badge--${activeCondition}`}>
                 {activeCondition === "hospitalized" && "Hospitalized"}
                 {activeCondition === "jailed" && "Jailed"}
                 {activeCondition === "normal" && "Normal"}
               </div>
-
-              {activeCondition !== "normal" && (
-                <div className="hosp-timer">
-                  <div className="hosp-timer__label">Time remaining</div>
-                  <div className="hosp-timer__value">
-                    {activeCondition === "hospitalized" ? hospitalRemainingLabel : jailRemainingLabel}
-                  </div>
-                  {activeCondition === "hospitalized" && (
-                    <div className="hosp-timer__bar-track">
-                      <div
-                        className="hosp-timer__bar-fill"
-                        style={{ width: `${100 - Math.round((hospitalRemainingMs / Math.max(1, hospitalRemainingMs)) * 100)}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
 
             <div className="info-list" style={{ marginTop: "12px" }}>
-              <InfoRow label="Reason" value={player.condition.reason ?? "None"} />
-              <InfoRow
-                label="Health"
-                value={
-                  <span>
-                    {Math.floor(player.stats.health)} / {player.stats.maxHealth}
-                    <span className="hosp-health-pct"> ({healthPct}%)</span>
-                  </span>
-                }
-              />
-              <InfoRow label="Current Education" value={player.current.education?.name ?? "None"} />
+              <InfoRow label="Citizen" value={player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown"} />
+              <InfoRow label="Time Remaining" value={timerLabel} />
+              <InfoRow label="Reason" value={player.condition.reason ?? "No active condition"} />
             </div>
 
-            {location.state?.redirectedFrom && (
+            {location.state?.redirectedFrom ? (
               <div className="hospital-note hospital-note--redirect">
-                Access to <strong>{location.state.redirectedFrom}</strong> is blocked
-                while {activeCondition}.
+                Access to <strong>{location.state.redirectedFrom}</strong> is unavailable while you are {activeCondition === "normal" ? "fine" : activeCondition}.
+              </div>
+            ) : null}
+
+            {activeCondition === "hospitalized" ? (
+              <div className="hospital-note">You will leave the hospital automatically when the timer expires.</div>
+            ) : null}
+
+            {activeCondition === "jailed" ? (
+              <div className="hospital-note">You will be released automatically when your sentence expires.</div>
+            ) : null}
+
+            {activeCondition === "normal" ? (
+              <div className="hospital-note">No current recovery or jail status. Congratulations on basic functionality.</div>
+            ) : null}
+          </ContentPanel>
+        </div>
+
+        <div className="nexis-column">
+          <ContentPanel title={activeCondition === "jailed" ? "Others In Jail" : "Others In Hospital"}>
+            {roster.length ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                {roster.map((entry) => (
+                  <div
+                    key={entry.internalId}
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: 8,
+                      padding: 12,
+                      background: "rgba(7, 13, 20, 0.55)",
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <strong>{entry.name}</strong>
+                    <div style={{ fontSize: 12, color: "#b7c3cf" }}>Remaining: {entry.remainingLabel}</div>
+                    <div style={{ fontSize: 12, color: "#d7dee6" }}>Reason: {entry.reason}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="hospital-note">
+                {activeCondition === "jailed"
+                  ? "No other prisoners are currently listed."
+                  : "No other patients are currently listed."}
               </div>
             )}
           </ContentPanel>
+        </div>
 
-          {/* ── Recovery Actions ─────────────────────────────────────────── */}
-          {isHospitalized && (
-            <ContentPanel title="Recovery">
+        {canUsePrototypeControls ? (
+          <div className="nexis-column">
+            <ContentPanel title="Admin Prototype Controls">
               <div className="hospital-note">
-                You will be automatically discharged when the timer expires and your health will be restored to full.
-                Emergency discharge is available if you cannot wait.
+                Reserved for the administrator while combat, jail, and recovery systems are still being stitched together properly.
               </div>
               <div className="hospital-actions" style={{ marginTop: "10px" }}>
-                <button
-                  type="button"
-                  className="hospital-btn"
-                  onClick={recoverFromHospital}
-                >
-                  Emergency Discharge
+                <button type="button" className="hospital-btn hospital-btn--danger" onClick={() => setHealth(0, "Combat defeat")}>
+                  Simulate Defeat
                 </button>
+                <button type="button" className="hospital-btn" onClick={() => hospitalizeFor(15, "Test admission")}>
+                  Admit 15 Minutes
+                </button>
+                <button type="button" className="hospital-btn" onClick={() => hospitalizeFor(60, "Extended test")}>
+                  Admit 60 Minutes
+                </button>
+                <button type="button" className="hospital-btn hospital-btn--danger" onClick={() => jailFor(10, "Caught stealing")}>
+                  Jail for 10 Minutes
+                </button>
+                {isHospitalized || isJailed ? (
+                  <button
+                    type="button"
+                    className="hospital-btn"
+                    onClick={isHospitalized ? recoverFromHospital : releaseFromJail}
+                  >
+                    Clear Condition
+                  </button>
+                ) : null}
               </div>
             </ContentPanel>
-          )}
-
-          {isJailed && (
-            <ContentPanel title="Incarceration">
-              <div className="hospital-note">
-                You are held in the city detention block. Most activity is suspended.
-                Your sentence expires automatically. Early release is available.
-              </div>
-              <div className="hospital-actions" style={{ marginTop: "10px" }}>
-                <button
-                  type="button"
-                  className="hospital-btn hospital-btn--danger"
-                  onClick={releaseFromJail}
-                >
-                  Early Release (Dev Override)
-                </button>
-              </div>
-            </ContentPanel>
-          )}
-
-          {activeCondition === "normal" && (
-            <ContentPanel title="Status">
-              <div className="hosp-clear">
-                <div className="hosp-clear__icon">✓</div>
-                <div className="hosp-clear__text">You are in good condition. No restrictions active.</div>
-              </div>
-            </ContentPanel>
-          )}
-        </div>
-
-        {/* ── Column 2: Restrictions ──────────────────────────────────────── */}
-        <div className="nexis-column">
-          {activeCondition === "hospitalized" && (
-            <>
-              <ContentPanel title="While Hospitalized — Blocked">
-                <ul className="hospital-list hospital-list--blocked">
-                  {BLOCKED_PAGES.map((p) => (
-                    <li key={p}>
-                      <span className="hosp-list-icon">✗</span> {p}
-                    </li>
-                  ))}
-                </ul>
-              </ContentPanel>
-
-              <ContentPanel title="While Hospitalized — Still Accessible">
-                <ul className="hospital-list hospital-list--allowed">
-                  {ALLOWED_PAGES.map((p) => (
-                    <li key={p}>
-                      <span className="hosp-list-icon hosp-list-icon--allow">✓</span> {p}
-                    </li>
-                  ))}
-                  <li>
-                    <span className="hosp-list-icon hosp-list-icon--allow">✓</span>
-                    Education in progress <em>(continues uninterrupted)</em>
-                  </li>
-                </ul>
-              </ContentPanel>
-            </>
-          )}
-
-          {activeCondition === "jailed" && (
-            <>
-              <ContentPanel title="While Jailed — Blocked">
-                <ul className="hospital-list hospital-list--blocked">
-                  {JAIL_BLOCKED.map((p) => (
-                    <li key={p}>
-                      <span className="hosp-list-icon">✗</span> {p}
-                    </li>
-                  ))}
-                </ul>
-              </ContentPanel>
-
-              <ContentPanel title="While Jailed — Still Accessible">
-                <ul className="hospital-list hospital-list--allowed">
-                  {JAIL_ALLOWED.map((p) => (
-                    <li key={p}>
-                      <span className="hosp-list-icon hosp-list-icon--allow">✓</span> {p}
-                    </li>
-                  ))}
-                  <li>
-                    <span className="hosp-list-icon hosp-list-icon--allow">✓</span>
-                    Education in progress <em>(continues uninterrupted)</em>
-                  </li>
-                </ul>
-              </ContentPanel>
-            </>
-          )}
-
-          {activeCondition === "normal" && (
-            <ContentPanel title="Restrictions">
-              <div className="hospital-note">
-                No active conditions. All pages accessible.
-              </div>
-              <ul className="hospital-list hospital-list--allowed">
-                <li>
-                  <span className="hosp-list-icon hosp-list-icon--allow">✓</span>
-                  Full access to all systems
-                </li>
-              </ul>
-            </ContentPanel>
-          )}
-
-          {/* ── Education continuity ─────────────────────────────────────── */}
-          <ContentPanel title="Education">
-            <div className="info-list">
-              <InfoRow
-                label="Active Course"
-                value={player.current.education ? player.current.education.name : "None"}
-              />
-              <InfoRow
-                label="Hospital Effect"
-                value={player.current.education ? "No interruption" : "N/A"}
-              />
-            </div>
-
-            <div className="hospital-actions" style={{ marginTop: "10px" }}>
-              {!player.current.education ? (
-                <button
-                  type="button"
-                  className="hospital-btn"
-                  onClick={() => startEducation("gs-basic-literacy", "Basic Literacy", 24 * 60 * 60 * 1000)}
-                >
-                  Start Demo Course
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="hospital-btn hospital-btn--danger"
-                  onClick={quitEducation}
-                >
-                  Quit Course (Resets Progress)
-                </button>
-              )}
-            </div>
-          </ContentPanel>
-        </div>
-
-        {/* ── Column 3: Dev Controls ──────────────────────────────────────── */}
-        <div className="nexis-column">
-          <ContentPanel title="Dev — Prototype Controls">
-            <div className="hospital-note">
-              These controls exist for testing before combat and missions are wired in.
-            </div>
-            <div className="hospital-actions" style={{ marginTop: "10px" }}>
-              <button
-                type="button"
-                className="hospital-btn hospital-btn--danger"
-                onClick={() => setHealth(0, "Combat defeat")}
-              >
-                Simulate Defeat → Hospital
-              </button>
-              <button
-                type="button"
-                className="hospital-btn"
-                onClick={() => hospitalizeFor(15, "Test admission")}
-              >
-                Admit 15 Minutes
-              </button>
-              <button
-                type="button"
-                className="hospital-btn"
-                onClick={() => hospitalizeFor(60, "Extended test")}
-              >
-                Admit 60 Minutes
-              </button>
-              <button
-                type="button"
-                className="hospital-btn hospital-btn--danger"
-                onClick={() => jailFor(10, "Caught stealing")}
-              >
-                Jail for 10 Minutes
-              </button>
-              {(isHospitalized || isJailed) && (
-                <button
-                  type="button"
-                  className="hospital-btn"
-                  onClick={isHospitalized ? recoverFromHospital : releaseFromJail}
-                >
-                  Clear Condition
-                </button>
-              )}
-            </div>
-          </ContentPanel>
-        </div>
-
+          </div>
+        ) : null}
       </div>
     </AppShell>
   );

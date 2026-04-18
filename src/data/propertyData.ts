@@ -4,6 +4,8 @@
 // Properties raise your max Comfort cap and unlock facility upgrades.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { isAbsoluteOwner, isAdministrator } from "../lib/adminAccess";
+
 export type PropertyUpgrade = {
   id: string;
   name: string;
@@ -12,6 +14,9 @@ export type PropertyUpgrade = {
   comfortBonus: number;       // additional comfort on top of base
   effects: string[];          // displayed as bullet list
 };
+
+export type PropertyAccess = "public" | "admin" | "absolute_owner";
+export type PropertyAcquisition = "purchase" | "assignment";
 
 export type PropertyTier = {
   id: string;
@@ -25,6 +30,13 @@ export type PropertyTier = {
   icon: string;               // emoji icon
   upgradeSlots: number;       // how many upgrades can be installed
   upgrades: PropertyUpgrade[];
+  access?: PropertyAccess;
+  acquisition?: PropertyAcquisition;
+  unique?: boolean;
+};
+
+export type PropertyViewer = {
+  publicId: number | null | undefined;
 };
 
 export const propertyTiers: PropertyTier[] = [
@@ -356,6 +368,185 @@ export const propertyTiers: PropertyTier[] = [
       },
     ],
   },
+  {
+    id: "shadow-guardian",
+    name: "Shadow Guardian Airship",
+    price: 0,
+    baseComfort: 75_000,
+    maxComfort: 100_000,
+    upkeepPerDay: 0,
+    summary: "Administrator command carrier. Subtlety was not invited.",
+    flavour:
+      "A fortress-airship with district-scale decks, sealed gardens, command galleries, and enough hull to make common sense file a formal complaint. Reserved for administrator identities trusted with Shadow Guardian command authority.",
+    icon: "SG",
+    upgradeSlots: 8,
+    access: "admin",
+    acquisition: "assignment",
+    upgrades: [
+      {
+        id: "shadow-guardian-command-spire",
+        name: "Command Spire",
+        description: "A towered bridge deck with full tactical projection and fleet-link systems.",
+        cost: 0,
+        comfortBonus: 3_500,
+        effects: ["+3,500 max comfort", "Full fleet coordination deck"],
+      },
+      {
+        id: "shadow-guardian-drill-decks",
+        name: "Drill Decks",
+        description: "Dedicated combat decks for training under absurdly expensive supervision.",
+        cost: 0,
+        comfortBonus: 3_000,
+        effects: ["+3,000 max comfort", "+7% battle stat gains from training"],
+      },
+      {
+        id: "shadow-guardian-infirmary",
+        name: "Guardian Infirmary",
+        description: "A full surgical and recovery bay with med-automata and warded rooms.",
+        cost: 0,
+        comfortBonus: 3_000,
+        effects: ["+3,000 max comfort", "Hospital recovery support"],
+      },
+      {
+        id: "shadow-guardian-archive",
+        name: "Black Archive",
+        description: "A classified archive containing command logs, histories, and restricted studies.",
+        cost: 0,
+        comfortBonus: 2_500,
+        effects: ["+2,500 max comfort", "Advanced education access"],
+      },
+      {
+        id: "shadow-guardian-waygate",
+        name: "Waygate Chamber",
+        description: "A stabilized travel chamber keyed to command routes and protected anchors.",
+        cost: 0,
+        comfortBonus: 3_500,
+        effects: ["+3,500 max comfort", "Priority travel routing"],
+      },
+      {
+        id: "shadow-guardian-vault",
+        name: "Shadow Vault",
+        description: "An armored treasury deck designed for items nobody should misplace.",
+        cost: 0,
+        comfortBonus: 3_000,
+        effects: ["+3,000 max comfort", "Massive secure storage"],
+      },
+      {
+        id: "shadow-guardian-gardens",
+        name: "Void Gardens",
+        description: "Suspended interior gardens because apparently even warships need scenery.",
+        cost: 0,
+        comfortBonus: 3_000,
+        effects: ["+3,000 max comfort", "Major comfort stabilization"],
+      },
+      {
+        id: "shadow-guardian-quarters",
+        name: "Command Suites",
+        description: "Private quarters for command staff, dignitaries, and the terminally important.",
+        cost: 0,
+        comfortBonus: 3_500,
+        effects: ["+3,500 max comfort", "High-capacity executive housing"],
+      },
+    ],
+  },
+  {
+    id: "shadow-guardian-prime",
+    name: "Shadow Guardian Prime",
+    price: 0,
+    baseComfort: 100_000,
+    maxComfort: 140_000,
+    upkeepPerDay: 0,
+    summary: "Hennet's one-of-one worldbreaker flagship. Modesty died on launch.",
+    flavour:
+      "A worldbreaker-class airship the size of a small city, carrying private academies, command citadels, sealed vault districts, and enough sovereign infrastructure to embarrass smaller nations. This flagship is reserved exclusively for Hennet Uthellien.",
+    icon: "SGP",
+    upgradeSlots: 10,
+    access: "absolute_owner",
+    acquisition: "assignment",
+    unique: true,
+    upgrades: [
+      {
+        id: "shadow-guardian-prime-citadel",
+        name: "Prime Command Citadel",
+        description: "The central command core from which the entire vessel is governed.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "Supreme command authority"],
+      },
+      {
+        id: "shadow-guardian-prime-warfoundry",
+        name: "Warfoundry Deck",
+        description: "A brutal training and fabrication complex for battle refinement at impossible scale.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "+12% battle stat gains from training"],
+      },
+      {
+        id: "shadow-guardian-prime-archive",
+        name: "Eclipse Archive",
+        description: "A classified archive-citadel with research stacks, sealed reliquaries, and command records.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "Elite education and intelligence support"],
+      },
+      {
+        id: "shadow-guardian-prime-infirmary",
+        name: "Prime Resurrection Wing",
+        description: "A full command-grade medical and recovery district.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "Best-in-class medical recovery"],
+      },
+      {
+        id: "shadow-guardian-prime-gardens",
+        name: "Skyglass Gardens",
+        description: "A floating interior biome because Hennet apparently wanted a private climate.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "Major comfort regeneration support"],
+      },
+      {
+        id: "shadow-guardian-prime-vault",
+        name: "Prime Treasury District",
+        description: "Not a vault room. A vault district. Entirely different level of problem.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "Extreme secure storage"],
+      },
+      {
+        id: "shadow-guardian-prime-waygate",
+        name: "Sovereign Waygate",
+        description: "A sovereign waygate chamber linked to protected command routes.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "Top-priority travel capability"],
+      },
+      {
+        id: "shadow-guardian-prime-quarters",
+        name: "Absolute Suites",
+        description: "Private residential decks designed for people who do not hear the word no often enough.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "Expanded command residence capacity"],
+      },
+      {
+        id: "shadow-guardian-prime-observatory",
+        name: "Worldglass Observatory",
+        description: "A strategic observatory with reality-calibrated long-range instruments.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "Superior intelligence and oversight"],
+      },
+      {
+        id: "shadow-guardian-prime-aegis",
+        name: "Aegis Halo",
+        description: "Defensive ward lattice spanning the entire flagship hull.",
+        cost: 0,
+        comfortBonus: 4_000,
+        effects: ["+4,000 max comfort", "Worldbreaker-grade defensive shielding"],
+      },
+    ],
+  },
 ];
 
 export function formatGold(value: number): string {
@@ -366,6 +557,71 @@ export function formatGold(value: number): string {
 
 export function getPropertyById(id: string): PropertyTier | undefined {
   return propertyTiers.find((p) => p.id === id);
+}
+
+export function getPropertyComfortCap(propertyId: string, installedUpgradeIds: string[]): number {
+  const property = getPropertyById(propertyId) ?? propertyTiers[0];
+  const installed = new Set(installedUpgradeIds);
+  const comfortFromUpgrades = property.upgrades.reduce(
+    (sum, upgrade) => sum + (installed.has(upgrade.id) ? upgrade.comfortBonus : 0),
+    0,
+  );
+  return property.baseComfort + comfortFromUpgrades;
+}
+
+export function getPropertyBattleTrainingMultiplier(propertyId: string, installedUpgradeIds: string[]): number {
+  const installed = new Set(installedUpgradeIds);
+  let multiplier = 1;
+
+  if (propertyId === "manor" && installed.has("manor-training")) {
+    multiplier *= 1.05;
+  }
+
+  if (propertyId === "shadow-guardian" && installed.has("shadow-guardian-drill-decks")) {
+    multiplier *= 1.07;
+  }
+
+  if (propertyId === "shadow-guardian-prime" && installed.has("shadow-guardian-prime-warfoundry")) {
+    multiplier *= 1.12;
+  }
+
+  return multiplier;
+}
+
+export function getPropertyTravelTimeMultiplier(propertyId: string, installedUpgradeIds: string[]) {
+  const installed = new Set(installedUpgradeIds);
+  let multiplier = 1;
+
+  if (propertyId === "manor" && installed.has("manor-stable")) {
+    multiplier *= 0.9;
+  }
+
+  if (propertyId === "shadow-guardian") {
+    multiplier *= 0.2;
+  }
+
+  if (propertyId === "shadow-guardian-prime") {
+    multiplier *= 0.1;
+  }
+
+  return Math.max(0.1, multiplier);
+}
+
+export function canAccessPropertyTier(tier: PropertyTier, viewer: PropertyViewer) {
+  const access = tier.access ?? "public";
+
+  if (access === "public") return true;
+  if (access === "absolute_owner") return isAbsoluteOwner(viewer.publicId);
+  if (access === "admin") return isAdministrator(viewer.publicId);
+  return false;
+}
+
+export function getPropertyAccessLabel(tier: PropertyTier) {
+  const access = tier.access ?? "public";
+
+  if (access === "absolute_owner") return "Hennet exclusive";
+  if (access === "admin") return "Administrator exclusive";
+  return null;
 }
 
 // Legacy compat

@@ -1,11 +1,13 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { ReactNode } from "react";
+import { ReactNode, useMemo } from "react";
 import { TopBar } from "./TopBar";
 import { usePlayer } from "../../state/PlayerContext";
 import { useAuth } from "../../state/AuthContext";
 import { StatBars } from "./StatBars";
-import { formatPlayerNameWithPublicId, formatPlayerPublicId } from "../../lib/publicIds";
+import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicIds";
+import { isAdministrator } from "../../lib/adminAccess";
 import { resolveDisplayTitle } from "../../lib/titleAccess";
+import { getTravelProgress, resolveTravelState } from "../../lib/travelState";
 
 type AppShellProps = {
   title?: string;
@@ -28,9 +30,13 @@ const world: Array<[string, string]> = [
   ["City Board", "/city-board"],
   ["Civic Jobs", "/civic-jobs"],
   ["Hospital", "/hospital"],
-  ["Guilds / Consortiums", "/guild"],
-  ["Market", "/market"],
+  ["Guilds", "/guilds"],
+  ["Consortiums", "/consortiums"],
 ];
+
+const HOSPITAL_HIDDEN = new Set(["/education", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
+const JAIL_HIDDEN = new Set(["/education", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
+const TRAVEL_HIDDEN = new Set(["/education", "/adventure", "/arena", "/city", "/civic-jobs", "/guilds", "/consortiums", "/housing"]);
 
 function SidebarSection({ title, links }: { title: string; links: Array<[string, string]> }) {
   if (!links.length) return null;
@@ -47,7 +53,7 @@ function SidebarSection({ title, links }: { title: string; links: Array<[string,
             className={({ isActive }) => `sidebar-link${isActive ? " sidebar-link--active" : ""}`}
           >
             <span>{label}</span>
-            <span className="sidebar-link__arrow">›</span>
+            <span className="sidebar-link__arrow">{">"}</span>
           </NavLink>
         ))}
       </div>
@@ -59,10 +65,38 @@ function formatGold(amount: number): string {
   return amount.toLocaleString("en-US") + " gp";
 }
 
+function getExperienceToNextLevel(level: number): number {
+  return Math.max(50, level * 50);
+}
+
+function getExperienceFloorForLevel(level: number): number {
+  let total = 0;
+  for (let currentLevel = 1; currentLevel < level; currentLevel += 1) {
+    total += getExperienceToNextLevel(currentLevel);
+  }
+  return total;
+}
+
+function formatExperienceProgress(experience: number, level: number) {
+  const floor = getExperienceFloorForLevel(level);
+  const xpToNext = getExperienceToNextLevel(level);
+  const currentXp = Math.max(0, experience - floor);
+  return `${currentXp.toLocaleString("en-US")} / ${xpToNext.toLocaleString("en-US")}`;
+}
+
+function getRemainingExperience(experience: number, level: number) {
+  const floor = getExperienceFloorForLevel(level);
+  const xpToNext = getExperienceToNextLevel(level);
+  const currentXp = Math.max(0, experience - floor);
+  return Math.max(0, xpToNext - currentXp);
+}
+
 export function AppShell({ title, hint, children }: AppShellProps) {
-  const { player, isHospitalized, hospitalRemainingLabel, isJailed, jailRemainingLabel } = usePlayer();
-  const { logout } = useAuth();
+  const { player, now, isHospitalized, hospitalRemainingLabel, isJailed, jailRemainingLabel } = usePlayer();
+  const { logout, activeAccount } = useAuth();
   const navigate = useNavigate();
+  const travelState = resolveTravelState(player.internalId, now);
+  const isTraveling = getTravelProgress(travelState, now).active;
 
   function handleLogout() {
     logout();
@@ -72,16 +106,30 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   let conditionLabel = "Normal";
   let conditionClass = "player-condition";
   if (isHospitalized) {
-    conditionLabel = `Hospital · ${hospitalRemainingLabel}`;
+    conditionLabel = `Hospital | ${hospitalRemainingLabel}`;
     conditionClass = "player-condition player-condition--hospital";
   } else if (isJailed) {
-    conditionLabel = `Jailed · ${jailRemainingLabel}`;
+    conditionLabel = `Jailed | ${jailRemainingLabel}`;
     conditionClass = "player-condition player-condition--jail";
+  } else if (isTraveling) {
+    conditionLabel = "Traveling";
+    conditionClass = "player-condition";
   }
 
   const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
   const displayNameWithPublicId = formatPlayerNameWithPublicId(displayName, player.publicId);
+  const profileRoute = getProfileRoute(player.publicId);
   const displayTitle = resolveDisplayTitle(player.title, player.publicId);
+  const hiddenRoutes = useMemo(() => {
+    if (isHospitalized) return HOSPITAL_HIDDEN;
+    if (isJailed) return JAIL_HIDDEN;
+    if (isTraveling) return TRAVEL_HIDDEN;
+    return null;
+  }, [isHospitalized, isJailed, isTraveling]);
+  const visibleCore = hiddenRoutes ? core.filter(([, route]) => !hiddenRoutes.has(route)) : core;
+  const adminLinks: Array<[string, string]> = isAdministrator(activeAccount ?? player.publicId) ? [["Admin", "/admin"]] : [];
+  const visibleWorldBase = [...world, ...adminLinks];
+  const visibleWorld = hiddenRoutes ? visibleWorldBase.filter(([, route]) => !hiddenRoutes.has(route)) : visibleWorldBase;
 
   return (
     <div className="app-shell">
@@ -89,14 +137,13 @@ export function AppShell({ title, hint, children }: AppShellProps) {
       <div className="app-main">
         <aside className="sidebar">
           <div className="sidebar-logo">
-            <div className="sidebar-logo__title">Ashen Crown</div>
-            <div className="sidebar-logo__subtitle">Realm operations ledger</div>
+            <div className="sidebar-logo__title">Nexis</div>
+            <div className="sidebar-logo__subtitle">Online realm of adventure</div>
           </div>
 
           <div className="player-card">
             <div className="player-card__name">
               <span className="player-card__username">{displayNameWithPublicId}</span>
-              <span className="player-card__id"> Citizen ID {formatPlayerPublicId(player.publicId)}</span>
             </div>
 
             <div className="player-card__rows">
@@ -112,6 +159,14 @@ export function AppShell({ title, hint, children }: AppShellProps) {
                 <span className="player-card__key">Days</span>
                 <span className="player-card__val">{player.daysPlayed}</span>
               </div>
+              <div className="player-card__row">
+                <span className="player-card__key">XP</span>
+                <span className="player-card__val">{formatExperienceProgress(player.experience, player.level)}</span>
+              </div>
+              <div className="player-card__row">
+                <span className="player-card__key">Next Level</span>
+                <span className="player-card__val">{getRemainingExperience(player.experience, player.level).toLocaleString("en-US")} xp</span>
+              </div>
               <div className="player-card__row player-card__row--gold">
                 <span className="player-card__key">Gold</span>
                 <span className="player-card__val player-card__val--gold">{formatGold(player.gold)}</span>
@@ -122,8 +177,9 @@ export function AppShell({ title, hint, children }: AppShellProps) {
           </div>
 
           <StatBars />
-          <SidebarSection title="Core" links={core} />
-          <SidebarSection title="World" links={world} />
+
+          <SidebarSection title="Core" links={visibleCore} />
+          <SidebarSection title="World" links={visibleWorld} />
 
           <div className="sidebar-logout">
             <button type="button" className="sidebar-logout__btn" onClick={handleLogout}>
@@ -133,7 +189,16 @@ export function AppShell({ title, hint, children }: AppShellProps) {
         </aside>
 
         <main className="content">
-          {title ? <div className="page-banner"><div className="page-banner__title">{title}</div></div> : null}
+          {title ? (
+            <div className="page-banner">
+              <div className="page-banner__title">{title}</div>
+              <div className="page-banner__actions">
+                <NavLink to={profileRoute} className="page-banner__action">
+                  Personal stats
+                </NavLink>
+              </div>
+            </div>
+          ) : null}
           {hint ? <div className="page-subhint">{hint}</div> : null}
           {children}
         </main>

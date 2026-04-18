@@ -1,4 +1,4 @@
-﻿.deploy/
+.deploy/
 .data/
 node_modules/
 dist/
@@ -7,3 +7,8 @@ dist/
 .env
 .env.*
 *.tsbuildinfo
+.data-backup-*/
+.live-pass-backup-*/
+.tmp-*.mjs
+*.broken_backup
+*.bak

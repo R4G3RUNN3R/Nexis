@@ -1,6 +1,9 @@
+import { getArenaStateKey } from "./arenaState";
+import { defaultCivicEmploymentState, normalizeCivicEmploymentState, readCivicEmploymentState, writeCivicEmploymentState } from "./civicJobsState";
+import { consortiumKey, guildKey } from "./organizations";
+
 const JOBS_STORAGE_KEY = "nexis_jobs";
 const EDUCATION_STORAGE_KEY = "nexis.education";
-const ARENA_STORAGE_KEY = "nexis_arena";
 const TIMER_STORAGE_KEY = "nexis_timers";
 
 export type CachedRuntimeState = {
@@ -11,10 +14,51 @@ export type CachedRuntimeState = {
   timers: Record<string, unknown>;
   guild: Record<string, unknown>;
   consortium: Record<string, unknown>;
+  civicEmployment: Record<string, unknown>;
 };
+
+const MAX_PLAYER_LEVEL = 100;
+
+function getExperienceToNextLevel(level: number) {
+  return Math.max(50, level * 50);
+}
+
+function normalizeExperience(value: unknown) {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.floor(numeric));
+}
+
+function getLevelFromExperience(experience: number) {
+  let level = 1;
+  let remainingXp = normalizeExperience(experience);
+  let xpToNextLevel = getExperienceToNextLevel(level);
+
+  while (remainingXp >= xpToNextLevel && level < MAX_PLAYER_LEVEL) {
+    remainingXp -= xpToNextLevel;
+    level += 1;
+    xpToNextLevel = getExperienceToNextLevel(level);
+  }
+
+  return level;
+}
+
+function normalizeLevel(level: unknown, experience: number) {
+  const derived = getLevelFromExperience(experience);
+  if (derived > 1 || experience > 0) return derived;
+  return 1;
+}
 
 function playerStorageKey(email: string) {
   return `nexis_player__${email.trim().toLowerCase()}`;
+}
+
+function resolveInternalPlayerId(email: string, playerOverride?: Record<string, unknown> | null) {
+  const fromOverride = typeof playerOverride?.internalId === "string" ? playerOverride.internalId : null;
+  if (fromOverride) return fromOverride;
+
+  const existingPlayer = readRecord(playerStorageKey(email));
+  return typeof existingPlayer.internalId === "string" ? existingPlayer.internalId : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -37,15 +81,71 @@ function writeRecord(key: string, value: unknown) {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
+const DEFAULT_WORKING_STATS = {
+  manualLabor: 10,
+  intelligence: 10,
+  endurance: 10,
+} as const;
+
+const DEFAULT_BATTLE_STATS = {
+  strength: 10,
+  defense: 10,
+  speed: 10,
+  dexterity: 10,
+} as const;
+
+const DEFAULT_CURRENCIES = {
+  copper: 0,
+  silver: 0,
+  gold: 500,
+  platinum: 0,
+} as const;
+
+function normalizeStatRecord<T extends Record<string, number>>(value: unknown, defaults: T): T {
+  const merged = {
+    ...defaults,
+    ...(isRecord(value) ? value : {}),
+  } as T;
+
+  const allMissingOrZero = Object.keys(defaults).every((key) => Number(merged[key as keyof T] ?? 0) <= 0);
+  return allMissingOrZero ? { ...defaults } : merged;
+}
+
+function normalizeCurrencyRecord(value: unknown, goldFallback: number) {
+  const record = isRecord(value) ? value : {};
+  return {
+    copper: Number(record.copper ?? DEFAULT_CURRENCIES.copper),
+    silver: Number(record.silver ?? DEFAULT_CURRENCIES.silver),
+    gold: Number(record.gold ?? goldFallback),
+    platinum: Number(record.platinum ?? DEFAULT_CURRENCIES.platinum),
+  };
+}
+
+function normalizeItemEnhancements(value: unknown) {
+  const record = isRecord(value) ? value : {};
+  return Object.fromEntries(
+    Object.entries(record)
+      .map(([itemId, enhancements]) => [
+        itemId,
+        Array.isArray(enhancements)
+          ? Array.from(new Set(enhancements.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim())))
+          : [],
+      ])
+      .filter((entry) => entry[1].length > 0),
+  );
+}
+
 export function readCachedRuntimeState(email: string): CachedRuntimeState {
+  const internalPlayerId = resolveInternalPlayerId(email);
   return {
     player: readRecord(playerStorageKey(email)),
     jobs: readRecord(JOBS_STORAGE_KEY),
     education: readRecord(EDUCATION_STORAGE_KEY),
-    arena: readRecord(ARENA_STORAGE_KEY),
+    arena: internalPlayerId ? readRecord(getArenaStateKey(internalPlayerId)) : {},
     timers: readRecord(TIMER_STORAGE_KEY),
-    guild: {},
-    consortium: {},
+    guild: internalPlayerId ? readRecord(guildKey(internalPlayerId)) : {},
+    consortium: internalPlayerId ? readRecord(consortiumKey(internalPlayerId)) : {},
+    civicEmployment: internalPlayerId ? (readCivicEmploymentState(internalPlayerId) as unknown as Record<string, unknown>) : (defaultCivicEmploymentState() as unknown as Record<string, unknown>),
   };
 }
 
@@ -55,8 +155,13 @@ export function writeCachedRuntimeState(email: string, state: Partial<CachedRunt
   if (state.player) writeRecord(playerStorageKey(email), state.player);
   if (state.jobs) writeRecord(JOBS_STORAGE_KEY, state.jobs);
   if (state.education) writeRecord(EDUCATION_STORAGE_KEY, state.education);
-  if (state.arena) writeRecord(ARENA_STORAGE_KEY, state.arena);
   if (state.timers) writeRecord(TIMER_STORAGE_KEY, state.timers);
+
+  const internalPlayerId = resolveInternalPlayerId(email, isRecord(state.player) ? state.player : null);
+  if (internalPlayerId && state.arena) writeRecord(getArenaStateKey(internalPlayerId), state.arena);
+  if (internalPlayerId && state.guild) writeRecord(guildKey(internalPlayerId), state.guild);
+  if (internalPlayerId && state.consortium) writeRecord(consortiumKey(internalPlayerId), state.consortium);
+  if (internalPlayerId && state.civicEmployment) writeCivicEmploymentState(internalPlayerId, normalizeCivicEmploymentState(state.civicEmployment));
 }
 
 type MergeServerStateArgs = {
@@ -101,6 +206,18 @@ export function mergeServerStateIntoCache({
   const runtimeTimers = isRecord(playerState?.runtimeState?.timers)
     ? playerState.runtimeState.timers
     : null;
+  const runtimeGuild =
+    isRecord(playerState?.runtimeState?.guild) && Object.keys(playerState.runtimeState.guild).length > 0
+      ? playerState.runtimeState.guild
+      : null;
+  const runtimeConsortium =
+    isRecord(playerState?.runtimeState?.consortium) && Object.keys(playerState.runtimeState.consortium).length > 0
+      ? playerState.runtimeState.consortium
+      : null;
+  const runtimeCivicEmployment =
+    isRecord(playerState?.runtimeState?.civicEmployment) && Object.keys(playerState.runtimeState.civicEmployment).length > 0
+      ? playerState.runtimeState.civicEmployment
+      : null;
 
   const mergedCurrent = {
     ...(isRecord(existing.current) ? existing.current : {}),
@@ -112,7 +229,13 @@ export function mergeServerStateIntoCache({
       ? playerState.currentJob
       : isRecord(playerState?.currentJob) && typeof playerState.currentJob.current === "string"
         ? playerState.currentJob.current
-        : null;
+      : null;
+
+  const mergedExperience = normalizeExperience(
+    runtimePlayer.experience ?? existing.experience ?? 0,
+  );
+
+  const mergedGold = Number(playerState?.gold ?? runtimePlayer.gold ?? existing.gold ?? 500);
 
   const mergedPlayer: Record<string, unknown> = {
     ...existing,
@@ -132,23 +255,32 @@ export function mergeServerStateIntoCache({
           ? existing.lastName
           : user.lastName,
     isRegistered: true,
-    level: playerState?.level ?? runtimePlayer.level ?? existing.level ?? 0,
-    gold: playerState?.gold ?? runtimePlayer.gold ?? existing.gold ?? 500,
+    experience: mergedExperience,
+    level: normalizeLevel(playerState?.level ?? runtimePlayer.level ?? existing.level, mergedExperience),
+    gold: mergedGold,
+    currencies: normalizeCurrencyRecord(runtimePlayer.currencies ?? existing.currencies, mergedGold),
+    itemEnhancements: normalizeItemEnhancements(runtimePlayer.itemEnhancements ?? existing.itemEnhancements),
     stats: {
       ...(isRecord(existing.stats) ? existing.stats : {}),
       ...(isRecord(runtimePlayer.stats) ? runtimePlayer.stats : {}),
       ...(isRecord(playerState?.stats) ? playerState.stats : {}),
     },
-    workingStats: {
-      ...(isRecord(existing.workingStats) ? existing.workingStats : {}),
-      ...(isRecord(runtimePlayer.workingStats) ? runtimePlayer.workingStats : {}),
-      ...(isRecord(playerState?.workingStats) ? playerState.workingStats : {}),
-    },
-    battleStats: {
-      ...(isRecord(existing.battleStats) ? existing.battleStats : {}),
-      ...(isRecord(runtimePlayer.battleStats) ? runtimePlayer.battleStats : {}),
-      ...(isRecord(playerState?.battleStats) ? playerState.battleStats : {}),
-    },
+    workingStats: normalizeStatRecord(
+      {
+        ...(isRecord(existing.workingStats) ? existing.workingStats : {}),
+        ...(isRecord(runtimePlayer.workingStats) ? runtimePlayer.workingStats : {}),
+        ...(isRecord(playerState?.workingStats) ? playerState.workingStats : {}),
+      },
+      DEFAULT_WORKING_STATS,
+    ),
+    battleStats: normalizeStatRecord(
+      {
+        ...(isRecord(existing.battleStats) ? existing.battleStats : {}),
+        ...(isRecord(runtimePlayer.battleStats) ? runtimePlayer.battleStats : {}),
+        ...(isRecord(playerState?.battleStats) ? playerState.battleStats : {}),
+      },
+      DEFAULT_BATTLE_STATS,
+    ),
     current: {
       ...mergedCurrent,
       job:
@@ -160,6 +292,9 @@ export function mergeServerStateIntoCache({
   writeRecord(playerStorageKey(email), mergedPlayer);
   if (runtimeJobs) writeRecord(JOBS_STORAGE_KEY, runtimeJobs);
   if (runtimeEducation) writeRecord(EDUCATION_STORAGE_KEY, runtimeEducation);
-  if (runtimeArena) writeRecord(ARENA_STORAGE_KEY, runtimeArena);
+  if (runtimeArena) writeRecord(getArenaStateKey(user.internalPlayerId), runtimeArena);
   if (runtimeTimers) writeRecord(TIMER_STORAGE_KEY, runtimeTimers);
+  if (runtimeGuild) writeRecord(guildKey(user.internalPlayerId), runtimeGuild);
+  if (runtimeConsortium) writeRecord(consortiumKey(user.internalPlayerId), runtimeConsortium);
+  if (runtimeCivicEmployment) writeCivicEmploymentState(user.internalPlayerId, normalizeCivicEmploymentState(runtimeCivicEmployment));
 }

@@ -4,7 +4,7 @@ import { ContentPanel } from "../components/layout/ContentPanel";
 import { AcademyDefinition, academyDefinitions, academySystemRules } from "../data/academyData";
 import "../styles/academies-ui.css";
 
-// Academy art — public/images/academies/
+// Academy art - public/images/academies/
 const ACADEMY_IMAGES: Record<string, string> = {
   southern:    "/images/academies/academy_southern.png",
   eastern:     "/images/academies/academy_eastern.png",
@@ -109,7 +109,7 @@ export default function AcademiesPage() {
                       <div className="academy-rank-card__top">
                         <span className="academy-rank-card__rank">
                           Rank {rank.rank}
-                          {rank.branch ? ` • ${rank.branch}` : ""}
+                          {rank.branch ? ` | ${rank.branch}` : ""}
                         </span>
                         <span className={`academy-rank-card__mode academy-rank-card__mode--${rank.rewardMode}`}>
                           {rank.rewardMode}

@@ -3,7 +3,13 @@ import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { usePlayer } from "../state/PlayerContext";
 import { formatPlayerNameWithPublicId } from "../lib/publicIds";
-import { formatTravelDuration, getCityName, getTravelProgress, resolveTravelState } from "../lib/travelState";
+import {
+  formatTravelDuration,
+  getCityName,
+  getTravelProgress,
+  resolveTravelState,
+} from "../lib/travelState";
+import { getConsortiumSummary, getGuildSummary } from "../lib/organizations";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -14,44 +20,59 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function QuickLinkRow({ label, to }: { label: string; to: string }) {
+function QuickLinkRow({ label, to, disabledReason }: { label: string; to: string; disabledReason?: string | null }) {
   return (
     <div className="info-row">
       <span className="info-row__label">{label}</span>
       <span className="info-row__value info-row__value--accent">
-        <Link className="inline-route-link" to={to}>
-          Open
-        </Link>
+        {disabledReason ? (
+          <span title={disabledReason} style={{ color: "#9aa7b4", cursor: "not-allowed" }}>
+            Locked
+          </span>
+        ) : (
+          <Link className="inline-route-link" to={to}>
+            Open
+          </Link>
+        )}
       </span>
     </div>
   );
 }
 
 export default function HomePage() {
-  const { player, isHospitalized, hospitalRemainingLabel } = usePlayer();
+  const { player, isHospitalized, hospitalRemainingLabel, isJailed, jailRemainingLabel } = usePlayer();
   const currentEducation = player.current.education;
   const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
   const displayNameWithPublicId = formatPlayerNameWithPublicId(displayName, player.publicId);
   const travelState = resolveTravelState(player.internalId);
   const travelProgress = getTravelProgress(travelState, Date.now());
+  const isTraveling = travelProgress.active;
+  const guildSummary = getGuildSummary(player.internalId);
+  const consortiumSummary = getConsortiumSummary(player.internalId);
+
+  const actionLockReason = isTraveling
+    ? `Unavailable while traveling. Arrival in ${formatTravelDuration(travelProgress.remainingMs)}.`
+    : isHospitalized
+    ? `Unavailable while hospitalized. Recovery in ${hospitalRemainingLabel}.`
+    : isJailed
+    ? `Unavailable while jailed. Release in ${jailRemainingLabel}.`
+    : null;
+
   const travelStatus = travelProgress.active
-    ? `${getCityName(travelState.originCityId)} → ${getCityName(travelState.destinationCityId)} • ${formatTravelDuration(travelProgress.remainingMs)}`
+    ? `${getCityName(travelState.originCityId)} -> ${getCityName(travelState.destinationCityId)} | ${formatTravelDuration(travelProgress.remainingMs)}`
     : getCityName(travelState.currentCityId);
 
   return (
-    <AppShell
-      title="Home"
-      hint="Control panel. Civic employment now sits separately from adventure work, and travel reflects real in-transit state instead of decorative nonsense."
-    >
+    <AppShell title="Home">
       <div className="nexis-grid">
         <div className="nexis-column">
           <ContentPanel title="General Information">
             <div className="info-list">
               <Row label="Name" value={displayNameWithPublicId} />
               <Row label="Level" value={player.level} />
-              <Row label="Rank" value={player.rank} />
+              <Row label="Rank" value={player.rank || "0"} />
               <Row label="Age" value={`${player.daysPlayed} days`} />
-              <Row label="Marital Status" value="0" />
+              <Row label="Household" value={player.property.current || "No residence"} />
             </div>
           </ContentPanel>
 
@@ -76,20 +97,26 @@ export default function HomePage() {
         <div className="nexis-column">
           <ContentPanel title="Current Activity">
             <div className="info-list">
-              <Row label="Education" value={currentEducation ? currentEducation.name : "None"} />
+              <Row label="Education" value={currentEducation ? currentEducation.name : "No active course"} />
               <Row label="Travel" value={travelStatus} />
               <Row label="Adventure" value={player.current.job ?? "No active contract"} />
-              <Row label="Civic Jobs" value="Open Civic Jobs board" />
-              <Row label="Recovery" value={isHospitalized ? `Hospitalized • ${hospitalRemainingLabel}` : "Normal"} />
+              <Row label="Guild" value={guildSummary} />
+              <Row label="Consortium" value={consortiumSummary} />
+              <Row
+                label="Recovery"
+                value={isHospitalized ? `Hospitalized | ${hospitalRemainingLabel}` : "Normal"}
+              />
             </div>
           </ContentPanel>
 
           <ContentPanel title="Quick Actions">
             <div className="info-list">
-              <QuickLinkRow label="Education" to="/education" />
-              <QuickLinkRow label="City" to="/city" />
-              <QuickLinkRow label="Adventure" to="/adventure" />
-              <QuickLinkRow label="Civic Jobs" to="/civic-jobs" />
+              <QuickLinkRow label="Education" to="/education" disabledReason={actionLockReason} />
+              <QuickLinkRow label="City" to="/city" disabledReason={actionLockReason} />
+              <QuickLinkRow label="Adventure" to="/adventure" disabledReason={actionLockReason} />
+              <QuickLinkRow label="Civic Jobs" to="/civic-jobs" disabledReason={actionLockReason} />
+              <QuickLinkRow label="Guilds" to="/guilds" disabledReason={isTraveling ? actionLockReason : null} />
+              <QuickLinkRow label="Consortiums" to="/consortiums" disabledReason={isTraveling ? actionLockReason : null} />
               <QuickLinkRow label="Travel" to="/travel" />
               <QuickLinkRow label="City Board" to="/city-board" />
             </div>
@@ -109,15 +136,18 @@ export default function HomePage() {
           <ContentPanel title="Housing">
             <div className="info-list">
               <Row label="Property" value={player.property.current} />
-              <Row label="Comfort Bonus" value={player.property.comfortProvided} />
+              <Row label="Comfort Cap" value={player.property.comfortProvided} />
             </div>
           </ContentPanel>
 
-          <ContentPanel title="Hospital Status">
+          <ContentPanel title="Condition">
             <div className="info-list">
-              <Row label="State" value={isHospitalized ? "Hospitalized" : "Healthy"} />
-              <Row label="Remaining" value={isHospitalized ? hospitalRemainingLabel : "0m 0s"} />
-              <Row label="Education" value={currentEducation ? "Continues while hospitalized" : "No active course"} />
+              <Row label="State" value={isHospitalized ? "Hospitalized" : isJailed ? "Jailed" : "Healthy"} />
+              <Row label="Remaining" value={isHospitalized ? hospitalRemainingLabel : isJailed ? jailRemainingLabel : "0m 0s"} />
+              <Row
+                label="Education"
+                value={currentEducation ? "Continues during recovery" : "No active course"}
+              />
             </div>
           </ContentPanel>
         </div>

@@ -585,13 +585,28 @@ const deception: JobCategory = {
 // Exports
 // ─────────────────────────────────────────────────────────────────────────────
 
+function staminaCostForCategoryIndex(index: number) {
+  return 2 + Math.floor(index / 2);
+}
+
+function normalizeCategory(category: JobCategory, index: number): JobCategory {
+  const staminaCost = staminaCostForCategoryIndex(index);
+  return {
+    ...category,
+    subJobs: category.subJobs.map((subJob) => ({
+      ...subJob,
+      staminaCost,
+    })),
+  };
+}
+
 export const jobCategories: JobCategory[] = [
   beginnerAdventurer,
   thievery,
   courier,
   labor,
   deception,
-];
+].map((category, index) => normalizeCategory(category, index));
 
 /** Lookup a category by id */
 export function getCategory(id: string): JobCategory | undefined {

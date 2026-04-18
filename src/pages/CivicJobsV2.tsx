@@ -5,7 +5,7 @@ export default function CivicJobsV2Page() {
   return (
     <AppShell
       title="Civic Jobs"
-      hint="Dedicated civic employment board for Nexis, kept separate from adventure-focused work."
+      hint="Civic employment now has real joining, shift, and promotion logic instead of decorative paperwork."
     >
       <CivicJobsBoard />
     </AppShell>

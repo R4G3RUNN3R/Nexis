@@ -13,6 +13,97 @@ import {
 } from "../state/EducationContext";
 import "../styles/education-ui.css";
 
+function buildCategoryTree(categoryId: string) {
+  const category = educationCategories.find((item) => item.id === categoryId);
+  if (!category) return [];
+
+  const courseIds = new Set(category.courses.map((course) => course.id));
+  const childMap = new Map<string, string[]>();
+
+  for (const course of category.courses) {
+    childMap.set(course.id, []);
+  }
+
+  for (const course of category.courses) {
+    for (const prerequisiteId of course.prerequisites ?? []) {
+      if (!courseIds.has(prerequisiteId)) continue;
+      childMap.get(prerequisiteId)?.push(course.id);
+    }
+  }
+
+  const roots = category.courses.filter(
+    (course) => !(course.prerequisites ?? []).some((prerequisiteId) => courseIds.has(prerequisiteId)),
+  );
+
+  const sortByCourseOrder = (courseIdsToSort: string[]) =>
+    [...courseIdsToSort].sort((left, right) => {
+      const leftCourse = educationCourseMap[left];
+      const rightCourse = educationCourseMap[right];
+      return category.courses.indexOf(leftCourse) - category.courses.indexOf(rightCourse);
+    });
+
+  return roots.map((root) => ({
+    root,
+    branch: sortByCourseOrder(childMap.get(root.id) ?? []),
+    childMap,
+  }));
+}
+
+function CourseTreeBranch({
+  courseId,
+  selectedCourseId,
+  depth = 0,
+  childMap,
+  onSelect,
+  education,
+}: {
+  courseId: string;
+  selectedCourseId: string;
+  depth?: number;
+  childMap: Map<string, string[]>;
+  onSelect: (courseId: string) => void;
+  education: ReturnType<typeof useEducation>;
+}) {
+  const course = educationCourseMap[courseId];
+  const state = getCourseState(course, education);
+  const children = childMap.get(courseId) ?? [];
+
+  return (
+    <div className="edu-branch" data-depth={depth}>
+      <button
+        type="button"
+        className={`edu-course-node edu-course-node--${state}${selectedCourseId === course.id ? " edu-course-node--selected" : ""}`}
+        onClick={() => onSelect(course.id)}
+      >
+        <span className="edu-course-node__stem" />
+        <span className="edu-course-node__code">{course.code}</span>
+        <span className="edu-course-node__name">
+          {course.name}
+          {course.prerequisites?.some((prerequisiteId) => educationCourseMap[prerequisiteId]?.categoryId !== course.categoryId) ? (
+            <span className="edu-course-node__external">External root</span>
+          ) : null}
+        </span>
+        <span className="edu-course-node__meta">{course.durationDays}d</span>
+      </button>
+      {children.length ? (
+        <div className="edu-branch__children">
+          {children.map((childId) => (
+            <CourseTreeBranch
+              key={childId}
+              courseId={childId}
+              selectedCourseId={selectedCourseId}
+              depth={depth + 1}
+              childMap={childMap}
+              onSelect={onSelect}
+              education={education}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function CourseLearnArea({
   courseId,
   categoryId,
@@ -40,10 +131,8 @@ function CourseLearnArea({
     }
 
     setRemainingMs(education.getRemainingMs());
-
     intervalRef.current = window.setInterval(() => {
-      const ms = education.getRemainingMs();
-      setRemainingMs(ms);
+      setRemainingMs(education.getRemainingMs());
     }, 1000);
 
     return () => {
@@ -57,9 +146,7 @@ function CourseLearnArea({
   if (isCompleted) {
     return (
       <div className="edu-action-area">
-        <span className="edu-action-badge edu-action-badge--completed">
-          Completed ✓
-        </span>
+        <span className="edu-action-badge edu-action-badge--completed">Completed</span>
       </div>
     );
   }
@@ -67,9 +154,7 @@ function CourseLearnArea({
   if (isThisCourseActive) {
     return (
       <div className="edu-action-area">
-        <div className="edu-action-countdown">
-          Learning… {formatCountdown(remainingMs)} remaining
-        </div>
+        <div className="edu-action-countdown">Learning {formatCountdown(remainingMs)} remaining</div>
         <button
           type="button"
           className="edu-action-button edu-action-button--cancel"
@@ -93,9 +178,7 @@ function CourseLearnArea({
         >
           Learn
         </button>
-        <span className="edu-action-hint">
-          Already studying another course
-        </span>
+        <span className="edu-action-hint">Already studying another course</span>
       </div>
     );
   }
@@ -116,9 +199,7 @@ function CourseLearnArea({
         >
           Learn
         </button>
-        <span className="edu-action-hint edu-action-hint--lock">
-          Requires: {prereqNames}
-        </span>
+        <span className="edu-action-hint edu-action-hint--lock">Learn Requires: {prereqNames}</span>
       </div>
     );
   }
@@ -144,22 +225,31 @@ function CourseLearnArea({
 export default function Education() {
   const education = useEducation();
   const [selectedCategoryId, setSelectedCategoryId] = useState(educationCategories[0]?.id ?? "");
-  const selectedCategory = educationCategories.find((c) => c.id === selectedCategoryId) ?? educationCategories[0];
+  const selectedCategory =
+    educationCategories.find((category) => category.id === selectedCategoryId) ?? educationCategories[0];
   const [selectedCourseId, setSelectedCourseId] = useState(selectedCategory?.courses[0]?.id ?? "");
 
-  const selectedCourse = useMemo(() => {
-    return educationCourseMap[selectedCourseId] ?? selectedCategory.courses[0];
-  }, [selectedCourseId, selectedCategory]);
+  const selectedCourse = useMemo(
+    () => educationCourseMap[selectedCourseId] ?? selectedCategory.courses[0],
+    [selectedCourseId, selectedCategory],
+  );
+  const categoryTree = useMemo(() => buildCategoryTree(selectedCategory.id), [selectedCategory.id]);
+  const externalPrerequisites = (selectedCourse.prerequisites ?? []).filter(
+    (courseId) => educationCourseMap[courseId]?.categoryId !== selectedCourse.categoryId,
+  );
 
   const [bannerRemainingMs, setBannerRemainingMs] = useState(() => education.getRemainingMs());
+
   useEffect(() => {
     if (!education.activeCourse) {
       setBannerRemainingMs(0);
       return;
     }
+
     const id = window.setInterval(() => {
       setBannerRemainingMs(education.getRemainingMs());
     }, 1000);
+
     return () => window.clearInterval(id);
   }, [education]);
 
@@ -170,13 +260,13 @@ export default function Education() {
   const bannerSubtitle = education.activeCourse ? formatRemaining(bannerRemainingMs) : "No active course";
 
   return (
-    <AppShell>
+    <AppShell title="Education" hint="Structured education now follows visible roots instead of reading like a tax return.">
       <div className="education-page">
         <div className="edu-banner">
           <div className="edu-banner__icon">i</div>
           <div>
             <div className="edu-banner__title">
-              EDUCATION <span>{activeCourseName ? `• ${activeCourseName}` : ""}</span>
+              EDUCATION <span>{activeCourseName ? `| ${activeCourseName}` : ""}</span>
             </div>
             <div className="edu-banner__subtitle">{bannerSubtitle}</div>
           </div>
@@ -214,7 +304,9 @@ export default function Education() {
                   <div className="edu-category-card__progress">
                     <div className="edu-category-card__progress-fill" style={{ width: `${percentage}%` }} />
                   </div>
-                  <div className="edu-category-card__count">{progress.completed}/{progress.total}</div>
+                  <div className="edu-category-card__count">
+                    {progress.completed} / {progress.total}
+                  </div>
                 </div>
               </button>
             );
@@ -225,37 +317,36 @@ export default function Education() {
           <section className="edu-panel">
             <div className="edu-panel__header">
               <span>{selectedCategory.name}</span>
-              <span>−</span>
+              <span>{selectedCategory.courses.length} roots</span>
             </div>
-            <div className="edu-course-list">
-              {selectedCategory.courses.map((course) => {
-                const state = getCourseState(course, education);
-                return (
-                  <button
-                    key={course.id}
-                    type="button"
-                    className={`edu-course-row edu-course-row--${state}${selectedCourse.id === course.id ? " edu-course-row--selected" : ""}`}
-                    onClick={() => setSelectedCourseId(course.id)}
-                  >
-                    <span className="edu-course-row__bullet" />
-                    <span className="edu-course-row__code">{course.code}</span>
-                    <span className="edu-course-row__name">{course.name}</span>
-                  </button>
-                );
-              })}
+            <div className="edu-panel__summary">{selectedCategory.description}</div>
+            <div className="edu-course-tree">
+              {categoryTree.map(({ root, childMap }) => (
+                <div key={root.id} className="edu-root-cluster">
+                  <div className="edu-root-cluster__label">
+                    Root {root.code}
+                    {(root.prerequisites ?? []).length ? " | external prerequisite" : ""}
+                  </div>
+                  <CourseTreeBranch
+                    courseId={root.id}
+                    selectedCourseId={selectedCourse.id}
+                    childMap={childMap}
+                    onSelect={setSelectedCourseId}
+                    education={education}
+                  />
+                </div>
+              ))}
             </div>
           </section>
 
           <section className="edu-panel">
             <div className="edu-panel__header">
               <span>{selectedCourse.name.toUpperCase()}</span>
-              <span>−</span>
+              <span>{selectedCourse.code}</span>
             </div>
             <div className="edu-detail-card">
               {education.isCourseCompleted(selectedCourse.id) ? (
-                <div className="edu-detail-card__completed-banner">
-                  You have completed this course!
-                </div>
+                <div className="edu-detail-card__completed-banner">You have completed this course.</div>
               ) : null}
 
               <div className="edu-detail-card__body">
@@ -277,27 +368,53 @@ export default function Education() {
                     <li>Length: {selectedCourse.durationDays} days</li>
                     <li>Cost: {selectedCourse.costGold} gold</li>
                     <li>Reward type: {selectedCourse.rewardKind}</li>
+                    {selectedCourse.workingStatRewards ? (
+                      <li>
+                        Working stats: {Object.entries(selectedCourse.workingStatRewards)
+                          .map(([key, value]) => `${key} +${value}`)
+                          .join(", ")}
+                      </li>
+                    ) : null}
                   </ul>
                 </div>
 
                 <div className="edu-detail-section">
                   <div className="edu-detail-section__label">Requirements:</div>
                   {selectedCourse.prerequisites?.length ? (
-                    <ul className="edu-detail-list">
-                      {selectedCourse.prerequisites.map((item) => (
-                        <li
-                          key={item}
-                          className={education.isCourseCompleted(item) ? "edu-prereq--met" : "edu-prereq--unmet"}
-                        >
-                          {educationCourseMap[item]?.name ?? item}
-                          {education.isCourseCompleted(item) ? " ✓" : ""}
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="edu-requirements-tree">
+                      {selectedCourse.prerequisites.map((item) => {
+                        const prerequisiteCourse = educationCourseMap[item];
+                        const isExternal = prerequisiteCourse?.categoryId !== selectedCourse.categoryId;
+                        return (
+                          <div
+                            key={item}
+                            className={`edu-requirements-tree__item ${education.isCourseCompleted(item) ? "edu-prereq--met" : "edu-prereq--unmet"}`}
+                          >
+                            <span className="edu-requirements-tree__dot" />
+                            <span>
+                              {prerequisiteCourse?.name ?? item}
+                              {education.isCourseCompleted(item) ? " complete" : ""}
+                              {isExternal ? " | from another faculty" : ""}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div className="edu-detail-card__plain">No prerequisites.</div>
                   )}
                 </div>
+
+                {externalPrerequisites.length ? (
+                  <div className="edu-detail-section">
+                    <div className="edu-detail-section__label">Rooted from:</div>
+                    <div className="edu-detail-card__plain">
+                      {externalPrerequisites
+                        .map((courseId) => educationCourseMap[courseId]?.name ?? courseId)
+                        .join(", ")}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="edu-detail-section">
                   <div className="edu-detail-section__label">Actions:</div>
@@ -312,20 +429,22 @@ export default function Education() {
                   <div className="edu-passive-strip__label">Passive bonuses</div>
                   <div className="edu-passive-strip__value">
                     {Object.keys(education.passiveBonuses).length
-                      ? Object.entries(education.passiveBonuses).map(([key, value]) => `${key} +${value}%`).join(" • ")
+                      ? Object.entries(education.passiveBonuses)
+                          .map(([key, value]) => `${key} +${value}%`)
+                          .join(" | ")
                       : "None yet"}
                   </div>
                 </div>
                 <div className="edu-passive-strip__block">
                   <div className="edu-passive-strip__label">Active unlocks</div>
                   <div className="edu-passive-strip__value">
-                    {education.activeUnlocks.length ? education.activeUnlocks.join(" • ") : "None yet"}
+                    {education.activeUnlocks.length ? education.activeUnlocks.join(" | ") : "None yet"}
                   </div>
                 </div>
                 <div className="edu-passive-strip__block">
                   <div className="edu-passive-strip__label">System unlocks</div>
                   <div className="edu-passive-strip__value">
-                    {education.systemUnlocks.length ? education.systemUnlocks.join(" • ") : "None yet"}
+                    {education.systemUnlocks.length ? education.systemUnlocks.join(" | ") : "None yet"}
                   </div>
                 </div>
               </div>

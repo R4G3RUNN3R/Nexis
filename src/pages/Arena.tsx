@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
+import { getPropertyBattleTrainingMultiplier } from "../data/propertyData";
+import { getArenaStateKey } from "../lib/arenaState";
 import { usePlayer } from "../state/PlayerContext";
 import "../styles/arena.css";
 
@@ -20,10 +22,12 @@ type TrainResult = {
   stat: BattleStat;
   trains: number;
   energyUsed: number;
+  comfortUsed: number;
   totalGain: number;
   newTotal: number;
   xpGained: number;
   arenaName: string;
+  averageComfortMultiplier: number;
   unlockedNextArena: boolean;
 };
 
@@ -53,7 +57,6 @@ const ARENAS: ArenaDef[] = [
   { id: "crownfall_coliseum", name: "Crownfall Coliseum", tier: 4, energyCost: 20, unlockEnergySpent: 68000, unlockCost: 8000000, flavor: "The highest standard arena. Nothing left but refinement, pain, and numbers.", gains: { strength: 9.5, defense: 9.5, speed: 9.5, dexterity: 9.5 } },
 ];
 
-const STORAGE_KEY_PREFIX = "nexis_arena_state";
 const STAT_LABELS: Record<BattleStat, string> = {
   strength: "Strength",
   defense: "Defense",
@@ -66,10 +69,7 @@ const STAT_DESCRIPTIONS: Record<BattleStat, string> = {
   speed: "Chance of hitting before the opponent reacts.",
   dexterity: "Ability to evade and control an exchange.",
 };
-
-function getArenaStateKey(playerId: string) {
-  return `${STORAGE_KEY_PREFIX}:${playerId}`;
-}
+const MAX_COMFORT_GAIN_BONUS = 0.1;
 
 function readArenaState(playerId: string) {
   if (typeof window === "undefined") {
@@ -105,18 +105,73 @@ function getTierXp(tier: number) {
   return tier;
 }
 
-function getArenaGain(currentStat: number, multiplier: number, trains: number) {
+function getComfortCostPerTrain(arena: ArenaDef) {
+  return Math.max(1, Math.ceil(arena.energyCost / 5));
+}
+
+function getComfortGainMultiplier(currentComfort: number, maxComfort: number) {
+  if (maxComfort <= 0) return 1;
+  const comfortRatio = Math.max(0, Math.min(1, currentComfort / maxComfort));
+  return 1 + comfortRatio * MAX_COMFORT_GAIN_BONUS;
+}
+
+function getAverageMultiplier(totalMultiplier: number, trains: number) {
+  if (trains <= 0) return 1;
+  return parseFloat((totalMultiplier / trains).toFixed(2));
+}
+
+function simulateArenaTraining({
+  currentStat,
+  baseMultiplier,
+  trains,
+  currentComfort,
+  maxComfort,
+  comfortCostPerTrain,
+  propertyTrainingMultiplier,
+  useRandomness,
+}: {
+  currentStat: number;
+  baseMultiplier: number;
+  trains: number;
+  currentComfort: number;
+  maxComfort: number;
+  comfortCostPerTrain: number;
+  propertyTrainingMultiplier: number;
+  useRandomness: boolean;
+}) {
   let total = 0;
+  let comfortRemaining = currentComfort;
+  let totalComfortMultiplier = 0;
+
   for (let i = 0; i < trains; i += 1) {
+    const comfortMultiplier = getComfortGainMultiplier(comfortRemaining, maxComfort);
     const statFactor = Math.sqrt(Math.max(currentStat + total, 0) + 100) / 10;
-    const randomness = 0.92 + Math.random() * 0.18;
-    total += multiplier * statFactor * randomness;
+    const randomness = useRandomness ? 0.92 + Math.random() * 0.18 : 1;
+    totalComfortMultiplier += comfortMultiplier;
+    total += baseMultiplier * propertyTrainingMultiplier * comfortMultiplier * statFactor * randomness;
+    comfortRemaining = Math.max(0, comfortRemaining - comfortCostPerTrain);
   }
-  return parseFloat(total.toFixed(2));
+
+  const totalComfortCost = Math.min(currentComfort, comfortCostPerTrain * trains);
+
+  return {
+    totalGain: parseFloat(total.toFixed(2)),
+    comfortUsed: Math.floor(totalComfortCost),
+    averageComfortMultiplier: getAverageMultiplier(totalComfortMultiplier, trains),
+  };
 }
 
 export default function ArenaPage() {
-  const { player, spendEnergy, spendGold, addBattleStat, addLevel, isHospitalized, isJailed } = usePlayer();
+  const {
+    player,
+    spendEnergy,
+    spendComfort,
+    spendGold,
+    addBattleStat,
+    addExperience,
+    isHospitalized,
+    isJailed,
+  } = usePlayer();
   const [arenaState, setArenaState] = useState(() => readArenaState(player.internalId));
   const [trainQty, setTrainQty] = useState(1);
   const [toast, setToast] = useState<TrainResult | null>(null);
@@ -139,6 +194,15 @@ export default function ArenaPage() {
     const currentIndex = ARENAS.findIndex((arena) => arena.id === selectedArena.id);
     return currentIndex >= 0 ? ARENAS[currentIndex + 1] ?? null : null;
   }, [selectedArena.id]);
+  const comfortCostPerTrain = useMemo(() => getComfortCostPerTrain(selectedArena), [selectedArena]);
+  const currentComfortMultiplier = useMemo(
+    () => getComfortGainMultiplier(player.stats.comfort, player.stats.maxComfort),
+    [player.stats.comfort, player.stats.maxComfort],
+  );
+  const propertyTrainingMultiplier = useMemo(
+    () => getPropertyBattleTrainingMultiplier(player.property.current, player.property.installedUpgrades),
+    [player.property.current, player.property.installedUpgrades],
+  );
 
   function selectArena(arenaId: string) {
     if (!unlockedSet.has(arenaId)) return;
@@ -165,13 +229,22 @@ export default function ArenaPage() {
     if (multiplier <= 0) return;
 
     const currentStat = player.battleStats[stat];
-    const totalGain = getArenaGain(currentStat, multiplier, trainQty);
-    const xpGained = getTierXp(selectedArena.tier) * trainQty;
-    const newTotal = parseFloat((currentStat + totalGain).toFixed(2));
+    const trainingResult = simulateArenaTraining({
+      currentStat,
+      baseMultiplier: multiplier,
+      trains: trainQty,
+      currentComfort: player.stats.comfort,
+      maxComfort: player.stats.maxComfort,
+      comfortCostPerTrain,
+      propertyTrainingMultiplier,
+      useRandomness: true,
+    });
+    const newTotal = parseFloat((currentStat + trainingResult.totalGain).toFixed(2));
 
     spendEnergy(energyNeeded);
-    addBattleStat(stat, totalGain);
-    if (xpGained > 0) addLevel(xpGained);
+    if (trainingResult.comfortUsed > 0) spendComfort(trainingResult.comfortUsed);
+    addBattleStat(stat, trainingResult.totalGain);
+    addExperience(getTierXp(selectedArena.tier) * trainQty);
 
     let unlockedNextArena = false;
     const newEnergySpent = arenaState.totalEnergySpent + energyNeeded;
@@ -179,7 +252,8 @@ export default function ArenaPage() {
       unlockedNextArena = true;
     }
 
-    const logLine = `You used ${energyNeeded} energy training your ${stat} in ${selectedArena.name} increasing it by ${formatNumber(totalGain)} to ${formatNumber(newTotal)} and gained ${xpGained} experience.`;
+    const trainTimesLabel = trainQty > 1 ? ` ${trainQty} times` : "";
+    const logLine = `You used ${energyNeeded} energy and ${trainingResult.comfortUsed} comfort training your ${stat}${trainTimesLabel} in ${selectedArena.name} increasing it by ${formatNumber(trainingResult.totalGain)} to ${formatNumber(newTotal)}. Average comfort bonus x${trainingResult.averageComfortMultiplier.toFixed(2)}.`;
 
     setArenaState((prev) => ({
       ...prev,
@@ -191,10 +265,12 @@ export default function ArenaPage() {
       stat,
       trains: trainQty,
       energyUsed: energyNeeded,
-      totalGain,
+      comfortUsed: trainingResult.comfortUsed,
+      totalGain: trainingResult.totalGain,
       newTotal,
-      xpGained,
+      xpGained: getTierXp(selectedArena.tier) * trainQty,
       arenaName: selectedArena.name,
+      averageComfortMultiplier: trainingResult.averageComfortMultiplier,
       unlockedNextArena,
     });
   }
@@ -202,7 +278,7 @@ export default function ArenaPage() {
   const qtyOptions = [1, 5, 10];
 
   return (
-    <AppShell title="Arena" hint="Train battle stats, unlock stronger arenas, and gain slight character experience as you progress.">
+    <AppShell title="Arena" hint="Train battle stats, unlock stronger arenas, and build power without accidentally power-leveling into absurdity.">
       <div className="arena-page">
         <div className="arena-panel">
           <div className="arena-panel__head">
@@ -218,6 +294,12 @@ export default function ArenaPage() {
             <span className={`arena-energy-val${player.stats.energy < selectedArena.energyCost ? " arena-energy-val--low" : ""}`}>{Math.floor(player.stats.energy)}/{player.stats.maxEnergy}</span>
             <span className="arena-energy-cost">{selectedArena.energyCost} energy per train</span>
           </div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12, color: "#6a7a8a", fontSize: 12 }}>
+            <span>Comfort {Math.floor(player.stats.comfort)} / {player.stats.maxComfort}</span>
+            <span>{comfortCostPerTrain} comfort per train</span>
+            <span>Comfort bonus x{currentComfortMultiplier.toFixed(2)}</span>
+            {propertyTrainingMultiplier > 1 ? <span>Property bonus x{propertyTrainingMultiplier.toFixed(2)}</span> : null}
+          </div>
 
           {isHospitalized ? <div className="arena-status-banner">You cannot train while hospitalized.</div> : null}
           {isJailed ? <div className="arena-status-banner arena-status-banner--locked">You cannot use standard arenas while jailed.</div> : null}
@@ -227,10 +309,11 @@ export default function ArenaPage() {
               <div className="arena-toast__body">
                 <span className="arena-toast__stat">{STAT_LABELS[toast.stat]}</span>
                 <span className="arena-toast__gained">+{formatNumber(toast.totalGain)}</span>
-                <span className="arena-toast__complete">New total {formatNumber(toast.newTotal)} • +{toast.xpGained} XP</span>
+                <span className="arena-toast__complete">New total {formatNumber(toast.newTotal)} | -{toast.comfortUsed} Comfort</span>
+                <span className="arena-toast__complete">Average comfort bonus x{toast.averageComfortMultiplier.toFixed(2)}</span>
                 {toast.unlockedNextArena ? <span className="arena-toast__unlock">A new arena can now be purchased.</span> : null}
               </div>
-              <button type="button" className="arena-toast__dismiss" onClick={() => setToast(null)}>×</button>
+              <button type="button" className="arena-toast__dismiss" onClick={() => setToast(null)}>x</button>
             </div>
           ) : null}
 
@@ -252,7 +335,18 @@ export default function ArenaPage() {
             {(["strength", "defense", "speed", "dexterity"] as BattleStat[]).map((stat) => {
               const multiplier = selectedArena.gains[stat];
               const disabled = multiplier <= 0 || isHospitalized || isJailed || player.stats.energy < selectedArena.energyCost * trainQty;
-              const estimatedGain = multiplier > 0 ? getArenaGain(player.battleStats[stat], multiplier, trainQty) : 0;
+              const estimatedGain = multiplier > 0
+                ? simulateArenaTraining({
+                    currentStat: player.battleStats[stat],
+                    baseMultiplier: multiplier,
+                    trains: trainQty,
+                    currentComfort: player.stats.comfort,
+                    maxComfort: player.stats.maxComfort,
+                    comfortCostPerTrain,
+                    propertyTrainingMultiplier,
+                    useRandomness: false,
+                  }).totalGain
+                : 0;
               return (
                 <button
                   key={stat}

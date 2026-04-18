@@ -31,10 +31,15 @@ const quickQuestions: Record<string, string[]> = {
     "How do I get more materials?",
     "What are Professions?",
   ],
-  "/jobs": [
+  "/adventure": [
     "How does the XP bar work?",
     "What happens if I crit fail?",
     "Which job is best to start?",
+  ],
+  "/civic-jobs": [
+    "How do civic jobs differ from adventure work?",
+    "Which civic track is easiest to enter first?",
+    "What do job points actually do?",
   ],
   "/education": [
     "Why is education important?",
@@ -61,9 +66,13 @@ const quickQuestions: Record<string, string[]> = {
     "What's the Western branch?",
     "What is Nexis Professions?",
   ],
-  "/guild": [
+  "/guilds": [
     "What are guilds for?",
-    "When will guilds be available?",
+    "How do I found one?",
+  ],
+  "/consortiums": [
+    "What are consortiums for?",
+    "How do I found one?",
   ],
   "/profile": [
     "What does my profile show?",

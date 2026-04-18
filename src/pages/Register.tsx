@@ -20,7 +20,11 @@ function getRedirectTarget(state: unknown): string {
     "redirectedFrom" in state &&
     typeof (state as { redirectedFrom?: unknown }).redirectedFrom === "string"
   ) {
-    return (state as { redirectedFrom: string }).redirectedFrom;
+    const redirectedFrom = (state as { redirectedFrom: string }).redirectedFrom;
+    if (redirectedFrom === "/app.html" || redirectedFrom === "/login" || redirectedFrom === "/register") {
+      return "/home";
+    }
+    return redirectedFrom;
   }
 
   return "/home";

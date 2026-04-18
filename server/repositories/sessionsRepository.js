@@ -51,3 +51,24 @@ export async function findSessionUserByTokenHash(client, tokenHash) {
     user,
   };
 }
+
+export async function findLatestSessionActivityByUserInternalId(client, userInternalId) {
+  const result = await client.query(
+    `
+      SELECT last_seen_at, expires_at
+      FROM auth_sessions
+      WHERE user_internal_id = $1
+      ORDER BY last_seen_at DESC NULLS LAST, created_at DESC
+      LIMIT 1
+    `,
+    [userInternalId],
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at).getTime() : null,
+    expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : null,
+  };
+}

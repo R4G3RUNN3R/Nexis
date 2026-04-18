@@ -14,6 +14,7 @@ import {
   type EducationCourse,
 } from "../data/educationData";
 import { useAuth } from "./AuthContext";
+import { usePlayer } from "./PlayerContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,6 +173,7 @@ const EducationContext = createContext<EducationContextValue | null>(null);
 export function EducationProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<EducationState>(readStoredState);
   const { serverHydrationVersion } = useAuth();
+  const { addBattleStat, addWorkingStat, addExperience } = usePlayer();
 
   // Persist to localStorage whenever state changes
   useEffect(() => {
@@ -203,14 +205,21 @@ export function EducationProvider({ children }: PropsWithChildren) {
 
       const rewards = finalizeRewards(course, current);
 
-      // Stub: actual stat changes (statRewards) would be applied to PlayerContext here.
-      // For now we log them so the wiring point is visible.
-      if (course.statRewards && Object.keys(course.statRewards).length > 0) {
-        console.info(
-          "[Education] Course completed — stat rewards (stub):",
-          course.statRewards,
-        );
+      if (course.statRewards) {
+        for (const [stat, value] of Object.entries(course.statRewards)) {
+          if (!value) continue;
+          addBattleStat(stat as "strength" | "defense" | "speed" | "dexterity", value);
+        }
       }
+
+      if (course.workingStatRewards) {
+        for (const [stat, value] of Object.entries(course.workingStatRewards)) {
+          if (!value) continue;
+          addWorkingStat(stat as "manualLabor" | "intelligence" | "endurance", value);
+        }
+      }
+
+      addExperience(Math.max(10, Math.round(course.durationDays * 2)));
 
       return {
         ...current,
@@ -219,7 +228,7 @@ export function EducationProvider({ children }: PropsWithChildren) {
         activeCourse: null,
       };
     });
-  }, []);
+  }, [addBattleStat, addExperience, addWorkingStat]);
 
   // 1-second polling interval for completion check
   useEffect(() => {
@@ -350,19 +359,26 @@ export function formatRemaining(ms: number): string {
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
 
-  return `${days} days, ${hours} hours, ${minutes} minutes, and ${seconds} seconds`;
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}hrs`);
+  if (minutes > 0) parts.push(`${minutes}min`);
+  if (!parts.length) parts.push("under 1min");
+
+  return parts.join(" ");
 }
 
-/** Format remaining ms as HH:MM:SS countdown string */
+/** Format remaining ms as a short human countdown */
 export function formatCountdown(ms: number): string {
-  if (ms <= 0) return "00:00:00";
+  if (ms <= 0) return "done";
   const totalSeconds = Math.floor(ms / 1000);
-  const h = Math.floor(totalSeconds / 3600);
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+  if (d > 0) return `${d}d ${h}hrs`;
+  if (h > 0) return `${h}hrs ${m}min`;
+  return `${m}min`;
 }
 
 export function getCategoryProgress(

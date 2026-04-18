@@ -5,13 +5,19 @@ export type ServerAuthUser = {
   lastName: string;
   publicId: number;
   publicPlayerId: string;
+  internalId?: string;
   internalPlayerId: string;
+  entityType: "player" | "npc" | "system" | "event";
+  privilegeRole: "player" | "staff" | "admin";
   createdAt: number;
 };
 
 export type ServerPlayerState = {
   level: number;
+  experience?: number;
   gold: number;
+  currencies?: Record<string, number>;
+  itemEnhancements?: Record<string, string[]>;
   stats: Record<string, number>;
   workingStats: Record<string, number>;
   battleStats: Record<string, number>;
@@ -24,6 +30,7 @@ export type ServerPlayerState = {
     timers?: Record<string, unknown>;
     guild?: Record<string, unknown>;
     consortium?: Record<string, unknown>;
+    civicEmployment?: Record<string, unknown>;
   };
   createdAt: number;
   updatedAt: number;

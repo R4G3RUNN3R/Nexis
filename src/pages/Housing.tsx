@@ -1,33 +1,33 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Nexis — Housing Page
-// Nexis property system: own one property at a time, buy upgrades per tier.
-// Shows current property panel at top, full tier list below.
-// ─────────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Nexis - Housing Page
+// One residence at a time, upgrades per tier, and now a mildly unreasonable
+// amount of administrator airship privilege.
+// ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { usePlayer } from "../state/PlayerContext";
 import {
-  propertyTiers,
-  getPropertyById,
+  canAccessPropertyTier,
   formatGold,
+  getPropertyAccessLabel,
+  getPropertyById,
+  propertyTiers,
   type PropertyTier,
   type PropertyUpgrade,
 } from "../data/propertyData";
 import "../styles/housing.css";
-
-// ─── Current Property Panel ───────────────────────────────────────────────────
 
 function CurrentPropertyPanel({ tier }: { tier: PropertyTier }) {
   const { player } = usePlayer();
   const installed = player.property.installedUpgrades;
 
   const comfortFromUpgrades = tier.upgrades
-    .filter((u) => installed.includes(u.id))
-    .reduce((sum, u) => sum + u.comfortBonus, 0);
+    .filter((upgrade) => installed.includes(upgrade.id))
+    .reduce((sum, upgrade) => sum + upgrade.comfortBonus, 0);
 
   const currentMaxComfort = tier.baseComfort + comfortFromUpgrades;
-  const installedCount = tier.upgrades.filter((u) => installed.includes(u.id)).length;
+  const installedCount = tier.upgrades.filter((upgrade) => installed.includes(upgrade.id)).length;
   const availableSlots = tier.upgradeSlots - installedCount;
 
   return (
@@ -67,8 +67,6 @@ function CurrentPropertyPanel({ tier }: { tier: PropertyTier }) {
   );
 }
 
-// ─── Upgrade Card ─────────────────────────────────────────────────────────────
-
 function UpgradeCard({
   upgrade,
   isInstalled,
@@ -86,7 +84,7 @@ function UpgradeCard({
         <div className="housing-upgrade__name">{upgrade.name}</div>
         <div className="housing-upgrade__cost">
           {isInstalled ? (
-            <span className="housing-upgrade__installed-tag">✓ Installed</span>
+            <span className="housing-upgrade__installed-tag">Installed</span>
           ) : (
             formatGold(upgrade.cost)
           )}
@@ -94,8 +92,8 @@ function UpgradeCard({
       </div>
       <div className="housing-upgrade__desc">{upgrade.description}</div>
       <ul className="housing-upgrade__effects">
-        {upgrade.effects.map((e) => (
-          <li key={e}>{e}</li>
+        {upgrade.effects.map((effect) => (
+          <li key={effect}>{effect}</li>
         ))}
       </ul>
       {!isInstalled && (
@@ -112,8 +110,6 @@ function UpgradeCard({
   );
 }
 
-// ─── Property Tier Row ────────────────────────────────────────────────────────
-
 function PropertyRow({
   tier,
   isOwned,
@@ -126,8 +122,11 @@ function PropertyRow({
   onClick: () => void;
 }) {
   const { player } = usePlayer();
-  const canAfford = player.gold >= tier.price;
-  const isLocked = !isOwned && !canAfford;
+  const canAccess = canAccessPropertyTier(tier, { publicId: player.publicId });
+  const isAssignment = (tier.acquisition ?? "purchase") === "assignment";
+  const canAfford = isAssignment ? canAccess : player.gold >= tier.price;
+  const isLocked = !isOwned && (!canAccess || !canAfford);
+  const accessLabel = getPropertyAccessLabel(tier);
 
   return (
     <button
@@ -142,41 +141,51 @@ function PropertyRow({
       </div>
       <div className="housing-tier-row__meta">
         <div className="housing-tier-row__comfort">
-          {tier.baseComfort}–{tier.maxComfort} comfort
+          {tier.baseComfort}-{tier.maxComfort} comfort
         </div>
         <div className={`housing-tier-row__price${isOwned ? " housing-tier-row__price--owned" : ""}`}>
-          {isOwned ? "Owned" : tier.price === 0 ? "Free" : formatGold(tier.price)}
+          {isOwned
+            ? "Owned"
+            : accessLabel
+            ? accessLabel
+            : isAssignment
+            ? "Assigned"
+            : tier.price === 0
+            ? "Free"
+            : formatGold(tier.price)}
         </div>
       </div>
     </button>
   );
 }
 
-// ─── Detail Panel ─────────────────────────────────────────────────────────────
-
 function PropertyDetailPanel({
   tier,
   isOwned,
+  canAccess,
   onPurchase,
   onInstallUpgrade,
 }: {
   tier: PropertyTier;
   isOwned: boolean;
+  canAccess: boolean;
   onPurchase: (tier: PropertyTier) => void;
   onInstallUpgrade: (upgrade: PropertyUpgrade) => void;
 }) {
   const { player } = usePlayer();
   const installed = player.property.installedUpgrades;
+  const isAssignment = (tier.acquisition ?? "purchase") === "assignment";
   const canAffordProperty = player.gold >= tier.price;
+  const canClaimProperty = canAccess && (isAssignment || canAffordProperty);
+  const accessLabel = getPropertyAccessLabel(tier);
 
-  const installedCount = tier.upgrades.filter((u) => installed.includes(u.id)).length;
+  const installedCount = tier.upgrades.filter((upgrade) => installed.includes(upgrade.id)).length;
   const comfortFromUpgrades = tier.upgrades
-    .filter((u) => installed.includes(u.id))
-    .reduce((sum, u) => sum + u.comfortBonus, 0);
+    .filter((upgrade) => installed.includes(upgrade.id))
+    .reduce((sum, upgrade) => sum + upgrade.comfortBonus, 0);
 
   return (
     <div className="housing-detail">
-      {/* Header */}
       <div className="housing-detail__header">
         <span className="housing-detail__icon">{tier.icon}</span>
         <div className="housing-detail__header-info">
@@ -185,7 +194,6 @@ function PropertyDetailPanel({
         </div>
       </div>
 
-      {/* Stats row */}
       <div className="housing-detail__stats">
         <div className="housing-detail__stat">
           <span>Base Comfort</span>
@@ -193,52 +201,52 @@ function PropertyDetailPanel({
         </div>
         <div className="housing-detail__stat">
           <span>Max Comfort (full)</span>
-          <strong>
-            {isOwned
-              ? tier.baseComfort + comfortFromUpgrades
-              : tier.maxComfort}
-          </strong>
+          <strong>{isOwned ? tier.baseComfort + comfortFromUpgrades : tier.maxComfort}</strong>
         </div>
         <div className="housing-detail__stat">
           <span>Upgrade Slots</span>
-          <strong>
-            {isOwned ? `${installedCount} / ${tier.upgradeSlots}` : tier.upgradeSlots}
-          </strong>
+          <strong>{isOwned ? `${installedCount} / ${tier.upgradeSlots}` : tier.upgradeSlots}</strong>
         </div>
         <div className="housing-detail__stat">
           <span>Upkeep / Day</span>
-          <strong>
-            {tier.upkeepPerDay === 0 ? "Free" : formatGold(tier.upkeepPerDay)}
-          </strong>
+          <strong>{tier.upkeepPerDay === 0 ? "Free" : formatGold(tier.upkeepPerDay)}</strong>
         </div>
       </div>
 
-      {/* Purchase button (if not owned) */}
       {!isOwned && (
         <div className="housing-detail__purchase-row">
           <div className="housing-detail__purchase-note">
-            {tier.price === 0
+            {!canAccess
+              ? accessLabel
+                ? `${accessLabel}. This residence is not available to this identity.`
+                : "This residence is not available to this identity."
+              : isAssignment
+              ? accessLabel
+                ? `${accessLabel}. Command access can be assigned without a gold cost.`
+                : "This residence is assigned rather than purchased."
+              : tier.price === 0
               ? "This is your default residence."
               : canAffordProperty
-              ? `You have ${formatGold(player.gold)} — you can afford this.`
+              ? `You have ${formatGold(player.gold)} - you can afford this.`
               : `You need ${formatGold(tier.price - player.gold)} more gold.`}
           </div>
-          {tier.price > 0 && (
+          {canAccess && (isAssignment || tier.price > 0) && (
             <button
               type="button"
               className="housing-detail__purchase-btn"
-              disabled={!canAffordProperty}
+              disabled={!canClaimProperty}
               onClick={() => onPurchase(tier)}
             >
-              {canAffordProperty
-                ? `Move In — ${formatGold(tier.price)}`
+              {isAssignment
+                ? "Claim Command Access"
+                : canAffordProperty
+                ? `Move In - ${formatGold(tier.price)}`
                 : "Cannot Afford"}
             </button>
           )}
         </div>
       )}
 
-      {/* Upgrades */}
       {tier.upgradeSlots > 0 && (
         <div className="housing-detail__upgrades">
           <div className="housing-detail__upgrades-header">
@@ -252,18 +260,22 @@ function PropertyDetailPanel({
             </div>
             {!isOwned && (
               <div className="housing-detail__upgrades-note">
-                Purchase this property to install upgrades.
+                {!canAccess
+                  ? "This residence must be assigned before upgrades are available."
+                  : isAssignment
+                  ? "Claim this command residence to install upgrades."
+                  : "Purchase this property to install upgrades."}
               </div>
             )}
           </div>
 
           <div className="housing-detail__upgrade-grid">
-            {tier.upgrades.map((u) => (
+            {tier.upgrades.map((upgrade) => (
               <UpgradeCard
-                key={u.id}
-                upgrade={u}
-                isInstalled={installed.includes(u.id)}
-                canAfford={isOwned && player.gold >= u.cost && !installed.includes(u.id)}
+                key={upgrade.id}
+                upgrade={upgrade}
+                isInstalled={installed.includes(upgrade.id)}
+                canAfford={isOwned && player.gold >= upgrade.cost && !installed.includes(upgrade.id)}
                 onInstall={onInstallUpgrade}
               />
             ))}
@@ -280,20 +292,29 @@ function PropertyDetailPanel({
   );
 }
 
-// ─── Housing Page ─────────────────────────────────────────────────────────────
-
 export default function HousingPage() {
   const { player, purchaseProperty, installUpgrade } = usePlayer();
   const [selectedTierId, setSelectedTierId] = useState(player.property.current);
   const [toast, setToast] = useState<string | null>(null);
 
   const currentTier = getPropertyById(player.property.current) ?? propertyTiers[0];
-  const selectedTier =
-    propertyTiers.find((t) => t.id === selectedTierId) ?? currentTier;
+  const visiblePropertyTiers = useMemo(
+    () =>
+      propertyTiers.filter(
+        (tier) =>
+          canAccessPropertyTier(tier, { publicId: player.publicId }) ||
+          tier.id === player.property.current,
+      ),
+    [player.property.current, player.publicId],
+  );
+  const selectedTier = visiblePropertyTiers.find((tier) => tier.id === selectedTierId) ?? currentTier;
   const isSelectedOwned = selectedTierId === player.property.current;
+  const canAccessSelectedTier = canAccessPropertyTier(selectedTier, {
+    publicId: player.publicId,
+  });
 
-  function showToast(msg: string) {
-    setToast(msg);
+  function showToast(message: string) {
+    setToast(message);
     setTimeout(() => setToast(null), 3000);
   }
 
@@ -301,9 +322,13 @@ export default function HousingPage() {
     const ok = purchaseProperty(tier.id, tier.price);
     if (ok) {
       setSelectedTierId(tier.id);
-      showToast(`You have moved into your new ${tier.name}.`);
+      showToast(
+        (tier.acquisition ?? "purchase") === "assignment"
+          ? `${tier.name} command access granted.`
+          : `You have moved into your new ${tier.name}.`,
+      );
     } else {
-      showToast("Insufficient gold.");
+      showToast("Access denied or insufficient gold.");
     }
   }
 
@@ -319,24 +344,19 @@ export default function HousingPage() {
   return (
     <AppShell title="Housing">
       <div className="housing-page">
-        {/* Toast */}
         {toast && <div className="housing-toast">{toast}</div>}
 
-        {/* Gold bar */}
         <div className="housing-gold-bar">
           <span className="housing-gold-bar__label">Your gold</span>
           <span className="housing-gold-bar__value">{formatGold(player.gold)}</span>
         </div>
 
-        {/* Current property panel */}
         <CurrentPropertyPanel tier={currentTier} />
 
-        {/* Two-column layout: tier list + detail panel */}
         <div className="housing-layout">
-          {/* Left: tier list */}
           <div className="housing-tiers">
-            <div className="housing-tiers__heading">All Properties</div>
-            {propertyTiers.map((tier) => (
+            <div className="housing-tiers__heading">Available Properties</div>
+            {visiblePropertyTiers.map((tier) => (
               <PropertyRow
                 key={tier.id}
                 tier={tier}
@@ -347,11 +367,11 @@ export default function HousingPage() {
             ))}
           </div>
 
-          {/* Right: detail panel */}
           <div className="housing-detail-wrap">
             <PropertyDetailPanel
               tier={selectedTier}
               isOwned={isSelectedOwned}
+              canAccess={canAccessSelectedTier}
               onPurchase={handlePurchase}
               onInstallUpgrade={handleInstallUpgrade}
             />

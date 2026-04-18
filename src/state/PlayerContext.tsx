@@ -6,6 +6,7 @@
 
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, useCallback } from "react";
 import { useAuth, playerStorageKey } from "./AuthContext";
+import { canAccessPropertyTier, getPropertyById, getPropertyComfortCap } from "../data/propertyData";
 import { sanitizeStoredTitle } from "../lib/titleAccess";
 
 type Condition =
@@ -26,12 +27,20 @@ type PlayerState = {
   name: string;
   lastName: string;
   title: string;
+  experience: number;
   level: number;
   rank: string;
   daysPlayed: number;
   gold: number;
+  currencies: {
+    copper: number;
+    silver: number;
+    gold: number;
+    platinum: number;
+  };
   isRegistered: boolean;
   inventory: Record<string, number>;  // itemId → qty
+  itemEnhancements: Record<string, string[]>;
   stats: {
     energy: number;
     maxEnergy: number;
@@ -88,6 +97,7 @@ type PlayerContextValue = {
   releaseFromJail: () => void;
   setHealth: (value: number, reason?: string) => void;
   spendEnergy: (amount: number) => void;
+  spendComfort: (amount: number) => void;
   spendStamina: (amount: number) => void;
   spendNerve: (amount: number) => void;
   addGold: (amount: number) => void;
@@ -95,7 +105,9 @@ type PlayerContextValue = {
   purchaseProperty: (tierId: string, cost: number) => boolean;
   installUpgrade: (upgradeId: string, cost: number) => boolean;
   addItem: (itemId: string, qty: number) => void;
+  addWorkingStat: (stat: "manualLabor" | "intelligence" | "endurance", amount: number) => void;
   addBattleStat: (stat: "strength" | "defense" | "speed" | "dexterity", amount: number) => void;
+  addExperience: (amount: number) => void;
   startEducation: (id: string, name: string, durationMs: number) => void;
   quitEducation: () => void;
   addLevel: (amount?: number) => void;
@@ -105,7 +117,96 @@ export function maxStaminaForLevel(level: number): number {
   return 10 + Math.floor(level / 5);
 }
 
+const MAX_PLAYER_LEVEL = 100;
+
+function getExperienceToNextLevel(level: number): number {
+  return Math.max(50, level * 50);
+}
+
+function normalizeExperience(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
+
+function getLevelFromExperience(experience: number) {
+  let level = 1;
+  let remainingXp = normalizeExperience(experience);
+  let xpToNextLevel = getExperienceToNextLevel(level);
+
+  while (remainingXp >= xpToNextLevel && level < MAX_PLAYER_LEVEL) {
+    remainingXp -= xpToNextLevel;
+    level += 1;
+    xpToNextLevel = getExperienceToNextLevel(level);
+  }
+
+  return level;
+}
+
+function getExperienceFloorForLevel(level: number) {
+  let total = 0;
+  for (let currentLevel = 1; currentLevel < level; currentLevel += 1) {
+    total += getExperienceToNextLevel(currentLevel);
+  }
+  return total;
+}
+
 const LEGACY_STORAGE_KEY = "nexis_player";
+const BASELINE_WORKING_STATS = {
+  manualLabor: 10,
+  intelligence: 10,
+  endurance: 10,
+} as const;
+const BASELINE_BATTLE_STATS = {
+  strength: 10,
+  defense: 10,
+  speed: 10,
+  dexterity: 10,
+} as const;
+
+function normalizeWorkingStats(stats: PlayerState["workingStats"]) {
+  const allZero =
+    stats.manualLabor <= 0 &&
+    stats.intelligence <= 0 &&
+    stats.endurance <= 0;
+
+  if (!allZero) return stats;
+  return { ...BASELINE_WORKING_STATS };
+}
+
+function normalizeCurrencies(currencies: PlayerState["currencies"] | undefined, goldFallback: number) {
+  return {
+    copper: Math.max(0, Math.floor(Number(currencies?.copper ?? 0))),
+    silver: Math.max(0, Math.floor(Number(currencies?.silver ?? 0))),
+    gold: Math.max(0, Math.floor(Number(currencies?.gold ?? goldFallback))),
+    platinum: Math.max(0, Math.floor(Number(currencies?.platinum ?? 0))),
+  };
+}
+
+function normalizeItemEnhancements(value: PlayerState["itemEnhancements"] | undefined) {
+  const source = value ?? {};
+  return Object.fromEntries(
+    Object.entries(source)
+      .map(([itemId, enhancements]) => [itemId, Array.isArray(enhancements) ? Array.from(new Set(enhancements.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim()))) : []])
+      .filter((entry) => entry[1].length > 0),
+  );
+}
+
+function normalizeBattleStats(stats: PlayerState["battleStats"]) {
+  const allZero =
+    stats.strength <= 0 &&
+    stats.defense <= 0 &&
+    stats.speed <= 0 &&
+    stats.dexterity <= 0;
+
+  if (!allZero) return stats;
+  return { ...BASELINE_BATTLE_STATS };
+}
+
+function normalizeLevel(level: number, experience: number) {
+  const fromExperience = getLevelFromExperience(experience);
+  if (fromExperience > 1 || experience > 0) return fromExperience;
+  return 1;
+}
 
 const basePlayer: PlayerState = {
   internalId: "plr_000000",
@@ -113,12 +214,15 @@ const basePlayer: PlayerState = {
   name: "",
   lastName: "",
   title: "",
-  level: 0,
+  experience: 0,
+  level: 1,
   rank: "0",
   daysPlayed: 0,
   gold: 500,
+  currencies: { copper: 0, silver: 0, gold: 500, platinum: 0 },
   isRegistered: false,
   inventory: {},
+  itemEnhancements: {},
   stats: {
     energy: 100,
     maxEnergy: 100,
@@ -133,8 +237,8 @@ const basePlayer: PlayerState = {
     chain: 0,
     maxChain: 10,
   },
-  workingStats: { manualLabor: 0, intelligence: 0, endurance: 0 },
-  battleStats: { strength: 0, defense: 0, speed: 0, dexterity: 0 },
+  workingStats: { ...BASELINE_WORKING_STATS },
+  battleStats: { ...BASELINE_BATTLE_STATS },
   property: { current: "shack", comfortProvided: 100, installedUpgrades: [] },
   current: { education: null, job: null, travel: null },
   condition: { type: "normal", until: null, reason: null },
@@ -147,10 +251,21 @@ type StoredPlayerState = Partial<PlayerState> & {
 };
 
 function mergePlayer(stored: StoredPlayerState, identity?: { internalPlayerId: string; publicId: number }): PlayerState {
-  const level = stored.level ?? basePlayer.level;
+  const experience = normalizeExperience(typeof stored.experience === "number" ? stored.experience : basePlayer.experience);
+  const level = normalizeLevel(typeof stored.level === "number" ? stored.level : basePlayer.level, experience);
   const mergedStats = { ...basePlayer.stats, ...(stored.stats ?? {}) };
   mergedStats.maxStamina = maxStaminaForLevel(level);
   mergedStats.stamina = Math.min(mergedStats.stamina, mergedStats.maxStamina);
+  const mergedProperty = { ...basePlayer.property, ...(stored.property ?? {}) };
+  const installedUpgrades = Array.isArray(mergedProperty.installedUpgrades)
+    ? mergedProperty.installedUpgrades.filter((upgradeId): upgradeId is string => typeof upgradeId === "string")
+    : [];
+  const propertyCurrent = typeof mergedProperty.current === "string" && mergedProperty.current
+    ? mergedProperty.current
+    : basePlayer.property.current;
+  const derivedMaxComfort = getPropertyComfortCap(propertyCurrent, installedUpgrades);
+  mergedStats.maxComfort = derivedMaxComfort;
+  mergedStats.comfort = Math.min(mergedStats.comfort, derivedMaxComfort);
   const internalId =
     identity?.internalPlayerId ??
     (typeof stored.internalId === "string" && stored.internalId ? stored.internalId : null) ??
@@ -166,13 +281,21 @@ function mergePlayer(stored: StoredPlayerState, identity?: { internalPlayerId: s
     internalId,
     publicId,
     title,
+    experience,
     level,
     stats: mergedStats,
-    workingStats: { ...basePlayer.workingStats, ...(stored.workingStats ?? {}) },
-    battleStats: { ...basePlayer.battleStats, ...(stored.battleStats ?? {}) },
-    property: { ...basePlayer.property, ...(stored.property ?? {}) },
+    workingStats: normalizeWorkingStats({ ...basePlayer.workingStats, ...(stored.workingStats ?? {}) }),
+    battleStats: normalizeBattleStats({ ...basePlayer.battleStats, ...(stored.battleStats ?? {}) }),
+    property: {
+      ...mergedProperty,
+      current: propertyCurrent,
+      installedUpgrades,
+      comfortProvided: derivedMaxComfort,
+    },
     current: { ...basePlayer.current, ...(stored.current ?? {}) },
     inventory: { ...basePlayer.inventory, ...(stored.inventory ?? {}) },
+    currencies: normalizeCurrencies((stored as Partial<PlayerState>).currencies, typeof stored.gold === "number" ? stored.gold : basePlayer.gold),
+    itemEnhancements: normalizeItemEnhancements((stored as Partial<PlayerState>).itemEnhancements),
   };
 }
 
@@ -256,6 +379,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined;
     setPlayer(readStoredPlayer(storageKey, identity));
   }, [storageKey, activeAccount, serverHydrationVersion]);
+  useEffect(() => {
+    function refreshFromRuntimeCache() {
+      const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined;
+      setPlayer(readStoredPlayer(storageKey, identity));
+    }
+
+    window.addEventListener("nexis:player-refresh", refreshFromRuntimeCache);
+    return () => window.removeEventListener("nexis:player-refresh", refreshFromRuntimeCache);
+  }, [storageKey, activeAccount]);
 
   useEffect(() => {
     let lastTick = Date.now();
@@ -316,6 +448,39 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }));
     }
   }, [player.level, player.stats.maxStamina]);
+
+  useEffect(() => {
+    const derivedComfortCap = getPropertyComfortCap(player.property.current, player.property.installedUpgrades);
+    if (
+      player.stats.maxComfort === derivedComfortCap &&
+      player.property.comfortProvided === derivedComfortCap
+    ) {
+      return;
+    }
+
+    setPlayer((prev) => {
+      const nextComfortCap = getPropertyComfortCap(prev.property.current, prev.property.installedUpgrades);
+      if (
+        prev.stats.maxComfort === nextComfortCap &&
+        prev.property.comfortProvided === nextComfortCap
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        stats: {
+          ...prev.stats,
+          maxComfort: nextComfortCap,
+          comfort: Math.min(prev.stats.comfort, nextComfortCap),
+        },
+        property: {
+          ...prev.property,
+          comfortProvided: nextComfortCap,
+        },
+      };
+    });
+  }, [player.property.current, player.property.installedUpgrades, player.property.comfortProvided, player.stats.maxComfort]);
 
   useEffect(() => {
     writeStoredPlayer(player, storageKey);
@@ -382,6 +547,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setPlayer((prev) => ({ ...prev, stats: { ...prev.stats, energy: Math.max(0, prev.stats.energy - amount) } }));
     }
 
+    function spendComfort(amount: number) {
+      setPlayer((prev) => ({
+        ...prev,
+        stats: {
+          ...prev.stats,
+          comfort: parseFloat(Math.max(0, prev.stats.comfort - amount).toFixed(4)),
+        },
+      }));
+    }
+
     function spendStamina(amount: number) {
       setPlayer((prev) => ({ ...prev, stats: { ...prev.stats, stamina: Math.max(0, prev.stats.stamina - amount) } }));
     }
@@ -391,7 +566,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
 
     function addGold(amount: number) {
-      setPlayer((prev) => ({ ...prev, gold: prev.gold + amount }));
+      setPlayer((prev) => {
+        const nextGold = prev.gold + amount;
+        return { ...prev, gold: nextGold, currencies: { ...prev.currencies, gold: nextGold } };
+      });
     }
 
     function spendGold(amount: number): boolean {
@@ -399,7 +577,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setPlayer((prev) => {
         if (prev.gold < amount) return prev;
         success = true;
-        return { ...prev, gold: prev.gold - amount };
+        const nextGold = prev.gold - amount;
+        return { ...prev, gold: nextGold, currencies: { ...prev.currencies, gold: nextGold } };
       });
       return success;
     }
@@ -407,9 +586,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     function purchaseProperty(tierId: string, cost: number): boolean {
       let success = false;
       setPlayer((prev) => {
+        const tier = getPropertyById(tierId);
+        if (!tier) return prev;
+        if (!canAccessPropertyTier(tier, { publicId: prev.publicId })) return prev;
         if (prev.gold < cost) return prev;
+        const nextComfortCap = getPropertyComfortCap(tierId, []);
         success = true;
-        return { ...prev, gold: prev.gold - cost, property: { current: tierId, comfortProvided: 100, installedUpgrades: [] } };
+        return {
+          ...prev,
+          gold: prev.gold - cost,
+          currencies: { ...prev.currencies, gold: prev.gold - cost },
+          stats: {
+            ...prev.stats,
+            maxComfort: nextComfortCap,
+            comfort: Math.min(prev.stats.comfort, nextComfortCap),
+          },
+          property: {
+            current: tierId,
+            comfortProvided: nextComfortCap,
+            installedUpgrades: [],
+          },
+        };
       });
       return success;
     }
@@ -418,6 +615,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setPlayer((prev) => ({
         ...prev,
         inventory: { ...prev.inventory, [itemId]: (prev.inventory[itemId] ?? 0) + qty },
+      }));
+    }
+
+    function addWorkingStat(stat: "manualLabor" | "intelligence" | "endurance", amount: number) {
+      setPlayer((prev) => ({
+        ...prev,
+        workingStats: {
+          ...prev.workingStats,
+          [stat]: parseFloat((prev.workingStats[stat] + amount).toFixed(2)),
+        },
       }));
     }
 
@@ -436,27 +643,55 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setPlayer((prev) => {
         if (prev.gold < cost) return prev;
         if (prev.property.installedUpgrades.includes(upgradeId)) return prev;
+        const nextInstalledUpgrades = [...prev.property.installedUpgrades, upgradeId];
+        const nextComfortCap = getPropertyComfortCap(prev.property.current, nextInstalledUpgrades);
         success = true;
         return {
           ...prev,
           gold: prev.gold - cost,
-          property: { ...prev.property, installedUpgrades: [...prev.property.installedUpgrades, upgradeId] },
+          currencies: { ...prev.currencies, gold: prev.gold - cost },
+          stats: {
+            ...prev.stats,
+            maxComfort: nextComfortCap,
+            comfort: Math.min(prev.stats.comfort, nextComfortCap),
+          },
+          property: {
+            ...prev.property,
+            installedUpgrades: nextInstalledUpgrades,
+            comfortProvided: nextComfortCap,
+          },
         };
       });
       return success;
     }
 
+    function addExperience(amount: number) {
+      setPlayer((prev) => ({
+        ...prev,
+        experience: normalizeExperience(prev.experience + amount),
+        level: getLevelFromExperience(prev.experience + amount),
+        stats: {
+          ...prev.stats,
+          maxStamina: maxStaminaForLevel(getLevelFromExperience(prev.experience + amount)),
+          stamina: Math.min(prev.stats.stamina, maxStaminaForLevel(getLevelFromExperience(prev.experience + amount))),
+        },
+      }));
+    }
+
     function addLevel(amount = 1) {
+      const nextAmount = Math.max(0, Math.floor(amount));
+      if (!nextAmount) return;
       setPlayer((prev) => {
-        const newLevel = prev.level + amount;
-        const newMaxStamina = maxStaminaForLevel(newLevel);
+        const targetLevel = Math.min(MAX_PLAYER_LEVEL, prev.level + nextAmount);
+        const nextExperience = getExperienceFloorForLevel(targetLevel);
         return {
           ...prev,
-          level: newLevel,
+          experience: nextExperience,
+          level: targetLevel,
           stats: {
             ...prev.stats,
-            maxStamina: newMaxStamina,
-            stamina: Math.min(prev.stats.stamina, newMaxStamina),
+            maxStamina: maxStaminaForLevel(targetLevel),
+            stamina: Math.min(prev.stats.stamina, maxStaminaForLevel(targetLevel)),
           },
         };
       });
@@ -490,6 +725,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       releaseFromJail,
       setHealth,
       spendEnergy,
+      spendComfort,
       spendStamina,
       spendNerve,
       addGold,
@@ -497,7 +733,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       purchaseProperty,
       installUpgrade,
       addItem,
+      addWorkingStat,
       addBattleStat,
+      addExperience,
       resetPlayer() {
         setPlayer(basePlayer);
       },

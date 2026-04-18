@@ -21,6 +21,8 @@ export type NexisAccount = {
   createdAt: number;
   publicId: number;
   internalPlayerId: string;
+  entityType: "player" | "npc" | "system" | "event";
+  privilegeRole: "player" | "staff" | "admin";
 };
 
 type AuthSource = "local" | "server";
@@ -149,6 +151,8 @@ function upsertMirroredAccount(
     createdAt: user.createdAt,
     publicId: user.publicId,
     internalPlayerId: user.internalPlayerId,
+    entityType: user.entityType,
+    privilegeRole: user.privilegeRole,
   };
 
   const updatedAccounts = {
@@ -222,6 +226,8 @@ function registerLocally(data: {
     createdAt: Date.now(),
     publicId: identity.publicId,
     internalPlayerId: identity.internalPlayerId,
+    entityType: "player",
+    privilegeRole: "player",
   };
 
   const updatedAccounts = { ...existing, [email]: account };

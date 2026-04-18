@@ -14,20 +14,70 @@ const DEFAULT_STATS = {
 };
 
 const DEFAULT_WORKING_STATS = {
-  manualLabor: 0,
-  intelligence: 0,
-  endurance: 0,
+  manualLabor: 10,
+  intelligence: 10,
+  endurance: 10,
 };
 
 const DEFAULT_BATTLE_STATS = {
-  strength: 0,
-  defense: 0,
-  speed: 0,
-  dexterity: 0,
+  strength: 10,
+  defense: 10,
+  speed: 10,
+  dexterity: 10,
 };
+
+const MAX_PLAYER_LEVEL = 100;
+
+function getExperienceToNextLevel(level) {
+  return Math.max(50, level * 50);
+}
+
+function normalizeExperience(value) {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.floor(numeric));
+}
+
+function getLevelFromExperience(experience) {
+  let level = 1;
+  let remainingXp = normalizeExperience(experience);
+  let xpToNextLevel = getExperienceToNextLevel(level);
+
+  while (remainingXp >= xpToNextLevel && level < MAX_PLAYER_LEVEL) {
+    remainingXp -= xpToNextLevel;
+    level += 1;
+    xpToNextLevel = getExperienceToNextLevel(level);
+  }
+
+  return level;
+}
+
+function normalizeLevel(value, experience) {
+  const derived = getLevelFromExperience(experience);
+  if (derived > 1 || experience > 0) return derived;
+  return 1;
+}
+
+function normalizeStatRecord(stats, defaults) {
+  const merged = { ...defaults, ...(stats ?? {}) };
+  const allBaselineMissing = Object.values(merged).every((value) => Number(value ?? 0) <= 0);
+  return allBaselineMissing ? { ...defaults } : merged;
+}
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function splitJobsRuntimeState(value) {
+  const record = asRecord(value);
+  const civicEmployment = asRecord(record.civicEmployment);
+  const { civicEmployment: _ignored, ...jobsState } = record;
+  return {
+    jobsState,
+    civicEmployment: Object.keys(civicEmployment).length
+      ? civicEmployment
+      : { activeTrackId: null, trackProgress: {} },
+  };
 }
 
 function asNumber(value, fallback) {
@@ -37,21 +87,26 @@ function asNumber(value, fallback) {
 function mapPlayerStateRow(row) {
   if (!row) return null;
 
+  const playerSnapshot = row.player_snapshot ?? {};
+  const experience = normalizeExperience(playerSnapshot.experience);
+  const { jobsState, civicEmployment } = splitJobsRuntimeState(row.jobs_state);
+
   return {
-    level: Number(row.level ?? 0),
+    level: normalizeLevel(row.level, experience),
     gold: Number(row.gold ?? 0),
     stats: row.stats ?? DEFAULT_STATS,
-    workingStats: row.working_stats ?? DEFAULT_WORKING_STATS,
-    battleStats: row.battle_stats ?? DEFAULT_BATTLE_STATS,
+    workingStats: normalizeStatRecord(row.working_stats, DEFAULT_WORKING_STATS),
+    battleStats: normalizeStatRecord(row.battle_stats, DEFAULT_BATTLE_STATS),
     currentJob: row.current_job ?? { current: null },
     runtimeState: {
-      player: row.player_snapshot ?? {},
-      jobs: row.jobs_state ?? {},
+      player: { ...playerSnapshot, experience, level: normalizeLevel(row.level, experience) },
+      jobs: jobsState,
       education: row.education_state ?? {},
       arena: row.arena_state ?? {},
       timers: row.timer_state ?? {},
       guild: row.guild_state ?? {},
       consortium: row.consortium_state ?? {},
+      civicEmployment,
     },
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
@@ -59,6 +114,10 @@ function mapPlayerStateRow(row) {
 }
 
 export async function createDefaultPlayerState(client, userInternalId) {
+  const defaultPlayerSnapshot = {
+    experience: 0,
+    level: 1,
+  };
   await client.query(
     `
       INSERT INTO player_state (
@@ -77,7 +136,7 @@ export async function createDefaultPlayerState(client, userInternalId) {
         guild_state,
         consortium_state
       )
-      VALUES ($1, 0, 500, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb)
+      VALUES ($1, 1, 500, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb)
       ON CONFLICT (user_internal_id) DO NOTHING
     `,
     [
@@ -86,7 +145,7 @@ export async function createDefaultPlayerState(client, userInternalId) {
       JSON.stringify(DEFAULT_WORKING_STATS),
       JSON.stringify(DEFAULT_BATTLE_STATS),
       JSON.stringify({ current: null }),
-      JSON.stringify({}),
+      JSON.stringify(defaultPlayerSnapshot),
       JSON.stringify({}),
       JSON.stringify({}),
       JSON.stringify({}),
@@ -127,10 +186,22 @@ export async function findPlayerStateByUserInternalId(client, userInternalId) {
 
 export async function upsertPlayerRuntimeState(client, userInternalId, runtimeState = {}) {
   const playerSnapshot = asRecord(runtimeState.player);
+  const experience = normalizeExperience(playerSnapshot.experience);
+  const normalizedLevel = normalizeLevel(asNumber(playerSnapshot.level, 1), experience);
   const stats = asRecord(playerSnapshot.stats);
   const workingStats = asRecord(playerSnapshot.workingStats);
   const battleStats = asRecord(playerSnapshot.battleStats);
   const current = asRecord(playerSnapshot.current);
+  const jobsState = asRecord(runtimeState.jobs);
+  const civicEmployment = asRecord(runtimeState.civicEmployment);
+  const persistedJobsState = Object.keys(civicEmployment).length
+    ? { ...jobsState, civicEmployment }
+    : jobsState;
+  const normalizedPlayerSnapshot = {
+    ...playerSnapshot,
+    experience,
+    level: normalizedLevel,
+  };
 
   await client.query(
     `
@@ -186,14 +257,14 @@ export async function upsertPlayerRuntimeState(client, userInternalId, runtimeSt
     `,
     [
       userInternalId,
-      Math.max(0, Math.floor(asNumber(playerSnapshot.level, 0))),
+      normalizedLevel,
       Math.max(0, Math.floor(asNumber(playerSnapshot.gold, 500))),
       JSON.stringify(Object.keys(stats).length ? stats : DEFAULT_STATS),
       JSON.stringify(Object.keys(workingStats).length ? workingStats : DEFAULT_WORKING_STATS),
       JSON.stringify(Object.keys(battleStats).length ? battleStats : DEFAULT_BATTLE_STATS),
       JSON.stringify({ current: current.job ?? null }),
-      JSON.stringify(playerSnapshot),
-      JSON.stringify(asRecord(runtimeState.jobs)),
+      JSON.stringify(normalizedPlayerSnapshot),
+      JSON.stringify(persistedJobsState),
       JSON.stringify(asRecord(runtimeState.education)),
       JSON.stringify(asRecord(runtimeState.arena)),
       JSON.stringify(asRecord(runtimeState.timers)),

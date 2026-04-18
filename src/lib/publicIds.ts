@@ -18,7 +18,8 @@ export type ReservedPublicIdentity = {
   numericId: number;
   displayId: string;
   name: string;
-  role: "npc" | "system" | "event";
+  entityType: "npc" | "system" | "event";
+  defaultPrivilegeRole: "player" | "staff" | "admin";
   note?: string;
 };
 
@@ -44,17 +45,25 @@ const ENTITY_CONFIG: Record<PublicEntityType, { prefix: string; storageKey: stri
 };
 
 export const RESERVED_PLAYER_IDENTITIES: ReservedPublicIdentity[] = [
-  { numericId: 1_000_000, displayId: "P1000000", name: "Hennet Uthellien", role: "system", note: "Administrator account" },
-  { numericId: 1_000_001, displayId: "P1000001", name: "Dianna Uthellien", role: "npc" },
-  { numericId: 1_000_002, displayId: "P1000002", name: "Varkon Sternhammer", role: "npc" },
-  { numericId: 1_000_003, displayId: "P1000003", name: "Reverend Mother Serana", role: "npc" },
-  { numericId: 1_000_004, displayId: "P1000004", name: "Faelar", role: "npc" },
-  { numericId: 1_000_005, displayId: "P1000005", name: "Solon Elias", role: "npc" },
-  { numericId: 1_000_006, displayId: "P1000006", name: "Nymeria Shadowsong", role: "npc" },
-  { numericId: 1_000_007, displayId: "P1000007", name: "CIEL", role: "system" },
-  { numericId: 1_000_008, displayId: "P1000008", name: "Santa Claus", role: "event" },
-  { numericId: 1_000_009, displayId: "P1000009", name: "Easter Bunny", role: "event" },
+  { numericId: 1_000_000, displayId: "P1000000", name: "Hennet Uthellien", entityType: "system", defaultPrivilegeRole: "admin", note: "Administrator account" },
+  { numericId: 1_000_001, displayId: "P1000001", name: "Dianna Uthellien", entityType: "npc", defaultPrivilegeRole: "player" },
+  { numericId: 1_000_002, displayId: "P1000002", name: "Varkon Sternhammer", entityType: "npc", defaultPrivilegeRole: "player" },
+  { numericId: 1_000_003, displayId: "P1000003", name: "Reverend Mother Serana", entityType: "npc", defaultPrivilegeRole: "player" },
+  { numericId: 1_000_004, displayId: "P1000004", name: "Faelar", entityType: "npc", defaultPrivilegeRole: "player" },
+  { numericId: 1_000_005, displayId: "P1000005", name: "Solon Elias", entityType: "npc", defaultPrivilegeRole: "player" },
+  { numericId: 1_000_006, displayId: "P1000006", name: "Nymeria Shadowsong", entityType: "npc", defaultPrivilegeRole: "player" },
+  { numericId: 1_000_007, displayId: "P1000007", name: "CIEL", entityType: "system", defaultPrivilegeRole: "player" },
+  { numericId: 1_000_008, displayId: "P1000008", name: "Santa Claus", entityType: "event", defaultPrivilegeRole: "player" },
+  { numericId: 1_000_009, displayId: "P1000009", name: "Easter Bunny", entityType: "event", defaultPrivilegeRole: "player" },
+  { numericId: 1_000_010, displayId: "P1000010", name: "Shadow Guardian Administrator I", entityType: "system", defaultPrivilegeRole: "admin", note: "Reserved administrator command identity" },
+  { numericId: 1_000_011, displayId: "P1000011", name: "Shadow Guardian Administrator II", entityType: "system", defaultPrivilegeRole: "admin", note: "Reserved administrator command identity" },
+  { numericId: 1_000_012, displayId: "P1000012", name: "Shadow Guardian Administrator III", entityType: "system", defaultPrivilegeRole: "admin", note: "Reserved administrator command identity" },
+  { numericId: 1_000_013, displayId: "P1000013", name: "Shadow Guardian Administrator IV", entityType: "system", defaultPrivilegeRole: "admin", note: "Reserved administrator command identity" },
 ];
+
+export function getReservedPlayerIdentity(numericId: number | null | undefined) {
+  return typeof numericId === "number" ? RESERVED_PLAYER_IDENTITIES.find((identity) => identity.numericId === numericId) ?? null : null;
+}
 
 function readAllocator(entity: PublicEntityType): AllocatorState {
   if (typeof window === "undefined") {

@@ -1,10 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Nexis — Jobs Page
+// Nexis - Jobs Page
 // XP model: one shared bar per category.
-// Sub-job cards show stats + Attempt only — no per-job XP bar.
+// Sub-job cards show stats + Attempt only - no per-job XP bar.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { usePlayer } from "../state/PlayerContext";
 import {
@@ -40,10 +40,10 @@ function OutcomePanel({
 
   const title =
     result.outcome === "success"
-      ? "✓ Success"
+      ? "Success"
       : result.outcome === "fail"
-      ? "✗ Failed"
-      : "⚠ Critical Fail";
+      ? "Failed"
+      : "Critical Fail";
 
   return (
     <div className={`jobs-outcome ${outcomeClass}`}>
@@ -58,7 +58,7 @@ function OutcomePanel({
           onClick={onDismiss}
           aria-label="Dismiss"
         >
-          ×
+          x
         </button>
       </div>
 
@@ -81,7 +81,7 @@ function OutcomePanel({
               <div className="jobs-outcome__row">
                 <span className="jobs-outcome__row-label">Chain streak</span>
                 <span className="jobs-outcome__row-value jobs-outcome__row-value--chain">
-                  ×{result.chainCount} — {Math.min(150, Math.round((1 + result.chainCount * 0.02) * 100))}% gold
+                  x{result.chainCount} - {Math.min(150, Math.round((1 + result.chainCount * 0.02) * 100))}% gold
                 </span>
               </div>
             )}
@@ -94,7 +94,7 @@ function OutcomePanel({
                 <div className="jobs-drops">
                   {result.itemsDropped.map((drop) => (
                     <span key={drop.itemId} className="jobs-drop-chip">
-                      {drop.itemName} ×{drop.qty}
+                      {drop.itemName} x{drop.qty}
                     </span>
                   ))}
                 </div>
@@ -128,7 +128,7 @@ function OutcomePanel({
 
       {result.categoryLeveledUp && (
         <div className="jobs-levelup-banner">
-          ↑ Category leveled up! Now level {result.categoryNewLevel}
+          Category leveled up! Now level {result.categoryNewLevel}
         </div>
       )}
     </div>
@@ -153,7 +153,7 @@ function CategoryXpBar({ progress }: { progress: CategoryProgress }) {
         <div className="jobs-cat-xp__fill" style={{ width: `${pct}%` }} />
       </div>
       <div className="jobs-cat-xp__sub">
-        {progress.totalSuccesses} successful jobs · {progress.totalAttempts} total attempts
+        {progress.totalSuccesses} successful jobs | {progress.totalAttempts} total attempts
       </div>
     </div>
   );
@@ -221,7 +221,7 @@ function SubJobCard({
           <span className="jobs-stat-chip__label">Success:</span> {successRate}%
         </span>
         <span className="jobs-stat-chip jobs-stat-chip--gold">
-          <span className="jobs-stat-chip__label">Gold:</span> {subJob.baseGoldMin}–{subJob.baseGoldMax}
+          <span className="jobs-stat-chip__label">Gold:</span> {subJob.baseGoldMin}-{subJob.baseGoldMax}
         </span>
         {hasDrops && (
           <span className="jobs-stat-chip jobs-stat-chip--drops">
@@ -230,7 +230,7 @@ function SubJobCard({
         )}
         {sjStats.chain > 1 && (
           <span className="jobs-stat-chip" style={{ color: "#ffd740" }}>
-            🔗 Chain ×{sjStats.chain}
+            Chain x{sjStats.chain}
           </span>
         )}
       </div>
@@ -268,11 +268,11 @@ function CategoryCard({
         <div className="jobs-category-card__name">{category.name}</div>
         <div className="jobs-category-card__theme">{category.theme}</div>
         <div className="jobs-category-card__meta">
-          {category.subJobs.length} available · Lv. {progress.level}
+          {category.subJobs.length} available | Lv. {progress.level}
         </div>
       </div>
       {category.isIllegal && (
-        <span className="jobs-category-card__badge" title="Illegal activities">⚠</span>
+        <span className="jobs-category-card__badge" title="Illegal activities">!</span>
       )}
     </button>
   );
@@ -292,19 +292,14 @@ export default function JobsPage() {
     jobCategories[0]?.id ?? "",
   );
   const [outcomes, setOutcomes] = useState<Record<string, OutcomeEntry>>({});
-  const dismissTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
   const selectedCategory =
     jobCategories.find((c) => c.id === selectedCategoryId) ?? jobCategories[0];
 
   const categoryProgress = jobs.getCategoryProgress(selectedCategoryId);
 
   useEffect(() => {
-    const timers = dismissTimers.current;
-    return () => {
-      Object.values(timers).forEach(clearTimeout);
-    };
-  }, []);
+    setOutcomes({});
+  }, [selectedCategoryId]);
 
   const handleAttempt = useCallback(
     (categoryId: string, subJobId: string) => {
@@ -312,26 +307,12 @@ export default function JobsPage() {
       if (!result) return;
 
       const entry: OutcomeEntry = { subJobId, result, timestamp: Date.now() };
-      setOutcomes((prev) => ({ ...prev, [subJobId]: entry }));
-
-      if (dismissTimers.current[subJobId]) {
-        clearTimeout(dismissTimers.current[subJobId]);
-      }
-      dismissTimers.current[subJobId] = setTimeout(() => {
-        setOutcomes((prev) => {
-          const next = { ...prev };
-          delete next[subJobId];
-          return next;
-        });
-      }, 5000);
+      setOutcomes({ [subJobId]: entry });
     },
     [jobs],
   );
 
   const handleDismissOutcome = useCallback((subJobId: string) => {
-    if (dismissTimers.current[subJobId]) {
-      clearTimeout(dismissTimers.current[subJobId]);
-    }
     setOutcomes((prev) => {
       const next = { ...prev };
       delete next[subJobId];
@@ -347,7 +328,7 @@ export default function JobsPage() {
       <div className="jobs-page">
         {isHospitalized && (
           <div className="jobs-status-banner">
-            <span className="jobs-status-banner__icon">🏥</span>
+            <span className="jobs-status-banner__icon">H</span>
             <div className="jobs-status-banner__info">
               <div className="jobs-status-banner__title">You are hospitalized</div>
               <div className="jobs-status-banner__timer">
@@ -358,7 +339,7 @@ export default function JobsPage() {
         )}
         {isJailed && (
           <div className="jobs-status-banner jobs-status-banner--jail">
-            <span className="jobs-status-banner__icon">⛓</span>
+            <span className="jobs-status-banner__icon">J</span>
             <div className="jobs-status-banner__info">
               <div className="jobs-status-banner__title">You are in jail</div>
               <div className="jobs-status-banner__timer">
@@ -369,7 +350,7 @@ export default function JobsPage() {
         )}
         {player.stats.stamina < 3 && !isHospitalized && !isJailed && (
           <div className="jobs-low-stamina">
-            💚 Low stamina — jobs cost stamina. It restores over time.
+            Low stamina - jobs cost stamina. It restores over time.
           </div>
         )}
 
@@ -402,7 +383,7 @@ export default function JobsPage() {
                       </div>
                     </div>
                     {selectedCategory.isIllegal && (
-                      <span className="jobs-category-header__illegal-tag">⚠ Illegal</span>
+                      <span className="jobs-category-header__illegal-tag">Illegal</span>
                     )}
                   </div>
 

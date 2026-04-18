@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { SESSION_TTL_HOURS } from "../config/env.js";
 import { query, withTransaction } from "../db/pool.js";
 import { HttpError } from "../lib/errors.js";
+import { getReservedIdentityMeta } from "../lib/userIdentity.js";
 import {
   createDefaultPlayerState,
   findPlayerStateByUserInternalId,
@@ -51,7 +52,10 @@ function mapApiUser(user) {
     lastName: user.lastName,
     publicId: user.publicId,
     publicPlayerId: formatPlayerPublicId(user.publicId),
+    internalId: user.internalId,
     internalPlayerId: user.internalId,
+    entityType: user.entityType,
+    privilegeRole: user.privilegeRole,
     createdAt: user.createdAt,
   };
 }
@@ -88,6 +92,14 @@ function validateLoginInput({ email, password }) {
   }
 }
 
+function getReservedIdentityDefaults(publicId) {
+  const reserved = getReservedIdentityMeta(publicId);
+  return {
+    entityType: reserved?.entityType ?? "player",
+    privilegeRole: reserved?.defaultPrivilegeRole ?? "player",
+  };
+}
+
 export async function registerUser({ firstName, lastName, email, password, existingPublicId }) {
   validateRegisterInput({ firstName, lastName, email, password });
   const normalizedEmail = normalizeEmail(email);
@@ -121,6 +133,7 @@ export async function registerUser({ firstName, lastName, email, password, exist
         ? await reserveMigratedPlayerPublicId(client, migratedPublicId)
         : await allocatePlayerPublicId(client);
     const passwordHash = await bcrypt.hash(password, 10);
+    const reservedDefaults = getReservedIdentityDefaults(publicId);
     const user = await createUser(client, {
       internalId: makeInternalUserId(),
       publicId,
@@ -129,6 +142,8 @@ export async function registerUser({ firstName, lastName, email, password, exist
       firstName: normalizedFirstName,
       lastName: normalizedLastName,
       passwordHash,
+      entityType: reservedDefaults.entityType,
+      privilegeRole: reservedDefaults.privilegeRole,
     });
 
     await createDefaultPlayerState(client, user.internalId);

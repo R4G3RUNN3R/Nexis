@@ -37,6 +37,21 @@ function formatCountdown(secsLeft: number, isFull: boolean): string {
   return m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `${s}s`;
 }
 
+function formatTimeToFull(current: number, max: number, intervalMs: number) {
+  if (current >= max) return "Already full";
+  const remainingUnits = Math.max(0, max - current);
+  const totalMs = Math.ceil(remainingUnits * intervalMs);
+  const totalMinutes = Math.ceil(totalMs / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  return parts.join(" ") || "under 1m";
+}
+
 // ─── Single stat bar ──────────────────────────────────────────────────────────
 
 function StatBar({
@@ -58,15 +73,16 @@ function StatBar({
   const secsLeft = isFull ? 0 : secsUntilNextTick(current, intervalMs);
   const countdown = formatCountdown(secsLeft, isFull);
   const isOver = displayCurrent > max;
+  const title = `Next tick in ${countdown}. Full in ${formatTimeToFull(current, max, intervalMs)}.`;
 
   return (
-    <div className="sb-row">
+    <div className="sb-row" title={title}>
       <div className="sb-row__label" style={{ color: colour }}>
         {label}:
       </div>
       <div className="sb-row__middle">
         <div className="sb-row__nums">
-          {displayCurrent}/{max}
+          {displayCurrent} / {max}
           {isOver && <span className="sb-over"> OVER</span>}
         </div>
         <div className="sb-track">

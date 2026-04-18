@@ -1,14 +1,14 @@
 export type EducationStatRewards = Partial<{
-  labor: number;
-  knowledge: number;
-  endurance: number;
   strength: number;
   dexterity: number;
   defense: number;
   speed: number;
+}>;
+
+export type EducationWorkingStatRewards = Partial<{
+  manualLabor: number;
   intelligence: number;
-  vitality: number;
-  charisma: number;
+  endurance: number;
 }>;
 
 export type EducationRewardKind =
@@ -30,6 +30,7 @@ export type EducationCourse = {
   rewardKind: EducationRewardKind;
   prerequisites?: string[];
   statRewards?: EducationStatRewards;
+  workingStatRewards?: EducationWorkingStatRewards;
   systemEffects?: string[];
   unlocksSystems?: string[];
   summaryLines: string[];
@@ -74,9 +75,10 @@ export const educationCategories: EducationCategory[] = [
         description: "Counting, valuation, and transactional reasoning. Commerce should not be run by people who fear numbers.",
         rewardKind: "economy",
         prerequisites: ["basic-literacy"],
+        workingStatRewards: { manualLabor: 1, intelligence: 3 },
         systemEffects: ["Unlocks commerce", "Market efficiency +5%", "Job income +3%"],
         unlocksSystems: ["commerce"],
-        summaryLines: ["Unlocks Commerce", "Market efficiency +5%", "Job income +3%"],
+        summaryLines: ["Unlocks Commerce", "Market efficiency +5%", "Job income +3%", "Manual Labor +1, Intelligence +3"],
       }),
       makeCourse("general", 3, {
         id: "world-geography",
@@ -86,9 +88,10 @@ export const educationCategories: EducationCategory[] = [
         description: "Maps, routes, terrain logic, and travel safety.",
         rewardKind: "travel",
         prerequisites: ["basic-literacy"],
+        workingStatRewards: { intelligence: 2, endurance: 2 },
         systemEffects: ["Travel time -5%", "Unlocks passive discovery events", "Prevents being lost during full travel"],
         unlocksSystems: ["safe_travel", "travel_discovery"],
-        summaryLines: ["Travel time -5%", "Unlocks travel discoveries", "Prevents getting lost on proper routes"],
+        summaryLines: ["Travel time -5%", "Unlocks travel discoveries", "Prevents getting lost on proper routes", "Intelligence +2, Endurance +2"],
       }),
       makeCourse("general", 4, {
         id: "civic-fundamentals",
@@ -98,9 +101,10 @@ export const educationCategories: EducationCategory[] = [
         description: "Permits, civic structures, public obligations, and legal standing.",
         rewardKind: "governance",
         prerequisites: ["practical-arithmetic"],
+        workingStatRewards: { intelligence: 3 },
         systemEffects: ["Unlocks consortium creation", "Unlocks permits", "Unlocks civic contracts"],
         unlocksSystems: ["consortium_creation", "permits", "civic_contracts"],
-        summaryLines: ["Required for Consortium creation", "Unlocks permits", "Unlocks civic contracts"],
+        summaryLines: ["Required for Consortium creation", "Unlocks permits", "Unlocks civic contracts", "Intelligence +3"],
       }),
       makeCourse("general", 5, {
         id: "study-discipline",
@@ -110,8 +114,9 @@ export const educationCategories: EducationCategory[] = [
         description: "Focus, scheduling, memory discipline, and sustained learning.",
         rewardKind: "utility",
         prerequisites: ["basic-literacy"],
+        workingStatRewards: { intelligence: 2 },
         systemEffects: ["Education speed +5%"],
-        summaryLines: ["Education speed +5%", "Stacks with Basic Literacy"],
+        summaryLines: ["Education speed +5%", "Stacks with Basic Literacy", "Intelligence +2"],
       }),
       makeCourse("general", 6, {
         id: "applied-reasoning",
@@ -121,8 +126,9 @@ export const educationCategories: EducationCategory[] = [
         description: "Pattern recognition and practical problem solving for missions, contracts, and investigations.",
         rewardKind: "utility",
         prerequisites: ["study-discipline"],
+        workingStatRewards: { intelligence: 3, endurance: 1 },
         systemEffects: ["Mission success +5%", "Contract success +5%", "Investigation success +5%"],
-        summaryLines: ["Mission success +5%", "Contract success +5%", "Investigation success +5%"],
+        summaryLines: ["Mission success +5%", "Contract success +5%", "Investigation success +5%", "Intelligence +3, Endurance +1"],
       }),
       makeCourse("general", 7, {
         id: "historical-awareness",
@@ -132,9 +138,10 @@ export const educationCategories: EducationCategory[] = [
         description: "Ruins make more sense when you know what fell there and why.",
         rewardKind: "travel",
         prerequisites: ["world-geography"],
+        workingStatRewards: { intelligence: 2 },
         systemEffects: ["Discovery loot +15%", "Unlocks relic clues", "Unlocks lore-heavy dialogue"],
         unlocksSystems: ["relic_missions", "lore_dialogue"],
-        summaryLines: ["Discovery loot +15%", "Unlocks relic clues", "Unlocks lore missions"],
+        summaryLines: ["Discovery loot +15%", "Unlocks relic clues", "Unlocks lore missions", "Intelligence +2"],
       }),
       makeCourse("general", 8, {
         id: "field-survival",
@@ -144,9 +151,9 @@ export const educationCategories: EducationCategory[] = [
         description: "Endurance, recovery, and staying functional outside safe walls.",
         rewardKind: "combat",
         prerequisites: ["world-geography"],
-        statRewards: { endurance: 5, vitality: 3 },
+        workingStatRewards: { endurance: 5, intelligence: 1 },
         systemEffects: ["Health regeneration +10%"],
-        summaryLines: ["Health regeneration +10%", "Endurance +5", "Vitality +3"],
+        summaryLines: ["Health regeneration +10%", "Endurance +5", "Intelligence +1"],
       }),
       makeCourse("general", 9, {
         id: "general-mastery",
@@ -194,8 +201,9 @@ export const educationCategories: EducationCategory[] = [
         description: "Body language, motive reading, and small lies.",
         rewardKind: "shadow",
         prerequisites: ["back-alley-awareness"],
+        workingStatRewards: { intelligence: 2 },
         systemEffects: ["Underworld encounter success +3%"],
-        summaryLines: ["Underworld encounter success +3%", "Better hostile read quality"],
+        summaryLines: ["Underworld encounter success +3%", "Better hostile read quality", "Intelligence +2"],
       }),
       makeCourse("street", 3, {
         id: "cheap-tricks",
@@ -217,8 +225,9 @@ export const educationCategories: EducationCategory[] = [
         description: "Knowing who knows who matters more than pretending morality is enough.",
         rewardKind: "shadow",
         prerequisites: ["cheap-tricks"],
+        workingStatRewards: { intelligence: 1, endurance: 1 },
         unlocksSystems: ["underworld_contacts"],
-        summaryLines: ["Unlocks underworld contacts", "Unlocks rumor-based errands"],
+        summaryLines: ["Unlocks underworld contacts", "Unlocks rumor-based errands", "Intelligence +1, Endurance +1"],
       }),
       makeCourse("street", 5, {
         id: "concealment-basics",
@@ -228,8 +237,9 @@ export const educationCategories: EducationCategory[] = [
         description: "Stashing, disguising, and not drawing the eye.",
         rewardKind: "shadow",
         prerequisites: ["street-rumors"],
+        workingStatRewards: { endurance: 2 },
         systemEffects: ["Stealth +4%"],
-        summaryLines: ["Stealth +4%", "Improves concealment behavior"],
+        summaryLines: ["Stealth +4%", "Improves concealment behavior", "Endurance +2"],
       }),
       makeCourse("street", 6, {
         id: "illicit-trade-awareness",
@@ -250,8 +260,9 @@ export const educationCategories: EducationCategory[] = [
         description: "Because every plan eventually needs a second door.",
         rewardKind: "shadow",
         prerequisites: ["illicit-trade-awareness"],
+        workingStatRewards: { endurance: 2, intelligence: 1 },
         systemEffects: ["Escape chance +5%"],
-        summaryLines: ["Escape chance +5%", "Better route withdrawal under pressure"],
+        summaryLines: ["Escape chance +5%", "Better route withdrawal under pressure", "Endurance +2, Intelligence +1"],
       }),
       makeCourse("street", 8, {
         id: "underworld-etiquette",
@@ -291,7 +302,8 @@ export const educationCategories: EducationCategory[] = [
         description: "Applied criminal intelligence and situational leverage.",
         rewardKind: "shadow",
         prerequisites: ["streetwise-mastery"],
-        summaryLines: ["Requires full Street Survival completion", "Foundation for Shadowcraft"],
+        workingStatRewards: { intelligence: 2 },
+        summaryLines: ["Requires full Street Survival completion", "Foundation for Shadowcraft", "Intelligence +2"],
       }),
       makeCourse("shadow", 2, {
         id: "sleight-of-hand",
@@ -335,7 +347,8 @@ export const educationCategories: EducationCategory[] = [
         rewardKind: "shadow",
         prerequisites: ["shadow-networking"],
         statRewards: { dexterity: 4, speed: 4 },
-        summaryLines: ["Dexterity +4", "Speed +4", "Improves evasion actions"],
+        workingStatRewards: { endurance: 2 },
+        summaryLines: ["Dexterity +4", "Speed +4", "Improves evasion actions", "Endurance +2"],
       }),
       makeCourse("shadow", 6, {
         id: "espionage",
@@ -367,8 +380,9 @@ export const educationCategories: EducationCategory[] = [
         description: "Precision violence. Efficient, ugly, and profitable.",
         rewardKind: "combat",
         prerequisites: ["black-market-access"],
+        workingStatRewards: { intelligence: 1, endurance: 2 },
         systemEffects: ["Stealthed damage +5%"],
-        summaryLines: ["Stealthed damage +5%", "Advanced rogue combat progression"],
+        summaryLines: ["Stealthed damage +5%", "Advanced rogue combat progression", "Intelligence +1, Endurance +2"],
       }),
       makeCourse("shadow", 9, {
         id: "guild-leadership",
@@ -378,8 +392,169 @@ export const educationCategories: EducationCategory[] = [
         description: "Running a shadow operation without getting everyone killed.",
         rewardKind: "governance",
         prerequisites: ["assassination-arts"],
+        workingStatRewards: { intelligence: 2 },
         unlocksSystems: ["shadow_leadership"],
-        summaryLines: ["Unlocks shadow leadership", "High-tier underworld authority"],
+        summaryLines: ["Unlocks shadow leadership", "High-tier underworld authority", "Intelligence +2"],
+      }),
+    ],
+  },
+  {
+    id: "commerce",
+    name: "Commerce & Logistics",
+    description: "Trade, ledgers, supply lines, and the noble profession of weaponizing paperwork.",
+    courses: [
+      makeCourse("commerce", 1, {
+        id: "ledger-basics",
+        name: "Ledger Basics",
+        durationDays: 10,
+        costGold: 1500,
+        description: "Bookkeeping, margins, and not losing coin to stupidity.",
+        rewardKind: "economy",
+        workingStatRewards: { intelligence: 2 },
+        summaryLines: ["Intelligence +2", "Foundation for advanced trade courses"],
+      }),
+      makeCourse("commerce", 2, {
+        id: "supply-discipline",
+        name: "Supply Discipline",
+        durationDays: 11,
+        costGold: 1700,
+        description: "Storage logic, movement efficiency, and keeping stock where stock belongs.",
+        rewardKind: "economy",
+        prerequisites: ["ledger-basics"],
+        workingStatRewards: { manualLabor: 2, intelligence: 1 },
+        systemEffects: ["Storage efficiency +5%"],
+        summaryLines: ["Storage efficiency +5%", "Manual Labor +2, Intelligence +1"],
+      }),
+      makeCourse("commerce", 3, {
+        id: "caravan-operations",
+        name: "Caravan Operations",
+        durationDays: 13,
+        costGold: 2200,
+        description: "Trade routes, convoy pacing, cargo security, and surviving greedy roads.",
+        rewardKind: "travel",
+        prerequisites: ["supply-discipline"],
+        workingStatRewards: { manualLabor: 1, intelligence: 2, endurance: 2 },
+        systemEffects: ["Trade route income +4%"],
+        summaryLines: ["Trade route income +4%", "Manual Labor +1, Intelligence +2, Endurance +2"],
+      }),
+      makeCourse("commerce", 4, {
+        id: "merchant-command",
+        name: "Merchant Command",
+        durationDays: 16,
+        costGold: 3000,
+        description: "Negotiation, delegation, and convincing a roomful of traders to respect numbers.",
+        rewardKind: "governance",
+        prerequisites: ["caravan-operations"],
+        workingStatRewards: { intelligence: 3, endurance: 1 },
+        systemEffects: ["Consortium income +5%"],
+        summaryLines: ["Consortium income +5%", "Intelligence +3, Endurance +1"],
+      }),
+    ],
+  },
+  {
+    id: "warfare",
+    name: "Warfare & Fieldcraft",
+    description: "Marching, discipline, tactics, and all the usual reasons soldiers need stronger knees.",
+    courses: [
+      makeCourse("warfare", 1, {
+        id: "drill-square-basics",
+        name: "Drill Square Basics",
+        durationDays: 10,
+        costGold: 1600,
+        description: "Formation discipline, footing, and surviving repeated shouted instructions.",
+        rewardKind: "combat",
+        workingStatRewards: { endurance: 2 },
+        statRewards: { defense: 2 },
+        summaryLines: ["Defense +2", "Endurance +2"],
+      }),
+      makeCourse("warfare", 2, {
+        id: "weapon-conditioning",
+        name: "Weapon Conditioning",
+        durationDays: 12,
+        costGold: 2000,
+        description: "Grip strength, repetition, and learning to enjoy soreness for bad reasons.",
+        rewardKind: "combat",
+        prerequisites: ["drill-square-basics"],
+        workingStatRewards: { manualLabor: 2, endurance: 1 },
+        statRewards: { strength: 2 },
+        summaryLines: ["Strength +2", "Manual Labor +2, Endurance +1"],
+      }),
+      makeCourse("warfare", 3, {
+        id: "march-survival",
+        name: "March Survival",
+        durationDays: 14,
+        costGold: 2400,
+        description: "Carry weight, keep pace, and complain internally like a professional.",
+        rewardKind: "travel",
+        prerequisites: ["weapon-conditioning"],
+        workingStatRewards: { endurance: 3, manualLabor: 1 },
+        systemEffects: ["Travel fatigue resistance +5%"],
+        summaryLines: ["Travel fatigue resistance +5%", "Endurance +3, Manual Labor +1"],
+      }),
+      makeCourse("warfare", 4, {
+        id: "battlefield-reading",
+        name: "Battlefield Reading",
+        durationDays: 16,
+        costGold: 2800,
+        description: "Threat recognition, angle control, and surviving chaos without theatrics.",
+        rewardKind: "combat",
+        prerequisites: ["march-survival"],
+        workingStatRewards: { intelligence: 2, endurance: 1 },
+        statRewards: { speed: 1, dexterity: 1 },
+        summaryLines: ["Speed +1, Dexterity +1", "Intelligence +2, Endurance +1"],
+      }),
+    ],
+  },
+  {
+    id: "medicine",
+    name: "Medicine & Recovery",
+    description: "Field treatment, recovery care, and cleaning up after everyone else's spectacular choices.",
+    courses: [
+      makeCourse("medicine", 1, {
+        id: "field-triage",
+        name: "Field Triage",
+        durationDays: 9,
+        costGold: 1400,
+        description: "Stop bleeding, sort priorities, and try not to faint professionally.",
+        rewardKind: "utility",
+        workingStatRewards: { intelligence: 2, endurance: 1 },
+        summaryLines: ["Intelligence +2, Endurance +1", "Foundation for medical study"],
+      }),
+      makeCourse("medicine", 2, {
+        id: "herbal-remedies",
+        name: "Herbal Remedies",
+        durationDays: 11,
+        costGold: 1800,
+        description: "Useful plants, useless plants, and plants with revenge issues.",
+        rewardKind: "utility",
+        prerequisites: ["field-triage"],
+        workingStatRewards: { intelligence: 2, manualLabor: 1 },
+        systemEffects: ["Hospital recovery speed +4%"],
+        summaryLines: ["Hospital recovery speed +4%", "Intelligence +2, Manual Labor +1"],
+      }),
+      makeCourse("medicine", 3, {
+        id: "ward-management",
+        name: "Ward Management",
+        durationDays: 13,
+        costGold: 2200,
+        description: "Supplies, patient flow, and the administrative side of human bad luck.",
+        rewardKind: "governance",
+        prerequisites: ["herbal-remedies"],
+        workingStatRewards: { intelligence: 3 },
+        systemEffects: ["Medical civic job performance +5%"],
+        summaryLines: ["Medical civic job performance +5%", "Intelligence +3"],
+      }),
+      makeCourse("medicine", 4, {
+        id: "restorative-practice",
+        name: "Restorative Practice",
+        durationDays: 16,
+        costGold: 2900,
+        description: "Long-form recovery care for when brute force stops being a treatment plan.",
+        rewardKind: "utility",
+        prerequisites: ["ward-management"],
+        workingStatRewards: { intelligence: 2, endurance: 2 },
+        systemEffects: ["Hospital time reduced by 5%"],
+        summaryLines: ["Hospital time reduced by 5%", "Intelligence +2, Endurance +2"],
       }),
     ],
   },

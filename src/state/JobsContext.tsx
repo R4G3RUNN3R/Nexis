@@ -207,7 +207,7 @@ export function JobsProvider({ children }: PropsWithChildren) {
     setStorage(readStorage());
   }, [serverHydrationVersion]);
 
-  const { player, isHospitalized, isJailed, hospitalizeFor, jailFor, spendStamina, addItem, addGold } =
+  const { player, isHospitalized, isJailed, hospitalizeFor, jailFor, spendStamina, addItem, addGold, addExperience } =
     usePlayer();
 
   // ── Getters ───────────────────────────────────────────────────────────────
@@ -287,6 +287,7 @@ export function JobsProvider({ children }: PropsWithChildren) {
 
         // ── Award gold + items to player ──────────────────────────────────
         addGold(goldEarned);
+        addExperience(xpEarned);
         for (const drop of itemsDropped) {
           addItem(drop.itemId, drop.qty);
         }
@@ -318,6 +319,7 @@ export function JobsProvider({ children }: PropsWithChildren) {
         xpEarned = Math.floor(subJob.xpPerSuccess * 0.1);  // 10% XP on fail
         newChain = 0;
         flavorText = "You failed to complete the task. Better luck next time.";
+        addExperience(xpEarned);
 
         const { updated } = applyXpToCategory(catProg, xpEarned);
         categoryNewLevel = updated.level;
@@ -398,6 +400,7 @@ export function JobsProvider({ children }: PropsWithChildren) {
       spendStamina,
       addItem,
       addGold,
+      addExperience,
     ],
   );
 

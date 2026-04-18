@@ -93,7 +93,7 @@ export const worldCities: WorldCity[] = [
     subtitle: "Western Port Territory",
     region: "west",
     academy: "The Iron Writ & Veiled Ledger",
-    xPercent: 10.2,
+    xPercent: 14.4,
     yPercent: 30.8,
     accessRule: "Ship required",
     travelFeel: "Western sea crossing with strong port and underworld identity.",
