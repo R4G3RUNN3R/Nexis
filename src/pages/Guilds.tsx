@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
+import { ContentPanel } from "../components/layout/ContentPanel";
 import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
 import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
 import { formatEntityPublicId } from "../lib/publicIds";
 import { createOrganization, getMyOrganization } from "../lib/organizationApi";
 import { formatDate, readGuildBoard, type GuildBoard } from "../lib/organizations";
+import { cielPageCopy } from "../data/cielPageCopy";
 import "../styles/guild.css";
 
 function StatusRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -24,9 +26,9 @@ export default function GuildsPage() {
   const [guildName, setGuildName] = useState("");
   const [guildTag, setGuildTag] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
   const hasGuildCharter = (player.inventory.guild_charter ?? 0) > 0;
   const foundingCost = hasGuildCharter ? 50000 : 150000;
+  const pageCopy = cielPageCopy.guilds;
 
   useEffect(() => {
     if (authSource === "server" && serverSessionToken) {
@@ -76,8 +78,18 @@ export default function GuildsPage() {
   }
 
   return (
-    <AppShell title="Guilds" hint="Guilds now sit on the shared organization core instead of living as browser folklore.">
+    <AppShell title="Guilds" hint={pageCopy.flavor}>
       <div style={{ display: "grid", gap: 16 }}>
+        <div className="page-intro-grid">
+          <ContentPanel title="Guild Flavor">
+            <p className="page-intro__lead">{pageCopy.flavor}</p>
+            <p className="page-intro__body">{pageCopy.alt}</p>
+          </ContentPanel>
+          <ContentPanel title="CIEL">
+            <p className="page-intro__body">{pageCopy.ciel}</p>
+          </ContentPanel>
+        </div>
+
         {message ? <section className="panel"><div className="panel__body"><strong>{message}</strong></div></section> : null}
         <section className="panel">
           <div className="panel__header"><h2>Guild Command Board</h2></div>
@@ -108,7 +120,7 @@ export default function GuildsPage() {
               </>
             ) : (
               <>
-                <div style={{ color: "#9fb0bf", fontSize: 13 }}>Guilds are Nexis social/combat organizations. This pass gives them a real shared backend core, founder roles, membership records, and logs without pretending wars are finished.</div>
+                <div style={{ color: "#9fb0bf", fontSize: 13 }}>Guilds are Ashen Crown social and combat organizations. This pass gives them a real shared backend core, founder roles, membership records, and logs without pretending wars are finished.</div>
                 <StatusRow label="Requirement" value="Name, tag, and founding funds" />
                 <StatusRow label="Founding Cost" value={`${foundingCost.toLocaleString("en-GB")} gold`} />
                 <StatusRow label="Guild Charter" value={hasGuildCharter ? "Present" : "Missing"} />
