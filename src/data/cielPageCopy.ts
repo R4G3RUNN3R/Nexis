@@ -25,6 +25,20 @@ export const cielPageCopy: Record<string, CielPageCopy> = {
       "The Academy handles Education access, advancement, and the small but important matter of whether you are cultivating mastery or merely collecting titles.",
     alt: "Training exists to refine potential. Or expose weakness more efficiently. Both outcomes are useful.",
   },
+  education: {
+    flavor:
+      "Steel, shadow, spirit, law, knowledge — every discipline sharpens something. Not every sharpening improves the blade.",
+    ciel:
+      "This is where structured learning becomes measurable. Courses, roots, unlocks, dependencies, and the ongoing question of whether you are building competence or just collecting labels.",
+    alt: "An academy does not decide who you are. It merely gives you better tools to prove it.",
+  },
+  jobs: {
+    flavor:
+      "The world is not built by heroes alone. It is built by those willing to work while others dream loudly.",
+    ciel:
+      "Jobs are how most people survive. Also how a few very clever people quietly build influence while louder fools chase glory. Pick something useful. Preferably something you can survive.",
+    alt: "Gold rarely falls from the sky. Shame, really. Until that changes, jobs remain the civilized solution.",
+  },
   travel: {
     flavor:
       "Roads, ships, distance, risk. The world is large enough to reward courage and punish carelessness in equal measure.",
