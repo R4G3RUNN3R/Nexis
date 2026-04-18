@@ -29,6 +29,7 @@ const world: Array<[string, string]> = [
   ["Civic Jobs", "/civic-jobs"],
   ["Hospital", "/hospital"],
   ["Guilds / Consortiums", "/guild"],
+  ["Market", "/market"],
 ];
 
 function SidebarSection({ title, links }: { title: string; links: Array<[string, string]> }) {
@@ -88,8 +89,8 @@ export function AppShell({ title, hint, children }: AppShellProps) {
       <div className="app-main">
         <aside className="sidebar">
           <div className="sidebar-logo">
-            <div className="sidebar-logo__title">Nexis</div>
-            <div className="sidebar-logo__subtitle">Online realm of adventure</div>
+            <div className="sidebar-logo__title">Ashen Crown</div>
+            <div className="sidebar-logo__subtitle">Realm operations ledger</div>
           </div>
 
           <div className="player-card">
@@ -121,7 +122,6 @@ export function AppShell({ title, hint, children }: AppShellProps) {
           </div>
 
           <StatBars />
-
           <SidebarSection title="Core" links={core} />
           <SidebarSection title="World" links={world} />
 
@@ -133,15 +133,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
         </aside>
 
         <main className="content">
-          {title ? (
-            <div className="page-banner">
-              <div className="page-banner__title">{title}</div>
-              <div className="page-banner__actions">
-                <button type="button" className="page-banner__action">Personal stats</button>
-                <button type="button" className="page-banner__action">Log</button>
-              </div>
-            </div>
-          ) : null}
+          {title ? <div className="page-banner"><div className="page-banner__title">{title}</div></div> : null}
           {hint ? <div className="page-subhint">{hint}</div> : null}
           {children}
         </main>
