@@ -95,3 +95,40 @@ body {
 .edu-category-card__progress-fill {
   background: linear-gradient(90deg, #e1a454 0%, #b66e30 100%);
 }
+
+.page-intro-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.page-intro__lead {
+  margin: 0 0 10px;
+  color: #f7e2bc;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.page-intro__body {
+  margin: 0;
+  color: #d7c9b2;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.travel-card__copy-block {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid rgba(216, 154, 71, 0.14);
+  background: rgba(9, 7, 6, 0.42);
+  border-radius: 10px;
+}
+
+@media (max-width: 900px) {
+  .page-intro-grid {
+    grid-template-columns: 1fr;
+  }
+}
