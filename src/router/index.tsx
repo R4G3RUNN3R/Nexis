@@ -25,6 +25,10 @@ import CityPage from "../pages/City";
 import InventoryPage from "../pages/Inventory";
 import ArenaPage from "../pages/Arena";
 import CivicJobsV2Page from "../pages/CivicJobsV2";
+import NewsPage from "../pages/News";
+import RulesPage from "../pages/Rules";
+import ContactPage from "../pages/Contact";
+import CreditsPage from "../pages/Credits";
 
 function OwnProfileRedirect() {
   const { player } = usePlayer();
@@ -36,6 +40,10 @@ export default function AppRouter() {
     <Routes>
       <Route path="/register" element={<RegisterPage initialMode="register" />} />
       <Route path="/login" element={<RegisterPage initialMode="login" />} />
+      <Route path="/news" element={<NewsPage />} />
+      <Route path="/rules" element={<RulesPage />} />
+      <Route path="/contact" element={<ContactPage />} />
+      <Route path="/credits" element={<CreditsPage />} />
 
       <Route path="/" element={<HomePage />} />
       <Route path="/home" element={<HomePage />} />
