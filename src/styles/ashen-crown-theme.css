@@ -1,0 +1,97 @@
+:root {
+  --accent: #d89a47;
+  --accent-2: #7a2b14;
+}
+
+body {
+  background: #070605;
+  color: #f0e6d5;
+}
+
+.content {
+  background: radial-gradient(circle at top, rgba(216, 154, 71, 0.12), transparent 24%), linear-gradient(180deg, #090706 0%, #120d09 55%, #060504 100%);
+}
+
+.sidebar,
+.panel,
+.placeholder-box,
+.legacy-entry,
+.achievement-card,
+.quickstat,
+.identity-card__level,
+.identity-card__rank,
+.identity-card__age,
+.equipment-slot {
+  border-color: rgba(216, 154, 71, 0.16);
+  background: linear-gradient(180deg, #17110d 0%, #0f0b08 100%);
+}
+
+.sidebar-logo,
+.panel__header,
+.page-banner,
+.sidebar-section__title,
+.topbar {
+  background: linear-gradient(180deg, #281911 0%, #17100c 100%);
+}
+
+.sidebar-logo__title,
+.page-banner__title,
+.panel__header h2,
+.character-hero h1,
+.topbar__brand {
+  color: #f6d7a3;
+}
+
+.topbar__brand {
+  font-size: 22px;
+  font-family: Georgia, serif;
+  letter-spacing: 1px;
+}
+
+.topbar__ticker,
+.sidebar-logo__subtitle,
+.page-subhint,
+.info-row__label,
+.stat-row__label,
+.activity-item__time,
+.achievement-card__category,
+.quickstat__label {
+  color: #baa27e;
+}
+
+.sidebar-link--active,
+.topbar__auth-link--accent {
+  background: linear-gradient(180deg, #7a2b14 0%, #56190c 100%);
+}
+
+.topbar__nav-trigger,
+.topbar__auth-link,
+.topbar__icon,
+.player-menu__trigger,
+.topbar__dropdown,
+.player-menu__dropdown {
+  border: 1px solid rgba(216, 154, 71, 0.18);
+  background: #16100c;
+}
+
+.topbar__auth-links {
+  display: flex;
+  gap: 8px;
+}
+
+.topbar__auth-link,
+.topbar__nav-trigger,
+.topbar__dropdown-link {
+  color: #f0dfc2;
+}
+
+.topbar__dropdown-link {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.bar span,
+.edu-category-card__progress-fill {
+  background: linear-gradient(90deg, #e1a454 0%, #b66e30 100%);
+}
