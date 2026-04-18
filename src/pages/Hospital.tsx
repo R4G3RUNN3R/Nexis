@@ -100,12 +100,22 @@ export default function HospitalPage() {
 
   const pageTitle = activeCondition === "jailed" ? "Jail" : "Hospital";
   const timerLabel = activeCondition === "hospitalized" ? hospitalRemainingLabel : activeCondition === "jailed" ? jailRemainingLabel : "0m";
+  const flavor = "Healing is not softness. Recovery is simply the price extracted by reality when confidence outpaces preparation.";
+  const ciel = "Hospital and jail are where consequences become measurable. Time, damage, sentences, and the uncomfortable fact that poor decisions are rarely free.";
+  const alt = "Restoration is useful. Humility would have been cheaper.";
 
   return (
-    <AppShell
-      title={pageTitle}
-      hint={activeCondition === "normal" ? "No active condition." : "Your current condition updates here in real time. Everything else can stop pretending to be accessible."}
-    >
+    <AppShell title={pageTitle} hint={flavor}>
+      <div className="page-intro-grid">
+        <ContentPanel title={activeCondition === "jailed" ? "Confinement" : "Recovery"}>
+          <p className="page-intro__lead">{flavor}</p>
+          <p className="page-intro__body">{alt}</p>
+        </ContentPanel>
+        <ContentPanel title="CIEL">
+          <p className="page-intro__body">{ciel}</p>
+        </ContentPanel>
+      </div>
+
       <div className="nexis-grid">
         <div className="nexis-column">
           <ContentPanel title="Current Status">
