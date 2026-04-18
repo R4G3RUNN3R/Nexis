@@ -44,6 +44,34 @@ export const cielPageCopy: Record<string, CielPageCopy> = {
     ciel:
       "Welcome to trade: where value is fluid, patience is profitable, and desperation has an exchange rate. Buy carefully. Sell intelligently. Try not to finance your own future problems.",
   },
+  guilds: {
+    flavor:
+      "No one builds anything lasting alone. They only pretend to, once others have done the difficult parts.",
+    ciel:
+      "Alliances increase capability, complication, and the number of people capable of disappointing you at scale. Still worth having.",
+    alt: "A good organization multiplies strength. A bad one multiplies excuses.",
+  },
+  consortiums: {
+    flavor:
+      "Creation is slower than destruction. That is why it matters more. Companies, unlike swords, tend to remember who mismanaged them.",
+    ciel:
+      "Consortiums are where labor, trade, logistics, and influence stop pretending to be separate things. Think of them as ambition with ledgers and payroll.",
+    alt: "Merchants call it enterprise. Directors call it stewardship. Opportunists call it scale.",
+  },
+  estate: {
+    flavor:
+      "Land, walls, ownership, influence. People do love turning stone into status.",
+    ciel:
+      "The Estate Office governs access to the property marketplace. If you intend to own something larger than your current delusions, start here.",
+    alt: "Property is one of the more respectable ways to announce ambition.",
+  },
+  blackMarket: {
+    flavor:
+      "Every city has a second pulse. Some just hide it beneath cleaner stone and better excuses.",
+    ciel:
+      "The Black Market remains restricted until Shadowcraft access exists. Which is the city’s polite way of saying not everyone earns entry to its more interesting hypocrisies.",
+    alt: "Restricted, hidden, profitable, and morally untidy. Naturally, people are fascinated.",
+  },
 };
 
 export const cielCityCopy: Record<string, CielPageCopy> = {
