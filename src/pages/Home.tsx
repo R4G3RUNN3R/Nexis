@@ -10,6 +10,7 @@ import {
   resolveTravelState,
 } from "../lib/travelState";
 import { getConsortiumSummary, getGuildSummary } from "../lib/organizations";
+import { cielPageCopy } from "../data/cielPageCopy";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -49,21 +50,32 @@ export default function HomePage() {
   const isTraveling = travelProgress.active;
   const guildSummary = getGuildSummary(player.internalId);
   const consortiumSummary = getConsortiumSummary(player.internalId);
+  const homeCopy = cielPageCopy.home;
 
   const actionLockReason = isTraveling
     ? `Unavailable while traveling. Arrival in ${formatTravelDuration(travelProgress.remainingMs)}.`
     : isHospitalized
-    ? `Unavailable while hospitalized. Recovery in ${hospitalRemainingLabel}.`
-    : isJailed
-    ? `Unavailable while jailed. Release in ${jailRemainingLabel}.`
-    : null;
+      ? `Unavailable while hospitalized. Recovery in ${hospitalRemainingLabel}.`
+      : isJailed
+        ? `Unavailable while jailed. Release in ${jailRemainingLabel}.`
+        : null;
 
   const travelStatus = travelProgress.active
     ? `${getCityName(travelState.originCityId)} -> ${getCityName(travelState.destinationCityId)} | ${formatTravelDuration(travelProgress.remainingMs)}`
     : getCityName(travelState.currentCityId);
 
   return (
-    <AppShell title="Home">
+    <AppShell title="Home" hint={homeCopy.flavor}>
+      <div className="page-intro-grid">
+        <ContentPanel title="World Overview">
+          <p className="page-intro__lead">{homeCopy.flavor}</p>
+          <p className="page-intro__body">{homeCopy.alt}</p>
+        </ContentPanel>
+        <ContentPanel title="CIEL">
+          <p className="page-intro__body">{homeCopy.ciel}</p>
+        </ContentPanel>
+      </div>
+
       <div className="nexis-grid">
         <div className="nexis-column">
           <ContentPanel title="General Information">
