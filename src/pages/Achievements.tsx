@@ -104,6 +104,10 @@ export default function AchievementsPage() {
   const [perkRanks, setPerkRanks] = useState<Record<string, number>>({});
   const [selectedPerkId, setSelectedPerkId] = useState<string>(legacyPerks[0]?.id ?? "");
 
+  const flavor = "History leaves marks. Achievement is simply what happens when those marks are measured, counted, and made impossible to deny.";
+  const ciel = "Achievements record what you have done. Legacy turns that record into advantage. Recognition is sentimental; merit points are useful.";
+  const alt = "Proof matters. Especially when memory becomes selective the moment power enters the room.";
+
   const filteredAchievements = useMemo(() => {
     return achievements.filter((achievement) => {
       const matchesCategory =
@@ -142,8 +146,18 @@ export default function AchievementsPage() {
   return (
     <AppShell
       title="Achievements & Legacy"
-      hint="Achievements grant Legacy Points. Legacy ranks cost 1 point for rank 1, 2 for rank 2, and so on."
+      hint={flavor}
     >
+      <div className="page-intro-grid">
+        <ContentPanel title="Record & Legacy">
+          <p className="page-intro__lead">{flavor}</p>
+          <p className="page-intro__body">{alt}</p>
+        </ContentPanel>
+        <ContentPanel title="CIEL">
+          <p className="page-intro__body">{ciel}</p>
+        </ContentPanel>
+      </div>
+
       <div className="legacy-summary-grid">
         <div className="legacy-summary-card">
           <span className="legacy-summary-card__label">Available Merits</span>
@@ -271,9 +285,9 @@ export default function AchievementsPage() {
             {selectedPerk ? (
               <div className="legacy-selected-panel">
                 <div className="legacy-selected-panel__text">
-                  This upgrade will {selectedPerk.description.toLowerCase()} by{" "}
+                  This upgrade will {selectedPerk.description.toLowerCase()} by {" "}
                   {getPerkEffectText(selectedPerk.baseEffect, selectedPerk.effectUnit, 1)} per rank.
-                  Current rank is {selectedPerkRank}/{selectedPerk.maxRank}. The next upgrade will cost{" "}
+                  Current rank is {selectedPerkRank}/{selectedPerk.maxRank}. The next upgrade will cost {" "}
                   {nextRankCost} merit{nextRankCost === 1 ? "" : "s"}.
                 </div>
 
