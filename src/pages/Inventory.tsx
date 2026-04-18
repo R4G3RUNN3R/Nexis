@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
+import { cielEmptyStates, cielPageCopy } from "../data/cielPageCopy";
 import { usePlayer } from "../state/PlayerContext";
 import "../styles/inventory.css";
 
@@ -64,6 +65,7 @@ export default function InventoryPage() {
   const { player } = usePlayer();
   const inventory = player.inventory ?? {};
   const [activeCategory, setActiveCategory] = useState("All");
+  const pageCopy = cielPageCopy.inventory;
 
   const entries = Object.entries(inventory)
     .filter(([, quantity]) => quantity > 0)
@@ -87,15 +89,19 @@ export default function InventoryPage() {
     () => ["All", ...Object.keys(categoryTotals).sort((left, right) => left.localeCompare(right))],
     [categoryTotals],
   );
-  const visibleEntries = activeCategory === "All"
-    ? entries
-    : entries.filter((entry) => entry.category === activeCategory);
+  const visibleEntries = activeCategory === "All" ? entries : entries.filter((entry) => entry.category === activeCategory);
 
   return (
-    <AppShell
-      title="Inventory"
-      hint="Rebuilt as a proper holdings ledger so it feels closer to Torn and less like a warehouse spreadsheet in witness protection."
-    >
+    <AppShell title="Inventory" hint={pageCopy.flavor}>
+      <div className="page-intro-grid">
+        <ContentPanel title="Holdings">
+          <p className="page-intro__lead">{pageCopy.flavor}</p>
+        </ContentPanel>
+        <ContentPanel title="CIEL">
+          <p className="page-intro__body">{pageCopy.ciel}</p>
+        </ContentPanel>
+      </div>
+
       <div className="nexis-grid">
         <div className="nexis-column nexis-column--wide">
           <ContentPanel title={`Items (${entries.length} types)`}>
@@ -103,16 +109,14 @@ export default function InventoryPage() {
               <div className="inv-empty">
                 <div className="inv-empty__icon">[ ]</div>
                 <div className="inv-empty__title">Your inventory is empty.</div>
-                <div className="inv-empty__sub">
-                  Complete jobs to gather materials. Beginner adventuring, salvage, and street work will start filling this up.
-                </div>
+                <div className="inv-empty__sub">{cielEmptyStates.emptyInventory}</div>
               </div>
             ) : (
               <div className="inv-ledger">
                 <div className="inv-ledger__headline">
-                  <div className="inv-ledger__title">Nexis Holdings Ledger</div>
+                  <div className="inv-ledger__title">Ashen Crown Holdings Ledger</div>
                   <div className="inv-ledger__subtitle">
-                    Clean stock counts, readable categories, and zero fake use buttons for systems that are not wired yet.
+                    Clean stock counts, readable categories, and no counterfeit buttons pretending half the economy already works.
                   </div>
                 </div>
 
@@ -165,9 +169,7 @@ export default function InventoryPage() {
               </div>
               <div className="info-row">
                 <span className="info-row__label">Total items</span>
-                <span className="info-row__value">
-                  {entries.reduce((sum, entry) => sum + entry.quantity, 0)}
-                </span>
+                <span className="info-row__value">{entries.reduce((sum, entry) => sum + entry.quantity, 0)}</span>
               </div>
             </div>
 
@@ -186,7 +188,7 @@ export default function InventoryPage() {
 
             {!isEmpty ? (
               <div className="inv-ledger-note">
-                Sell, use, and crafting hooks still depend on the wider item economy. The ledger at least stops pretending otherwise.
+                Sell, use, and crafting hooks still depend on the wider item economy. The ledger at least has the decency not to lie about it.
               </div>
             ) : null}
           </ContentPanel>
