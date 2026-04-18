@@ -1,5 +1,5 @@
 {
-  "name": "nexis",
+  "name": "ashen-crown",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -27,9 +27,9 @@
     "typescript": "^5.5.3",
     "vite": "^5.4.8"
   },
-  "description": "",
+  "description": "Ashen Crown browser RPG client and server.",
   "main": "index.js",
-  "keywords": [],
+  "keywords": ["ashen-crown", "browser-rpg", "fantasy"],
   "author": "",
   "license": "ISC"
 }
