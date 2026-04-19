@@ -19,6 +19,8 @@ import AchievementsPage from "../pages/Achievements";
 import BlackMarketPage from "../pages/BlackMarket";
 import BankPage from "../pages/Bank";
 import GuildPage from "../pages/Guild";
+import GuildsPage from "../pages/Guilds";
+import ConsortiumsPage from "../pages/Consortiums";
 import HospitalPage from "../pages/Hospital";
 import TavernPage from "../pages/Tavern";
 import CityPage from "../pages/City";
@@ -55,6 +57,8 @@ export default function AppRouter() {
       <Route path="/achievements" element={<AchievementsPage />} />
       <Route path="/housing" element={<HousingPage />} />
       <Route path="/guild" element={<GuildPage />} />
+      <Route path="/guilds" element={<RouteGuard><GuildsPage /></RouteGuard>} />
+      <Route path="/consortiums" element={<RouteGuard><ConsortiumsPage /></RouteGuard>} />
       <Route path="/hospital" element={<HospitalPage />} />
       <Route path="/city-board" element={<CityBoardPage />} />
       <Route path="/skills" element={<SkillsPage />} />
