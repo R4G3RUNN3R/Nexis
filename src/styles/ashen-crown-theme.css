@@ -74,6 +74,25 @@ body {
   background: #16100c;
 }
 
+.topbar__left {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.topbar__link {
+  color: #f0dfc2;
+  text-decoration: none;
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.topbar__link:hover,
+.topbar__link.active {
+  background: rgba(216, 154, 71, 0.12);
+}
+
 .topbar__auth-links {
   display: flex;
   gap: 8px;
@@ -125,6 +144,29 @@ body {
   border: 1px solid rgba(216, 154, 71, 0.14);
   background: rgba(9, 7, 6, 0.42);
   border-radius: 10px;
+}
+
+.sidebar-quote-strip {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid rgba(216, 154, 71, 0.14);
+  border-radius: 10px;
+  background: rgba(9, 7, 6, 0.42);
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-quote-strip__label {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #baa27e;
+}
+
+.sidebar-quote-strip__text {
+  color: #e7d8bc;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 @media (max-width: 900px) {
