@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useMemo } from "react";
 import { TopBar } from "./TopBar";
 import { usePlayer } from "../../state/PlayerContext";
@@ -8,6 +8,7 @@ import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicI
 import { isAdministrator } from "../../lib/adminAccess";
 import { resolveDisplayTitle } from "../../lib/titleAccess";
 import { getTravelProgress, resolveTravelState } from "../../lib/travelState";
+import { cielLoadingQuotes } from "../../data/cielPageCopy";
 
 type AppShellProps = {
   title?: string;
@@ -95,6 +96,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const { player, now, isHospitalized, hospitalRemainingLabel, isJailed, jailRemainingLabel } = usePlayer();
   const { logout, activeAccount } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const travelState = resolveTravelState(player.internalId, now);
   const isTraveling = getTravelProgress(travelState, now).active;
 
@@ -130,6 +132,9 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const adminLinks: Array<[string, string]> = isAdministrator(activeAccount ?? player.publicId) ? [["Admin", "/admin"]] : [];
   const visibleWorldBase = [...world, ...adminLinks];
   const visibleWorld = hiddenRoutes ? visibleWorldBase.filter(([, route]) => !hiddenRoutes.has(route)) : visibleWorldBase;
+  const quoteSeed = `${location.pathname}|${title ?? ""}`;
+  const quoteIndex = Math.abs(Array.from(quoteSeed).reduce((sum, char) => sum + char.charCodeAt(0), 0)) % cielLoadingQuotes.length;
+  const shellQuote = cielLoadingQuotes[quoteIndex];
 
   return (
     <div className="app-shell">
@@ -137,8 +142,8 @@ export function AppShell({ title, hint, children }: AppShellProps) {
       <div className="app-main">
         <aside className="sidebar">
           <div className="sidebar-logo">
-            <div className="sidebar-logo__title">Nexis</div>
-            <div className="sidebar-logo__subtitle">Online realm of adventure</div>
+            <div className="sidebar-logo__title">Ashen Crown</div>
+            <div className="sidebar-logo__subtitle">World brand | Nexis shard access</div>
           </div>
 
           <div className="player-card">
@@ -180,6 +185,11 @@ export function AppShell({ title, hint, children }: AppShellProps) {
 
           <SidebarSection title="Core" links={visibleCore} />
           <SidebarSection title="World" links={visibleWorld} />
+
+          <div className="sidebar-quote-strip">
+            <div className="sidebar-quote-strip__label">CIEL</div>
+            <div className="sidebar-quote-strip__text">{shellQuote}</div>
+          </div>
 
           <div className="sidebar-logout">
             <button type="button" className="sidebar-logout__btn" onClick={handleLogout}>
