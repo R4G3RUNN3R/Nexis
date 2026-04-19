@@ -6,12 +6,10 @@ import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicI
 import { CONSORTIUM_STORAGE_PREFIX, GUILD_STORAGE_PREFIX } from "../../lib/organizations";
 
 const navLinks: Array<[string, string]> = [
-  ["Wiki", "#"],
-  ["Rules", "#"],
-  ["Forums", "#"],
-  ["Discord", "#"],
-  ["Staff", "#"],
-  ["Credits", "#"],
+  ["News", "/news"],
+  ["Rules", "/rules"],
+  ["Contact", "/contact"],
+  ["Credits", "/credits"],
 ];
 
 type SearchResult = {
@@ -45,6 +43,8 @@ function buildSearchIndex() {
     { id: "route-guilds", label: "Guilds", hint: "Group management", to: "/guilds" },
     { id: "route-consortiums", label: "Consortiums", hint: "Player companies", to: "/consortiums" },
     { id: "route-city-board", label: "City Board", hint: "Public notices", to: "/city-board" },
+    { id: "route-rules", label: "Rules", hint: "Public guidance", to: "/rules" },
+    { id: "route-news", label: "News", hint: "Public updates", to: "/news" },
   ];
 
   const accounts = readJson<Record<string, { firstName: string; lastName: string; publicId: number }>>("nexis_accounts");
@@ -170,14 +170,9 @@ export function TopBar() {
     <header className="topbar">
       <div className="topbar__left">
         {navLinks.map(([label, to]) => (
-          <span
-            key={label}
-            className="topbar__link"
-            title={`${label} is not wired in this build yet.`}
-            style={{ opacity: 0.6, cursor: "default" }}
-          >
+          <NavLink key={to} to={to} className="topbar__link">
             {label}
-          </span>
+          </NavLink>
         ))}
       </div>
 
@@ -186,7 +181,7 @@ export function TopBar() {
           <input
             className="topbar__search"
             type="search"
-            placeholder="Search users, guilds, consortiums..."
+            placeholder="Search citizens, guilds, consortiums..."
             aria-label="Search"
             value={query}
             onChange={(event) => {
@@ -229,13 +224,13 @@ export function TopBar() {
             aria-label="Open time menu"
             onClick={() => setClockOpen((value) => !value)}
           >
-            <span aria-hidden="true">??</span>
+            <span aria-hidden="true">⏳</span>
           </button>
 
           {clockOpen ? (
             <div className="topbar__dropdown topbar__dropdown--clock">
               <div className="topbar__dropdown-row">
-                <span className="topbar__dropdown-label">Server Time</span>
+                <span className="topbar__dropdown-label">Nexis Time</span>
                 <strong>{serverTime}</strong>
               </div>
               <div className="topbar__dropdown-row">
@@ -259,7 +254,7 @@ export function TopBar() {
 
           {playerOpen ? (
             <div className="player-menu__dropdown">
-              <div className="player-menu__server">Shard: Cay</div>
+              <div className="player-menu__server">Ashen Crown | Shard: Cay</div>
               <NavLink to={profileRoute} className="player-menu__item" onClick={() => setPlayerOpen(false)}>
                 Character Profile
               </NavLink>
