@@ -8,6 +8,7 @@ import { JobsProvider } from "./state/JobsContext";
 import { ArenaProvider } from "./state/ArenaContext";
 import Ciel from "./components/ciel/Ciel";
 import { BackendStateBridge } from "./components/state/BackendStateBridge";
+import RouteTransitionQuote from "./components/layout/RouteTransitionQuote";
 
 const PUBLIC_PATHS = new Set(["/login", "/register", "/news", "/rules", "/contact", "/credits"]);
 
@@ -37,6 +38,7 @@ export default function App() {
                 <BackendStateBridge />
                 <BrowserRouter>
                   <AuthGate>
+                    <RouteTransitionQuote />
                     <AppRouter />
                     <Ciel />
                   </AuthGate>
