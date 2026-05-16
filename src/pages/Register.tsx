@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../state/AuthContext";
 import "../styles/register.css";
 
@@ -14,6 +14,7 @@ type AuthPageProps = {
 };
 
 function getRedirectTarget(state: unknown): string {
+  const fallback = "/home";
   if (
     typeof state === "object" &&
     state !== null &&
@@ -21,13 +22,20 @@ function getRedirectTarget(state: unknown): string {
     typeof (state as { redirectedFrom?: unknown }).redirectedFrom === "string"
   ) {
     const redirectedFrom = (state as { redirectedFrom: string }).redirectedFrom;
-    if (redirectedFrom === "/app.html" || redirectedFrom === "/login" || redirectedFrom === "/register") {
-      return "/home";
+    if (
+      redirectedFrom === "/app.html" ||
+      redirectedFrom === "/login" ||
+      redirectedFrom === "/register" ||
+      redirectedFrom === "/forgot-password" ||
+      redirectedFrom === "/reset-password"
+    ) {
+      return fallback;
     }
+
     return redirectedFrom;
   }
 
-  return "/home";
+  return fallback;
 }
 
 function validateName(name: string, fieldLabel: string): string | null {
@@ -302,6 +310,12 @@ function LoginForm({ onSwitch, redirectTarget }: { onSwitch: () => void; redirec
           {isSubmitting ? "Signing In..." : "Log In"}
         </button>
       </form>
+
+      <div className="register-switch">
+        <Link className="register-switch__btn" to="/forgot-password">
+          Forgot password?
+        </Link>
+      </div>
 
       <div className="register-switch">
         Don&apos;t have an account?{" "}

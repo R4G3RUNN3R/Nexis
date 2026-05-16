@@ -67,7 +67,9 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
         name: "Bank",
         route: "/bank",
         icon: "B",
-        description: "Deposits, reserves, and future financial systems.",
+        description: "Deposits, reserves, and institutional finance.",
+        locked: true,
+        lockReason: "Coming soon: deposits and reserves are not open yet.",
       },
       {
         id: "black_market",
@@ -110,7 +112,7 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
       {
         id: "jail",
         name: "Jail",
-        route: "/hospital",
+        route: "/jail",
         icon: "J",
         description: "Detention, penalties, busting, and inmate tracking.",
       },
@@ -141,7 +143,9 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
         name: "Tavern",
         route: "/tavern",
         icon: "T",
-        description: "Rumors, casual hooks, and future social contract leads.",
+        description: "Rumors, contract leads, and social hooks.",
+        locked: true,
+        lockReason: "Coming soon: tavern rumors and social contracts are not open yet.",
       },
     ],
   },
@@ -179,6 +183,13 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
         route: "/housing",
         icon: "HS",
         description: "Property ownership, upgrades, upkeep, and household effects.",
+      },
+      {
+        id: "property_office",
+        name: "Property Office",
+        route: "/city/property-office",
+        icon: "PO",
+        description: "Buy or sell organization plots and review build-ready capacity data.",
       },
       {
         id: "travel",
@@ -274,6 +285,13 @@ function makeRemoteCityDistricts(city: WorldCity): CityDistrict[] {
           route: "/housing",
           icon: "HS",
           description: "Review your residence and installed upgrades.",
+        },
+        {
+          id: `${city.id}_property_office`,
+          name: "Property Office",
+          route: "/city/property-office",
+          icon: "PO",
+          description: "Manage organization plot contracts and sellback options.",
         },
         {
           id: `${city.id}_guilds`,

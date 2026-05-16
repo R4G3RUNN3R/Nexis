@@ -18,8 +18,7 @@ export type ReservedPublicIdentity = {
   numericId: number;
   displayId: string;
   name: string;
-  entityType: "npc" | "system" | "event";
-  defaultPrivilegeRole: "player" | "staff" | "admin";
+  role: "npc" | "system" | "event";
   note?: string;
 };
 
@@ -45,25 +44,21 @@ const ENTITY_CONFIG: Record<PublicEntityType, { prefix: string; storageKey: stri
 };
 
 export const RESERVED_PLAYER_IDENTITIES: ReservedPublicIdentity[] = [
-  { numericId: 1_000_000, displayId: "P1000000", name: "Hennet Uthellien", entityType: "system", defaultPrivilegeRole: "admin", note: "Administrator account" },
-  { numericId: 1_000_001, displayId: "P1000001", name: "Dianna Uthellien", entityType: "npc", defaultPrivilegeRole: "player" },
-  { numericId: 1_000_002, displayId: "P1000002", name: "Varkon Sternhammer", entityType: "npc", defaultPrivilegeRole: "player" },
-  { numericId: 1_000_003, displayId: "P1000003", name: "Reverend Mother Serana", entityType: "npc", defaultPrivilegeRole: "player" },
-  { numericId: 1_000_004, displayId: "P1000004", name: "Faelar", entityType: "npc", defaultPrivilegeRole: "player" },
-  { numericId: 1_000_005, displayId: "P1000005", name: "Solon Elias", entityType: "npc", defaultPrivilegeRole: "player" },
-  { numericId: 1_000_006, displayId: "P1000006", name: "Nymeria Shadowsong", entityType: "npc", defaultPrivilegeRole: "player" },
-  { numericId: 1_000_007, displayId: "P1000007", name: "CIEL", entityType: "system", defaultPrivilegeRole: "player" },
-  { numericId: 1_000_008, displayId: "P1000008", name: "Santa Claus", entityType: "event", defaultPrivilegeRole: "player" },
-  { numericId: 1_000_009, displayId: "P1000009", name: "Easter Bunny", entityType: "event", defaultPrivilegeRole: "player" },
-  { numericId: 1_000_010, displayId: "P1000010", name: "Shadow Guardian Administrator I", entityType: "system", defaultPrivilegeRole: "admin", note: "Reserved administrator command identity" },
-  { numericId: 1_000_011, displayId: "P1000011", name: "Shadow Guardian Administrator II", entityType: "system", defaultPrivilegeRole: "admin", note: "Reserved administrator command identity" },
-  { numericId: 1_000_012, displayId: "P1000012", name: "Shadow Guardian Administrator III", entityType: "system", defaultPrivilegeRole: "admin", note: "Reserved administrator command identity" },
-  { numericId: 1_000_013, displayId: "P1000013", name: "Shadow Guardian Administrator IV", entityType: "system", defaultPrivilegeRole: "admin", note: "Reserved administrator command identity" },
+  { numericId: 1_000_000, displayId: "P1000000", name: "Hennet Uthellien", role: "system", note: "Administrator account" },
+  { numericId: 1_000_001, displayId: "P1000001", name: "Dianna Uthellien", role: "npc" },
+  { numericId: 1_000_002, displayId: "P1000002", name: "Varkon Sternhammer", role: "npc" },
+  { numericId: 1_000_003, displayId: "P1000003", name: "Reverend Mother Serana", role: "npc" },
+  { numericId: 1_000_004, displayId: "P1000004", name: "Faelar", role: "npc" },
+  { numericId: 1_000_005, displayId: "P1000005", name: "Solon Elias", role: "npc" },
+  { numericId: 1_000_006, displayId: "P1000006", name: "Nymeria Shadowsong", role: "npc" },
+  { numericId: 1_000_007, displayId: "P1000007", name: "CIEL", role: "system" },
+  { numericId: 1_000_008, displayId: "P1000008", name: "Santa Claus", role: "event" },
+  { numericId: 1_000_009, displayId: "P1000009", name: "Easter Bunny", role: "event" },
+  { numericId: 1_000_010, displayId: "P1000010", name: "Shadow Guardian Administrator I", role: "system", note: "Reserved administrator command identity" },
+  { numericId: 1_000_011, displayId: "P1000011", name: "Shadow Guardian Administrator II", role: "system", note: "Reserved administrator command identity" },
+  { numericId: 1_000_012, displayId: "P1000012", name: "Shadow Guardian Administrator III", role: "system", note: "Reserved administrator command identity" },
+  { numericId: 1_000_013, displayId: "P1000013", name: "Shadow Guardian Administrator IV", role: "system", note: "Reserved administrator command identity" },
 ];
-
-export function getReservedPlayerIdentity(numericId: number | null | undefined) {
-  return typeof numericId === "number" ? RESERVED_PLAYER_IDENTITIES.find((identity) => identity.numericId === numericId) ?? null : null;
-}
 
 function readAllocator(entity: PublicEntityType): AllocatorState {
   if (typeof window === "undefined") {
@@ -135,7 +130,7 @@ function formatInternalPlayerId(sequence: number) {
 }
 
 function isUsablePlayerNumericId(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= FIRST_NON_RESERVED_ID;
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
 function isUsableInternalPlayerId(value: unknown): value is string {
@@ -171,19 +166,24 @@ export function formatPlayerNameWithPublicId(name: string, numericId: number | n
 }
 
 export function parsePlayerPublicId(raw: string | undefined) {
-  if (!raw || !/^P\d{7}$/.test(raw)) return null;
-  const parsed = Number.parseInt(raw.slice(1), 10);
+  if (!raw) return null;
+  const normalized = raw.trim().toUpperCase();
+  const numeric = /^P(\d{7})$/.exec(normalized)?.[1] ?? (/^\d{7}$/.exec(normalized)?.[0] ?? null);
+  if (!numeric) return null;
+  const parsed = Number.parseInt(numeric, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 export function getProfileRoute(publicId: number | null | undefined) {
-  return isUsablePlayerNumericId(publicId) ? `/profile/${formatPlayerPublicId(publicId)}` : "/profile";
+  return typeof publicId === "number" && Number.isInteger(publicId) && publicId > 0
+    ? `/profile/${formatPlayerPublicId(publicId)}`
+    : "/profile";
 }
 
 export function allocatePublicNumericId(entity: PublicEntityType, existingNumericIds: Iterable<number>) {
   const used = new Set<number>(getReservedNumericIds());
   for (const numericId of existingNumericIds) {
-    if (Number.isInteger(numericId) && numericId >= FIRST_NON_RESERVED_ID) {
+    if (Number.isInteger(numericId) && numericId > 0) {
       used.add(numericId);
     }
   }
@@ -230,7 +230,7 @@ export function migrateStoredAccountIdentities<T extends AccountIdentityRecord>(
   accounts: Record<string, T & { publicId: number; internalPlayerId: string }>;
   changed: boolean;
 } {
-  const usedPublicIds = new Set<number>(getReservedNumericIds());
+  const usedPublicIds = new Set<number>();
   const usedInternalIds = new Set<string>();
   const migrated = {} as Record<string, T & { publicId: number; internalPlayerId: string }>;
   let changed = false;

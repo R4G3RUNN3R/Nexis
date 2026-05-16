@@ -24,7 +24,7 @@ export async function ensureDatabaseSchema() {
         ('consortium', $3)
       ON CONFLICT (entity_type) DO NOTHING
     `,
-    [FIRST_PLAYER_NUMERIC_ID, PLAYER_PUBLIC_ID_BASE + 20, PLAYER_PUBLIC_ID_BASE + 20],
+    [FIRST_PLAYER_NUMERIC_ID, PLAYER_PUBLIC_ID_BASE + 20, PLAYER_PUBLIC_ID_BASE + 21],
   );
 
   return true;

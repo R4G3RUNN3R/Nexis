@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import {
@@ -14,6 +14,21 @@ import {
   type LegacyPerk,
   type LegacyPerkCategory,
 } from "../data/legacyPerksData";
+
+const LEGACY_RANKS_KEY = "nexis_legacy_perk_ranks";
+
+function readLegacyRanks(): Record<string, number> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LEGACY_RANKS_KEY) ?? "{}") as Record<string, number>;
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, value]): [string, number] => [key, Math.max(0, Math.floor(Number(value ?? 0)))])
+        .filter(([, value]) => value > 0),
+    );
+  } catch {
+    return {};
+  }
+}
 
 function AchievementProgress({
   progress,
@@ -101,12 +116,10 @@ export default function AchievementsPage() {
   const [selectedLegacyCategory, setSelectedLegacyCategory] =
     useState<LegacyPerkCategory | "All">("All");
   const [hideCompleted, setHideCompleted] = useState(false);
-  const [perkRanks, setPerkRanks] = useState<Record<string, number>>({});
+  const [perkRanks, setPerkRanks] = useState<Record<string, number>>(() =>
+    typeof window === "undefined" ? {} : readLegacyRanks(),
+  );
   const [selectedPerkId, setSelectedPerkId] = useState<string>(legacyPerks[0]?.id ?? "");
-
-  const flavor = "History leaves marks. Achievement is simply what happens when those marks are measured, counted, and made impossible to deny.";
-  const ciel = "Achievements record what you have done. Legacy turns that record into advantage. Recognition is sentimental; merit points are useful.";
-  const alt = "Proof matters. Especially when memory becomes selective the moment power enters the room.";
 
   const filteredAchievements = useMemo(() => {
     return achievements.filter((achievement) => {
@@ -125,7 +138,13 @@ export default function AchievementsPage() {
     });
   }, [selectedLegacyCategory]);
 
-  const totalPointsEarned = achievements.filter((a) => a.progress >= a.target).length;
+  useEffect(() => {
+    window.localStorage.setItem(LEGACY_RANKS_KEY, JSON.stringify(perkRanks));
+  }, [perkRanks]);
+
+  const totalPointsEarned = achievements
+    .filter((achievement) => achievement.progress >= achievement.target)
+    .reduce((sum, achievement) => sum + achievement.rewardPoints, 0);
   const totalPointsSpent = Object.entries(perkRanks).reduce((sum, [, rank]) => {
     let local = 0;
     for (let i = 1; i <= rank; i += 1) local += i;
@@ -146,18 +165,8 @@ export default function AchievementsPage() {
   return (
     <AppShell
       title="Achievements & Legacy"
-      hint={flavor}
+      hint="Achievements grant Legacy Points. Legacy ranks cost 1 point for rank 1, 2 for rank 2, and so on."
     >
-      <div className="page-intro-grid">
-        <ContentPanel title="Record & Legacy">
-          <p className="page-intro__lead">{flavor}</p>
-          <p className="page-intro__body">{alt}</p>
-        </ContentPanel>
-        <ContentPanel title="CIEL">
-          <p className="page-intro__body">{ciel}</p>
-        </ContentPanel>
-      </div>
-
       <div className="legacy-summary-grid">
         <div className="legacy-summary-card">
           <span className="legacy-summary-card__label">Available Merits</span>
@@ -285,9 +294,9 @@ export default function AchievementsPage() {
             {selectedPerk ? (
               <div className="legacy-selected-panel">
                 <div className="legacy-selected-panel__text">
-                  This upgrade will {selectedPerk.description.toLowerCase()} by {" "}
+                  This upgrade will {selectedPerk.description.toLowerCase()} by{" "}
                   {getPerkEffectText(selectedPerk.baseEffect, selectedPerk.effectUnit, 1)} per rank.
-                  Current rank is {selectedPerkRank}/{selectedPerk.maxRank}. The next upgrade will cost {" "}
+                  Current rank is {selectedPerkRank}/{selectedPerk.maxRank}. The next upgrade will cost{" "}
                   {nextRankCost} merit{nextRankCost === 1 ? "" : "s"}.
                 </div>
 

@@ -1,132 +1,781 @@
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
+import { OrganizationBaseTab } from "../components/organizations/OrganizationBaseTab";
+import { ConsortiumLogisticsBoard } from "../components/organizations/ConsortiumLogisticsBoard";
 import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
-import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
-import { formatEntityPublicId } from "../lib/publicIds";
-import {
-  addOrganizationMember,
-  applyToConsortium,
-  assignConsortiumPosition,
-  claimConsortiumPoints,
-  createOrganization,
-  depositConsortiumTreasury,
-  getMyOrganization,
-  redeemConsortiumReward,
-  removeConsortiumMember,
-  reviewConsortiumApplication,
-  runConsortiumOutreach,
-} from "../lib/organizationApi";
-import { formatDate, type ConsortiumBoard, type ConsortiumReward, type ConsortiumTypeDefinition } from "../lib/organizations";
+import { allocatePublicNumericId, formatEntityPublicId } from "../lib/publicIds";
+import { createOrganization, getMyOrganization, getOrganizationByPublicId } from "../lib/organizationApi";
 import { cielPageCopy } from "../data/cielPageCopy";
+import {
+  CONSORTIUM_STORAGE_PREFIX,
+  consortiumKey,
+  formatDate,
+  readConsortiumBoard,
+  type ConsortiumBoard,
+  type ConsortiumTypeDefinition,
+  writeJson,
+  type OrganizationMember,
+  type OrganizationRole,
+} from "../lib/organizations";
+import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
 import "../styles/guild.css";
 
-type AnyBoard = ConsortiumBoard & Record<string, any>;
-type DirectoryEntry = Record<string, any>;
+const LOCAL_CONSORTIUM_TYPES = [
+  {
+    id: "mercantile_house",
+    name: "Mercantile House",
+    summary: "Trade manifests, route profit, and respectable greed.",
+    baseCost: 180_000,
+    baseIncomePerShift: 240,
+    startingVault: 2_500,
+    roleSummary: "Roles: Director, Quartermaster, Trade Clerk",
+  },
+  {
+    id: "security_contractor",
+    name: "Security Contractor",
+    summary: "Protection contracts, escorts, and expensive people with weapons.",
+    baseCost: 220_000,
+    baseIncomePerShift: 280,
+    startingVault: 3_000,
+    roleSummary: "Roles: Director, Operations Captain, Field Lead",
+  },
+  {
+    id: "research_collective",
+    name: "Research Collective",
+    summary: "Study grants, commissioned analysis, and suspiciously polished reports.",
+    baseCost: 260_000,
+    baseIncomePerShift: 320,
+    startingVault: 3_500,
+    roleSummary: "Roles: Director, Archivist, Senior Researcher",
+  },
+] as const;
 
-const panelStyle = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 14, display: "grid", gap: 10, background: "rgba(255,255,255,0.02)" } as const;
-const statCard = { border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 12, display: "grid", gap: 6 } as const;
+type ConsortiumChoice = {
+  id: string;
+  name: string;
+  summary: string;
+  baseCost: number;
+  baseIncomePerShift: number;
+  startingVault: number;
+  roleSummary: string;
+};
 
-function Field({ label, value }: { label: string; value: React.ReactNode }) { return <div className="info-row"><span className="info-row__label">{label}</span><span className="info-row__value">{value}</span></div>; }
-function TreasuryLine({ treasury }: { treasury: { copper: number; silver: number; gold: number; platinum: number } }) { return <>{treasury.platinum}p | {treasury.gold}g | {treasury.silver}s | {treasury.copper}c</>; }
-function RewardCard({ reward, points, onRedeem }: { reward: ConsortiumReward; points: number; onRedeem?: (rewardKey: string) => void }) {
-  const unlocked = reward.unlocked ?? true;
-  const canRedeem = reward.canRedeem ?? true;
-  return <div style={panelStyle}><div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><strong>{reward.starTier}? {reward.displayName}</strong><span style={{ color: reward.mode === "passive" ? "#8ec8a7" : "#f7cf80", fontSize: 12 }}>{reward.mode === "passive" ? "Passive" : "Active"}</span></div><div style={{ color: "#b7c3cf", fontSize: 13 }}>{reward.effectSummary}</div>{reward.mode === "active" && onRedeem ? <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}><span style={{ fontSize: 12, color: "#9fb0bf" }}>Cost: {reward.pointCost} CP</span><button type="button" className="org-button" disabled={!unlocked || !canRedeem} onClick={() => onRedeem(reward.rewardKey)}>{unlocked ? (canRedeem ? "Redeem" : "Need more CP") : "Locked"}</button></div> : <span style={{ fontSize: 12, color: unlocked ? "#8ec8a7" : "#9fb0bf" }}>{unlocked ? "Unlocked" : `Unlocks at ${reward.starTier}?`}</span>}</div>;
+type ConsortiumMemberTab = "overview" | "logistics" | "base";
+
+function StatusRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="info-row">
+      <span className="info-row__label">{label}</span>
+      <span className="info-row__value">{value}</span>
+    </div>
+  );
+}
+
+function collectExistingOrganizationPublicIds(prefix: string) {
+  if (typeof window === "undefined") return [] as number[];
+
+  return Object.keys(window.localStorage)
+    .filter((key) => key.startsWith(prefix))
+    .map((key) => {
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { publicId?: unknown };
+        return typeof parsed.publicId === "number" ? parsed.publicId : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter((value): value is number => value !== null);
+}
+
+function readBoardNumberMetadata(board: ConsortiumBoard, key: string, fallback = 0) {
+  const value = board.metadata?.[key];
+  return typeof value === "number" ? value : fallback;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function toServerChoice(template: ConsortiumTypeDefinition): ConsortiumChoice {
+  return {
+    id: template.key,
+    name: template.displayName,
+    summary: template.description,
+    baseCost: template.creationCost,
+    baseIncomePerShift: 0,
+    startingVault: 0,
+    roleSummary: template.rolesFlavor.join(", "),
+  };
+}
+
+function getApplicantCount(board: ConsortiumBoard) {
+  const applications = (board as ConsortiumBoard & { applications?: unknown }).applications;
+  return Array.isArray(applications) ? applications.length : readBoardNumberMetadata(board, "applicantCount");
+}
+
+function getAdvertisingLevel(board: ConsortiumBoard) {
+  const management = asRecord(asRecord(board.metadata).management);
+  const outreach = asRecord(management.outreach);
+  return typeof outreach.level === "number" ? outreach.level : readBoardNumberMetadata(board, "advertisingLevel", 1);
+}
+
+function getDailyGeneration(board: ConsortiumBoard) {
+  const directValue = (board as ConsortiumBoard & { companyDailyGeneration?: unknown }).companyDailyGeneration;
+  return typeof directValue === "number" ? directValue : readBoardNumberMetadata(board, "baseIncomePerShift");
+}
+
+function readNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function getEmployeeRows(board: ConsortiumBoard) {
+  const detailed = (board as ConsortiumBoard & { memberDetails?: unknown }).memberDetails;
+  if (Array.isArray(detailed) && detailed.length > 0) {
+    return detailed.map((entry) => {
+      const employee = asRecord(entry);
+      return {
+        key: `${String(employee.userInternalId ?? "member")}-${String(employee.roleKey ?? "employee")}`,
+        roleLabel: String(employee.positionDisplayName ?? employee.roleDisplayName ?? employee.roleKey ?? "Employee"),
+        summary: `${String(employee.displayName ?? "Unknown")} | Daily CP ${String(employee.dailyCpGain ?? 0)}`,
+      };
+    });
+  }
+
+  return board.members.map((employee) => ({
+    key: `${employee.userInternalId}-${employee.roleKey}`,
+    roleLabel: employee.roleKey,
+    summary: `${employee.displayName} | Efficiency 100%`,
+  }));
 }
 
 export default function ConsortiumsPage() {
-  const { player } = usePlayer();
+  const { publicId: publicIdParam } = useParams();
+  const { player, spendGold } = usePlayer();
   const { activeAccount, authSource, serverSessionToken } = useAuth();
-  const [board, setBoard] = useState<AnyBoard | null>(null);
-  const [templates, setTemplates] = useState<ConsortiumTypeDefinition[]>([]);
-  const [directory, setDirectory] = useState<DirectoryEntry[]>([]);
+  const [board, setBoard] = useState<ConsortiumBoard | null>(null);
+  const [loadingBoard, setLoadingBoard] = useState(false);
+  const [serverTemplates, setServerTemplates] = useState<ConsortiumTypeDefinition[]>([]);
   const [consortiumName, setConsortiumName] = useState("");
-  const [selectedTypeKey, setSelectedTypeKey] = useState("merchant");
-  const [applyNotes, setApplyNotes] = useState<Record<string, string>>({});
-  const [memberInviteId, setMemberInviteId] = useState("");
-  const [treasuryDeposit, setTreasuryDeposit] = useState("1000");
+  const [consortiumTag, setConsortiumTag] = useState("");
+  const [selectedTypeId, setSelectedTypeId] = useState<string>("mercantile_house");
+  const [memberTab, setMemberTab] = useState<ConsortiumMemberTab>("overview");
   const [message, setMessage] = useState<string | null>(null);
+  const [boardLoadError, setBoardLoadError] = useState<string | null>(null);
+  const routeOrganizationPublicId = typeof publicIdParam === "string" ? publicIdParam.trim() : "";
+  const isDetailRoute = routeOrganizationPublicId.length > 0;
+
+  const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
+  const hasConsortiumWrit = (player.inventory.consortium_writ ?? 0) > 0;
+  const isServerMode = authSource === "server" && Boolean(serverSessionToken);
+
+  const consortiumTypes = useMemo<ConsortiumChoice[]>(
+    () => (isServerMode ? serverTemplates.map(toServerChoice) : [...LOCAL_CONSORTIUM_TYPES]),
+    [isServerMode, serverTemplates],
+  );
   const pageCopy = cielPageCopy.consortiums;
+  const selectedType = consortiumTypes.find((type) => type.id === selectedTypeId) ?? consortiumTypes[0] ?? LOCAL_CONSORTIUM_TYPES[0];
+  const foundingCost = hasConsortiumWrit ? Math.max(75_000, selectedType.baseCost - 75_000) : selectedType.baseCost;
 
-  const refreshPlayerCache = (playerState?: Record<string, unknown>) => {
-    if (!activeAccount || !playerState) return;
-    mergeServerStateIntoCache({ email: activeAccount.email, user: { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId, firstName: activeAccount.firstName, lastName: activeAccount.lastName }, playerState: playerState as never });
-    window.dispatchEvent(new CustomEvent("nexis:player-refresh"));
-  };
+  async function reloadConsortiumBoard() {
+    if (isServerMode && serverSessionToken) {
+      setLoadingBoard(true);
+      const result = await (isDetailRoute
+        ? getOrganizationByPublicId(serverSessionToken, "consortium", routeOrganizationPublicId)
+        : getMyOrganization(serverSessionToken, "consortium"));
+      if ("ok" in result && result.ok === false) {
+        setBoardLoadError(result.error);
+        setLoadingBoard(false);
+        return;
+      }
+      const payload = result as {
+        organization: ConsortiumBoard | null;
+        consortiumTemplates?: ConsortiumTypeDefinition[];
+      };
+      setBoardLoadError(null);
+      setBoard(payload.organization);
+      setServerTemplates(payload.consortiumTemplates ?? []);
+      setLoadingBoard(false);
+      return;
+    }
 
-  const reload = async () => {
-    if (!serverSessionToken) return;
-    const result = await getMyOrganization(serverSessionToken, "consortium");
-    if ("ok" in result && result.ok === false) { setMessage(result.error); return; }
-    setBoard(((result as any).organization ?? null) as AnyBoard | null);
-    setTemplates(((result as any).consortiumTemplates ?? []) as ConsortiumTypeDefinition[]);
-    setDirectory((((result as any).directory ?? []) as DirectoryEntry[]));
-    if (((result as any).organization?.consortiumType?.key)) setSelectedTypeKey((result as any).organization.consortiumType.key);
-    else if (((result as any).consortiumTemplates?.[0]?.key)) setSelectedTypeKey((result as any).consortiumTemplates[0].key);
-  };
+    setLoadingBoard(false);
+    setBoard(readConsortiumBoard(player.internalId));
+  }
 
   useEffect(() => {
-    if (authSource !== "server" || !serverSessionToken) {
-      setBoard(null); setTemplates([]); setDirectory([]); setMessage("Consortium companies are live-server only. The browser-only fallback has been escorted outside before it could embarrass itself further."); return;
+    void reloadConsortiumBoard();
+  }, [isDetailRoute, isServerMode, player.internalId, routeOrganizationPublicId, serverSessionToken]);
+
+  useEffect(() => {
+    if (!consortiumTypes.length) return;
+    if (!consortiumTypes.some((type) => type.id === selectedTypeId)) {
+      setSelectedTypeId(consortiumTypes[0].id);
     }
-    void reload();
-  }, [authSource, serverSessionToken]);
+  }, [consortiumTypes, selectedTypeId]);
 
-  const selectedType = useMemo(() => templates.find((entry) => entry.key === selectedTypeKey) ?? templates[0] ?? null, [selectedTypeKey, templates]);
-  const hasWrit = (player.inventory.consortium_writ ?? 0) > 0;
-  const foundingCost = selectedType ? (hasWrit ? Math.max(75000, selectedType.creationCost - 75000) : selectedType.creationCost) : 0;
-  const createDisabled = !!board || !selectedType || consortiumName.trim().length < 3 || player.gold < foundingCost;
+  const consortiumBlockReason = useMemo(() => {
+    if (board) return "You already operate a consortium on this character.";
+    if (consortiumName.trim().length < 3) return "Consortium name must be at least 3 characters.";
+    if (!selectedType) return "No consortium template is available yet.";
+    if (!isServerMode && consortiumTag.trim().length < 2) return "Consortium tag must be at least 2 characters.";
+    if (player.gold < foundingCost) return `You need ${(foundingCost - player.gold).toLocaleString("en-GB")} more gold.`;
+    return null;
+  }, [board, consortiumName, consortiumTag, foundingCost, isServerMode, player.gold, selectedType]);
 
-  const act = async (runner: () => Promise<any>, success?: (payload: any) => void) => {
-    const result = await runner();
-    if ("ok" in result && result.ok === false) { setMessage(result.error); return; }
-    success?.(result as any);
-    await reload();
-  };
+  const canCreateConsortium = consortiumBlockReason === null;
+
+  const employeeRows = board ? getEmployeeRows(board) : [];
+  const isConsortiumMemberView = Boolean(board?.memberRoleKey);
+  const academyContract = asRecord((board as (ConsortiumBoard & { academyContract?: unknown }) | null)?.academyContract);
+  const businessContract = asRecord(academyContract.businessStudies);
+  const businessCompletionPct = readNumber(businessContract.averageTrackCompletionPct);
+  const businessCompletedCourses = readNumber(businessContract.averageCompletedCourses);
+  const businessRequiredCourses = Math.max(1, readNumber(businessContract.requiredCourses));
+  const businessYieldPct = readNumber(businessContract.consortiumYieldPct);
+  const businessWorkerEfficiencyPct = readNumber(businessContract.workerEfficiencyPct);
+  const businessTreasuryPct = readNumber(businessContract.treasuryEfficiencyPct);
+  const businessRoutePct = readNumber(businessContract.routePerformancePct);
+  const commandCards = board
+    ? [
+        {
+          label: "Type",
+          value: board.consortiumTypeName ?? "Unclassified",
+          note: `Tier ${board.starRating ?? 1}`,
+        },
+        {
+          label: "Treasury",
+          value: `${board.treasury.gold.toLocaleString("en-GB")} gold`,
+          note: "Liquid reserves",
+        },
+        {
+          label: "Daily Yield",
+          value: `${getDailyGeneration(board).toLocaleString("en-GB")} gold`,
+          note: businessYieldPct > 0
+            ? `${getApplicantCount(board)} applicants waiting | +${businessYieldPct}% academy`
+            : `${getApplicantCount(board)} applicants waiting`,
+        },
+        {
+          label: "Personnel",
+          value: String(board.members.length),
+          note: `Advertising level ${getAdvertisingLevel(board)}`,
+        },
+      ]
+    : [];
+
+  async function createConsortium() {
+    if (!canCreateConsortium) return;
+
+    if (isServerMode && serverSessionToken) {
+      const result = await createOrganization(serverSessionToken, {
+        type: "consortium",
+        name: consortiumName.trim(),
+        consortiumTypeKey: selectedType.id,
+      });
+      if ("ok" in result && result.ok === false) {
+        setMessage(result.error);
+        return;
+      }
+
+      const payload = result as {
+        organization: ConsortiumBoard;
+        playerState: Parameters<typeof mergeServerStateIntoCache>[0]["playerState"];
+      };
+
+      if (activeAccount) {
+        mergeServerStateIntoCache({
+          email: activeAccount.email,
+          user: {
+            internalPlayerId: activeAccount.internalPlayerId,
+            publicId: activeAccount.publicId,
+            firstName: activeAccount.firstName,
+            lastName: activeAccount.lastName,
+          },
+          playerState: payload.playerState,
+        });
+      }
+
+      setBoard(payload.organization);
+      setConsortiumName("");
+      setConsortiumTag("");
+      setMessage(
+        `Consortium founded: ${payload.organization.name} [${formatEntityPublicId("consortium", payload.organization.publicId)}]`,
+      );
+      return;
+    }
+
+    const paid = spendGold(foundingCost);
+    if (!paid) {
+      setMessage("Not enough gold to found a consortium.");
+      return;
+    }
+
+    const publicId = allocatePublicNumericId(
+      "consortium",
+      collectExistingOrganizationPublicIds(CONSORTIUM_STORAGE_PREFIX),
+    );
+    const founderPublicId = typeof player.publicId === "number" ? player.publicId : publicId;
+    const directorRole: OrganizationRole = {
+      roleKey: "director",
+      displayName: "Director",
+      rankOrder: 1,
+      permissions: ["manage_members", "manage_treasury", "manage_contracts", "recruit_members", "view_logs", "participate"],
+      isSystemRole: true,
+    };
+    const foundingMember: OrganizationMember = {
+      userInternalId: player.internalId,
+      publicId: founderPublicId,
+      displayName,
+      roleKey: directorRole.roleKey,
+      joinedAt: Date.now(),
+    };
+
+    const nextBoard: ConsortiumBoard = {
+      internalId: `local_consortium_${player.internalId}`,
+      publicId,
+      type: "consortium",
+      name: consortiumName.trim(),
+      tag: consortiumTag.trim().toUpperCase().slice(0, 6),
+      founderInternalId: player.internalId,
+      founderPublicId,
+      description: selectedType.summary,
+      statusText: "Founding charter filed",
+      consortiumTypeKey: selectedType.id,
+      consortiumTypeName: selectedType.name,
+      passiveBonusSummary: selectedType.roleSummary,
+      creationCost: foundingCost,
+      treasury: {
+        copper: 0,
+        silver: 0,
+        gold: selectedType.startingVault,
+        platinum: 0,
+      },
+      metadata: {
+        applicantCount: 0,
+        advertisingLevel: 1,
+        baseIncomePerShift: selectedType.baseIncomePerShift,
+      },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      roles: [directorRole],
+      members: [foundingMember],
+      logs: [],
+      starRating: 1,
+    };
+
+    writeJson(consortiumKey(player.internalId), nextBoard);
+    setBoard(nextBoard);
+    setConsortiumName("");
+    setConsortiumTag("");
+    setMessage(
+      `Consortium founded: ${nextBoard.name} [${formatEntityPublicId("consortium", nextBoard.publicId)}]`,
+    );
+
+  }
 
   return (
-    <AppShell title="Consortiums" hint={pageCopy.flavor}>
-      <div style={{ display: "grid", gap: 16 }}>
-        <div className="page-intro-grid">
-          <ContentPanel title="Consortium Flavor">
-            <p className="page-intro__lead">{pageCopy.flavor}</p>
-            <p className="page-intro__body">{pageCopy.alt}</p>
-          </ContentPanel>
-          <ContentPanel title="CIEL">
-            <p className="page-intro__body">{pageCopy.ciel}</p>
-          </ContentPanel>
-        </div>
+    <AppShell
+      title="Consortiums"
+      hint="Economic organizations now behave more like real player companies: pick a type, fund it properly, then run the board."
+    >
+      <div className="guild-stack">
+        <section className="panel">
+          <div className="panel__body guild-grid">
+            <article className="guild-card">
+              <div className="guild-card__section-title">Consortium Brief</div>
+              <div className="guild-card__body guild-card__body--small">
+                {pageCopy.flavor}
+              </div>
+              {pageCopy.alt ? <div className="guild-card__body guild-card__body--small">{pageCopy.alt}</div> : null}
+            </article>
+            <article className="guild-card">
+              <div className="guild-card__section-title">CIEL</div>
+              <div className="guild-card__body guild-card__body--small">{pageCopy.ciel}</div>
+            </article>
+          </div>
+        </section>
 
-        {message ? <section className="panel"><div className="panel__body"><strong>{message}</strong></div></section> : null}
-        {board ? (
-          <>
-            <section className="panel"><div className="panel__header"><h2>{board.name} [{formatEntityPublicId("consortium", board.publicId)}]</h2></div><div className="panel__body" style={{ display: "grid", gap: 16 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-                {Object.values((board.healthMetrics ?? {}) as Record<string, any>).map((metric: any) => <div key={metric.key} style={statCard}><div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><strong>{metric.label}</strong><span>{metric.value}</span></div><div style={{ color: "#b7c3cf", fontSize: 12 }}>{metric.meaning}</div><div style={{ color: metric.rating === "Strong" ? "#8ec8a7" : metric.rating === "Stable" ? "#f7cf80" : "#ff9b8f", fontSize: 12 }}>{metric.rating}</div></div>)}
+        {message ? (
+          <section className="panel guild-message-panel">
+            <div className="panel__body">
+              <strong>{message}</strong>
+            </div>
+          </section>
+        ) : null}
+
+        {commandCards.length ? (
+          <section className="guild-command-strip">
+            {commandCards.map((card) => (
+              <article key={card.label} className="guild-command-card">
+                <span className="guild-command-card__label">{card.label}</span>
+                <strong className="guild-command-card__value">{card.value}</strong>
+                <span className="guild-command-card__note">{card.note}</span>
+              </article>
+            ))}
+          </section>
+        ) : null}
+
+        <section className="panel">
+          <div className="panel__header">
+            <h2>{board ? "Consortium Board" : "Found a Consortium"}</h2>
+          </div>
+          <div className="panel__body guild-stack">
+            {loadingBoard ? (
+              <div className="guild-inline-note">
+                Loading consortium records from the live shard.
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-                <div style={panelStyle}><strong>Company Details</strong><Field label="Type" value={board.consortiumType?.displayName ?? board.consortiumTypeName} /><Field label="Founded" value={`${formatDate(board.createdAt)} (${board.companyAgeDays ?? 1} days)`} /><Field label="Stars" value={`${board.starRating ?? 1}?`} /><Field label="Director" value={board.members?.find((entry: any) => entry.roleKey === "director")?.displayName ?? "Unknown"} /><Field label="Employees" value={`${board.performance?.employeeCount ?? board.members?.length ?? 0} / ${board.employeeCapacity ?? 0}`} /><Field label="Treasury / Vault" value={<TreasuryLine treasury={board.treasury} />} /><Field label="Daily CP Generation" value={`${board.companyDailyGeneration ?? 0} CP / day`} /><Field label="Performance" value={board.performance?.summary ?? board.passiveBonusSummary} /></div>
-                <div style={panelStyle}><strong>Your Details</strong><Field label="Current Role" value={board.yourDetails?.roleDisplayName ?? board.memberRoleKey ?? "Employee"} /><Field label="Current Position" value={board.yourDetails?.positionDisplayName ?? "Unassigned"} /><Field label="Contribution" value={`${board.yourDetails?.contributionScore ?? 0}`} /><Field label="Working Stats" value={board.yourDetails ? `ML ${board.yourDetails.workingStats.manualLabor} | INT ${board.yourDetails.workingStats.intelligence} | END ${board.yourDetails.workingStats.endurance}` : "Unavailable"} /><Field label="Consortium Points" value={`${board.consortiumPoints?.points ?? 0} CP`} /><Field label="Daily CP Gain" value={`${board.consortiumPoints?.dailyGain ?? 0} CP / day`} /></div>
+            ) : board ? (
+              isConsortiumMemberView ? (
+                <div className="org-surface">
+                  <section className="org-hero org-hero--consortium">
+                    <div>
+                      <p className="org-eyebrow">Consortium Board</p>
+                      <h2 className="org-hero__title">
+                        {board.name} <span>[{formatEntityPublicId("consortium", board.publicId)}]</span>
+                      </h2>
+                      <p className="org-hero__copy">
+                        {board.description ?? "Operational board for routes, treasury, and escort contracts."}
+                      </p>
+                      <div className="org-tag-row">
+                        <span>{board.consortiumTypeName ?? "Unclassified"}</span>
+                        <span>{board.memberRoleKey ?? "member"}</span>
+                        <span>Founded {formatDate(board.createdAt)}</span>
+                        <span>{board.statusText}</span>
+                      </div>
+                    </div>
+                    <div className="org-hero__actions">
+                      <button type="button" className="org-button" onClick={() => void reloadConsortiumBoard()}>
+                        Refresh Board
+                      </button>
+                      <button type="button" className="org-button" onClick={() => setMemberTab("logistics")}>
+                        Logistics
+                      </button>
+                      <button type="button" className="org-button org-button--ghost" onClick={() => setMemberTab("base")}>
+                        Base Ledger
+                      </button>
+                    </div>
+                  </section>
+
+                  <div className="guild-tabs">
+                    <button
+                      type="button"
+                      className={`guild-tab${memberTab === "overview" ? " guild-tab--active" : ""}`}
+                      onClick={() => setMemberTab("overview")}
+                    >
+                      Overview
+                    </button>
+                    <button
+                      type="button"
+                      className={`guild-tab${memberTab === "logistics" ? " guild-tab--active" : ""}`}
+                      onClick={() => setMemberTab("logistics")}
+                    >
+                      Logistics
+                    </button>
+                    <button
+                      type="button"
+                      className={`guild-tab${memberTab === "base" ? " guild-tab--active" : ""}`}
+                      onClick={() => setMemberTab("base")}
+                    >
+                      Base
+                    </button>
+                  </div>
+
+                  {memberTab === "overview" ? (
+                    <>
+                      <section className="org-stat-strip">
+                        <article className="org-stat-card">
+                          <span>Treasury</span>
+                          <strong>{board.treasury.gold.toLocaleString("en-GB")}g</strong>
+                          <p>Liquid reserve</p>
+                        </article>
+                        <article className="org-stat-card">
+                          <span>Staff</span>
+                          <strong>{board.members.length}</strong>
+                          <p>Assignable employees</p>
+                        </article>
+                        <article className="org-stat-card">
+                          <span>Daily Yield</span>
+                          <strong>{getDailyGeneration(board).toLocaleString("en-GB")}</strong>
+                          <p>Gold generation</p>
+                        </article>
+                        <article className="org-stat-card">
+                          <span>Hazard Pressure</span>
+                          <strong>{Math.max(0, 100 - Math.round(getDailyGeneration(board) / 5))}</strong>
+                          <p>Route volatility indicator</p>
+                        </article>
+                        <article className="org-stat-card">
+                          <span>Escort State</span>
+                          <strong>{board.memberRoleKey ? "Linked" : "Public"}</strong>
+                          <p>Guild coverage available</p>
+                        </article>
+                      </section>
+
+                      <section className="panel org-panel">
+                        <div className="org-panel__head">
+                          <div>
+                            <p className="org-eyebrow">Academy Contract</p>
+                            <h3>Business Studies linkage</h3>
+                          </div>
+                        </div>
+                        <div className="org-detail-list">
+                          <StatusRow label="Track completion" value={`${businessCompletionPct}%`} />
+                          <StatusRow label="Track coverage" value={`${businessCompletedCourses.toFixed(1)} / ${businessRequiredCourses}`} />
+                          <StatusRow label="Company yield" value={`+${businessYieldPct}%`} />
+                          <StatusRow label="Worker efficiency" value={`+${businessWorkerEfficiencyPct}%`} />
+                          <StatusRow label="Treasury discipline" value={`+${businessTreasuryPct}%`} />
+                          <StatusRow label="Route performance" value={`+${businessRoutePct}%`} />
+                        </div>
+                        <div className="guild-inline-note">
+                          Business Studies now feeds this board through server-calculated modifiers tied to completed study progress.
+                        </div>
+                      </section>
+
+                      <section className="org-grid-two">
+                        <section className="panel org-panel">
+                          <div className="org-panel__head">
+                            <div>
+                              <p className="org-eyebrow">Operations</p>
+                              <h3>Live logistics board</h3>
+                            </div>
+                          </div>
+                          <div className="org-detail-list">
+                            <StatusRow label="Company Type" value={board.consortiumTypeName ?? "Unclassified"} />
+                            <StatusRow label="Tier" value={board.starRating ?? 1} />
+                            <StatusRow label="Applicants" value={getApplicantCount(board)} />
+                            <StatusRow label="Advertising" value={`Level ${getAdvertisingLevel(board)}`} />
+                            <StatusRow label="Daily Generation" value={`${getDailyGeneration(board).toLocaleString("en-GB")} gold`} />
+                          </div>
+                        </section>
+
+                        <section className="panel org-panel">
+                          <div className="org-panel__head">
+                            <div>
+                              <p className="org-eyebrow">Escort Contract</p>
+                              <h3>Protection layer</h3>
+                            </div>
+                          </div>
+                          <div className="org-detail-list">
+                            <StatusRow label="Guild Link" value="Set per logistics operation" />
+                            <StatusRow label="Coverage" value="Influences live route outcomes" />
+                            <StatusRow label="Mode" value="None / Internal / Guild contract" />
+                            <StatusRow label="Status" value="Configured in operation board" />
+                          </div>
+                          <div className="guild-inline-note">
+                            This board follows the handoff flow: consortium route, escort slot, guild linkage, and resolved contribution.
+                          </div>
+                        </section>
+                      </section>
+
+                      <section className="panel org-panel">
+                        <div className="org-panel__head">
+                          <div>
+                            <p className="org-eyebrow">Employees</p>
+                            <h3>Assignable crew</h3>
+                          </div>
+                        </div>
+                        <div className="org-table-wrap">
+                          <table className="org-compact-table">
+                            <thead>
+                              <tr>
+                                <th>Employee</th>
+                                <th>Role</th>
+                                <th>Summary</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {employeeRows.map((employee) => (
+                                <tr key={employee.key}>
+                                  <td>{employee.summary.split(" | ")[0]}</td>
+                                  <td>{employee.roleLabel}</td>
+                                  <td>{employee.summary.split(" | ").slice(1).join(" | ") || "Operationally available"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+                    </>
+                  ) : null}
+
+                  {memberTab === "logistics" ? (
+                    <ConsortiumLogisticsBoard
+                      board={board}
+                      serverSessionToken={serverSessionToken}
+                      onConsortiumReload={reloadConsortiumBoard}
+                      onMessage={setMessage}
+                    />
+                  ) : null}
+
+                  {memberTab === "base" ? (
+                    <ContentPanel title="Consortium Base">
+                      <OrganizationBaseTab
+                        serverSessionToken={serverSessionToken}
+                        organizationInternalId={board.internalId}
+                        organizationType="consortium"
+                        onMessage={setMessage}
+                        onRefreshOrganization={() => void reloadConsortiumBoard()}
+                      />
+                    </ContentPanel>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="org-surface">
+                  <section className="org-hero org-hero--public">
+                    <div>
+                      <p className="org-eyebrow">Consortium Public Detail</p>
+                      <h2 className="org-hero__title">
+                        {board.name} <span>[{formatEntityPublicId("consortium", board.publicId)}]</span>
+                      </h2>
+                      <p className="org-hero__copy">{board.description ?? "Public consortium charter."}</p>
+                    </div>
+                    <div className="org-hero__actions">
+                      <button type="button" className="org-button" disabled>
+                        Submit Application
+                      </button>
+                      <button type="button" className="org-button org-button--ghost" disabled>
+                        Request Escort Partnering
+                      </button>
+                    </div>
+                  </section>
+
+                  <section className="org-grid-two">
+                    <section className="panel org-panel">
+                      <div className="org-panel__head">
+                        <div>
+                          <p className="org-eyebrow">Company Charter</p>
+                          <h3>Public standing</h3>
+                        </div>
+                      </div>
+                      <div className="org-detail-list">
+                        <StatusRow label="Type" value={board.consortiumTypeName ?? "Unclassified"} />
+                        <StatusRow label="Tier" value={board.starRating ?? 1} />
+                        <StatusRow label="Director" value={board.members[0]?.displayName ?? "Unlisted"} />
+                        <StatusRow label="Founded" value={formatDate(board.createdAt)} />
+                        <StatusRow label="Status" value={board.statusText} />
+                      </div>
+                    </section>
+
+                    <section className="panel org-panel">
+                      <div className="org-panel__head">
+                        <div>
+                          <p className="org-eyebrow">Public Offers</p>
+                          <h3>Interaction paths</h3>
+                        </div>
+                      </div>
+                      <div className="org-stack-list">
+                        <article>
+                          <strong>Applications</strong>
+                          <p>Formal applications are reviewed by consortium directors and officers.</p>
+                        </article>
+                        <article>
+                          <strong>Escort coordination</strong>
+                          <p>Guild escort contracts are attached on active logistics operations.</p>
+                        </article>
+                        <article>
+                          <strong>Commercial standing</strong>
+                          <p>Tier, treasury discipline, and operation outcomes shape consortium reputation.</p>
+                        </article>
+                      </div>
+                    </section>
+                  </section>
+                </div>
+              )
+            ) : !board && isDetailRoute ? (
+              <div className="guild-grid">
+                <section className="guild-card guild-card--hero">
+                  <div className="guild-card__eyebrow">Board unavailable</div>
+                  <div className="guild-card__title">Consortium record could not be rendered</div>
+                  <div className="guild-card__body guild-card__body--small">
+                    {message ?? `No live consortium board matched ${routeOrganizationPublicId}. The route exists now; the record still has to cooperate.`}
+                  </div>
+                </section>
               </div>
-              {board.memberRoleKey === "director" ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-                <div style={panelStyle}><strong>Management Tools</strong><div className="org-form" style={{ margin: 0, gridTemplateColumns: "1fr auto" }}><input className="org-input" value={treasuryDeposit} onChange={(event) => setTreasuryDeposit(event.target.value)} placeholder="Gold to deposit" /><button type="button" className="org-button" onClick={() => act(() => depositConsortiumTreasury(serverSessionToken!, board.internalId, Number(treasuryDeposit || 0)), (payload) => refreshPlayerCache(payload.playerState))}>Deposit Gold</button></div><div className="org-form" style={{ margin: 0, gridTemplateColumns: "1fr auto" }}><input className="org-input" value={memberInviteId} onChange={(event) => setMemberInviteId(event.target.value)} placeholder="Direct hire public ID" /><button type="button" className="org-button" onClick={() => act(() => addOrganizationMember(serverSessionToken!, board.internalId, memberInviteId), () => setMemberInviteId("") )}>Direct Hire</button></div><button type="button" className="org-button" onClick={() => act(() => runConsortiumOutreach(serverSessionToken!, board.internalId))}>Launch Outreach (2,500g)</button></div>
-                <div style={panelStyle}><strong>Applications</strong>{(board.applications ?? []).length ? (board.applications as any[]).map((application) => <div key={application.applicantInternalId} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 10 }}><div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><strong>{application.applicantName} [P{String(application.applicantPublicId).padStart(7, "0")}]</strong><span style={{ color: "#9fb0bf", fontSize: 12 }}>{formatDate(application.submittedAt)}</span></div><div style={{ color: "#b7c3cf", fontSize: 13 }}>{application.note || "No cover note. Bold. Possibly reckless."}</div><div style={{ color: "#9fb0bf", fontSize: 12 }}>ML {application.workingStats.manualLabor} | INT {application.workingStats.intelligence} | END {application.workingStats.endurance}</div><div style={{ display: "flex", gap: 8, marginTop: 8 }}><button type="button" className="org-button" onClick={() => act(() => reviewConsortiumApplication(serverSessionToken!, board.internalId, String(application.applicantPublicId), "accept"))}>Accept</button><button type="button" className="org-button org-button--ghost" onClick={() => act(() => reviewConsortiumApplication(serverSessionToken!, board.internalId, String(application.applicantPublicId), "reject"))}>Reject</button></div></div>) : <div style={{ color: "#9fb0bf", fontSize: 13 }}>No pending applications. Popularity will have to do the flirting for you.</div>}</div>
-              </div> : null}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-                {(board.rewardLadder ?? []).map((reward: ConsortiumReward) => <RewardCard key={reward.rewardKey} reward={{ ...reward, unlocked: (board.starRating ?? 0) >= reward.starTier, canRedeem: reward.mode === "active" ? (board.consortiumPoints?.points ?? 0) >= Number(reward.pointCost ?? 0) : undefined }} points={board.consortiumPoints?.points ?? 0} onRedeem={reward.mode === "active" ? (rewardKey) => act(() => redeemConsortiumReward(serverSessionToken!, board.internalId, rewardKey), (payload) => refreshPlayerCache(payload.playerState)) : undefined} />)}
+            ) : !board && authSource === "server" && !isDetailRoute && boardLoadError ? (
+              <div className="guild-grid">
+                <section className="guild-card guild-card--hero">
+                  <div className="guild-card__eyebrow">Board unavailable</div>
+                  <div className="guild-card__title">Consortium board could not be loaded</div>
+                  <div className="guild-card__body guild-card__body--small">
+                    {boardLoadError}
+                  </div>
+                  <button
+                    type="button"
+                    className="org-button"
+                    onClick={() => {
+                      void reloadConsortiumBoard();
+                    }}
+                  >
+                    Retry consortium board
+                  </button>
+                </section>
               </div>
-              <div style={panelStyle}><strong>Roster</strong>{(board.memberDetails ?? []).map((member: any) => <div key={member.userInternalId} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 10, display: "grid", gap: 8 }}><div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong>{member.displayName} [P{String(member.publicId).padStart(7, "0")}]</strong><span style={{ color: "#9fb0bf", fontSize: 12 }}>{member.roleDisplayName} | {member.positionDisplayName} | {member.dailyCpGain} CP/day</span></div><div style={{ color: "#b7c3cf", fontSize: 13 }}>Contribution {member.contributionScore} | ML {member.workingStats.manualLabor} | INT {member.workingStats.intelligence} | END {member.workingStats.endurance}</div>{board.memberRoleKey === "director" && member.roleKey !== "director" ? <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{(board.positions ?? []).filter((position: any) => position.key !== "director").map((position: any) => <button key={position.key} type="button" className="org-button org-button--ghost" onClick={() => act(() => assignConsortiumPosition(serverSessionToken!, board.internalId, String(member.publicId), position.key))}>{position.displayName}</button>)}<button type="button" className="org-button org-button--ghost" onClick={() => act(() => removeConsortiumMember(serverSessionToken!, board.internalId, String(member.publicId)))}>Dismiss</button></div> : null}</div>)}</div>
-              <div style={panelStyle}><strong>Company History</strong>{(board.logs ?? []).length ? (board.logs as any[]).map((entry) => <div key={`${entry.actionType}-${entry.createdAt}`} style={{ color: "#b7c3cf", fontSize: 13 }}>{formatDate(entry.createdAt)} · {entry.actionType}</div>) : <div style={{ color: "#9fb0bf", fontSize: 13 }}>No company log entries yet.</div>}</div>
-            </div></section>
-          </>
-        ) : (
-          <>
-            <section className="panel"><div className="panel__header"><h2>Found A Consortium</h2></div><div className="panel__body" style={{ display: "grid", gap: 12 }}><div className="org-form"><input className="org-input" value={consortiumName} onChange={(event) => setConsortiumName(event.target.value)} placeholder="Consortium name" /><select className="org-input" value={selectedTypeKey} onChange={(event) => setSelectedTypeKey(event.target.value)}>{templates.map((template) => <option key={template.key} value={template.key}>{template.displayName} · {template.creationCost.toLocaleString("en-GB")}g</option>)}</select><button type="button" className="org-button" disabled={createDisabled} onClick={() => act(() => createOrganization(serverSessionToken!, { type: "consortium", name: consortiumName.trim(), consortiumTypeKey: selectedType?.key }), (payload) => refreshPlayerCache(payload.playerState))}>Create Consortium</button></div><div style={{ color: "#9fb0bf", fontSize: 13 }}>{selectedType?.description ?? "Template data is still loading."} Founding cost: {foundingCost.toLocaleString("en-GB")} gold.</div></div></section>
-            <section className="panel"><div className="panel__header"><h2>Open Companies</h2></div><div className="panel__body" style={{ display: "grid", gap: 12 }}>{directory.length ? directory.map((entry) => <div key={String(entry.internalId)} style={panelStyle}><div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong>{entry.name} [{formatEntityPublicId("consortium", Number(entry.publicId))}]</strong><span style={{ color: "#9fb0bf", fontSize: 12 }}>{entry.consortiumTypeName} · {entry.starRating}?</span></div><div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.performanceSummary}</div><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>{Object.values((entry.healthMetrics ?? {}) as Record<string, any>).map((metric: any) => <div key={metric.key} style={statCard}><strong>{metric.label}</strong><span>{metric.value}</span></div>)}</div><div style={{ color: "#9fb0bf", fontSize: 12 }}>Director: {entry.director?.displayName ?? "Unknown"} · Employees: {entry.employeeCount} / {entry.employeeCapacity} · Treasury: <TreasuryLine treasury={entry.treasury} /></div><div className="org-form" style={{ margin: 0, gridTemplateColumns: "1fr auto" }}><input className="org-input" value={applyNotes[String(entry.internalId)] ?? ""} onChange={(event) => setApplyNotes((current) => ({ ...current, [String(entry.internalId)]: event.target.value }))} placeholder={entry.viewerHasPendingApplication ? "Application pending" : "Application note (optional)"} disabled={!!entry.viewerHasPendingApplication} /><button type="button" className="org-button" disabled={!!entry.viewerHasPendingApplication} onClick={() => act(() => applyToConsortium(serverSessionToken!, String(entry.internalId), applyNotes[String(entry.internalId)] ?? ""), () => setApplyNotes((current) => ({ ...current, [String(entry.internalId)]: "" })))}>{entry.viewerHasPendingApplication ? "Applied" : "Apply"}</button></div></div>) : <div style={{ color: "#9fb0bf", fontSize: 13 }}>No live consortium companies are available right now.</div>}</div></section>
-          </>
-        )}
+            ) : (
+              <div className="guild-grid">
+                <section className="guild-card guild-card--hero">
+                  <div className="guild-card__eyebrow">Founding Charter</div>
+                  <div className="guild-card__title">Build the operating board</div>
+                  <div className="guild-card__body guild-card__body--small">
+                    Consortiums are player companies. Choose a business type, fund it properly, and this board becomes its operating surface.
+                  </div>
+                  <div className="guild-roster">
+                    <StatusRow
+                      label="Requirement"
+                      value={isServerMode ? "Name, company type, and founding funds" : "Name, tag, company type, and founding funds"}
+                    />
+                    {isServerMode ? null : <StatusRow label="Banner Mark" value="Legacy local tag required" />}
+                    <StatusRow label="Founding Cost" value={`${foundingCost.toLocaleString("en-GB")} gold`} />
+                    <StatusRow label="Consortium Writ" value={hasConsortiumWrit ? "Present" : "Missing"} />
+                  </div>
+                  <div className="org-form">
+                    <input
+                      className="org-input"
+                      value={consortiumName}
+                      onChange={(event) => setConsortiumName(event.target.value)}
+                      placeholder="Consortium name"
+                    />
+                    {isServerMode ? null : (
+                      <input
+                        className="org-input"
+                        value={consortiumTag}
+                        onChange={(event) => setConsortiumTag(event.target.value)}
+                        placeholder="Consortium tag"
+                      />
+                    )}
+                    <button type="button" className="org-button" disabled={!canCreateConsortium} onClick={() => void createConsortium()}>
+                      Create Consortium
+                    </button>
+                  </div>
+                  <div className={`guild-inline-note${consortiumBlockReason ? " guild-inline-note--warning" : ""}`}>
+                    {consortiumBlockReason ?? `${selectedType.name} selected. Founding this company will create your persistent board immediately.`}
+                  </div>
+                </section>
+
+                <section className="guild-card">
+                  <div className="guild-card__eyebrow">Consortium Types</div>
+                  <div className="org-choices">
+                    {consortiumTypes.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        className={`org-choice${selectedTypeId === type.id ? " org-choice--active" : ""}`}
+                        onClick={() => setSelectedTypeId(type.id)}
+                      >
+                        <strong>{type.name}</strong>
+                        <span>{type.summary}</span>
+                        <span>{type.roleSummary}</span>
+                        <span>{type.baseIncomePerShift} gold / shift baseline</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </AppShell>
   );

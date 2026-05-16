@@ -1,10 +1,3 @@
-export type ProfileOrganizationSummary = {
-  name: string;
-  tag: string;
-  publicId: number;
-  type: "guild" | "consortium";
-};
-
 export type ProfileResponse = {
   viewer: {
     mode: "public" | "self" | "staff";
@@ -12,7 +5,6 @@ export type ProfileResponse = {
     isSelf: boolean;
   };
   publicProfile: {
-    internalId: string;
     name: string;
     publicId: number;
     title: string;
@@ -21,53 +13,170 @@ export type ProfileResponse = {
     rank: string | null;
     ageLabel: string;
     createdAt: number;
-    life: { current: number; max: number };
-    lastAction: { isOnline: boolean; lastActionAt: number | null; label: string };
-    status: { label: string; condition: { type: string; until: number | null; reason: string | null } };
-    guild: ProfileOrganizationSummary | null;
-    consortium: ProfileOrganizationSummary | null;
+    life: {
+      current: number;
+      max: number;
+    };
+    lastAction: {
+      isOnline: boolean;
+      lastActionAt: number | null;
+      label: string;
+    };
+    status: {
+      label: string;
+      condition: {
+        type: string;
+        until: number | null;
+        reason: string | null;
+      };
+    };
+    guild: {
+      publicId: number;
+      name: string;
+    } | null;
+    consortium: {
+      publicId: number;
+      name: string;
+    } | null;
     job: string | null;
-    property: { propertyId: string };
-    travel: { summary: string };
-    bio: { bio: string | null; signature: string | null; reservedNote: string | null };
-    counters: null;
+    property: {
+      propertyId: string;
+    };
+    travel: {
+      summary: string;
+    };
+    portrait: {
+      imageUrl: string | null;
+      hasCustomImage: boolean;
+    };
+    bio: {
+      bio: string | null;
+      signature: string | null;
+      reservedNote: string | null;
+    };
+    legacyEntries: Array<{
+      id: string;
+      title: string;
+      summary: string;
+      kind: string;
+      awardedAt: number;
+    }>;
+    counters: {
+      awards?: number;
+      friends?: number;
+      enemies?: number;
+      forumPosts?: number;
+    } | null;
   };
   selfProfile: {
-    currencies: { copper: number; silver: number; gold: number; platinum: number };
-    workingStats: Record<string, number>;
-    battleStats: Record<string, number>;
+    currencies: {
+      copper: number;
+      silver: number;
+      gold: number;
+      platinum: number;
+    };
+    workingStats: {
+      manualLabor: number;
+      intelligence: number;
+      endurance: number;
+    };
+    battleStats: {
+      strength: number;
+      defense: number;
+      speed: number;
+      dexterity: number;
+    };
     inventoryCount: number;
     inventoryTypes: number;
   } | null;
   moderation: {
     email: string;
     internalId: string;
-    entityType: "player" | "npc" | "system" | "event";
-    privilegeRole: "player" | "staff" | "admin";
+    entityType: string;
+    privilegeRole: string;
     reservedIdentityName: string | null;
   } | null;
 };
 
-export type ProfileApiResult =
+type ProfileResult =
   | { ok: true; profile: ProfileResponse }
-  | { ok: false; error: string; status: number | null; code?: string | null };
+  | { ok: false; error: string };
 
-export async function getProfileView(publicId: string, sessionToken?: string | null): Promise<ProfileApiResult> {
+type ProfileImageUploadResult =
+  | { ok: true; imageUrl: string }
+  | { ok: false; error: string };
+
+export async function getProfileView(
+  publicId: string,
+  sessionToken: string | null,
+): Promise<ProfileResult> {
   try {
     const response = await fetch(`/api/profiles/${encodeURIComponent(publicId)}`, {
-      headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
+      headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : undefined,
     });
-    const payload = (await response.json()) as { profile?: ProfileResponse; error?: string; code?: string | null };
-    if (!response.ok || !payload.profile) {
+
+    const payload = (await response.json().catch(() => null)) as
+      | { profile?: ProfileResponse; error?: string }
+      | null;
+
+    if (!response.ok || !payload?.profile) {
       return {
         ok: false,
-        error: payload.error ?? `Request failed (${response.status}).`,
-        status: response.status,
-        code: payload.code ?? null,
+        error: payload?.error ?? "Citizen record unavailable.",
       };
     }
-    return { ok: true, profile: payload.profile };
+
+    return {
+      ok: true,
+      profile: payload.profile,
+    };
   } catch {
-    return { ok: false, error: "Profile service unavailable.", status: null, code: "NETWORK_UNAVAILABLE" };
+    return {
+      ok: false,
+      error: "Citizen record unavailable.",
+    };
+  }
+}
+
+export async function uploadOwnProfileImage(
+  file: File,
+  sessionToken: string | null,
+): Promise<ProfileImageUploadResult> {
+  if (!sessionToken) {
+    return { ok: false, error: "Authentication required." };
+  }
+
+  const payload = new FormData();
+  payload.append("image", file);
+
+  try {
+    const response = await fetch("/api/me/profile-image", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+      },
+      body: payload,
+    });
+
+    const parsed = (await response.json().catch(() => null)) as
+      | { imageUrl?: string; error?: string }
+      | null;
+
+    if (!response.ok || !parsed?.imageUrl) {
+      return {
+        ok: false,
+        error: parsed?.error ?? "Profile image upload failed.",
+      };
+    }
+
+    return {
+      ok: true,
+      imageUrl: parsed.imageUrl,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: "Profile image upload failed.",
+    };
   }
 }

@@ -11,7 +11,6 @@ export function BackendStateBridge() {
     activeAccount,
     authSource,
     serverSessionToken,
-    serverHydrationVersion,
     syncServerRuntimeState,
   } = useAuth();
   const lastSyncedPayload = useRef<string>("");
@@ -23,18 +22,13 @@ export function BackendStateBridge() {
   );
 
   useEffect(() => {
-    if (!activeEmail) {
-      lastSyncedPayload.current = "";
-      return;
-    }
-
     lastSyncedPayload.current = "";
-  }, [activeEmail, serverHydrationVersion]);
+  }, [activeEmail]);
 
   useEffect(() => {
     if (!shouldSync || !activeEmail) return undefined;
 
-    const interval = window.setInterval(() => {
+    const flushSnapshot = (keepalive = false) => {
       const nextSerialized = serializeSnapshot(activeEmail);
       if (nextSerialized === lastSyncedPayload.current) {
         return;
@@ -42,10 +36,31 @@ export function BackendStateBridge() {
 
       lastSyncedPayload.current = nextSerialized;
       const nextSnapshot = JSON.parse(nextSerialized) as ReturnType<typeof readCachedRuntimeState>;
-      void syncServerRuntimeState(nextSnapshot);
+      void syncServerRuntimeState(nextSnapshot, { keepalive });
+    };
+
+    const interval = window.setInterval(() => {
+      flushSnapshot(false);
     }, 2000);
 
-    return () => window.clearInterval(interval);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushSnapshot(true);
+      }
+    };
+
+    const handlePageHide = () => {
+      flushSnapshot(true);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
   }, [activeEmail, shouldSync, syncServerRuntimeState]);
 
   return null;

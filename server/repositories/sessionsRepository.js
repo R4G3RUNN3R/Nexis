@@ -39,6 +39,16 @@ export async function touchSession(client, tokenHash) {
   );
 }
 
+export async function deleteSessionsByUserInternalId(client, userInternalId) {
+  await client.query(
+    `
+      DELETE FROM auth_sessions
+      WHERE user_internal_id = $1
+    `,
+    [userInternalId],
+  );
+}
+
 export async function findSessionUserByTokenHash(client, tokenHash) {
   const session = await findSessionRecordByTokenHash(client, tokenHash);
   if (!session) return null;

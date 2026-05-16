@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
+import { ITEM_CATALOGUE } from "../data/itemsData";
 import { usePlayer } from "../state/PlayerContext";
 import {
   useJobs,
@@ -15,7 +16,6 @@ import {
   type CategoryProgress,
 } from "../state/JobsContext";
 import { jobCategories, type JobCategory, type SubJob } from "../data/jobsData";
-import { cielPageCopy } from "../data/cielPageCopy";
 import "../styles/jobs.css";
 
 type OutcomeEntry = {
@@ -177,9 +177,10 @@ function SubJobCard({
   onDismissOutcome: (subJobId: string) => void;
 }) {
   const jobs = useJobs();
-  const { player, isHospitalized, isJailed } = usePlayer();
+  const { player } = usePlayer();
 
   const sjStats = jobs.getSubJobStats(categoryId, subJob.id);
+  const attemptStatus = jobs.canAttemptJob(categoryId, subJob.id);
 
   const successRate = computeSuccessRate(
     subJob.baseFailChance,
@@ -187,13 +188,14 @@ function SubJobCard({
     categoryLevel,
   );
 
-  const blocked =
-    isHospitalized || isJailed || player.stats.stamina < subJob.staminaCost;
+  const blocked = !attemptStatus.allowed;
 
   const hasDrops = subJob.itemDrops.length > 0;
   const maxDropChance = hasDrops
     ? Math.round(Math.max(...subJob.itemDrops.map((d) => d.dropChance)) * 100)
     : 0;
+  const requiredItems = subJob.requiredItems ?? [];
+  const criticalRisk = Math.round(subJob.baseCritFailChance * 100);
 
   return (
     <div className={`jobs-subjob-card${outcome ? " jobs-subjob-card--attempting" : ""}`}>
@@ -230,12 +232,48 @@ function SubJobCard({
             <span className="jobs-stat-chip__label">Drops:</span> up to {maxDropChance}%
           </span>
         )}
+        {requiredItems.length > 0 && (
+          <span className="jobs-stat-chip jobs-stat-chip--drops">
+            <span className="jobs-stat-chip__label">Required:</span> {requiredItems.length} item{requiredItems.length === 1 ? "" : "s"}
+          </span>
+        )}
+        <span
+          className="jobs-stat-chip jobs-stat-chip--danger"
+          title="Critical failures can send you to hospital or jail depending on the job."
+        >
+          <span className="jobs-stat-chip__label">Critical Risk:</span> {criticalRisk}%
+        </span>
         {sjStats.chain > 1 && (
           <span className="jobs-stat-chip" style={{ color: "#ffd740" }}>
             Chain x{sjStats.chain}
           </span>
         )}
       </div>
+
+      {requiredItems.length > 0 && (
+        <div className="jobs-subjob-card__stats">
+          {requiredItems.map((requirement) => {
+            const owned = Number(player.inventory?.[requirement.itemId] ?? 0);
+            const itemName = ITEM_CATALOGUE[requirement.itemId]?.name ?? requirement.itemId;
+            const missing = owned < requirement.quantity;
+            return (
+              <span
+                key={`${subJob.id}-${requirement.itemId}`}
+                className="jobs-stat-chip"
+                style={{ color: missing ? "#ff8d8d" : "#7ed6dd" }}
+              >
+                <span className="jobs-stat-chip__label">Need:</span> {itemName} {owned} / {requirement.quantity}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {blocked && attemptStatus.reason ? (
+        <div className="jobs-low-stamina" style={{ marginTop: 12 }}>
+          {attemptStatus.reason}
+        </div>
+      ) : null}
 
       {outcome && (
         <OutcomePanel
@@ -289,8 +327,6 @@ export default function JobsPage() {
     isJailed,
     jailRemainingLabel,
   } = usePlayer();
-  const pageCopy = cielPageCopy.jobs;
-
   const [selectedCategoryId, setSelectedCategoryId] = useState(
     jobCategories[0]?.id ?? "",
   );
@@ -299,6 +335,11 @@ export default function JobsPage() {
     jobCategories.find((c) => c.id === selectedCategoryId) ?? jobCategories[0];
 
   const categoryProgress = jobs.getCategoryProgress(selectedCategoryId);
+  const totalOperations = selectedCategory?.subJobs.length ?? 0;
+  const totalCategories = jobCategories.length;
+  const lowestStaminaCost = selectedCategory
+    ? Math.min(...selectedCategory.subJobs.map((job) => job.staminaCost))
+    : 0;
 
   useEffect(() => {
     setOutcomes({});
@@ -325,20 +366,36 @@ export default function JobsPage() {
 
   return (
     <AppShell
-      title="Adventure"
-      hint={pageCopy.flavor}
+      title="Adventuring"
+      hint="Field work, hustles, and street-level opportunity. Pick a category, run operations, gain category mastery, and try not to get folded into a cautionary tale."
     >
-      <div className="page-intro-grid">
-        <ContentPanel title="Work & Opportunity">
-          <p className="page-intro__lead">{pageCopy.flavor}</p>
-          <p className="page-intro__body">{pageCopy.alt}</p>
-        </ContentPanel>
-        <ContentPanel title="CIEL">
-          <p className="page-intro__body">{pageCopy.ciel}</p>
-        </ContentPanel>
-      </div>
-
       <div className="jobs-page">
+        <ContentPanel title="Operations Board">
+          <div className="jobs-overview">
+            <div className="jobs-overview__item">
+              <span className="jobs-overview__label">Current Category</span>
+              <strong className="jobs-overview__value">{selectedCategory?.name ?? "None"}</strong>
+            </div>
+            <div className="jobs-overview__item">
+              <span className="jobs-overview__label">Categories</span>
+              <strong className="jobs-overview__value">{totalCategories}</strong>
+            </div>
+            <div className="jobs-overview__item">
+              <span className="jobs-overview__label">Operations</span>
+              <strong className="jobs-overview__value">{totalOperations}</strong>
+            </div>
+            <div className="jobs-overview__item">
+              <span className="jobs-overview__label">Lowest Stamina Cost</span>
+              <strong className="jobs-overview__value">{lowestStaminaCost}</strong>
+            </div>
+          </div>
+          {selectedCategory ? (
+            <div className="jobs-overview__brief">
+              {selectedCategory.description} {selectedCategory.isIllegal ? "Illegal work draws guards and jail time, because the city remains annoyingly consistent about crime." : "Legal work keeps the gold honest, or at least honest-looking."}
+            </div>
+          ) : null}
+        </ContentPanel>
+
         {isHospitalized && (
           <div className="jobs-status-banner">
             <span className="jobs-status-banner__icon">H</span>
@@ -393,6 +450,9 @@ export default function JobsPage() {
                       </div>
                       <div className="jobs-category-header__desc">
                         {selectedCategory.description}
+                      </div>
+                      <div className="jobs-category-header__submeta">
+                        {selectedCategory.theme} | {selectedCategory.subJobs.length} operations | starting cost {lowestStaminaCost} stamina
                       </div>
                     </div>
                     {selectedCategory.isIllegal && (

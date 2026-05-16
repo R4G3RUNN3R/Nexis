@@ -1,5 +1,3 @@
-import { type CivicJobTrackId } from "../data/civicJobsData";
-
 export type CivicTrackProgress = {
   rank: number;
   jobPoints: number;
@@ -9,30 +7,77 @@ export type CivicTrackProgress = {
 };
 
 export type CivicEmploymentState = {
-  activeTrackId: CivicJobTrackId | null;
-  trackProgress: Partial<Record<CivicJobTrackId, CivicTrackProgress>>;
+  activeTrackId: string | null;
+  trackProgress: Record<string, CivicTrackProgress>;
 };
 
-const CIVIC_STATE_PREFIX = "nexis_civic_employment_";
-export const CIVIC_SHIFT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
-const PROMOTION_POINT_THRESHOLDS: Record<number, number> = {
-  1: 0,
-  2: 6,
-  3: 15,
-  4: 30,
-  5: 50,
+export type CivicPassiveMode = "permanent" | "employed";
+
+export type CivicPassive = {
+  key: string;
+  name: string;
+  magnitude: number;
+  activeMode: CivicPassiveMode;
+  unlockRank: number;
 };
 
-function stateKey(internalPlayerId: string) {
-  return `${CIVIC_STATE_PREFIX}${internalPlayerId}`;
-}
+export type ActiveCivicPassives = Record<string, number>;
 
-export function defaultCivicEmploymentState(): CivicEmploymentState {
-  return {
-    activeTrackId: null,
-    trackProgress: {},
-  };
-}
+export const CIVIC_SHIFT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const MAX_CIVIC_RANK = 7;
+const PROMOTION_POINT_COSTS: Record<number, number> = {
+  2: 5,
+  3: 10,
+  4: 15,
+  5: 20,
+  6: 25,
+  7: 30,
+};
+
+const TRACK_CAPSTONES: Record<string, CivicPassive | undefined> = {
+  city_watch: {
+    key: "city_watch_hardline",
+    name: "Hardline Watch Doctrine",
+    magnitude: 8,
+    activeMode: "employed",
+    unlockRank: 7,
+  },
+  apothecary_hall: {
+    key: "hospital_recovery",
+    name: "Field Triage Discipline",
+    magnitude: 15,
+    activeMode: "permanent",
+    unlockRank: 7,
+  },
+  university: {
+    key: "education_speed",
+    name: "Scholarly Momentum",
+    magnitude: 10,
+    activeMode: "permanent",
+    unlockRank: 7,
+  },
+  provisioner: {
+    key: "market_discount",
+    name: "Procurement Mastery",
+    magnitude: 8,
+    activeMode: "permanent",
+    unlockRank: 7,
+  },
+  civic_tribunal: {
+    key: "jail_reduction",
+    name: "Tribunal Leverage",
+    magnitude: 15,
+    activeMode: "permanent",
+    unlockRank: 7,
+  },
+  gambling_den: {
+    key: "gambling_den_house_edge",
+    name: "House Edge Discipline",
+    magnitude: 8,
+    activeMode: "employed",
+    unlockRank: 7,
+  },
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -44,10 +89,17 @@ function asWholeNumber(value: unknown, fallback: number) {
   return Math.max(0, Math.floor(numeric));
 }
 
+export function defaultCivicEmploymentState(): CivicEmploymentState {
+  return {
+    activeTrackId: null,
+    trackProgress: {},
+  };
+}
+
 function normalizeTrackProgress(value: unknown): CivicTrackProgress | null {
   if (!isRecord(value)) return null;
   return {
-    rank: Math.max(1, asWholeNumber(value.rank, 1)),
+    rank: Math.min(MAX_CIVIC_RANK, Math.max(1, asWholeNumber(value.rank, 1))),
     jobPoints: asWholeNumber(value.jobPoints, 0),
     shiftsWorked: asWholeNumber(value.shiftsWorked, 0),
     joinedAt: asWholeNumber(value.joinedAt, Date.now()),
@@ -63,36 +115,12 @@ export function normalizeCivicEmploymentState(value: unknown): CivicEmploymentSt
     Object.entries(trackProgressSource)
       .map(([trackId, progress]) => [trackId, normalizeTrackProgress(progress)] as const)
       .filter((entry): entry is [string, CivicTrackProgress] => entry[1] !== null),
-  ) as CivicEmploymentState['trackProgress'];
+  ) as CivicEmploymentState["trackProgress"];
 
   return {
-    activeTrackId: typeof value.activeTrackId === 'string' ? (value.activeTrackId as CivicJobTrackId) : null,
+    activeTrackId: typeof value.activeTrackId === "string" ? value.activeTrackId : null,
     trackProgress,
   };
-}
-
-export function readCivicEmploymentState(internalPlayerId: string): CivicEmploymentState {
-  if (typeof window === "undefined") return defaultCivicEmploymentState();
-
-  try {
-    const raw = window.localStorage.getItem(stateKey(internalPlayerId));
-    if (!raw) return defaultCivicEmploymentState();
-    return normalizeCivicEmploymentState(JSON.parse(raw));
-  } catch {
-    return defaultCivicEmploymentState();
-  }
-}
-
-export function writeCivicEmploymentState(internalPlayerId: string, state: CivicEmploymentState) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(stateKey(internalPlayerId), JSON.stringify(normalizeCivicEmploymentState(state)));
-}
-
-export function getTrackProgress(
-  state: CivicEmploymentState,
-  trackId: CivicJobTrackId,
-): CivicTrackProgress | null {
-  return state.trackProgress[trackId] ?? null;
 }
 
 export function createTrackProgress(now = Date.now()): CivicTrackProgress {
@@ -105,11 +133,38 @@ export function createTrackProgress(now = Date.now()): CivicTrackProgress {
   };
 }
 
+export function getTrackProgress(state: CivicEmploymentState, trackId: string): CivicTrackProgress | null {
+  return state.trackProgress[trackId] ?? null;
+}
+
 export function getShiftCooldownRemaining(progress: CivicTrackProgress | null, now = Date.now()) {
   if (!progress?.lastShiftAt) return 0;
   return Math.max(0, progress.lastShiftAt + CIVIC_SHIFT_COOLDOWN_MS - now);
 }
 
 export function getRequiredPointsForRank(rank: number) {
-  return PROMOTION_POINT_THRESHOLDS[rank] ?? Number.POSITIVE_INFINITY;
+  if (rank <= 1) return 0;
+  return PROMOTION_POINT_COSTS[rank] ?? Number.POSITIVE_INFINITY;
+}
+
+export function getUnlockedPassivesForTrack(trackId: string, rank: number) {
+  const capstone = TRACK_CAPSTONES[trackId];
+  if (!capstone) return [] as CivicPassive[];
+  if (rank < capstone.unlockRank) return [] as CivicPassive[];
+  return [capstone];
+}
+
+export function getActiveCivicJobPassives(state: CivicEmploymentState): ActiveCivicPassives {
+  const passives: ActiveCivicPassives = {};
+  const activeTrackId = state.activeTrackId;
+
+  for (const [trackId, progress] of Object.entries(state.trackProgress)) {
+    for (const passive of getUnlockedPassivesForTrack(trackId, progress.rank)) {
+      if (passive.activeMode === "permanent" || trackId === activeTrackId) {
+        passives[passive.key] = passive.magnitude;
+      }
+    }
+  }
+
+  return passives;
 }

@@ -3,13 +3,16 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { usePlayer } from "../../state/PlayerContext";
 import { useAuth } from "../../state/AuthContext";
 import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicIds";
-import { CONSORTIUM_STORAGE_PREFIX, GUILD_STORAGE_PREFIX } from "../../lib/organizations";
+
+import { isStaffOrAdmin } from "../../lib/adminAccess";
 
 const navLinks: Array<[string, string]> = [
-  ["News", "/news"],
-  ["Rules", "/rules"],
-  ["Contact", "/contact"],
-  ["Credits", "/credits"],
+  ["Home", "/home"],
+  ["Profile", "/profile"],
+  ["City", "/city"],
+  ["Travel", "/travel"],
+  ["Guilds", "/guilds"],
+  ["Consortiums", "/consortiums"],
 ];
 
 type SearchResult = {
@@ -43,8 +46,6 @@ function buildSearchIndex() {
     { id: "route-guilds", label: "Guilds", hint: "Group management", to: "/guilds" },
     { id: "route-consortiums", label: "Consortiums", hint: "Player companies", to: "/consortiums" },
     { id: "route-city-board", label: "City Board", hint: "Public notices", to: "/city-board" },
-    { id: "route-rules", label: "Rules", hint: "Public guidance", to: "/rules" },
-    { id: "route-news", label: "News", hint: "Public updates", to: "/news" },
   ];
 
   const accounts = readJson<Record<string, { firstName: string; lastName: string; publicId: number }>>("nexis_accounts");
@@ -60,34 +61,6 @@ function buildSearchIndex() {
     });
   }
 
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (!key) continue;
-
-    if (key.startsWith(GUILD_STORAGE_PREFIX)) {
-      const guild = readJson<{ name: string; tag: string }>(key);
-      if (guild?.name) {
-        results.push({
-          id: `guild-${key}`,
-          label: guild.name,
-          hint: `Guild ${guild.tag}`,
-          to: "/guilds",
-        });
-      }
-    }
-
-    if (key.startsWith(CONSORTIUM_STORAGE_PREFIX)) {
-      const consortium = readJson<{ name: string; tag: string; companyTypeName?: string }>(key);
-      if (consortium?.name) {
-        results.push({
-          id: `consortium-${key}`,
-          label: consortium.name,
-          hint: consortium.companyTypeName ?? `Consortium ${consortium.tag}`,
-          to: "/consortiums",
-        });
-      }
-    }
-  }
 
   return results;
 }
@@ -100,7 +73,7 @@ export function TopBar() {
   const [now, setNow] = useState(() => new Date());
 
   const { player } = usePlayer();
-  const { logout } = useAuth();
+  const { activeAccount, logout } = useAuth();
   const navigate = useNavigate();
 
   const playerMenuRef = useRef<HTMLDivElement | null>(null);
@@ -143,8 +116,13 @@ export function TopBar() {
   const displayName = player.lastName
     ? `${player.name} ${player.lastName}`
     : player.name || "Unknown";
-  const displayNameWithPublicId = formatPlayerNameWithPublicId(displayName, player.publicId);
-  const profileRoute = getProfileRoute(player.publicId);
+  const displayPublicId = activeAccount?.publicId ?? player.publicId;
+  const displayNameWithPublicId = formatPlayerNameWithPublicId(displayName, displayPublicId);
+  const profileRoute = getProfileRoute(displayPublicId);
+  const canAccessAdmin = isStaffOrAdmin({
+    publicId: activeAccount?.publicId ?? player.publicId,
+    privilegeRole: activeAccount?.privilegeRole ?? "player",
+  });
 
   const initial = player.name ? player.name.charAt(0).toUpperCase() : "?";
 
@@ -170,7 +148,11 @@ export function TopBar() {
     <header className="topbar">
       <div className="topbar__left">
         {navLinks.map(([label, to]) => (
-          <NavLink key={to} to={to} className="topbar__link">
+          <NavLink
+            key={to}
+            to={label === "Profile" ? profileRoute : to}
+            className={({ isActive }) => `topbar__link${isActive ? " topbar__link--active" : ""}`}
+          >
             {label}
           </NavLink>
         ))}
@@ -181,7 +163,7 @@ export function TopBar() {
           <input
             className="topbar__search"
             type="search"
-            placeholder="Search citizens, guilds, consortiums..."
+            placeholder="Search users, guilds, consortiums..."
             aria-label="Search"
             value={query}
             onChange={(event) => {
@@ -221,16 +203,16 @@ export function TopBar() {
           <button
             type="button"
             className="topbar__icon"
-            aria-label="Open time menu"
+            aria-label="Clock"
             onClick={() => setClockOpen((value) => !value)}
           >
-            <span aria-hidden="true">⏳</span>
+            <span className="topbar__icon-label">Clock</span>
           </button>
 
           {clockOpen ? (
             <div className="topbar__dropdown topbar__dropdown--clock">
               <div className="topbar__dropdown-row">
-                <span className="topbar__dropdown-label">Nexis Time</span>
+                <span className="topbar__dropdown-label">Server Time</span>
                 <strong>{serverTime}</strong>
               </div>
               <div className="topbar__dropdown-row">
@@ -254,10 +236,15 @@ export function TopBar() {
 
           {playerOpen ? (
             <div className="player-menu__dropdown">
-              <div className="player-menu__server">Ashen Crown | Shard: Cay</div>
+              <div className="player-menu__server">Shard: Cay</div>
               <NavLink to={profileRoute} className="player-menu__item" onClick={() => setPlayerOpen(false)}>
                 Character Profile
               </NavLink>
+              {canAccessAdmin ? (
+                <NavLink to="/admin" className="player-menu__item player-menu__item--admin" onClick={() => setPlayerOpen(false)}>
+                  Administration
+                </NavLink>
+              ) : null}
               <NavLink to="/achievements" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
                 Achievements
               </NavLink>

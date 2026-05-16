@@ -2,7 +2,7 @@ import PublicPageShell from "../components/layout/PublicPageShell";
 
 const credits = [
   { role: "Project Direction", people: ["Core project lead"], years: "Founding – Present" },
-  { role: "Realm Systems Design", people: ["Progression and economy design"], years: "Founding – Present" },
+  { role: "Nexis Systems Design", people: ["Progression and economy design"], years: "Founding – Present" },
   { role: "Frontend Development", people: ["Portal, public pages, and in-game shell"], years: "Current phase" },
   { role: "Worldbuilding & Narrative", people: ["Lore, factions, cities, and route planning"], years: "Current phase" },
   { role: "Future Team Slots", people: ["Engineering", "Art", "Writing", "QA"], years: "To be expanded" },
@@ -12,7 +12,7 @@ export default function CreditsPage() {
   return (
     <PublicPageShell
       title="Credits"
-      subtitle="The current credits board is intentionally lean. It gives the project a proper home now and leaves space for the full roster as the realm grows."
+      subtitle="The current credits board is intentionally lean. It gives the project a proper home now and leaves space for the full roster as Nexis grows."
     >
       <section className="public-panel">
         <div className="public-panel__header">Current roster</div>

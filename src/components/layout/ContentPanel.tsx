@@ -4,17 +4,19 @@ type ContentPanelProps = {
   title: string;
   children: ReactNode;
   defaultOpen?: boolean;
+  className?: string;
 };
 
 export function ContentPanel({
   title,
   children,
   defaultOpen = true,
+  className = "",
 }: ContentPanelProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className={`panel${open ? "" : " panel--collapsed"}`}>
+    <section className={`panel${open ? "" : " panel--collapsed"}${className ? ` ${className}` : ""}`}>
       <button
         type="button"
         className="panel__header panel__header--button"
@@ -22,7 +24,7 @@ export function ContentPanel({
         aria-expanded={open}
       >
         <h2>{title}</h2>
-        <span className="panel__toggle">{open ? "−" : "+"}</span>
+        <span className="panel__toggle">{open ? "-" : "+"}</span>
       </button>
 
       {open ? <div className="panel__body">{children}</div> : null}

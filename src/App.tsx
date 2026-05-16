@@ -6,11 +6,21 @@ import { EducationProvider } from "./state/EducationContext";
 import { TimerProvider } from "./state/TimerContext";
 import { JobsProvider } from "./state/JobsContext";
 import { ArenaProvider } from "./state/ArenaContext";
-import Ciel from "./components/ciel/Ciel";
 import { BackendStateBridge } from "./components/state/BackendStateBridge";
+import Ciel from "./components/ciel/Ciel";
 import RouteTransitionQuote from "./components/layout/RouteTransitionQuote";
 
-const PUBLIC_PATHS = new Set(["/login", "/register", "/news", "/rules", "/contact", "/credits"]);
+const PUBLIC_PATHS = new Set([
+  "/",
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/news",
+  "/rules",
+  "/contact",
+  "/credits",
+]);
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoggedIn } = useAuth();
@@ -24,7 +34,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace state={{ redirectedFrom: location.pathname }} />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <RouteTransitionQuote />
+      {children}
+      <Ciel />
+    </>
+  );
 }
 
 export default function App() {
@@ -38,9 +54,7 @@ export default function App() {
                 <BackendStateBridge />
                 <BrowserRouter>
                   <AuthGate>
-                    <RouteTransitionQuote />
                     <AppRouter />
-                    <Ciel />
                   </AuthGate>
                 </BrowserRouter>
               </EducationProvider>

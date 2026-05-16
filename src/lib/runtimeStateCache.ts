@@ -1,5 +1,4 @@
 import { getArenaStateKey } from "./arenaState";
-import { defaultCivicEmploymentState, normalizeCivicEmploymentState, readCivicEmploymentState, writeCivicEmploymentState } from "./civicJobsState";
 import { consortiumKey, guildKey } from "./organizations";
 
 const JOBS_STORAGE_KEY = "nexis_jobs";
@@ -14,7 +13,9 @@ export type CachedRuntimeState = {
   timers: Record<string, unknown>;
   guild: Record<string, unknown>;
   consortium: Record<string, unknown>;
+  travel: Record<string, unknown>;
   civicEmployment: Record<string, unknown>;
+  legacy: Record<string, unknown>;
 };
 
 const MAX_PLAYER_LEVEL = 100;
@@ -94,13 +95,6 @@ const DEFAULT_BATTLE_STATS = {
   dexterity: 10,
 } as const;
 
-const DEFAULT_CURRENCIES = {
-  copper: 0,
-  silver: 0,
-  gold: 500,
-  platinum: 0,
-} as const;
-
 function normalizeStatRecord<T extends Record<string, number>>(value: unknown, defaults: T): T {
   const merged = {
     ...defaults,
@@ -111,41 +105,23 @@ function normalizeStatRecord<T extends Record<string, number>>(value: unknown, d
   return allMissingOrZero ? { ...defaults } : merged;
 }
 
-function normalizeCurrencyRecord(value: unknown, goldFallback: number) {
-  const record = isRecord(value) ? value : {};
-  return {
-    copper: Number(record.copper ?? DEFAULT_CURRENCIES.copper),
-    silver: Number(record.silver ?? DEFAULT_CURRENCIES.silver),
-    gold: Number(record.gold ?? goldFallback),
-    platinum: Number(record.platinum ?? DEFAULT_CURRENCIES.platinum),
-  };
-}
-
-function normalizeItemEnhancements(value: unknown) {
-  const record = isRecord(value) ? value : {};
-  return Object.fromEntries(
-    Object.entries(record)
-      .map(([itemId, enhancements]) => [
-        itemId,
-        Array.isArray(enhancements)
-          ? Array.from(new Set(enhancements.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim())))
-          : [],
-      ])
-      .filter((entry) => entry[1].length > 0),
-  );
-}
-
 export function readCachedRuntimeState(email: string): CachedRuntimeState {
   const internalPlayerId = resolveInternalPlayerId(email);
+  const player = readRecord(playerStorageKey(email));
   return {
-    player: readRecord(playerStorageKey(email)),
+    player,
     jobs: readRecord(JOBS_STORAGE_KEY),
     education: readRecord(EDUCATION_STORAGE_KEY),
     arena: internalPlayerId ? readRecord(getArenaStateKey(internalPlayerId)) : {},
     timers: readRecord(TIMER_STORAGE_KEY),
     guild: internalPlayerId ? readRecord(guildKey(internalPlayerId)) : {},
     consortium: internalPlayerId ? readRecord(consortiumKey(internalPlayerId)) : {},
-    civicEmployment: internalPlayerId ? (readCivicEmploymentState(internalPlayerId) as unknown as Record<string, unknown>) : (defaultCivicEmploymentState() as unknown as Record<string, unknown>),
+    travel: isRecord(player.current) && isRecord(player.current.travel) ? player.current.travel : {},
+    civicEmployment:
+      isRecord(player.current) && isRecord(player.current.civicEmployment)
+        ? player.current.civicEmployment
+        : readRecord("nexis_civic_employment"),
+    legacy: readRecord("nexis_legacy"),
   };
 }
 
@@ -156,12 +132,33 @@ export function writeCachedRuntimeState(email: string, state: Partial<CachedRunt
   if (state.jobs) writeRecord(JOBS_STORAGE_KEY, state.jobs);
   if (state.education) writeRecord(EDUCATION_STORAGE_KEY, state.education);
   if (state.timers) writeRecord(TIMER_STORAGE_KEY, state.timers);
+  if (state.civicEmployment) {
+    writeRecord("nexis_civic_employment", state.civicEmployment);
+    const existingPlayer = readRecord(playerStorageKey(email));
+    writeRecord(playerStorageKey(email), {
+      ...existingPlayer,
+      current: {
+        ...(isRecord(existingPlayer.current) ? existingPlayer.current : {}),
+        civicEmployment: state.civicEmployment,
+      },
+    });
+  }
+  if (state.legacy) writeRecord("nexis_legacy", state.legacy);
 
   const internalPlayerId = resolveInternalPlayerId(email, isRecord(state.player) ? state.player : null);
   if (internalPlayerId && state.arena) writeRecord(getArenaStateKey(internalPlayerId), state.arena);
   if (internalPlayerId && state.guild) writeRecord(guildKey(internalPlayerId), state.guild);
   if (internalPlayerId && state.consortium) writeRecord(consortiumKey(internalPlayerId), state.consortium);
-  if (internalPlayerId && state.civicEmployment) writeCivicEmploymentState(internalPlayerId, normalizeCivicEmploymentState(state.civicEmployment));
+  if (state.travel) {
+    const existingPlayer = readRecord(playerStorageKey(email));
+    writeRecord(playerStorageKey(email), {
+      ...existingPlayer,
+      current: {
+        ...(isRecord(existingPlayer.current) ? existingPlayer.current : {}),
+        travel: state.travel,
+      },
+    });
+  }
 }
 
 type MergeServerStateArgs = {
@@ -214,14 +211,27 @@ export function mergeServerStateIntoCache({
     isRecord(playerState?.runtimeState?.consortium) && Object.keys(playerState.runtimeState.consortium).length > 0
       ? playerState.runtimeState.consortium
       : null;
+  const runtimeTravel =
+    isRecord(playerState?.runtimeState?.travel) && Object.keys(playerState.runtimeState.travel).length > 0
+      ? playerState.runtimeState.travel
+      : null;
   const runtimeCivicEmployment =
-    isRecord(playerState?.runtimeState?.civicEmployment) && Object.keys(playerState.runtimeState.civicEmployment).length > 0
+    isRecord(playerState?.runtimeState?.civicEmployment) &&
+    Object.keys(playerState.runtimeState.civicEmployment).length > 0
       ? playerState.runtimeState.civicEmployment
       : null;
+  const runtimeLegacy =
+    isRecord(playerState?.runtimeState?.legacy) && Object.keys(playerState.runtimeState.legacy).length > 0
+      ? playerState.runtimeState.legacy
+      : null;
+  const existingCurrent = isRecord(existing.current) ? existing.current : {};
+  const runtimeCurrent = isRecord(runtimePlayer.current) ? runtimePlayer.current : {};
 
-  const mergedCurrent = {
-    ...(isRecord(existing.current) ? existing.current : {}),
-    ...(isRecord(runtimePlayer.current) ? runtimePlayer.current : {}),
+  const mergedCurrent: Record<string, unknown> = {
+    ...existingCurrent,
+    ...runtimeCurrent,
+    ...(runtimeTravel ? { travel: runtimeTravel } : {}),
+    ...(runtimeCivicEmployment ? { civicEmployment: runtimeCivicEmployment } : {}),
   };
 
   const resolvedJob =
@@ -234,8 +244,6 @@ export function mergeServerStateIntoCache({
   const mergedExperience = normalizeExperience(
     runtimePlayer.experience ?? existing.experience ?? 0,
   );
-
-  const mergedGold = Number(playerState?.gold ?? runtimePlayer.gold ?? existing.gold ?? 500);
 
   const mergedPlayer: Record<string, unknown> = {
     ...existing,
@@ -257,9 +265,7 @@ export function mergeServerStateIntoCache({
     isRegistered: true,
     experience: mergedExperience,
     level: normalizeLevel(playerState?.level ?? runtimePlayer.level ?? existing.level, mergedExperience),
-    gold: mergedGold,
-    currencies: normalizeCurrencyRecord(runtimePlayer.currencies ?? existing.currencies, mergedGold),
-    itemEnhancements: normalizeItemEnhancements(runtimePlayer.itemEnhancements ?? existing.itemEnhancements),
+    gold: playerState?.gold ?? runtimePlayer.gold ?? existing.gold ?? 500,
     stats: {
       ...(isRecord(existing.stats) ? existing.stats : {}),
       ...(isRecord(runtimePlayer.stats) ? runtimePlayer.stats : {}),
@@ -283,9 +289,7 @@ export function mergeServerStateIntoCache({
     ),
     current: {
       ...mergedCurrent,
-      job:
-        resolvedJob ??
-        (typeof mergedCurrent.job === "string" ? mergedCurrent.job : null),
+      job: resolvedJob ?? (typeof existingCurrent.job === "string" ? existingCurrent.job : null),
     },
   };
 
@@ -296,5 +300,6 @@ export function mergeServerStateIntoCache({
   if (runtimeTimers) writeRecord(TIMER_STORAGE_KEY, runtimeTimers);
   if (runtimeGuild) writeRecord(guildKey(user.internalPlayerId), runtimeGuild);
   if (runtimeConsortium) writeRecord(consortiumKey(user.internalPlayerId), runtimeConsortium);
-  if (runtimeCivicEmployment) writeCivicEmploymentState(user.internalPlayerId, normalizeCivicEmploymentState(runtimeCivicEmployment));
+  if (runtimeCivicEmployment) writeRecord("nexis_civic_employment", runtimeCivicEmployment);
+  if (runtimeLegacy) writeRecord("nexis_legacy", runtimeLegacy);
 }

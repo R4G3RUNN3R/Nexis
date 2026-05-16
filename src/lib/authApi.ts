@@ -31,6 +31,8 @@ export type ServerPlayerState = {
     guild?: Record<string, unknown>;
     consortium?: Record<string, unknown>;
     civicEmployment?: Record<string, unknown>;
+    travel?: Record<string, unknown>;
+    legacy?: Record<string, unknown>;
   };
   createdAt: number;
   updatedAt: number;
@@ -70,11 +72,44 @@ export type ApiStateSyncResponse =
     }
   | ApiFailure;
 
+export type ApiPasswordResetRequestResponse =
+  | { ok: true; delivered: true }
+  | ApiFailure;
+
+export type ApiPasswordResetResponse =
+  | { ok: true; reset: true }
+  | ApiFailure;
+
+export type ApiTravelResponse =
+  | {
+      ok: true;
+      playerState: ServerPlayerState;
+      travel: Record<string, unknown>;
+    }
+  | ApiFailure;
+
+export type ApiChronicleStatusResponse =
+  | {
+      ok: true;
+      donorTier: Record<string, unknown>;
+      legacy: Record<string, unknown>;
+      activeRun: Record<string, unknown> | null;
+    }
+  | ApiFailure;
+
 function asSuccess<T extends Record<string, unknown>>(payload: T): T & { ok: true } {
   return { ok: true, ...payload };
 }
 
-const API_TIMEOUT_MS = 3000;
+function asChronicleSuccess(payload: {
+  donorTier: Record<string, unknown>;
+  legacy: Record<string, unknown>;
+  activeRun: Record<string, unknown> | null;
+}): ApiChronicleStatusResponse {
+  return asSuccess(payload);
+}
+
+const API_TIMEOUT_MS = 8000;
 
 async function requestJson<TSuccess>(
   path: string,
@@ -121,7 +156,7 @@ async function requestJson<TSuccess>(
   } catch {
     return {
       ok: false,
-      error: "Server unavailable. Falling back to local shard storage.",
+      error: "Server unavailable right now.",
       unavailable: true,
       status: null,
       code: "NETWORK_UNAVAILABLE",
@@ -163,12 +198,100 @@ export function getCurrentServerUser(sessionToken: string): Promise<ApiMeRespons
 export function saveCurrentServerState(
   sessionToken: string,
   runtimeState: Record<string, unknown>,
+  options: {
+    keepalive?: boolean;
+  } = {},
 ): Promise<ApiStateSyncResponse> {
   return requestJson<{ playerState: ServerPlayerState }>("/api/state", {
     method: "PUT",
+    keepalive: options.keepalive,
     headers: {
       Authorization: `Bearer ${sessionToken}`,
     },
     body: JSON.stringify(runtimeState),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function requestPasswordReset(data: { email: string }): Promise<ApiPasswordResetRequestResponse> {
+  return requestJson<{ delivered: true }>("/api/forgot-password", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function submitPasswordReset(data: { token: string; password: string }): Promise<ApiPasswordResetResponse> {
+  return requestJson<{ reset: true }>("/api/reset-password", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerTravelState(sessionToken: string): Promise<ApiTravelResponse> {
+  return requestJson<{ playerState: ServerPlayerState; travel: Record<string, unknown> }>("/api/travel", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function startServerTravel(
+  sessionToken: string,
+  destinationCityId: string,
+): Promise<ApiTravelResponse> {
+  return requestJson<{ playerState: ServerPlayerState; travel: Record<string, unknown> }>("/api/travel/start", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+    body: JSON.stringify({ destinationCityId }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function cancelServerTravel(sessionToken: string): Promise<ApiTravelResponse> {
+  return requestJson<{ playerState: ServerPlayerState; travel: Record<string, unknown> }>("/api/travel/cancel", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getChronicleStatus(sessionToken: string): Promise<ApiChronicleStatusResponse> {
+  return requestJson<{ donorTier: Record<string, unknown>; legacy: Record<string, unknown>; activeRun: Record<string, unknown> | null }>("/api/legacy/chronicle", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asChronicleSuccess(result)));
+}
+
+export function openMonthlyChronicle(sessionToken: string): Promise<ApiChronicleStatusResponse> {
+  return requestJson<{ donorTier: Record<string, unknown>; legacy: Record<string, unknown>; activeRun: Record<string, unknown> | null }>("/api/legacy/chronicle/open", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asChronicleSuccess(result)));
+}
+
+export function submitChronicleChoice(
+  sessionToken: string,
+  choiceKey: string,
+): Promise<ApiChronicleStatusResponse> {
+  return requestJson<{ donorTier?: Record<string, unknown>; legacy: Record<string, unknown>; activeRun: Record<string, unknown> | null }>("/api/legacy/chronicle/choice", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+    body: JSON.stringify({ choiceKey }),
+  }).then((result) =>
+    "ok" in result
+      ? result
+      : asChronicleSuccess({
+          donorTier: result.donorTier ?? {},
+          legacy: result.legacy,
+          activeRun: result.activeRun,
+        }),
+  );
 }

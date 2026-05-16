@@ -2,8 +2,6 @@ import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { usePlayer } from "../state/PlayerContext";
-import { useAuth } from "../state/AuthContext";
-import { isStaffOrAdmin } from "../lib/adminAccess";
 import "../styles/hospital.css";
 import "../styles/hosp-full.css";
 
@@ -75,47 +73,31 @@ function readConditionRoster(conditionType: "hospitalized" | "jailed", activeInt
 }
 
 export default function HospitalPage() {
-  const location = useLocation() as { state?: { redirectedFrom?: string } };
+  const location = useLocation() as { pathname: string; state?: { redirectedFrom?: string } };
   const {
     player,
     isHospitalized,
     isJailed,
     hospitalRemainingLabel,
     jailRemainingLabel,
-    hospitalizeFor,
-    recoverFromHospital,
-    releaseFromJail,
-    setHealth,
-    jailFor,
   } = usePlayer();
-  const { activeAccount } = useAuth();
 
   const activeCondition = isHospitalized ? "hospitalized" : isJailed ? "jailed" : "normal";
-  const canUsePrototypeControls = isStaffOrAdmin(activeAccount ?? player.publicId);
-  const roster = activeCondition === "hospitalized"
+  const viewMode = location.pathname === "/jail" ? "jailed" : activeCondition;
+  const roster = viewMode === "hospitalized"
     ? readConditionRoster("hospitalized", player.internalId)
-    : activeCondition === "jailed"
+    : viewMode === "jailed"
     ? readConditionRoster("jailed", player.internalId)
     : [];
 
-  const pageTitle = activeCondition === "jailed" ? "Jail" : "Hospital";
-  const timerLabel = activeCondition === "hospitalized" ? hospitalRemainingLabel : activeCondition === "jailed" ? jailRemainingLabel : "0m";
-  const flavor = "Healing is not softness. Recovery is simply the price extracted by reality when confidence outpaces preparation.";
-  const ciel = "Hospital and jail are where consequences become measurable. Time, damage, sentences, and the uncomfortable fact that poor decisions are rarely free.";
-  const alt = "Restoration is useful. Humility would have been cheaper.";
+  const pageTitle = viewMode === "jailed" ? "Jail" : "Hospital";
+  const timerLabel = activeCondition === "hospitalized" ? hospitalRemainingLabel : activeCondition === "jailed" ? jailRemainingLabel : "No active timer";
 
   return (
-    <AppShell title={pageTitle} hint={flavor}>
-      <div className="page-intro-grid">
-        <ContentPanel title={activeCondition === "jailed" ? "Confinement" : "Recovery"}>
-          <p className="page-intro__lead">{flavor}</p>
-          <p className="page-intro__body">{alt}</p>
-        </ContentPanel>
-        <ContentPanel title="CIEL">
-          <p className="page-intro__body">{ciel}</p>
-        </ContentPanel>
-      </div>
-
+    <AppShell
+      title={pageTitle}
+      hint={activeCondition === "normal" ? "No active condition." : "Your current condition updates here in real time. Everything else can stop pretending to be accessible."}
+    >
       <div className="nexis-grid">
         <div className="nexis-column">
           <ContentPanel title="Current Status">
@@ -148,13 +130,13 @@ export default function HospitalPage() {
             ) : null}
 
             {activeCondition === "normal" ? (
-              <div className="hospital-note">No current recovery or jail status. Congratulations on basic functionality.</div>
+              <div className="hospital-note">{viewMode === "jailed" ? "No active jail sentence. You are currently free." : "No current recovery or jail status. Congratulations on basic functionality."}</div>
             ) : null}
           </ContentPanel>
         </div>
 
         <div className="nexis-column">
-          <ContentPanel title={activeCondition === "jailed" ? "Others In Jail" : "Others In Hospital"}>
+          <ContentPanel title={viewMode === "jailed" ? "Others In Jail" : "Others In Hospital"}>
             {roster.length ? (
               <div style={{ display: "grid", gap: 10 }}>
                 {roster.map((entry) => (
@@ -177,7 +159,7 @@ export default function HospitalPage() {
               </div>
             ) : (
               <div className="hospital-note">
-                {activeCondition === "jailed"
+                {viewMode === "jailed"
                   ? "No other prisoners are currently listed."
                   : "No other patients are currently listed."}
               </div>
@@ -185,38 +167,6 @@ export default function HospitalPage() {
           </ContentPanel>
         </div>
 
-        {canUsePrototypeControls ? (
-          <div className="nexis-column">
-            <ContentPanel title="Admin Prototype Controls">
-              <div className="hospital-note">
-                Reserved for the administrator while combat, jail, and recovery systems are still being stitched together properly.
-              </div>
-              <div className="hospital-actions" style={{ marginTop: "10px" }}>
-                <button type="button" className="hospital-btn hospital-btn--danger" onClick={() => setHealth(0, "Combat defeat")}>
-                  Simulate Defeat
-                </button>
-                <button type="button" className="hospital-btn" onClick={() => hospitalizeFor(15, "Test admission")}>
-                  Admit 15 Minutes
-                </button>
-                <button type="button" className="hospital-btn" onClick={() => hospitalizeFor(60, "Extended test")}>
-                  Admit 60 Minutes
-                </button>
-                <button type="button" className="hospital-btn hospital-btn--danger" onClick={() => jailFor(10, "Caught stealing")}>
-                  Jail for 10 Minutes
-                </button>
-                {isHospitalized || isJailed ? (
-                  <button
-                    type="button"
-                    className="hospital-btn"
-                    onClick={isHospitalized ? recoverFromHospital : releaseFromJail}
-                  >
-                    Clear Condition
-                  </button>
-                ) : null}
-              </div>
-            </ContentPanel>
-          </div>
-        ) : null}
       </div>
     </AppShell>
   );

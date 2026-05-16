@@ -2,8 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
-import { getAdminPlayerDetails, postAdminPlayerAction, searchAdminPlayers, type AdminActionSuccess, type AdminPlayerSummary, type AdminPlayerTarget } from "../lib/adminApi";
-import { isAdministrator } from "../lib/adminAccess";
+import {
+  getAdminPlayerDetails,
+  postAdminPlayerAction,
+  searchAdminPlayers,
+  type AdminActionSuccess,
+  type AdminPlayerSummary,
+  type AdminPlayerTarget,
+} from "../lib/adminApi";
+import { ADMIN_ACTION_POLICIES } from "../lib/adminActionPolicy";
+import { isAdministrator, isStaffOrAdmin } from "../lib/adminAccess";
 import { ITEM_ENHANCEMENT_OPTIONS, ITEM_OPTIONS } from "../data/itemsData";
 import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
 import { useAuth } from "../state/AuthContext";
@@ -37,7 +45,19 @@ export default function AdminPage() {
   const [enhancementValue, setEnhancementValue] = useState(ITEM_ENHANCEMENT_OPTIONS[0] ?? "Tempered");
   const [privilegeRole, setPrivilegeRole] = useState<"player" | "staff" | "admin">("player");
 
-  const isAdmin = authSource === "server" && Boolean(serverSessionToken) && isAdministrator(activeAccount ?? player.publicId);
+  const canAccessAdmin = authSource === "server"
+    && Boolean(serverSessionToken)
+    && isStaffOrAdmin({
+      publicId: activeAccount?.publicId ?? player.publicId,
+      privilegeRole: activeAccount?.privilegeRole ?? "player",
+    });
+  const canManageRoles = authSource === "server"
+    && Boolean(serverSessionToken)
+    && isAdministrator({
+      publicId: activeAccount?.publicId ?? player.publicId,
+      privilegeRole: activeAccount?.privilegeRole ?? "player",
+    });
+  const canUseSensitiveMutations = canManageRoles;
 
   useEffect(() => {
     if (!selected) return;
@@ -57,10 +77,16 @@ export default function AdminPage() {
     setPrivilegeRole(selected.user.privilegeRole);
   }, [selected]);
 
-  const inventoryRows = useMemo(() => Object.entries(selected?.player.inventory ?? {}).sort((left, right) => left[0].localeCompare(right[0])), [selected]);
-  const enhancementRows = useMemo(() => Object.entries(selected?.player.itemEnhancements ?? {}).sort((left, right) => left[0].localeCompare(right[0])), [selected]);
+  const inventoryRows = useMemo(
+    () => Object.entries(selected?.player.inventory ?? {}).sort((left, right) => left[0].localeCompare(right[0])),
+    [selected],
+  );
+  const enhancementRows = useMemo(
+    () => Object.entries(selected?.player.itemEnhancements ?? {}).sort((left, right) => left[0].localeCompare(right[0])),
+    [selected],
+  );
 
-  if (!isAdmin) {
+  if (!canAccessAdmin) {
     return <Navigate to="/home" replace />;
   }
 
@@ -142,11 +168,14 @@ export default function AdminPage() {
                 <div>Identity classification: <strong>{selected.user.entityType}</strong></div>
                 <div>Privilege role: <strong>{selected.user.privilegeRole}</strong></div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
-                  <button type="button" onClick={() => runAction("fillEnergy", {})}>Fill Energy</button>
-                  <button type="button" onClick={() => runAction("fillStamina", {})}>Fill Stamina</button>
-                  <button type="button" onClick={() => runAction("fillHealth", {})}>Fill Health</button>
-                  <button type="button" onClick={() => runAction("fillComfort", {})}>Fill Comfort</button>
-                  <button type="button" onClick={() => runAction("fillAllBars", {})}>Fill All Bars</button>
+                  <button type="button" onClick={() => runAction("fillEnergy", {})}>{ADMIN_ACTION_POLICIES.fillEnergy.label}</button>
+                  <button type="button" onClick={() => runAction("fillStamina", {})}>{ADMIN_ACTION_POLICIES.fillStamina.label}</button>
+                  <button type="button" onClick={() => runAction("fillHealth", {})}>{ADMIN_ACTION_POLICIES.fillHealth.label}</button>
+                  <button type="button" onClick={() => runAction("fillComfort", {})}>{ADMIN_ACTION_POLICIES.fillComfort.label}</button>
+                  <button type="button" onClick={() => runAction("fillAllBars", {})}>{ADMIN_ACTION_POLICIES.fillAllBars.label}</button>
+                </div>
+                <div style={{ color: "#9fb0bf", fontSize: 13 }}>
+                  Staff-safe support actions: bar recovery only. Progression, economy, gear, and role mutations are restricted below.
                 </div>
               </div>
             </ContentPanel>
@@ -158,95 +187,113 @@ export default function AdminPage() {
             <ContentPanel title="Account Role Control">
               <div style={{ display: "grid", gap: 12 }}>
                 <div style={{ color: "#9fb0bf", fontSize: 13 }}>
-                  NPC or system identity classification is separate from account privilege role. Changing the role below does not rewrite the target's reserved identity.
+                  NPC or system identity classification is separate from account privilege role. Changing the role below does not rewrite the target&apos;s reserved identity.
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <select value={privilegeRole} onChange={(event) => setPrivilegeRole(event.target.value as "player" | "staff" | "admin") }>
+                  <select value={privilegeRole} onChange={(event) => setPrivilegeRole(event.target.value as "player" | "staff" | "admin")} disabled={!canManageRoles}>
                     {PRIVILEGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
-                  <button type="button" onClick={() => runAction("setAccountPrivilegeRole", { privilegeRole })}>Apply Account Role</button>
+                  <button type="button" onClick={() => runAction("setAccountPrivilegeRole", { privilegeRole })} disabled={!canManageRoles}>
+                    Apply Account Role
+                  </button>
+                </div>
+                <div style={{ color: canManageRoles ? "#9fb0bf" : "#d98f8f", fontSize: 13 }}>
+                  {canManageRoles ? "Administrator-level privilege change control enabled." : "Role changes are administrator-only, because letting staff mint more staff is how you accidentally breed a coup."}
                 </div>
               </div>
             </ContentPanel>
 
-            <ContentPanel title="Stats and Currency Controls">
-              <div style={{ display: "grid", gap: 14 }}>
-                <SectionTitle>Battle Stats</SectionTitle>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
-                  {Object.entries(battleStats).map(([key, value]) => (
-                    <label key={key} style={{ display: "grid", gap: 4 }}>
-                      <span>{key}</span>
-                      <input type="number" value={value} min={0} onChange={(event) => setBattleStats((current) => ({ ...current, [key]: Number(event.target.value) }))} />
-                    </label>
-                  ))}
-                </div>
-                <button type="button" onClick={() => runAction("setBattleStats", { battleStats })}>Apply Battle Stats</button>
+            {canUseSensitiveMutations ? (
+              <>
+                <ContentPanel title="Stats and Currency Controls">
+                  <div style={{ display: "grid", gap: 14 }}>
+                    <SectionTitle>Battle Stats</SectionTitle>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+                      {Object.entries(battleStats).map(([key, value]) => (
+                        <label key={key} style={{ display: "grid", gap: 4 }}>
+                          <span>{key}</span>
+                          <input type="number" value={value} min={0} onChange={(event) => setBattleStats((current) => ({ ...current, [key]: Number(event.target.value) }))} />
+                        </label>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => runAction("setBattleStats", { battleStats })}>{ADMIN_ACTION_POLICIES.setBattleStats.label}</button>
 
-                <SectionTitle>Working Stats</SectionTitle>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
-                  {Object.entries(workingStats).map(([key, value]) => (
-                    <label key={key} style={{ display: "grid", gap: 4 }}>
-                      <span>{key}</span>
-                      <input type="number" value={value} min={0} onChange={(event) => setWorkingStats((current) => ({ ...current, [key]: Number(event.target.value) }))} />
-                    </label>
-                  ))}
-                </div>
-                <button type="button" onClick={() => runAction("setWorkingStats", { workingStats })}>Apply Working Stats</button>
+                    <SectionTitle>Working Stats</SectionTitle>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+                      {Object.entries(workingStats).map(([key, value]) => (
+                        <label key={key} style={{ display: "grid", gap: 4 }}>
+                          <span>{key}</span>
+                          <input type="number" value={value} min={0} onChange={(event) => setWorkingStats((current) => ({ ...current, [key]: Number(event.target.value) }))} />
+                        </label>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => runAction("setWorkingStats", { workingStats })}>{ADMIN_ACTION_POLICIES.setWorkingStats.label}</button>
 
-                <SectionTitle>Currencies</SectionTitle>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
-                  {Object.entries(currencies).map(([key, value]) => (
-                    <label key={key} style={{ display: "grid", gap: 4 }}>
-                      <span>{key}</span>
-                      <input type="number" value={value} min={0} onChange={(event) => setCurrencies((current) => ({ ...current, [key]: Number(event.target.value) }))} />
-                    </label>
-                  ))}
-                </div>
-                <button type="button" onClick={() => runAction("setCurrencies", { currencies })}>Apply Currency Values</button>
+                    <SectionTitle>Currencies</SectionTitle>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+                      {Object.entries(currencies).map(([key, value]) => (
+                        <label key={key} style={{ display: "grid", gap: 4 }}>
+                          <span>{key}</span>
+                          <input type="number" value={value} min={0} onChange={(event) => setCurrencies((current) => ({ ...current, [key]: Number(event.target.value) }))} />
+                        </label>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => runAction("setCurrencies", { currencies })}>{ADMIN_ACTION_POLICIES.setCurrencies.label}</button>
 
-                <SectionTitle>Player Job</SectionTitle>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <input value={jobValue} onChange={(event) => setJobValue(event.target.value)} placeholder="Assign or clear current job" style={{ flex: 1, minWidth: 240 }} />
-                  <button type="button" onClick={() => runAction("setPlayerJob", { job: jobValue })}>Assign / Change</button>
-                  <button type="button" onClick={() => runAction("setPlayerJob", { job: null })}>Remove Job</button>
-                </div>
-              </div>
-            </ContentPanel>
+                    <SectionTitle>Player Job</SectionTitle>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <input value={jobValue} onChange={(event) => setJobValue(event.target.value)} placeholder="Assign or clear current job" style={{ flex: 1, minWidth: 240 }} />
+                      <button type="button" onClick={() => runAction("setPlayerJob", { job: jobValue })}>Assign / Change</button>
+                      <button type="button" onClick={() => runAction("setPlayerJob", { job: null })}>Remove Job</button>
+                    </div>
+                  </div>
+                </ContentPanel>
 
-            <ContentPanel title="Inventory and Enhancements">
-              <div style={{ display: "grid", gap: 14 }}>
-                <SectionTitle>Inventory</SectionTitle>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <select value={inventoryItemId} onChange={(event) => setInventoryItemId(event.target.value)}>
-                    {ITEM_OPTIONS.map((item) => <option key={item.itemId} value={item.itemId}>{item.name}</option>)}
-                  </select>
-                  <input type="number" value={inventoryQty} min={1} onChange={(event) => setInventoryQty(Number(event.target.value))} style={{ width: 120 }} />
-                  <button type="button" onClick={() => runAction("addInventoryItem", { itemId: inventoryItemId, quantity: inventoryQty })}>Add Item</button>
-                  <button type="button" onClick={() => runAction("removeInventoryItem", { itemId: inventoryItemId, quantity: inventoryQty })}>Remove Item</button>
-                </div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  {inventoryRows.length ? inventoryRows.map(([itemId, quantity]) => <div key={itemId}>{itemId}: x{quantity}</div>) : <div>No inventory recorded.</div>}
-                </div>
+                <ContentPanel title="Inventory and Enhancements">
+                  <div style={{ display: "grid", gap: 14 }}>
+                    <SectionTitle>Inventory</SectionTitle>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <select value={inventoryItemId} onChange={(event) => setInventoryItemId(event.target.value)}>
+                        {ITEM_OPTIONS.map((item) => <option key={item.itemId} value={item.itemId}>{item.name}</option>)}
+                      </select>
+                      <input type="number" value={inventoryQty} min={1} onChange={(event) => setInventoryQty(Number(event.target.value))} style={{ width: 120 }} />
+                      <button type="button" onClick={() => runAction("addInventoryItem", { itemId: inventoryItemId, quantity: inventoryQty })}>Add Item</button>
+                      <button type="button" onClick={() => runAction("removeInventoryItem", { itemId: inventoryItemId, quantity: inventoryQty })}>Remove Item</button>
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {inventoryRows.length ? inventoryRows.map(([itemId, quantity]) => <div key={itemId}>{itemId}: x{quantity}</div>) : <div>No inventory recorded.</div>}
+                    </div>
 
-                <SectionTitle>Item Enhancements</SectionTitle>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <select value={enhancementItemId} onChange={(event) => setEnhancementItemId(event.target.value)}>
-                    {ITEM_OPTIONS.map((item) => <option key={item.itemId} value={item.itemId}>{item.name}</option>)}
-                  </select>
-                  <select value={enhancementValue} onChange={(event) => setEnhancementValue(event.target.value)}>
-                    {ITEM_ENHANCEMENT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                  <button type="button" onClick={() => runAction("addItemEnhancement", { itemId: enhancementItemId, enhancement: enhancementValue })}>Add Enhancement</button>
-                  <button type="button" onClick={() => runAction("removeItemEnhancement", { itemId: enhancementItemId, enhancement: enhancementValue })}>Remove Enhancement</button>
+                    <SectionTitle>Item Enhancements</SectionTitle>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <select value={enhancementItemId} onChange={(event) => setEnhancementItemId(event.target.value)}>
+                        {ITEM_OPTIONS.map((item) => <option key={item.itemId} value={item.itemId}>{item.name}</option>)}
+                      </select>
+                      <select value={enhancementValue} onChange={(event) => setEnhancementValue(event.target.value)}>
+                        {ITEM_ENHANCEMENT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                      <button type="button" onClick={() => runAction("addItemEnhancement", { itemId: enhancementItemId, enhancement: enhancementValue })}>Add Enhancement</button>
+                      <button type="button" onClick={() => runAction("removeItemEnhancement", { itemId: enhancementItemId, enhancement: enhancementValue })}>Remove Enhancement</button>
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {enhancementRows.length ? enhancementRows.map(([itemId, enhancements]) => <div key={itemId}>{itemId}: {enhancements.join(", ")}</div>) : <div>No enhancements recorded.</div>}
+                    </div>
+                  </div>
+                </ContentPanel>
+              </>
+            ) : (
+              <ContentPanel title="Restricted Mutations">
+                <div style={{ color: "#d7dee6", display: "grid", gap: 8 }}>
+                  <div>Staff can search accounts, inspect target details, and perform support recovery actions.</div>
+                  <div>Stat edits, currency edits, job edits, inventory or gear changes, and account-role changes are administrator-only.</div>
                 </div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  {enhancementRows.length ? enhancementRows.map(([itemId, enhancements]) => <div key={itemId}>{itemId}: {(enhancements as string[]).join(", ")}</div>) : <div>No enhancements recorded.</div>}
-                </div>
-              </div>
-            </ContentPanel>
+              </ContentPanel>
+            )}
 
             <ContentPanel title="Organization Controls">
-              <div style={{ color: "#9fb0bf", fontSize: 13 }}>Future section: guild and consortium administration will sit here once the shared organization core has more than founder/member scaffolding.</div>
+              <div style={{ color: "#9fb0bf", fontSize: 13 }}>
+                Future section: guild and consortium administration will sit here once the shared organization core has more than founder/member scaffolding.
+              </div>
             </ContentPanel>
           </>
         ) : null}

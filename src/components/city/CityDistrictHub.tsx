@@ -33,8 +33,11 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
           <ContentPanel key={district.id} title={district.name}>
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ fontSize: 13, color: "#9fb0bf" }}>{district.summary}</div>
-              {district.destinations.map((destination) =>
-                destination.locked ? (
+              {district.destinations.map((destination) => {
+                const lockedLabel = destination.lockReason?.toLowerCase().startsWith("coming soon")
+                  ? "Coming Soon"
+                  : "Locked";
+                return destination.locked ? (
                   <div
                     key={destination.id}
                     style={{
@@ -48,10 +51,10 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
                       <strong style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span>{destination.icon ?? "?"}</span>
+                        <span>{destination.icon ?? "Site"}</span>
                         <span>{destination.name}</span>
                       </strong>
-                      <span style={{ fontSize: 12, color: "#d98f8f" }}>Locked</span>
+                      <span style={{ fontSize: 12, color: "#d98f8f" }}>{lockedLabel}</span>
                     </div>
                     <div style={{ fontSize: 13, opacity: 0.82 }}>{destination.description}</div>
                     <div style={{ fontSize: 12, color: "#b7c3cf" }}>{destination.lockReason}</div>
@@ -75,15 +78,15 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
                       <strong style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span>{destination.icon ?? "?"}</span>
+                        <span>{destination.icon ?? "Site"}</span>
                         <span>{destination.name}</span>
                       </strong>
                       <span style={{ fontSize: 12, color: "#d8c278" }}>Open</span>
                     </div>
                     <div style={{ fontSize: 13, opacity: 0.82 }}>{destination.description}</div>
                   </Link>
-                ),
-              )}
+                );
+              })}
             </div>
           </ContentPanel>
         ))}

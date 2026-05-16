@@ -1,86 +1,190 @@
+import { access, mkdir, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { withTransaction } from "../db/pool.js";
 import { HttpError } from "../lib/errors.js";
-import { isStaffOrAdmin } from "../lib/adminAccess.js";
 import { buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
-import { getReservedIdentityMeta } from "../lib/userIdentity.js";
-import { findOrganizationForUserByType } from "../repositories/organizationRepository.js";
 import { createDefaultPlayerState, findPlayerStateByUserInternalId } from "../repositories/playerStateRepository.js";
-import { findLatestSessionActivityByUserInternalId } from "../repositories/sessionsRepository.js";
-import { findUserByPublicId } from "../repositories/usersRepository.js";
+import { findUserByPublicId, findUserByInternalId } from "../repositories/usersRepository.js";
+import { findOrganizationForUserByType } from "../repositories/organizationRepository.js";
+import { resolveTravelForRuntimeState } from "./travelService.js";
+import { upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
 
-function normalizePublicId(value) {
-  const text = String(value ?? "").trim().toUpperCase();
-  const match = /^P?(\d{7})$/.exec(text);
+const PROFILE_IMAGE_DIR = path.join(process.cwd(), ".data", "profile-images");
+const PROFILE_IMAGE_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function asRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function normalizePublicId(publicId) {
+  const match = /^P?(\d{7})$/i.exec(String(publicId ?? "").trim());
   if (!match) {
-    throw new HttpError(400, "Invalid public profile identifier.", "INVALID_PROFILE_ID");
+    throw new HttpError(400, "Citizen record unavailable.", "PROFILE_ID_INVALID");
   }
   return Number.parseInt(match[1], 10);
 }
 
-function formatRelativeAge(timestamp) {
-  const diffMs = Math.max(0, Date.now() - timestamp);
-  const totalDays = Math.max(0, Math.floor(diffMs / 86400000));
-  if (totalDays >= 365) {
-    const years = Math.floor(totalDays / 365);
-    const days = totalDays % 365;
-    return days > 0 ? `${years}y ${days}d` : `${years}y`;
+function buildLastAction(runtimeState) {
+  const currentTravel = asRecord(runtimeState.travel);
+  if (currentTravel.status === "in_transit") {
+    return { isOnline: false, lastActionAt: currentTravel.departureAt ?? null, label: "Travelling by caravan" };
   }
-  return `${totalDays}d`;
+  return { isOnline: false, lastActionAt: null, label: "Recently active" };
 }
 
-function formatLastAction(timestamp) {
-  if (!timestamp) return "No recent activity";
-  const diffMs = Math.max(0, Date.now() - timestamp);
-  const diffMinutes = Math.floor(diffMs / 60000);
-  if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
-}
-
-function buildTravelSummary(currentTravel) {
-  if (typeof currentTravel === "string" && currentTravel.trim()) {
-    return currentTravel.trim();
+function buildTravelSummary(runtimeState) {
+  const currentTravel = asRecord(runtimeState.travel);
+  if (currentTravel.status === "in_transit") {
+    return `Travelling by caravan to ${String(currentTravel.destinationCityId ?? "unknown").toUpperCase()}`;
   }
-  return "In Nexis City";
+  return typeof runtimeState.player.current?.currentCityId === "string"
+    ? `In ${String(runtimeState.player.current.currentCityId).toUpperCase()}`
+    : "In Nexis City";
 }
 
-function buildStatusLabel(runtimePlayer) {
-  if (runtimePlayer.condition?.type === "hospitalized") return "Hospitalized";
-  if (runtimePlayer.condition?.type === "jailed") return "Jailed";
-  if (runtimePlayer.current?.travel) return "Traveling";
-  if (runtimePlayer.current?.job) return "Working";
-  if (runtimePlayer.current?.education?.name) return "Studying";
-  return "Idle";
+function sanitizeProfileImageKey(value) {
+  return typeof value === "string" && PROFILE_IMAGE_KEY_PATTERN.test(value) ? value : null;
 }
 
-function summarizeOrganization(organization) {
-  if (!organization) return null;
+function resolveProfileImageUrl(imageKey) {
+  const safeKey = sanitizeProfileImageKey(imageKey);
+  return safeKey ? `/api/profile-images/${encodeURIComponent(safeKey)}` : null;
+}
+
+function readPortrait(runtimeState) {
+  const portrait = asRecord(runtimeState.player.portrait);
+  const imageKey = sanitizeProfileImageKey(portrait.imageKey);
   return {
-    name: organization.name,
-    tag: organization.tag,
-    publicId: organization.publicId,
-    type: organization.type,
+    imageUrl: resolveProfileImageUrl(imageKey),
+    hasCustomImage: Boolean(imageKey),
   };
 }
 
-function buildBio(runtimePlayer, reservedIdentity) {
-  const bio = typeof runtimePlayer.bio === "string" && runtimePlayer.bio.trim() ? runtimePlayer.bio.trim() : null;
-  const signature = typeof runtimePlayer.signature === "string" && runtimePlayer.signature.trim() ? runtimePlayer.signature.trim() : null;
-  const reservedNote = reservedIdentity?.entityType === "npc" ? `${reservedIdentity.displayName} is a reserved Nexis identity.` : null;
+function detectProfileImageExtension(file) {
+  const buffer = file?.buffer;
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) {
+    throw new HttpError(400, "Profile image upload is invalid.", "PROFILE_IMAGE_INVALID");
+  }
+
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return ".jpg";
+  }
+
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return ".png";
+  }
+
+  if (
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return ".webp";
+  }
+
+  throw new HttpError(400, "Profile image must be PNG, JPEG, or WEBP.", "PROFILE_IMAGE_TYPE_INVALID");
+}
+
+function buildLegacyEntries(runtimeState) {
+  const legacy = asRecord(runtimeState.legacy);
+  const entries = Array.isArray(legacy.visibleEntries) ? legacy.visibleEntries : [];
+  return entries
+    .map((entry, index) => {
+      const record = asRecord(entry);
+      return {
+        id: typeof record.id === "string" ? record.id : `legacy_${index + 1}`,
+        title: typeof record.title === "string" ? record.title : "Legacy Entry",
+        summary: typeof record.summary === "string" ? record.summary : "A remembered Chronicle consequence remains recorded here.",
+        kind: typeof record.kind === "string" ? record.kind : "chronicle",
+        awardedAt: typeof record.awardedAt === "number" ? record.awardedAt : Date.now(),
+      };
+    })
+    .slice(0, 24);
+}
+
+function buildProfileResponse(viewerUser, targetUser, playerState, organizationSummary) {
+  const runtimeState = buildMutableRuntimeState(targetUser, playerState);
+  resolveTravelForRuntimeState(runtimeState);
+  const bio = asRecord(runtimeState.player.bio);
+  const entityType = targetUser.entityType ?? "player";
+  const privilegeRole = targetUser.privilegeRole ?? "player";
+  const isSelf = Boolean(viewerUser && viewerUser.internalId === targetUser.internalId);
+  const canModerate = Boolean(viewerUser && viewerUser.privilegeRole && viewerUser.privilegeRole !== "player");
+
   return {
-    bio,
-    signature,
-    reservedNote,
+    viewer: {
+      mode: isSelf ? "self" : canModerate ? "staff" : "public",
+      canModerate,
+      isSelf,
+    },
+    publicProfile: {
+      name: `${targetUser.firstName}${targetUser.lastName ? ` ${targetUser.lastName}` : ""}`.trim(),
+      publicId: targetUser.publicId,
+      title: runtimeState.player.title ?? "",
+      entityType,
+      level: playerState.level ?? 1,
+      rank: typeof runtimeState.player.rank === "string" && runtimeState.player.rank ? runtimeState.player.rank : null,
+      ageLabel: typeof runtimeState.player.ageLabel === "string" && runtimeState.player.ageLabel ? runtimeState.player.ageLabel : "Newly registered",
+      createdAt: targetUser.createdAt,
+      life: {
+        current: Number(runtimeState.player.stats?.health ?? 100),
+        max: Number(runtimeState.player.stats?.maxHealth ?? 100),
+      },
+      lastAction: buildLastAction(runtimeState),
+      status: {
+        label: runtimeState.player.condition?.type === "normal" ? "Available" : String(runtimeState.player.condition?.type ?? "Available"),
+        condition: runtimeState.player.condition,
+      },
+      guild: organizationSummary.guild,
+      consortium: organizationSummary.consortium,
+      job: typeof runtimeState.player.current?.job === "string" ? runtimeState.player.current.job : null,
+      property: {
+        propertyId: typeof runtimeState.player.property?.current === "string" ? runtimeState.player.property.current : "shack",
+      },
+      travel: {
+        summary: buildTravelSummary(runtimeState),
+      },
+      portrait: readPortrait(runtimeState),
+      bio: {
+        bio: typeof bio.bio === "string" ? bio.bio : null,
+        signature: typeof bio.signature === "string" ? bio.signature : null,
+        reservedNote: typeof bio.reservedNote === "string" ? bio.reservedNote : null,
+      },
+      counters: null,
+      legacyEntries: buildLegacyEntries(runtimeState),
+    },
+    selfProfile: isSelf
+      ? {
+          currencies: runtimeState.player.currencies,
+          workingStats: runtimeState.player.workingStats,
+          battleStats: runtimeState.player.battleStats,
+          inventoryCount: Object.values(runtimeState.player.inventory ?? {}).reduce((sum, value) => sum + Number(value ?? 0), 0),
+          inventoryTypes: Object.keys(runtimeState.player.inventory ?? {}).length,
+        }
+      : null,
+    moderation: canModerate
+      ? {
+          email: targetUser.email,
+          internalId: targetUser.internalId,
+          entityType,
+          privilegeRole,
+          reservedIdentityName: null,
+        }
+      : null,
   };
 }
 
-export async function getProfileView(viewerUser, publicIdParam) {
-  const publicId = normalizePublicId(publicIdParam);
-
+export async function getProfileForViewer(viewerUser, publicIdValue) {
   return withTransaction(async (client) => {
+    const publicId = normalizePublicId(publicIdValue);
     const targetUser = await findUserByPublicId(client, publicId);
     if (!targetUser) {
       throw new HttpError(404, "Citizen record unavailable.", "PROFILE_NOT_FOUND");
@@ -92,75 +196,80 @@ export async function getProfileView(viewerUser, publicIdParam) {
       throw new HttpError(404, "Citizen record unavailable.", "PROFILE_STATE_NOT_FOUND");
     }
 
-    const runtimeState = buildMutableRuntimeState(targetUser, playerState);
-    const runtimePlayer = runtimeState.player;
-    const reservedIdentity = getReservedIdentityMeta(targetUser.publicId);
+    const viewer = viewerUser?.internalId ? await findUserByInternalId(client, viewerUser.internalId) : null;
     const guild = await findOrganizationForUserByType(client, targetUser.internalId, "guild");
     const consortium = await findOrganizationForUserByType(client, targetUser.internalId, "consortium");
-    const latestSession = await findLatestSessionActivityByUserInternalId(client, targetUser.internalId);
 
-    const isSelf = Boolean(viewerUser && viewerUser.internalId === targetUser.internalId);
-    const canModerate = Boolean(viewerUser && isStaffOrAdmin(viewerUser));
-    const viewerMode = isSelf ? "self" : canModerate ? "staff" : "public";
-    const lastActionAt = latestSession?.lastSeenAt ?? playerState.updatedAt ?? targetUser.createdAt;
-    const isOnline = Boolean(latestSession?.lastSeenAt && Date.now() - latestSession.lastSeenAt <= 5 * 60 * 1000);
-    const meaningfulRank = typeof runtimePlayer.rank === "string" && runtimePlayer.rank && runtimePlayer.rank !== "0" ? runtimePlayer.rank : null;
+    return buildProfileResponse(viewer, targetUser, playerState, {
+      guild: guild ? { publicId: Number(guild.publicId), name: String(guild.name) } : null,
+      consortium: consortium ? { publicId: Number(consortium.publicId), name: String(consortium.name) } : null,
+    });
+  });
+}
+
+export async function updateOwnProfileImage(viewerUser, file) {
+  if (!viewerUser?.internalId) {
+    throw new HttpError(401, "Authentication required.", "AUTH_REQUIRED");
+  }
+
+  if (!file) {
+    throw new HttpError(400, "Select an image before uploading.", "PROFILE_IMAGE_REQUIRED");
+  }
+
+  const extension = detectProfileImageExtension(file);
+
+  const result = await withTransaction(async (client) => {
+    const user = await findUserByInternalId(client, viewerUser.internalId);
+    if (!user) {
+      throw new HttpError(404, "Citizen record unavailable.", "PROFILE_NOT_FOUND");
+    }
+
+    await createDefaultPlayerState(client, user.internalId);
+    const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+    if (!playerState) {
+      throw new HttpError(404, "Citizen record unavailable.", "PROFILE_STATE_NOT_FOUND");
+    }
+
+    const runtimeState = buildMutableRuntimeState(user, playerState);
+    const previousPortrait = asRecord(runtimeState.player.portrait);
+    const previousImageKey = sanitizeProfileImageKey(previousPortrait.imageKey);
+    const imageKey = `${user.internalId}-${Date.now()}${extension}`;
+    const imagePath = path.join(PROFILE_IMAGE_DIR, imageKey);
+
+    await mkdir(PROFILE_IMAGE_DIR, { recursive: true });
+    await writeFile(imagePath, file.buffer);
+
+    runtimeState.player.portrait = {
+      imageKey,
+      mimeType: file.mimetype,
+      updatedAt: Date.now(),
+    };
+
+    await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
 
     return {
-      viewer: {
-        mode: viewerMode,
-        canModerate,
-        isSelf,
-      },
-      publicProfile: {
-        internalId: targetUser.internalId,
-        name: `${targetUser.firstName}${targetUser.lastName ? ` ${targetUser.lastName}` : ""}`.trim(),
-        publicId: targetUser.publicId,
-        title: typeof runtimePlayer.title === "string" ? runtimePlayer.title : "",
-        entityType: targetUser.entityType,
-        level: Number(playerState.level ?? runtimePlayer.level ?? 1),
-        rank: meaningfulRank,
-        ageLabel: formatRelativeAge(targetUser.createdAt),
-        createdAt: targetUser.createdAt,
-        life: {
-          current: Number(runtimePlayer.stats?.health ?? 0),
-          max: Number(runtimePlayer.stats?.maxHealth ?? 0),
-        },
-        lastAction: {
-          isOnline,
-          lastActionAt,
-          label: isOnline ? "Online" : formatLastAction(lastActionAt),
-        },
-        status: {
-          label: buildStatusLabel(runtimePlayer),
-          condition: runtimePlayer.condition,
-        },
-        guild: summarizeOrganization(guild),
-        consortium: summarizeOrganization(consortium),
-        job: runtimePlayer.current?.job ?? null,
-        property: {
-          propertyId: runtimePlayer.property?.current ?? "shack",
-        },
-        travel: {
-          summary: buildTravelSummary(runtimePlayer.current?.travel),
-        },
-        bio: buildBio(runtimePlayer, reservedIdentity),
-        counters: null,
-      },
-      selfProfile: isSelf ? {
-        currencies: runtimePlayer.currencies,
-        workingStats: runtimePlayer.workingStats,
-        battleStats: runtimePlayer.battleStats,
-        inventoryCount: Object.values(runtimePlayer.inventory ?? {}).reduce((total, value) => total + Number(value ?? 0), 0),
-        inventoryTypes: Object.keys(runtimePlayer.inventory ?? {}).length,
-      } : null,
-      moderation: canModerate ? {
-        email: targetUser.email,
-        internalId: targetUser.internalId,
-        entityType: targetUser.entityType,
-        privilegeRole: targetUser.privilegeRole,
-        reservedIdentityName: reservedIdentity?.displayName ?? null,
-      } : null,
+      imageKey,
+      previousImageKey,
     };
   });
+
+  // Keep prior portrait files in place for now so stale in-flight requests do not
+  // 404 during replacement. Cleanup can be handled later with a retention job.
+  return {
+    imageUrl: resolveProfileImageUrl(result.imageKey),
+  };
+}
+
+export async function resolveProfileImagePath(imageKey) {
+  const safeKey = sanitizeProfileImageKey(imageKey);
+  if (!safeKey) {
+    throw new HttpError(404, "Profile image not found.", "PROFILE_IMAGE_NOT_FOUND");
+  }
+
+  const imagePath = path.join(PROFILE_IMAGE_DIR, safeKey);
+  await access(imagePath).catch(() => {
+    throw new HttpError(404, "Profile image not found.", "PROFILE_IMAGE_NOT_FOUND");
+  });
+
+  return imagePath;
 }

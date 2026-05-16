@@ -1,29 +1,43 @@
 import express from "express";
 import authRoutes from "./routes/authRoutes.js";
 import stateRoutes from "./routes/stateRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
-import organizationRoutes from "./routes/organizationRoutes.js";
+import siteRoutes from "./routes/siteRoutes.js";
+import travelRoutes from "./routes/travelRoutes.js";
+import civicJobsRoutes from "./routes/civicJobsRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
+import chronicleRoutes from "./routes/chronicleRoutes.js";
+import organizationRoutes from "./routes/organizationRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import adminOrganizationRoutes from "./routes/adminOrganizationRoutes.js";
 import { DatabaseUnavailableError, HttpError } from "./lib/errors.js";
+
+const ROUTE_MODULES = [
+  authRoutes,
+  stateRoutes,
+  siteRoutes,
+  travelRoutes,
+  civicJobsRoutes,
+  profileRoutes,
+  chronicleRoutes,
+  organizationRoutes,
+  adminRoutes,
+  adminOrganizationRoutes,
+];
+
+function mountRoutes(app, prefix) {
+  ROUTE_MODULES.forEach((router) => app.use(prefix, router));
+}
 
 export function createApp() {
   const app = express();
 
   app.use(express.json());
 
-  app.use("/api", authRoutes);
-  app.use("/api", stateRoutes);
-  app.use("/api", adminRoutes);
-  app.use("/api", organizationRoutes);
-  app.use("/api", profileRoutes);
+  mountRoutes(app, "/api");
   // The live nginx proxy currently forwards /api/* requests to the backend
   // without preserving the /api prefix, so support both shapes until the
   // server config is normalized.
-  app.use("/", authRoutes);
-  app.use("/", stateRoutes);
-  app.use("/", adminRoutes);
-  app.use("/", organizationRoutes);
-  app.use("/", profileRoutes);
+  mountRoutes(app, "/");
 
   app.use((req, res) => {
     res.status(404).json({ error: "Endpoint not found." });

@@ -13,6 +13,7 @@ import {
   type EducationCategory,
   type EducationCourse,
 } from "../data/educationData";
+import { getActiveCivicJobPassives, normalizeCivicEmploymentState } from "../lib/civicJobsState";
 import { useAuth } from "./AuthContext";
 import { usePlayer } from "./PlayerContext";
 
@@ -173,7 +174,7 @@ const EducationContext = createContext<EducationContextValue | null>(null);
 export function EducationProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<EducationState>(readStoredState);
   const { serverHydrationVersion } = useAuth();
-  const { addBattleStat, addWorkingStat, addExperience } = usePlayer();
+  const { player, addBattleStat, addWorkingStat, addExperience } = usePlayer();
 
   // Persist to localStorage whenever state changes
   useEffect(() => {
@@ -267,7 +268,8 @@ export function EducationProvider({ children }: PropsWithChildren) {
         return { ok: false, message: "Prerequisites are not complete." };
       }
 
-      const multiplier = Math.max(0.1, 1 - educationSpeedBonus / 100);
+      const civicEducationBonus = getActiveCivicJobPassives(normalizeCivicEmploymentState(player.current.civicEmployment)).education_speed ?? 0;
+      const multiplier = Math.max(0.1, 1 - (educationSpeedBonus + civicEducationBonus) / 100);
       const durationMs = Math.round(
         course.durationDays * 24 * 60 * 60 * 1000 * multiplier,
       );
@@ -290,6 +292,7 @@ export function EducationProvider({ children }: PropsWithChildren) {
     [
       educationSpeedBonus,
       isCourseLocked,
+      player.internalId,
       state.activeCourse,
       state.completedCourses,
     ],

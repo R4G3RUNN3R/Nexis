@@ -15,6 +15,12 @@ export function isStaffOrAdmin(user) {
   return isStaffOrAdminRole(normalizePrivilegeRole(user?.privilegeRole, user?.publicId));
 }
 
+export function assertStaffOrAdmin(user) {
+  if (!isStaffOrAdmin(user)) {
+    throw new HttpError(403, "Staff or administrator access required.", "STAFF_REQUIRED");
+  }
+}
+
 export function assertAdministrator(user) {
   if (!isAdministrator(user)) {
     throw new HttpError(403, "Administrator access required.", "ADMIN_REQUIRED");

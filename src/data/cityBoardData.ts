@@ -49,7 +49,6 @@ export const CITY_BOARD_LISTINGS: CityBoardListing[] = [
     summary: "Assist the Archives with records transport and document handling. Discretion preferred.",
     rewardLabel: "Gold + civic standing",
     requirementLabel: "Basic literacy",
-    route: "/city-board",
   },
   {
     id: "opportunity_scout_route",

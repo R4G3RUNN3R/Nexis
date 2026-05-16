@@ -56,36 +56,34 @@ async function hydrateOrganization(client, row) {
   const organization = mapOrganizationRow(row);
   if (!organization) return null;
 
-  const [rolesResult, membersResult, logsResult] = await Promise.all([
-    client.query(
-      `
-        SELECT role_key, display_name, rank_order, permissions, is_system_role
-        FROM organization_roles
-        WHERE organization_internal_id = $1
-        ORDER BY rank_order ASC
-      `,
-      [organization.internalId],
-    ),
-    client.query(
-      `
-        SELECT user_internal_id, user_public_id, display_name, role_key, joined_at
-        FROM organization_members
-        WHERE organization_internal_id = $1
-        ORDER BY joined_at ASC
-      `,
-      [organization.internalId],
-    ),
-    client.query(
-      `
-        SELECT action_type, actor_internal_id, actor_public_id, summary, created_at
-        FROM organization_logs
-        WHERE organization_internal_id = $1
-        ORDER BY created_at DESC
-        LIMIT 20
-      `,
-      [organization.internalId],
-    ),
-  ]);
+  const rolesResult = await client.query(
+    `
+      SELECT role_key, display_name, rank_order, permissions, is_system_role
+      FROM organization_roles
+      WHERE organization_internal_id = $1
+      ORDER BY rank_order ASC
+    `,
+    [organization.internalId],
+  );
+  const membersResult = await client.query(
+    `
+      SELECT user_internal_id, user_public_id, display_name, role_key, joined_at
+      FROM organization_members
+      WHERE organization_internal_id = $1
+      ORDER BY joined_at ASC
+    `,
+    [organization.internalId],
+  );
+  const logsResult = await client.query(
+    `
+      SELECT action_type, actor_internal_id, actor_public_id, summary, created_at
+      FROM organization_logs
+      WHERE organization_internal_id = $1
+      ORDER BY created_at DESC
+      LIMIT 20
+    `,
+    [organization.internalId],
+  );
 
   return {
     ...organization,
@@ -115,6 +113,11 @@ export async function findOrganizationForUserByType(client, userInternalId, type
 
 export async function findOrganizationByInternalId(client, organizationInternalId) {
   const result = await client.query(`SELECT * FROM organizations WHERE internal_id = $1 LIMIT 1`, [organizationInternalId]);
+  return hydrateOrganization(client, result.rows[0]);
+}
+
+export async function findOrganizationByPublicId(client, publicId) {
+  const result = await client.query(`SELECT * FROM organizations WHERE public_id = $1 LIMIT 1`, [publicId]);
   return hydrateOrganization(client, result.rows[0]);
 }
 
@@ -301,5 +304,17 @@ export async function removeOrganizationMember(client, organizationInternalId, u
   await client.query(
     `DELETE FROM organization_members WHERE organization_internal_id = $1 AND user_internal_id = $2`,
     [organizationInternalId, userInternalId],
+  );
+}
+
+export async function updateOrganizationMemberRole(client, organizationInternalId, userInternalId, roleKey) {
+  await client.query(
+    `
+      UPDATE organization_members
+      SET role_key = $3
+      WHERE organization_internal_id = $1
+        AND user_internal_id = $2
+    `,
+    [organizationInternalId, userInternalId, roleKey],
   );
 }

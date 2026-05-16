@@ -5,7 +5,7 @@ export default function CityBoardPage() {
   return (
     <AppShell
       title="City Board"
-      hint="Nexis public board rebuilt as the city newspaper equivalent: jobs, notices, opportunities, bounties, and property leads."
+      hint="Public postings, civic work, notices, bounties, and property leads from the city board."
     >
       <CityBoardSections />
     </AppShell>

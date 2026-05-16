@@ -3,7 +3,7 @@ import PublicPageShell from "../components/layout/PublicPageShell";
 const gameOffenses = [
   {
     title: "Real money trading",
-    body: "Trading Ashen Crown currency, items, accounts, services, or advantages for real-world money, goods, or services is forbidden. Gains made through these deals will be removed and severe bans may follow without warning.",
+    body: "Trading Nexis currency, items, accounts, services, or advantages for real-world money, goods, or services is forbidden. Gains made through these deals will be removed and severe bans may follow without warning.",
   },
   {
     title: "Account trading or sharing",
@@ -35,8 +35,8 @@ const socialRules = [
 export default function RulesPage() {
   return (
     <PublicPageShell
-      title="Ashen Crown Rules"
-      subtitle="A realm built on freedom still needs boundaries. These rules protect progression, player trust, and the long-term health of the world."
+      title="Nexis Rules"
+      subtitle="A world built on freedom still needs boundaries. These rules protect progression, player trust, and the long-term health of the shard."
     >
       <section className="public-panel">
         <div className="public-panel__header">Game offenses and punishments</div>
@@ -66,7 +66,7 @@ export default function RulesPage() {
       <section className="public-panel">
         <div className="public-panel__header">Design principle</div>
         <div className="public-panel__body">
-          Ashen Crown allows harsh choices inside the game world. It does not allow behavior that damages account integrity, player safety, or the fairness of progression. If a system is locked, the game will tell players why it is locked and what education or requirement unlocks it.
+          Nexis allows harsh choices inside the game world. It does not allow behavior that damages account integrity, player safety, or the fairness of progression. If a system is locked, the game will tell players why it is locked and what education or requirement unlocks it.
         </div>
       </section>
     </PublicPageShell>

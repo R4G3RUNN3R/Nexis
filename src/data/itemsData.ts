@@ -1,4 +1,10 @@
-export const ITEM_CATALOGUE: Record<string, { name: string; category: string; description: string }> = {
+export type ItemDefinition = {
+  name: string;
+  category: string;
+  description: string;
+};
+
+export const ITEM_CATALOGUE: Record<string, ItemDefinition> = {
   wild_herb: { name: "Wild Herb", category: "Herb", description: "Common flora. Used in basic potion recipes." },
   medicinal_herb: { name: "Medicinal Herb", category: "Herb", description: "Useful for healing compounds. Sought by alchemists." },
   healing_root: { name: "Healing Root", category: "Herb", description: "Rare root with potent restorative properties." },
@@ -13,14 +19,26 @@ export const ITEM_CATALOGUE: Record<string, { name: string; category: string; de
   rope: { name: "Rope", category: "Material", description: "Reliable cordage. Useful in a dozen trades." },
   ancient_fragment: { name: "Ancient Fragment", category: "Relic", description: "Piece of a ruined inscription. Scholars pay well." },
   torn_map: { name: "Tattered Map", category: "Relic", description: "Part of an old map. The rest is somewhere out there." },
+  common_tome: { name: "Common Tome", category: "Relic", description: "Weathered reading matter with more value to scholars than to sane people." },
+  lore_fragment: { name: "Lore Fragment", category: "Relic", description: "Shards of historical script that hint at places with worse traps." },
+  old_manuscript: { name: "Old Manuscript", category: "Relic", description: "A brittle manuscript with enough mystery to become someone else's obsession." },
+  sealed_chronicle: { name: "Sealed Chronicle", category: "Relic", description: "Restricted text bundle that absolutely invites being opened anyway." },
   stolen_coin: { name: "Stolen Coin", category: "Valuables", description: "Liberated from an inattentive pocket." },
   rare_gemstone: { name: "Rare Gemstone", category: "Valuables", description: "Uncut gem. Fence it or keep it." },
   forged_document: { name: "Forged Document", category: "Relic", description: "Convincingly fake. Useful for certain arrangements." },
   lockpick: { name: "Lockpick", category: "Tool", description: "A good tool deserves a good cause." },
+  lockpick_set: { name: "Lockpick Set", category: "Tool", description: "A fuller set of picks for jobs that stop being polite." },
   rations: { name: "Rations", category: "Consumable", description: "Standard travel food. Better than nothing." },
   worn_boots: { name: "Worn Boots", category: "Equipment", description: "Seen better days. Still keeps the feet dry." },
   stone_block: { name: "Stone Block", category: "Material", description: "Cut stone. Essential for construction." },
   clay: { name: "Clay", category: "Material", description: "Raw clay. Used in ceramics and construction." },
+  iron_parts: { name: "Iron Parts", category: "Material", description: "Useful machine-grade salvage with obvious future obligations." },
+  gear_cogs: { name: "Gear Cogs", category: "Material", description: "Precision cogs for locks, traps, and headaches." },
+  springs: { name: "Springs", category: "Material", description: "Coiled metal components for devices that snap, launch, or both." },
+  clean_linen: { name: "Clean Linen", category: "Textile", description: "Practical cloth stock that can still pass for respectable." },
+  alchemical_root: { name: "Alchemical Root", category: "Alchemy", description: "A reactive root prized by brewers with poor sleep schedules." },
+  toxic_plant: { name: "Toxic Plant", category: "Alchemy", description: "Useful, dangerous flora. Lovely combination." },
+  empty_vials: { name: "Empty Vials", category: "Consumable", description: "Glass containers waiting for something more alarming." },
   vial_of_ink: { name: "Vial of Ink", category: "Consumable", description: "High-quality ink. Useful for scribes and forgers alike." },
   wax_seal: { name: "Wax Seal", category: "Tool", description: "Official-looking seal. Almost official." },
   guild_charter: { name: "Guild Charter", category: "Document", description: "Founding permit for guild creation." },
@@ -29,6 +47,9 @@ export const ITEM_CATALOGUE: Record<string, { name: string; category: string; de
   brigandine_plate: { name: "Brigandine Plate", category: "Armor", description: "Layered protection favored by disciplined caravan guards." },
   tower_shield: { name: "Tower Shield", category: "Shield", description: "A heavy shield built to hold a line when everything else goes badly." },
   smithing_hammer: { name: "Smithing Hammer", category: "Tool", description: "A forge hammer with weight distribution that actually respects wrists." },
+  steel_ingot: { name: "Steel Ingot", category: "Refined Material", description: "A heavier forge stock for work that wants to survive impact." },
+  tempered_steel: { name: "Tempered Steel", category: "Refined Material", description: "Heat-treated metal for better gear and worse expenses." },
+  iron_rivets: { name: "Iron Rivets", category: "Refined Material", description: "Fastening stock for armor, carts, and structural stubbornness." },
   healing_tonic: { name: "Healing Tonic", category: "Alchemy", description: "Basic restorative brew used by field healers and optimists." },
   focus_draught: { name: "Focus Draught", category: "Alchemy", description: "Sharpening drink that keeps hands steady and mistakes expensive." },
   antitoxin: { name: "Antitoxin", category: "Alchemy", description: "Counteragent stock for venom, rot, and other rude chemistry." },
@@ -48,6 +69,20 @@ export const ITEM_CATALOGUE: Record<string, { name: string; category: string; de
   rare_materials: { name: "Rare Materials", category: "Luxury", description: "Curated premium inputs for prestige crafting and expensive mistakes." },
   prestige_goods: { name: "Prestige Goods", category: "Luxury", description: "Elite artisan output intended to impress patrons and accountants alike." },
   engraved_goblet: { name: "Engraved Goblet", category: "Luxury", description: "Ceremonial drinking ware for houses that like their excess polished." },
+  herbalist_gloves: { name: "Herbalist Gloves", category: "Equipment", description: "Protective gloves for harvesting plants that bite back chemically." },
+  wood_axe: { name: "Wood Axe", category: "Tool", description: "A respectable field axe for woodcutting and lesser mistakes." },
+  miners_pick: { name: "Miner's Pick", category: "Tool", description: "A proper pick for ore work, tunnel walls, and regrettable overtime." },
+  hunters_bow: { name: "Hunter's Bow", category: "Weapon", description: "Simple hunting bow suited to small game and quiet confidence." },
+  lantern: { name: "Lantern", category: "Tool", description: "Portable light for ruins, tunnels, and decisions made after sunset." },
+  shovel: { name: "Shovel", category: "Tool", description: "Field shovel for trenches, graves, and other socially awkward holes." },
+  forged_seal_kit: { name: "Forged Seal Kit", category: "Tool", description: "Wax, stamp heads, and fraud-adjacent polish for false credentials." },
+  courier_satchel: { name: "Courier Satchel", category: "Equipment", description: "Reinforced satchel for contraband, documents, and plausible deniability." },
+  rare_herb: { name: "Rare Herb", category: "Herb", description: "A higher-grade field herb with all the usual whispers of value." },
+  enchanted_parchment: { name: "Enchanted Parchment", category: "Document", description: "Special parchment that makes fraud and scholarship equally expensive." },
+  magic_tome: { name: "Magic Tome", category: "Relic", description: "A dangerous book for people who think libraries should bite back." },
+  alchemists_notes: { name: "Alchemist's Notes", category: "Alchemy", description: "Field notes from someone who probably exploded only once." },
+  catalyst_powder: { name: "Catalyst Powder", category: "Alchemy", description: "Reactive dust for brews, devices, and very poor impulse control." },
+  philosophers_salt: { name: "Philosopher's Salt", category: "Alchemy", description: "Rare crystalline salt reserved for elite compounds and worse decisions." },
 };
 
 export const ITEM_OPTIONS = Object.entries(ITEM_CATALOGUE)

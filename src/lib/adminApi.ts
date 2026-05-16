@@ -55,8 +55,6 @@ export type AdminActionSuccess = {
   audit: AdminActionAudit;
 };
 
-export type AdminActionResponse = AdminActionSuccess | ApiFailure;
-
 async function requestJson<T>(path: string, token: string, init: RequestInit = {}): Promise<T | ApiFailure> {
   try {
     const response = await fetch(path, {

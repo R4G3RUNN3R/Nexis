@@ -4,11 +4,11 @@ export default function TavernPage() {
   return (
     <PlaceholderPage
       title="Tavern"
-      description="The tavern remains a visible district destination so the city feels coherent, but rumors, contracts, and social systems are still queued behind the core progression work."
+      description="The tavern remains a visible district destination, but rumors, contracts, and social systems are not open yet."
       bullets={[
-        "Rumor chains and lightweight social hooks belong here.",
-        "Future contract leads and local notices will branch out from here.",
-        "The route is stable even though the deeper tavern systems are not live yet.",
+        "Rumor chains and lightweight social hooks belong here later.",
+        "Contract leads and local notices will branch out from here once the tavern opens.",
+        "For now, the city marks this as a reserved destination.",
       ]}
     />
   );

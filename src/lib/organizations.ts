@@ -74,6 +74,425 @@ export type ConsortiumPointState = {
   dailyGain: number;
 };
 
+export type OrganizationBaseAuction = {
+  auctionId: number;
+  opensAt: number;
+  closesAt: number;
+  openingBidGold: number;
+  currentBidGold: number;
+  debtGoldAtConfiscation: number;
+  bidderOrganizationInternalId: string | null;
+  bidderOrganizationPublicId: number | null;
+  bidderPublicId: number | null;
+};
+
+export type OrganizationBaseSnapshot = {
+  baseId: number;
+  organizationInternalId: string;
+  ownershipMode: string;
+  propertyKey: string;
+  status: "active" | "confiscated" | "auction" | string;
+  monthlyUpkeepGold: number;
+  periodDueGold: number;
+  periodPaidGold: number;
+  outstandingGold: number;
+  review: {
+    minimumRequiredGold: number;
+    shortfallToThresholdGold: number;
+    isUnderThreshold: boolean;
+    msUntilReview: number;
+    daysUntilReview: number;
+    warningWindowDays: number;
+    isReviewWindowOpen: boolean;
+  };
+  reviewAnchorDayUtc: number;
+  acquiredAt: number;
+  cityId: string | null;
+  displayName: string;
+  acquisitionCostGold: number;
+  periodStartedAt: number;
+  nextReviewAt: number;
+  buybackUntil: number | null;
+  debtGoldAtConfiscation: number | null;
+  leaderInternalId: string | null;
+  passiveBenefitsActive: boolean;
+  buyback: {
+    principalDebtGold: number;
+    interestPct: number;
+    totalDueGold: number;
+    buybackUntil: number | null;
+  } | null;
+  auction: OrganizationBaseAuction | null;
+  construction: Record<string, unknown> | null;
+  buildingState: string | null;
+  plotSize: string | null;
+  roomCapacity: number;
+  roomsUsed: number;
+  rooms: Array<Record<string, unknown>>;
+  buildQuality: {
+    tier: "poor" | "standard" | "fine" | "exceptional";
+    score: number;
+    modifiers: {
+      operationalMultiplier: number;
+      upkeepMultiplier: number;
+    };
+    breakdown: Record<string, unknown>;
+    contributions: Array<Record<string, unknown>>;
+  } | null;
+  qualityModifiers: {
+    upkeepMultiplier: number;
+    operationalMultiplier: number;
+  } | null;
+  mechanicalEffects: {
+    organizationType: string;
+    baseStatus: string;
+    buildingKey: string | null;
+    qualityFactor: number;
+    effects: Record<string, number>;
+    contributions: Array<Record<string, unknown>>;
+    roomCount: number;
+    source: string;
+  } | null;
+  events: Array<Record<string, unknown>>;
+  storage: Array<Record<string, unknown>>;
+};
+
+export type OrganizationBaseOwnershipResponse = {
+  organizationPublicId: number;
+  organizationType: OrganizationType;
+  catalog: {
+    modes: Record<string, string>;
+    eligibleBuildings: Array<Record<string, unknown>>;
+    eligiblePlots: Array<Record<string, unknown>>;
+    mainBuildingOptions?: Array<Record<string, unknown>>;
+    roomOptions?: Array<Record<string, unknown>>;
+    propertyOffice?: {
+      plotPurchaseMinLevel: number;
+      npcSellbackReturnPct: number;
+      builderAvailability: {
+        playerBuilders: number;
+        npcBuilders: number;
+        totalAvailable: number;
+      };
+      constructionEligibleTracks?: string[];
+      hireVisibilityPolicy?: {
+        aggregateOnly: boolean;
+        exposesRawBuilderIdentity: boolean;
+      };
+    };
+  };
+  base: OrganizationBaseSnapshot | null;
+};
+
+export type ConsortiumLogisticsTemplate = {
+  key: string;
+  displayName: string;
+  summary: string;
+  routeType: "caravan" | "ship";
+  lane: string;
+  riskLevel: string;
+  upfrontCostGold: number;
+  durationHours: number;
+  rewardRange: {
+    minGold: number;
+    maxGold: number;
+  };
+  dangerTags: string[];
+  dangerProfile: string;
+  recommendedWorkers: number;
+  recommendedWorkingScore: number;
+  recommendedBattleScore: number;
+  escortEligible: boolean;
+};
+
+export type ConsortiumLogisticsWorker = {
+  userInternalId: string;
+  publicId: number;
+  displayName: string;
+  roleKey: string;
+  workingStats: Record<string, number>;
+  battleStats: Record<string, number>;
+  workingScore: number;
+  battleScore: number;
+};
+
+export type ConsortiumLogisticsEscortMode = {
+  key: "none" | "internal_team" | "guild_contract";
+  displayName: string;
+  summary: string;
+};
+
+export type ConsortiumLogisticsAssignedWorker = {
+  userInternalId: string;
+  publicId: number;
+  displayName: string;
+  roleKey: string;
+  assignmentRole: string;
+  assignedAt: number;
+  workingStats: Record<string, number>;
+  battleStats: Record<string, number>;
+};
+
+export type ConsortiumLogisticsOperation = {
+  internalId: string;
+  templateKey: string;
+  displayName: string;
+  routeType: string;
+  lane: string;
+  riskLevel: string;
+  upfrontCostGold: number;
+  durationHours: number;
+  rewardRange: {
+    minGold: number;
+    maxGold: number;
+  };
+  dangerProfile: {
+    summary: string | null;
+    tags: string[];
+  };
+  state: string;
+  statusText: string;
+  createdAt: number;
+  updatedAt: number;
+  startedAt: number | null;
+  expectedOutcomeAt: number | null;
+  assignedWorkers: ConsortiumLogisticsAssignedWorker[];
+  escortContract: {
+    mode: string;
+    status: string;
+    guildOrganizationInternalId: string | null;
+    guildPublicId: number | null;
+    guildName: string | null;
+    coverageRating: number;
+    notes: string | null;
+    attachedAt: number | null;
+  };
+  outcome: {
+    result: string | null;
+    resolvedAt: number | null;
+    summary: string | null;
+    goldReturned: number | null;
+    treasuryDeltaGold: number | null;
+    lossAppliedGold: number;
+    lossSummary: string | null;
+    dangerTriggered: string[];
+    escortContribution: string | null;
+    crewContribution: string | null;
+    resolutionScore: number | null;
+  };
+  template?: ConsortiumLogisticsTemplate;
+  preview?: {
+    successOdds: number;
+    totalWorking: number;
+    totalBattle: number;
+    escortScore: number;
+    dangerPressure: number;
+    workerCoverage: number;
+    workingLift: number;
+    battleLift: number;
+  };
+  canLaunch?: boolean;
+  canManageAssignments?: boolean;
+};
+
+export type ConsortiumLogisticsBoard = {
+  templates: ConsortiumLogisticsTemplate[];
+  operations: ConsortiumLogisticsOperation[];
+  workerPool: ConsortiumLogisticsWorker[];
+  escortModes: ConsortiumLogisticsEscortMode[];
+  canManageOperations: boolean;
+  summary: {
+    draftCount: number;
+    activeCount: number;
+    resolvedCount: number;
+    escortLinkedCount: number;
+  };
+  placeholderNotice: string;
+};
+
+export type GuildPublicProfile = {
+  headline: string;
+  recruitmentStatus: string;
+  doctrine: string;
+  territory: string;
+  diplomacy: string;
+  publicNotice: string;
+};
+
+export type GuildMemberDetail = OrganizationMember & {
+  roleDisplayName: string;
+  level: number;
+  title: string | null;
+  location: string;
+  status: string;
+  life: {
+    current: number;
+    max: number;
+  };
+  isOnline: boolean;
+  lastAction: string;
+};
+
+export type GuildWarRoom = {
+  readiness: number;
+  warRating: number;
+  doctrine: string;
+  activeWars: Array<{
+    target: string;
+    status: string;
+    startedAt: number;
+  }>;
+  recentHistory: Array<{
+    summary: string;
+    createdAt: number;
+  }>;
+};
+
+export type GuildDungeonTemplate = {
+  key: string;
+  displayName: string;
+  summary: string;
+  minMembers: number;
+  recommendedPower: number;
+  reputationReward: number;
+  goldReward: number;
+  cooldownHours: number;
+};
+
+export type GuildQuestSlot = {
+  slotKey: string;
+  label: string;
+  focus: string;
+  assignedMember?: {
+    userInternalId: string;
+    publicId: number;
+    displayName: string;
+    roleDisplayName: string;
+    level: number;
+    status: string;
+    location: string;
+    isOkay: boolean;
+    unavailableReason: string | null;
+  } | null;
+};
+
+export type GuildQuestTemplate = {
+  key: string;
+  displayName: string;
+  summary: string;
+  planningHours: number;
+  requiredMembers: number;
+  slots: GuildQuestSlot[];
+  reputationReward: number;
+  treasuryGoldReward: number;
+  memberGoldReward: number;
+  canPlan: boolean;
+  blockedReason: string | null;
+};
+
+export type GuildQuestPlan = {
+  questKey: string;
+  displayName: string;
+  summary: string;
+  planningHours: number;
+  plannedAt: number;
+  readyAt: number;
+  plannedBy: {
+    publicId: number;
+    displayName: string;
+  };
+  slots: GuildQuestSlot[];
+  planningComplete: boolean;
+  allSlotsFilled: boolean;
+  everyoneOkay: boolean;
+  canInitiate: boolean;
+  canCancel: boolean;
+  canPlanAgain: boolean;
+  blockedReason: string | null;
+};
+
+export type GuildQuestHistoryEntry = {
+  questKey: string;
+  displayName: string;
+  summary: string;
+  outcome: "success" | "failure";
+  createdAt: number;
+  reputationGain: number;
+  treasuryGoldGain: number;
+  participantPublicIds: number[];
+};
+
+export type GuildQuestBoard = {
+  templates: GuildQuestTemplate[];
+  currentPlan: GuildQuestPlan | null;
+  history: GuildQuestHistoryEntry[];
+};
+
+export type GuildQuestMemberPoolEntry = {
+  userInternalId: string;
+  publicId: number;
+  displayName: string;
+  roleDisplayName: string;
+  level: number;
+  status: string;
+  location: string;
+  isQuestReady: boolean;
+  questBlockReason: string | null;
+};
+
+export type GuildPassives = {
+  reputation: number;
+  totalEarned: number;
+  totalSpent: number;
+  availablePoints: number;
+  dailyRenown: number;
+};
+
+export type OrganizationAcademyContract = {
+  source: string;
+  businessStudies?: {
+    averageTrackCompletionPct: number;
+    averageCompletedCourses?: number;
+    requiredCourses?: number;
+    consortiumYieldPct: number;
+    workerEfficiencyPct: number;
+    treasuryEfficiencyPct: number;
+    routePerformancePct: number;
+  };
+  adventuringSurvival?: {
+    averageTrackCompletionPct: number;
+    averageCompletedCourses?: number;
+    requiredCourses?: number;
+    guildReadinessPct: number;
+    operationSurvivalPct: number;
+    battleEdgePct: number;
+  };
+};
+
+export type GuildSkillNode = {
+  key: string;
+  displayName: string;
+  tier: number;
+  pointCost: number;
+  effectSummary: string;
+  unlocked: boolean;
+  prerequisites: string[];
+};
+
+export type GuildArmory = {
+  items: Array<{
+    itemId: string;
+    label: string;
+    quantity: number;
+  }>;
+};
+
+export type GuildSettings = {
+  invitePolicy: string;
+  warDoctrine: string;
+  publicProfile: GuildPublicProfile;
+};
+
 export type OrganizationRecord = {
   internalId: string;
   publicId: number;
@@ -103,6 +522,28 @@ export type OrganizationRecord = {
   unlockedPassives?: ConsortiumReward[];
   redeemableActives?: ConsortiumReward[];
   consortiumPoints?: ConsortiumPointState | null;
+  publicProfile?: GuildPublicProfile;
+  memberDetails?: GuildMemberDetail[];
+  warRoom?: GuildWarRoom;
+  dungeonBoard?: GuildDungeonTemplate[];
+  guildQuestBoard?: GuildQuestBoard;
+  questMemberPool?: GuildQuestMemberPoolEntry[];
+  guildPassives?: GuildPassives;
+  academyContract?: OrganizationAcademyContract;
+  baseMechanicalEffects?: {
+    organizationType: string;
+    baseStatus: string;
+    buildingKey: string | null;
+    qualityFactor: number;
+    effects: Record<string, number>;
+    contributions: Array<Record<string, unknown>>;
+    roomCount: number;
+    source: string;
+  };
+  skillTree?: GuildSkillNode[];
+  armory?: GuildArmory;
+  settingsView?: GuildSettings;
+  viewerPermissions?: OrganizationPermission[];
 };
 
 export type GuildBoard = OrganizationRecord & { type: "guild" };

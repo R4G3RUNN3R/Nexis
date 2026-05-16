@@ -7,6 +7,7 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, useCallback } from "react";
 import { useAuth, playerStorageKey } from "./AuthContext";
 import { canAccessPropertyTier, getPropertyById, getPropertyComfortCap } from "../data/propertyData";
+import { getActiveCivicJobPassives, normalizeCivicEmploymentState } from "../lib/civicJobsState";
 import { sanitizeStoredTitle } from "../lib/titleAccess";
 
 type Condition =
@@ -32,15 +33,8 @@ type PlayerState = {
   rank: string;
   daysPlayed: number;
   gold: number;
-  currencies: {
-    copper: number;
-    silver: number;
-    gold: number;
-    platinum: number;
-  };
   isRegistered: boolean;
   inventory: Record<string, number>;  // itemId → qty
-  itemEnhancements: Record<string, string[]>;
   stats: {
     energy: number;
     maxEnergy: number;
@@ -74,7 +68,9 @@ type PlayerState = {
   current: {
     education: CurrentEducation;
     job: string | null;
-    travel: string | null;
+    travel: string | Record<string, unknown> | null;
+    currentCityId?: string | null;
+    civicEmployment?: unknown;
   };
   condition: Condition;
 };
@@ -173,24 +169,6 @@ function normalizeWorkingStats(stats: PlayerState["workingStats"]) {
   return { ...BASELINE_WORKING_STATS };
 }
 
-function normalizeCurrencies(currencies: PlayerState["currencies"] | undefined, goldFallback: number) {
-  return {
-    copper: Math.max(0, Math.floor(Number(currencies?.copper ?? 0))),
-    silver: Math.max(0, Math.floor(Number(currencies?.silver ?? 0))),
-    gold: Math.max(0, Math.floor(Number(currencies?.gold ?? goldFallback))),
-    platinum: Math.max(0, Math.floor(Number(currencies?.platinum ?? 0))),
-  };
-}
-
-function normalizeItemEnhancements(value: PlayerState["itemEnhancements"] | undefined) {
-  const source = value ?? {};
-  return Object.fromEntries(
-    Object.entries(source)
-      .map(([itemId, enhancements]) => [itemId, Array.isArray(enhancements) ? Array.from(new Set(enhancements.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim()))) : []])
-      .filter((entry) => entry[1].length > 0),
-  );
-}
-
 function normalizeBattleStats(stats: PlayerState["battleStats"]) {
   const allZero =
     stats.strength <= 0 &&
@@ -219,10 +197,8 @@ const basePlayer: PlayerState = {
   rank: "0",
   daysPlayed: 0,
   gold: 500,
-  currencies: { copper: 0, silver: 0, gold: 500, platinum: 0 },
   isRegistered: false,
   inventory: {},
-  itemEnhancements: {},
   stats: {
     energy: 100,
     maxEnergy: 100,
@@ -240,7 +216,7 @@ const basePlayer: PlayerState = {
   workingStats: { ...BASELINE_WORKING_STATS },
   battleStats: { ...BASELINE_BATTLE_STATS },
   property: { current: "shack", comfortProvided: 100, installedUpgrades: [] },
-  current: { education: null, job: null, travel: null },
+  current: { education: null, job: null, travel: null, currentCityId: "nexis", civicEmployment: null },
   condition: { type: "normal", until: null, reason: null },
 };
 
@@ -294,8 +270,6 @@ function mergePlayer(stored: StoredPlayerState, identity?: { internalPlayerId: s
     },
     current: { ...basePlayer.current, ...(stored.current ?? {}) },
     inventory: { ...basePlayer.inventory, ...(stored.inventory ?? {}) },
-    currencies: normalizeCurrencies((stored as Partial<PlayerState>).currencies, typeof stored.gold === "number" ? stored.gold : basePlayer.gold),
-    itemEnhancements: normalizeItemEnhancements((stored as Partial<PlayerState>).itemEnhancements),
   };
 }
 
@@ -379,15 +353,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined;
     setPlayer(readStoredPlayer(storageKey, identity));
   }, [storageKey, activeAccount, serverHydrationVersion]);
-  useEffect(() => {
-    function refreshFromRuntimeCache() {
-      const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined;
-      setPlayer(readStoredPlayer(storageKey, identity));
-    }
-
-    window.addEventListener("nexis:player-refresh", refreshFromRuntimeCache);
-    return () => window.removeEventListener("nexis:player-refresh", refreshFromRuntimeCache);
-  }, [storageKey, activeAccount]);
 
   useEffect(() => {
     let lastTick = Date.now();
@@ -483,8 +448,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [player.property.current, player.property.installedUpgrades, player.property.comfortProvided, player.stats.maxComfort]);
 
   useEffect(() => {
+    if (!activeAccount && !player.isRegistered) {
+      return;
+    }
+
     writeStoredPlayer(player, storageKey);
-  }, [player, storageKey]);
+  }, [activeAccount, player, storageKey]);
 
   const isHospitalized = player.condition.type === "hospitalized";
   const isJailed = player.condition.type === "jailed";
@@ -492,12 +461,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const jailRemainingMs = isJailed ? Math.max(0, (player.condition as { until: number }).until - now) : 0;
 
   const value = useMemo<PlayerContextValue>(() => {
+    function getActiveCivicPassiveMagnitude(passiveKey: "hospital_recovery" | "jail_reduction") {
+      return getActiveCivicJobPassives(normalizeCivicEmploymentState(player.current.civicEmployment))[passiveKey] ?? 0;
+    }
+
     function registerPlayer(firstName: string, lastName: string) {
       setPlayer((prev) => ({ ...prev, name: firstName.trim(), lastName: lastName.trim(), isRegistered: true }));
     }
 
     function hospitalizeFor(minutes: number, reason = "Combat defeat") {
-      const until = Date.now() + minutes * 60 * 1000;
+      const reduction = getActiveCivicPassiveMagnitude("hospital_recovery");
+      const adjustedMinutes = Math.max(1, Math.round(minutes * (1 - reduction / 100)));
+      const until = Date.now() + adjustedMinutes * 60 * 1000;
       setPlayer((prev) => ({
         ...prev,
         stats: { ...prev.stats, health: 0 },
@@ -515,7 +490,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
 
     function jailFor(minutes: number, reason = "Arrested") {
-      const until = Date.now() + minutes * 60 * 1000;
+      const reduction = getActiveCivicPassiveMagnitude("jail_reduction");
+      const adjustedMinutes = Math.max(1, Math.round(minutes * (1 - reduction / 100)));
+      const until = Date.now() + adjustedMinutes * 60 * 1000;
       setPlayer((prev) => ({
         ...prev,
         condition: { type: "jailed", until, reason },
@@ -566,10 +543,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
 
     function addGold(amount: number) {
-      setPlayer((prev) => {
-        const nextGold = prev.gold + amount;
-        return { ...prev, gold: nextGold, currencies: { ...prev.currencies, gold: nextGold } };
-      });
+      setPlayer((prev) => ({ ...prev, gold: prev.gold + amount }));
     }
 
     function spendGold(amount: number): boolean {
@@ -577,8 +551,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setPlayer((prev) => {
         if (prev.gold < amount) return prev;
         success = true;
-        const nextGold = prev.gold - amount;
-        return { ...prev, gold: nextGold, currencies: { ...prev.currencies, gold: nextGold } };
+        return { ...prev, gold: prev.gold - amount };
       });
       return success;
     }
@@ -595,7 +568,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         return {
           ...prev,
           gold: prev.gold - cost,
-          currencies: { ...prev.currencies, gold: prev.gold - cost },
           stats: {
             ...prev.stats,
             maxComfort: nextComfortCap,
@@ -649,7 +621,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         return {
           ...prev,
           gold: prev.gold - cost,
-          currencies: { ...prev.currencies, gold: prev.gold - cost },
           stats: {
             ...prev.stats,
             maxComfort: nextComfortCap,

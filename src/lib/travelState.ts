@@ -1,152 +1,85 @@
-import { worldCities, worldRoutes, type WorldCityId } from "../data/worldMapData";
-import { getPropertyTravelTimeMultiplier } from "../data/propertyData";
+import { worldCities, type WorldCityId } from "../data/worldMapData";
 
 export type PersistedTravelState = {
+  status: "idle" | "in_transit";
   currentCityId: WorldCityId;
-  originCityId: WorldCityId | null;
+  originCityId: WorldCityId;
   destinationCityId: WorldCityId | null;
-  startedAt: number | null;
+  routeType: "road" | "sea" | "mixed";
+  mode: "caravan" | "personal_wagon";
+  departureAt: number | null;
   arrivalAt: number | null;
   durationMs: number | null;
+  arrivalNotice: {
+    destinationCityId: WorldCityId | null;
+    destinationName: string | null;
+    arrivedAt: number | null;
+  } | null;
 };
 
-const TRAVEL_STATE_PREFIX = "nexis_travel_state_";
-const DEFAULT_CITY_ID: WorldCityId = "nexis";
+const DEFAULT_STATE: PersistedTravelState = {
+  status: "idle",
+  currentCityId: "nexis",
+  originCityId: "nexis",
+  destinationCityId: null,
+  routeType: "road",
+  mode: "caravan",
+  departureAt: null,
+  arrivalAt: null,
+  durationMs: null,
+  arrivalNotice: null,
+};
 
-function keyFor(internalPlayerId: string) {
-  return `${TRAVEL_STATE_PREFIX}${internalPlayerId}`;
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-export function defaultTravelState(): PersistedTravelState {
+function asCityId(value: unknown, fallback: WorldCityId = "nexis"): WorldCityId {
+  return worldCities.some((city) => city.id === value) ? (value as WorldCityId) : fallback;
+}
+
+function readArrivalNotice(
+  value: unknown,
+  fallbackCityId: WorldCityId,
+): PersistedTravelState["arrivalNotice"] {
+  const record = asRecord(value);
+  if (!Object.keys(record).length) return null;
+
   return {
-    currentCityId: DEFAULT_CITY_ID,
-    originCityId: null,
-    destinationCityId: null,
-    startedAt: null,
-    arrivalAt: null,
-    durationMs: null,
+    destinationCityId: record.destinationCityId
+      ? asCityId(record.destinationCityId, fallbackCityId)
+      : null,
+    destinationName: typeof record.destinationName === "string" ? record.destinationName : null,
+    arrivedAt: typeof record.arrivedAt === "number" ? record.arrivedAt : null,
   };
 }
 
-export function readTravelState(internalPlayerId: string): PersistedTravelState {
-  if (typeof window === "undefined") return defaultTravelState();
-  try {
-    const raw = window.localStorage.getItem(keyFor(internalPlayerId));
-    if (!raw) return defaultTravelState();
-    const parsed = JSON.parse(raw) as Partial<PersistedTravelState>;
-    const currentCityId = worldCities.some((city) => city.id === parsed.currentCityId)
-      ? (parsed.currentCityId as WorldCityId)
-      : DEFAULT_CITY_ID;
-    const originCityId = worldCities.some((city) => city.id === parsed.originCityId)
-      ? (parsed.originCityId as WorldCityId)
-      : null;
-    const destinationCityId = worldCities.some((city) => city.id === parsed.destinationCityId)
-      ? (parsed.destinationCityId as WorldCityId)
-      : null;
-
-    return {
-      currentCityId,
-      originCityId,
-      destinationCityId,
-      startedAt: typeof parsed.startedAt === "number" ? parsed.startedAt : null,
-      arrivalAt: typeof parsed.arrivalAt === "number" ? parsed.arrivalAt : null,
-      durationMs: typeof parsed.durationMs === "number" ? parsed.durationMs : null,
-    };
-  } catch {
-    return defaultTravelState();
-  }
-}
-
-export function writeTravelState(internalPlayerId: string, state: PersistedTravelState) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(keyFor(internalPlayerId), JSON.stringify(state));
-}
-
-export function resolveTravelState(internalPlayerId: string, now = Date.now()): PersistedTravelState {
-  const current = readTravelState(internalPlayerId);
-  if (current.destinationCityId && current.arrivalAt && now >= current.arrivalAt) {
-    const resolved: PersistedTravelState = {
-      currentCityId: current.destinationCityId,
-      originCityId: null,
-      destinationCityId: null,
-      startedAt: null,
-      arrivalAt: null,
-      durationMs: null,
-    };
-    writeTravelState(internalPlayerId, resolved);
-    return resolved;
-  }
-  return current;
-}
-
-export function getRouteDurationMs(from: WorldCityId, to: WorldCityId) {
-  const route = worldRoutes.find(
-    (entry) => (entry.from === from && entry.to === to) || (entry.from === to && entry.to === from),
-  );
-
-  if (!route) return 10 * 60 * 1000;
-
-  switch (route.type) {
-    case "road":
-      return 12 * 60 * 1000;
-    case "sea":
-      return 18 * 60 * 1000;
-    case "mixed":
-      return 22 * 60 * 1000;
-    default:
-      return 10 * 60 * 1000;
-  }
-}
-
-export function startTravel(
-  internalPlayerId: string,
-  destinationCityId: WorldCityId,
-  now = Date.now(),
-  options?: { propertyId?: string; installedUpgradeIds?: string[] },
-) {
-  const current = resolveTravelState(internalPlayerId, now);
-  if (current.destinationCityId) return current;
-  if (current.currentCityId === destinationCityId) return current;
-
-  const propertyMultiplier = getPropertyTravelTimeMultiplier(
-    options?.propertyId ?? "shack",
-    options?.installedUpgradeIds ?? [],
-  );
-  const durationMs = Math.max(
-    30 * 1000,
-    Math.round(getRouteDurationMs(current.currentCityId, destinationCityId) * propertyMultiplier),
-  );
-  const next: PersistedTravelState = {
-    currentCityId: current.currentCityId,
-    originCityId: current.currentCityId,
-    destinationCityId,
-    startedAt: now,
-    arrivalAt: now + durationMs,
-    durationMs,
+export function readTravelStateFromPlayer(player: { current?: { travel?: unknown; currentCityId?: unknown } } | null | undefined): PersistedTravelState {
+  const record = asRecord(player?.current?.travel);
+  const currentCityId = asCityId(record.currentCityId ?? player?.current?.currentCityId, "nexis");
+  return {
+    status: record.status === "in_transit" ? "in_transit" : "idle",
+    currentCityId,
+    originCityId: asCityId(record.originCityId, currentCityId),
+    destinationCityId: record.destinationCityId ? asCityId(record.destinationCityId, currentCityId) : null,
+    routeType:
+      record.routeType === "sea" || record.routeType === "mixed" ? record.routeType : "road",
+    mode: record.mode === "personal_wagon" ? "personal_wagon" : "caravan",
+    departureAt: typeof record.departureAt === "number" ? record.departureAt : null,
+    arrivalAt: typeof record.arrivalAt === "number" ? record.arrivalAt : null,
+    durationMs: typeof record.durationMs === "number" ? record.durationMs : null,
+    arrivalNotice: readArrivalNotice(record.arrivalNotice, currentCityId),
   };
-  writeTravelState(internalPlayerId, next);
-  return next;
-}
-
-export function cancelTravel(internalPlayerId: string, now = Date.now()) {
-  const current = resolveTravelState(internalPlayerId, now);
-  if (!current.destinationCityId || !current.startedAt || !current.durationMs) return current;
-
-  const elapsedMs = Math.max(30 * 1000, Math.min(current.durationMs, now - current.startedAt));
-  const next: PersistedTravelState = {
-    currentCityId: current.currentCityId,
-    originCityId: current.destinationCityId,
-    destinationCityId: current.currentCityId,
-    startedAt: now,
-    arrivalAt: now + elapsedMs,
-    durationMs: elapsedMs,
-  };
-  writeTravelState(internalPlayerId, next);
-  return next;
 }
 
 export function getTravelProgress(state: PersistedTravelState, now = Date.now()) {
-  if (!state.destinationCityId || !state.startedAt || !state.arrivalAt || !state.durationMs) {
+  if (
+    state.status !== "in_transit" ||
+    !state.destinationCityId ||
+    !state.departureAt ||
+    !state.arrivalAt ||
+    !state.durationMs
+  ) {
     return {
       active: false,
       percent: 0,
@@ -155,7 +88,7 @@ export function getTravelProgress(state: PersistedTravelState, now = Date.now())
     };
   }
 
-  const elapsedMs = Math.max(0, now - state.startedAt);
+  const elapsedMs = Math.max(0, now - state.departureAt);
   const remainingMs = Math.max(0, state.arrivalAt - now);
   const percent = Math.max(0, Math.min(100, Math.round((elapsedMs / state.durationMs) * 100)));
 
@@ -180,4 +113,8 @@ export function formatTravelDuration(ms: number) {
 export function getCityName(cityId: WorldCityId | null) {
   if (!cityId) return "Unknown";
   return worldCities.find((city) => city.id === cityId)?.name ?? "Unknown";
+}
+
+export function defaultTravelState() {
+  return { ...DEFAULT_STATE };
 }

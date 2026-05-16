@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
-import { ContentPanel } from "../components/layout/ContentPanel";
 import {
   educationCategories,
   educationCourseMap,
   getCourseState,
 } from "../data/educationData";
-import { cielPageCopy } from "../data/cielPageCopy";
 import {
   formatCountdown,
   formatRemaining,
@@ -20,6 +18,7 @@ function buildCategoryTree(categoryId: string) {
   if (!category) return [];
 
   const courseIds = new Set(category.courses.map((course) => course.id));
+  const courseOrder = new Map(category.courses.map((course, index) => [course.id, index]));
   const childMap = new Map<string, string[]>();
 
   for (const course of category.courses) {
@@ -27,9 +26,12 @@ function buildCategoryTree(categoryId: string) {
   }
 
   for (const course of category.courses) {
-    for (const prerequisiteId of course.prerequisites ?? []) {
-      if (!courseIds.has(prerequisiteId)) continue;
-      childMap.get(prerequisiteId)?.push(course.id);
+    const internalPrerequisites = (course.prerequisites ?? [])
+      .filter((prerequisiteId) => courseIds.has(prerequisiteId))
+      .sort((left, right) => (courseOrder.get(left) ?? 0) - (courseOrder.get(right) ?? 0));
+    const primaryParent = internalPrerequisites[internalPrerequisites.length - 1];
+    if (primaryParent) {
+      childMap.get(primaryParent)?.push(course.id);
     }
   }
 
@@ -49,6 +51,13 @@ function buildCategoryTree(categoryId: string) {
     branch: sortByCourseOrder(childMap.get(root.id) ?? []),
     childMap,
   }));
+}
+
+function formatEducationKey(value: string) {
+  return value
+    .replace(/_/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function CourseTreeBranch({
@@ -226,7 +235,6 @@ function CourseLearnArea({
 
 export default function Education() {
   const education = useEducation();
-  const pageCopy = cielPageCopy.education;
   const [selectedCategoryId, setSelectedCategoryId] = useState(educationCategories[0]?.id ?? "");
   const selectedCategory =
     educationCategories.find((category) => category.id === selectedCategoryId) ?? educationCategories[0];
@@ -263,17 +271,7 @@ export default function Education() {
   const bannerSubtitle = education.activeCourse ? formatRemaining(bannerRemainingMs) : "No active course";
 
   return (
-    <AppShell title="Education" hint={pageCopy.flavor}>
-      <div className="page-intro-grid">
-        <ContentPanel title="Discipline & Study">
-          <p className="page-intro__lead">{pageCopy.flavor}</p>
-          <p className="page-intro__body">{pageCopy.alt}</p>
-        </ContentPanel>
-        <ContentPanel title="CIEL">
-          <p className="page-intro__body">{pageCopy.ciel}</p>
-        </ContentPanel>
-      </div>
-
+    <AppShell title="Education" hint="Structured education now follows visible roots instead of reading like a tax return.">
       <div className="education-page">
         <div className="edu-banner">
           <div className="edu-banner__icon">i</div>
@@ -380,11 +378,11 @@ export default function Education() {
                   <ul className="edu-detail-list">
                     <li>Length: {selectedCourse.durationDays} days</li>
                     <li>Cost: {selectedCourse.costGold} gold</li>
-                    <li>Reward type: {selectedCourse.rewardKind}</li>
+                    <li>Reward type: {formatEducationKey(selectedCourse.rewardKind)}</li>
                     {selectedCourse.workingStatRewards ? (
                       <li>
                         Working stats: {Object.entries(selectedCourse.workingStatRewards)
-                          .map(([key, value]) => `${key} +${value}`)
+                          .map(([key, value]) => `${formatEducationKey(key)} +${value}`)
                           .join(", ")}
                       </li>
                     ) : null}
@@ -443,7 +441,7 @@ export default function Education() {
                   <div className="edu-passive-strip__value">
                     {Object.keys(education.passiveBonuses).length
                       ? Object.entries(education.passiveBonuses)
-                          .map(([key, value]) => `${key} +${value}%`)
+                        .map(([key, value]) => `${formatEducationKey(key)} +${value}%`)
                           .join(" | ")
                       : "None yet"}
                   </div>
@@ -451,13 +449,13 @@ export default function Education() {
                 <div className="edu-passive-strip__block">
                   <div className="edu-passive-strip__label">Active unlocks</div>
                   <div className="edu-passive-strip__value">
-                    {education.activeUnlocks.length ? education.activeUnlocks.join(" | ") : "None yet"}
+                    {education.activeUnlocks.length ? education.activeUnlocks.map(formatEducationKey).join(" | ") : "None yet"}
                   </div>
                 </div>
                 <div className="edu-passive-strip__block">
                   <div className="edu-passive-strip__label">System unlocks</div>
                   <div className="edu-passive-strip__value">
-                    {education.systemUnlocks.length ? education.systemUnlocks.join(" | ") : "None yet"}
+                    {education.systemUnlocks.length ? education.systemUnlocks.map(formatEducationKey).join(" | ") : "None yet"}
                   </div>
                 </div>
               </div>

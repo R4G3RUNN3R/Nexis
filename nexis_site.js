@@ -714,6 +714,215 @@ function redirectAuthenticatedVisitors() {
   }
 }
 
+async function loadPendingRankings() {
+  const playerRoot = document.getElementById("player-rankings");
+  const guildRoot = document.getElementById("guild-rankings");
+  const consortiumRoot = document.getElementById("consortium-rankings");
+  const playerStatus = document.getElementById("player-rankings-status");
+  const guildStatus = document.getElementById("guild-rankings-status");
+  const consortiumStatus = document.getElementById("consortium-rankings-status");
+
+  if (!playerRoot || !guildRoot || !consortiumRoot || document.body.dataset.page !== "home") return;
+
+  const renderPendingCard = (title, note) => `
+    <article class="ranking-card ranking-card--loading">
+      <span class="ranking-card__rank">--</span>
+      <div class="ranking-card__body">
+        <strong>${title}</strong>
+        <p class="ranking-card__note">${note}</p>
+      </div>
+    </article>
+  `;
+
+  const renderPlayerEntries = (entries) =>
+    entries
+      .map((entry) => {
+        const publicId = formatPlayerPublicId(entry.publicId);
+        return `
+          <article class="ranking-card">
+            <span class="ranking-card__rank">#${entry.rank}</span>
+            <div class="ranking-card__body">
+              <strong>${entry.name} [${publicId}]</strong>
+              <span class="ranking-card__meta">${entry.pendingTitle}</span>
+              <div class="ranking-card__stats">
+                <div class="ranking-card__stat">
+                  <span class="ranking-card__stat-label">Level</span>
+                  <strong>${entry.level}</strong>
+                </div>
+                <div class="ranking-card__stat">
+                  <span class="ranking-card__stat-label">Battle Scan</span>
+                  <strong>${entry.battleScore}</strong>
+                </div>
+                <div class="ranking-card__stat">
+                  <span class="ranking-card__stat-label">Working Scan</span>
+                  <strong>${entry.workingScore}</strong>
+                </div>
+              </div>
+              <p class="ranking-card__note">${entry.summary}</p>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+
+  const renderPlayerBoards = (boards) =>
+    boards
+      .map((board) => `
+        <section class="ranking-subboard">
+          <div class="ranking-subboard__head">
+            <span class="ranking-subboard__title">${board.title}</span>
+            <span class="ranking-subboard__meta">${board.metricLabel}</span>
+          </div>
+          <div class="rankings-grid">
+            ${board.entries.length
+              ? renderPlayerEntries(board.entries)
+              : renderPendingCard("Pending", `No ${board.title.toLowerCase()} ladder yet.`)}
+          </div>
+        </section>
+      `)
+      .join("");
+
+  const renderGuildEntries = (entries) =>
+    entries
+      .map((entry) => {
+        const publicId = entry.publicId ? `G${String(entry.publicId).padStart(7, "0")}` : "Pending";
+        const tagText = entry.tag ? `[${entry.tag}]` : "Charter";
+        return `
+          <article class="ranking-card">
+            <span class="ranking-card__rank">#${entry.rank}</span>
+            <div class="ranking-card__body">
+              <strong>${entry.name} ${tagText}</strong>
+              <span class="ranking-card__meta">${publicId}</span>
+              <div class="ranking-card__stats">
+                <div class="ranking-card__stat">
+                  <span class="ranking-card__stat-label">Reputation</span>
+                  <strong>${entry.reputationTotal}</strong>
+                </div>
+                <div class="ranking-card__stat">
+                  <span class="ranking-card__stat-label">Members</span>
+                  <strong>${entry.memberCount}</strong>
+                </div>
+              </div>
+              <p class="ranking-card__note">${entry.summary}</p>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+
+  const renderConsortiumEntries = (entries) =>
+    entries
+      .map((entry) => {
+        const publicId = entry.publicId ? `C${String(entry.publicId).padStart(7, "0")}` : "Pending";
+        return `
+          <article class="ranking-card">
+            <span class="ranking-card__rank">#${entry.rank}</span>
+            <div class="ranking-card__body">
+              <strong>${entry.name}</strong>
+              <span class="ranking-card__meta">${entry.consortiumTypeName} - ${publicId}</span>
+              <div class="ranking-card__stats">
+                <div class="ranking-card__stat">
+                  <span class="ranking-card__stat-label">Earnings</span>
+                  <strong>${entry.earningsTotal}</strong>
+                </div>
+                <div class="ranking-card__stat">
+                  <span class="ranking-card__stat-label">Stars</span>
+                  <strong>${entry.stars}</strong>
+                </div>
+                <div class="ranking-card__stat">
+                  <span class="ranking-card__stat-label">Employees</span>
+                  <strong>${entry.memberCount}</strong>
+                </div>
+              </div>
+              <p class="ranking-card__note">${entry.summary}</p>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+
+  try {
+    const response = await fetch("/api/site/rankings", {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Ranking feed unavailable.");
+    }
+
+    const payload = await response.json();
+    const playerEntries = Array.isArray(payload?.playerRankings?.entries)
+      ? payload.playerRankings.entries
+      : Array.isArray(payload?.rankings)
+        ? payload.rankings
+        : [];
+    const playerBoards = Array.isArray(payload?.playerRankings?.boards)
+      ? payload.playerRankings.boards
+      : [];
+    const guildEntries = Array.isArray(payload?.guildRankings?.entries) ? payload.guildRankings.entries : [];
+    const consortiumEntries = Array.isArray(payload?.consortiumRankings?.entries) ? payload.consortiumRankings.entries : [];
+
+    if (playerStatus) {
+      playerStatus.textContent = payload?.playerRankings?.statusLabel || payload?.statusLabel || "Pending";
+    }
+    if (guildStatus) {
+      guildStatus.textContent = payload?.guildRankings?.statusLabel || "Pending";
+    }
+    if (consortiumStatus) {
+      consortiumStatus.textContent = payload?.consortiumRankings?.statusLabel || "Pending";
+    }
+
+    playerRoot.innerHTML = playerBoards.length
+      ? renderPlayerBoards(playerBoards)
+      : playerEntries.length
+        ? renderPlayerEntries(playerEntries)
+        : renderPendingCard(
+            "Pending",
+            "No public player ladder yet. The shard still needs actual citizens, not rehearsal props.",
+          );
+
+    guildRoot.innerHTML = guildEntries.length
+      ? renderGuildEntries(guildEntries)
+      : renderPendingCard(
+          "Pending",
+          "Guild standings will appear once charters start accumulating real reputation.",
+        );
+
+    consortiumRoot.innerHTML = consortiumEntries.length
+      ? renderConsortiumEntries(consortiumEntries)
+      : renderPendingCard(
+          "Pending",
+          "Consortium standings will appear once real companies start showing actual earnings.",
+        );
+  } catch (_error) {
+    if (playerStatus) {
+      playerStatus.textContent = "Pending";
+    }
+    if (guildStatus) {
+      guildStatus.textContent = "Pending";
+    }
+    if (consortiumStatus) {
+      consortiumStatus.textContent = "Pending";
+    }
+
+    playerRoot.innerHTML = renderPendingCard(
+      "Pending",
+      "The player ladder is offline for the moment, which is still more honest than hallucinating champions.",
+    );
+    guildRoot.innerHTML = renderPendingCard(
+      "Pending",
+      "The guild ledger is unavailable right now, so it stays pending instead of pretending.",
+    );
+    consortiumRoot.innerHTML = renderPendingCard(
+      "Pending",
+      "The consortium ledger is unavailable right now, so it stays pending instead of bluffing.",
+    );
+  }
+}
+
 bindRegisterForm();
 bindLoginForm();
 redirectAuthenticatedVisitors();
+loadPendingRankings();

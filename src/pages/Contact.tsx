@@ -4,7 +4,7 @@ export default function ContactPage() {
   return (
     <PublicPageShell
       title="Contact"
-      subtitle="Support routes, moderation channels, and project communication points for Ashen Crown."
+      subtitle="Support routes, moderation channels, and project communication points for Nexis."
     >
       <section className="public-panel">
         <div className="public-panel__header">Support channels</div>
@@ -14,7 +14,7 @@ export default function ContactPage() {
               <h3>Account support</h3>
               <p>Use this channel for login trouble, access issues, progression blockers, or account recovery verification.</p>
               <ul className="public-bullet-list">
-                <li>Email: support@ashencrown.game</li>
+                <li>Email: support@nexis.nexus</li>
                 <li>Include your character name and a brief description of the issue.</li>
               </ul>
             </article>
@@ -22,7 +22,7 @@ export default function ContactPage() {
               <h3>Rules and reports</h3>
               <p>Use this route for harassment reports, exploit reports, automation concerns, or suspected account abuse.</p>
               <ul className="public-bullet-list">
-                <li>Email: reports@ashencrown.game</li>
+                <li>Email: reports@nexis.nexus</li>
                 <li>Include screenshots, timestamps, and as much detail as possible.</li>
               </ul>
             </article>
@@ -30,7 +30,7 @@ export default function ContactPage() {
               <h3>Project and community</h3>
               <p>Use this for press, partnership, creator, or community inquiries about the project itself.</p>
               <ul className="public-bullet-list">
-                <li>Email: hello@ashencrown.game</li>
+                <li>Email: hello@nexis.nexus</li>
                 <li>For urgent moderation matters, use the rules and reports channel instead.</li>
               </ul>
             </article>

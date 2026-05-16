@@ -2,14 +2,14 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { AcademyDefinition, academyDefinitions, academySystemRules } from "../data/academyData";
-import { cielPageCopy } from "../data/cielPageCopy";
 import "../styles/academies-ui.css";
 
+// Academy art - public/images/academies/
 const ACADEMY_IMAGES: Record<string, string> = {
-  southern: "/images/academies/academy_southern.png",
-  eastern: "/images/academies/academy_eastern.png",
-  northern: "/images/academies/academy_northern.png",
-  western: "/images/academies/academy_western.png",
+  southern:    "/images/academies/academy_southern.png",
+  eastern:     "/images/academies/academy_eastern.png",
+  northern:    "/images/academies/academy_northern.png",
+  western:     "/images/academies/academy_western.png",
   professions: "/images/academies/academy_professions.png",
 };
 
@@ -24,25 +24,17 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function AcademiesPage() {
   const [selectedId, setSelectedId] = useState(academyDefinitions[0]?.id ?? "southern");
-  const pageCopy = cielPageCopy.academy;
 
   const selectedAcademy = useMemo<AcademyDefinition | undefined>(
     () => academyDefinitions.find((academy) => academy.id === selectedId),
-    [selectedId],
+    [selectedId]
   );
 
   return (
-    <AppShell title="Academies" hint={pageCopy.flavor}>
-      <div className="page-intro-grid">
-        <ContentPanel title="Academy Flavor">
-          <p className="page-intro__lead">{pageCopy.flavor}</p>
-          <p className="page-intro__body">{pageCopy.alt}</p>
-        </ContentPanel>
-        <ContentPanel title="CIEL">
-          <p className="page-intro__body">{pageCopy.ciel}</p>
-        </ContentPanel>
-      </div>
-
+    <AppShell
+      title="Academies"
+      hint="Full academy structure is now in code. Perk payloads and live logic come after the structure is locked."
+    >
       <div className="academies-grid">
         <div className="academies-column academies-column--left">
           <ContentPanel title="Academy Rules">
@@ -171,7 +163,7 @@ export default function AcademiesPage() {
             </div>
 
             <div className="academy-summary-block">
-              <div className="academy-summary-block__label">Ashen Crown Academy</div>
+              <div className="academy-summary-block__label">Nexis Academy</div>
               <p>
                 The Nexis City profession school is not part of the one-active switching system.
                 Its learned professions remain always active and are meant to support trade,

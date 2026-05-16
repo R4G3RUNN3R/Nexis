@@ -6,6 +6,20 @@ export type CivicJobTrackId =
   | "civic_bureau"
   | "forge_union";
 
+export type WorkingStatKey = "manualLabor" | "intelligence" | "endurance";
+export type CivicPassiveKey =
+  | "education_speed"
+  | "hospital_recovery"
+  | "jail_reduction"
+  | "market_discount";
+
+export interface CivicJobPassive {
+  key: CivicPassiveKey;
+  name: string;
+  description: string;
+  magnitude: number;
+}
+
 export interface CivicJobRank {
   rank: number;
   title: string;
@@ -13,7 +27,8 @@ export interface CivicJobRank {
   requirementRule?: CivicRankRequirementRule;
   dailyGold: number;
   dailyJobPoints: number;
-  passiveSummary: string;
+  workingStatGains: Partial<Record<WorkingStatKey, number>>;
+  passiveUnlock?: CivicJobPassive;
 }
 
 export interface CivicEntryRequirementRule {
@@ -47,101 +62,384 @@ export interface CivicJobTrack {
   ranks: CivicJobRank[];
 }
 
+const EDUCATION_SPECIAL: CivicJobPassive = {
+  key: "education_speed",
+  name: "Faculty Privilege",
+  description: "Courses complete faster while you remain employed in Education.",
+  magnitude: 10,
+};
+
+const MEDICAL_SPECIAL: CivicJobPassive = {
+  key: "hospital_recovery",
+  name: "Medical Network",
+  description: "Hospital recovery times are reduced while you remain employed in Medical.",
+  magnitude: 15,
+};
+
+const LAW_SPECIAL: CivicJobPassive = {
+  key: "jail_reduction",
+  name: "Judicial Pull",
+  description: "Jail sentences are reduced while you remain employed in Law.",
+  magnitude: 15,
+};
+
+const GROCER_SPECIAL: CivicJobPassive = {
+  key: "market_discount",
+  name: "Bulk Buyer",
+  description: "Legal market purchases are discounted while you remain employed in Grocer.",
+  magnitude: 8,
+};
+
 export const CIVIC_JOB_TRACKS: CivicJobTrack[] = [
   {
     id: "city_guard",
-    name: "City Guard",
-    subtitle: "Order, patrols, and the occasional reminder that laws are mostly paperwork with weapons.",
-    interviewPrompt: "Why should Nexis trust you with its walls and citizens?",
-    entryRequirements: ["Battle-ready fundamentals", "No active jail sentence", "Working stats total 30+"],
+    name: "Army",
+    subtitle: "Barracks drills, patrol work, and getting shouted at by people who think volume is strategy.",
+    interviewPrompt: "Why should Nexis hand you a uniform and trust you not to embarrass it?",
+    entryRequirements: ["Working stats total 30+", "Not currently jailed"],
     entryRule: { minimumWorkingTotal: 30, requireNotJailed: true },
-    specialties: ["Patrol bonuses", "Slight arrest resistance later", "Better defensive duty income"],
+    specialties: ["Endurance growth", "Manual Labor growth", "Solid daily salary"],
     ranks: [
-      { rank: 1, title: "Watch Recruit", requirementLabel: "Starter", dailyGold: 120, dailyJobPoints: 2, passiveSummary: "+1% civic respect gain" },
-      { rank: 2, title: "Gate Watcher", requirementLabel: "Working stats 75+ total", requirementRule: { minimumWorkingTotal: 75 }, dailyGold: 180, dailyJobPoints: 3, passiveSummary: "+1% travel safety in nearby routes" },
-      { rank: 3, title: "Patrolman", requirementLabel: "Working stats 140+ total", requirementRule: { minimumWorkingTotal: 140 }, dailyGold: 260, dailyJobPoints: 4, passiveSummary: "+2% civic respect gain" },
-      { rank: 4, title: "Shield Sergeant", requirementLabel: "Working stats 240+ total", requirementRule: { minimumWorkingTotal: 240 }, dailyGold: 360, dailyJobPoints: 5, passiveSummary: "+2% defensive recovery speed" },
-      { rank: 5, title: "Wall Captain", requirementLabel: "Working stats 400+ total", requirementRule: { minimumWorkingTotal: 400 }, dailyGold: 500, dailyJobPoints: 6, passiveSummary: "+3% city security actions" },
+      {
+        rank: 1,
+        title: "Recruit",
+        requirementLabel: "Starter",
+        dailyGold: 40,
+        dailyJobPoints: 1,
+        workingStatGains: { endurance: 1, manualLabor: 1 },
+      },
+      {
+        rank: 2,
+        title: "Private",
+        requirementLabel: "10 job points and Working stats 70+ total",
+        requirementRule: { minimumWorkingTotal: 70 },
+        dailyGold: 65,
+        dailyJobPoints: 2,
+        workingStatGains: { endurance: 1, manualLabor: 1 },
+      },
+      {
+        rank: 3,
+        title: "Corporal",
+        requirementLabel: "30 job points and Endurance 45+",
+        requirementRule: { minimumEndurance: 45 },
+        dailyGold: 95,
+        dailyJobPoints: 3,
+        workingStatGains: { endurance: 2, manualLabor: 1 },
+      },
+      {
+        rank: 4,
+        title: "Sergeant",
+        requirementLabel: "70 job points and Working stats 160+ total",
+        requirementRule: { minimumWorkingTotal: 160 },
+        dailyGold: 135,
+        dailyJobPoints: 4,
+        workingStatGains: { endurance: 2, manualLabor: 1 },
+      },
+      {
+        rank: 5,
+        title: "Commandant",
+        requirementLabel: "130 job points and Working stats 260+ total",
+        requirementRule: { minimumWorkingTotal: 260 },
+        dailyGold: 185,
+        dailyJobPoints: 5,
+        workingStatGains: { endurance: 2, manualLabor: 2 },
+      },
     ],
   },
   {
     id: "medical_corps",
-    name: "Medical Corps",
-    subtitle: "Patching up people who keep making terrible decisions. A growth sector.",
-    interviewPrompt: "How do you stay calm when someone arrives leaking enthusiasm and blood?",
+    name: "Medical",
+    subtitle: "Treat the wounded, manage the ward, and quietly judge how people keep arriving here.",
+    interviewPrompt: "Why should the hospital trust your hands and your nerves?",
     entryRequirements: ["Basic Literacy completed", "Intelligence 12+", "Not currently hospitalized"],
     entryRule: { completedCourses: ["basic-literacy"], minimumIntelligence: 12, requireNotHospitalized: true },
-    specialties: ["Recovery bonuses", "Potion quality later", "Hospital utility"],
+    specialties: ["Intelligence growth", "Endurance growth", "Final recovery passive"],
     ranks: [
-      { rank: 1, title: "Ward Runner", requirementLabel: "Starter", dailyGold: 110, dailyJobPoints: 2, passiveSummary: "+1% recovery speed" },
-      { rank: 2, title: "Apothecary Aide", requirementLabel: "Intelligence 40+", requirementRule: { minimumIntelligence: 40 }, dailyGold: 170, dailyJobPoints: 3, passiveSummary: "+1% potion efficiency" },
-      { rank: 3, title: "Field Medic", requirementLabel: "Intelligence 90+", requirementRule: { minimumIntelligence: 90 }, dailyGold: 250, dailyJobPoints: 4, passiveSummary: "+2% recovery speed" },
-      { rank: 4, title: "Surgical Hand", requirementLabel: "Intelligence 160+", requirementRule: { minimumIntelligence: 160 }, dailyGold: 340, dailyJobPoints: 5, passiveSummary: "+2% revive-style service quality" },
-      { rank: 5, title: "Hospital Master", requirementLabel: "Intelligence 260+", requirementRule: { minimumIntelligence: 260 }, dailyGold: 470, dailyJobPoints: 6, passiveSummary: "+3% medical service output" },
+      {
+        rank: 1,
+        title: "Orderly",
+        requirementLabel: "Starter",
+        dailyGold: 35,
+        dailyJobPoints: 1,
+        workingStatGains: { intelligence: 1, endurance: 1 },
+      },
+      {
+        rank: 2,
+        title: "Nurse",
+        requirementLabel: "10 job points and Intelligence 35+",
+        requirementRule: { minimumIntelligence: 35 },
+        dailyGold: 60,
+        dailyJobPoints: 2,
+        workingStatGains: { intelligence: 1, endurance: 1 },
+      },
+      {
+        rank: 3,
+        title: "Paramedic",
+        requirementLabel: "30 job points and Intelligence 70+",
+        requirementRule: { minimumIntelligence: 70 },
+        dailyGold: 90,
+        dailyJobPoints: 3,
+        workingStatGains: { intelligence: 2, endurance: 1 },
+      },
+      {
+        rank: 4,
+        title: "Surgeon",
+        requirementLabel: "70 job points and Intelligence 125+",
+        requirementRule: { minimumIntelligence: 125 },
+        dailyGold: 125,
+        dailyJobPoints: 4,
+        workingStatGains: { intelligence: 2, endurance: 1 },
+      },
+      {
+        rank: 5,
+        title: "Chief Physician",
+        requirementLabel: "130 job points and Intelligence 210+",
+        requirementRule: { minimumIntelligence: 210 },
+        dailyGold: 175,
+        dailyJobPoints: 5,
+        workingStatGains: { intelligence: 2, endurance: 2 },
+        passiveUnlock: MEDICAL_SPECIAL,
+      },
     ],
   },
   {
     id: "academy_staff",
-    name: "Academy Staff",
-    subtitle: "A noble profession, mostly consisting of paperwork, dust, and explaining obvious things repeatedly.",
-    interviewPrompt: "How would you support the city academy and its students?",
+    name: "Education",
+    subtitle: "Teach, catalogue, supervise, and endure the administrative ritual known as academia.",
+    interviewPrompt: "Why should Nexis trust you around lessons, records, and people asking obvious questions?",
     entryRequirements: ["Basic Literacy completed", "Study Discipline completed", "Intelligence 14+"],
     entryRule: { completedCourses: ["basic-literacy", "study-discipline"], minimumIntelligence: 14 },
-    specialties: ["Education speed support", "Course access later", "Library utility"],
+    specialties: ["Strong Intelligence growth", "Steady salary", "Final education-speed passive"],
     ranks: [
-      { rank: 1, title: "Archive Clerk", requirementLabel: "Starter", dailyGold: 100, dailyJobPoints: 2, passiveSummary: "+1% education speed" },
-      { rank: 2, title: "Study Attendant", requirementLabel: "Intelligence 50+", requirementRule: { minimumIntelligence: 50 }, dailyGold: 150, dailyJobPoints: 3, passiveSummary: "+1% course cost efficiency" },
-      { rank: 3, title: "Assistant Lecturer", requirementLabel: "Intelligence 110+", requirementRule: { minimumIntelligence: 110 }, dailyGold: 230, dailyJobPoints: 4, passiveSummary: "+2% education speed" },
-      { rank: 4, title: "Faculty Scribe", requirementLabel: "Intelligence 180+", requirementRule: { minimumIntelligence: 180 }, dailyGold: 320, dailyJobPoints: 5, passiveSummary: "+2% unlock tracking clarity" },
-      { rank: 5, title: "Dean's Hand", requirementLabel: "Intelligence 300+", requirementRule: { minimumIntelligence: 300 }, dailyGold: 440, dailyJobPoints: 6, passiveSummary: "+3% education speed" },
+      {
+        rank: 1,
+        title: "Teaching Aide",
+        requirementLabel: "Starter",
+        dailyGold: 30,
+        dailyJobPoints: 1,
+        workingStatGains: { intelligence: 1 },
+      },
+      {
+        rank: 2,
+        title: "Tutor",
+        requirementLabel: "10 job points and Intelligence 40+",
+        requirementRule: { minimumIntelligence: 40 },
+        dailyGold: 55,
+        dailyJobPoints: 2,
+        workingStatGains: { intelligence: 1, endurance: 1 },
+      },
+      {
+        rank: 3,
+        title: "Lecturer",
+        requirementLabel: "30 job points and Intelligence 85+",
+        requirementRule: { minimumIntelligence: 85 },
+        dailyGold: 85,
+        dailyJobPoints: 3,
+        workingStatGains: { intelligence: 2 },
+      },
+      {
+        rank: 4,
+        title: "Professor",
+        requirementLabel: "70 job points and Intelligence 145+",
+        requirementRule: { minimumIntelligence: 145 },
+        dailyGold: 120,
+        dailyJobPoints: 4,
+        workingStatGains: { intelligence: 2, endurance: 1 },
+      },
+      {
+        rank: 5,
+        title: "Chancellor",
+        requirementLabel: "130 job points and Intelligence 230+",
+        requirementRule: { minimumIntelligence: 230 },
+        dailyGold: 165,
+        dailyJobPoints: 5,
+        workingStatGains: { intelligence: 3 },
+        passiveUnlock: EDUCATION_SPECIAL,
+      },
     ],
   },
   {
     id: "trade_office",
-    name: "Trade Office",
-    subtitle: "Where numbers become power, invoices become weapons, and merchants pretend they are respectable.",
-    interviewPrompt: "Why should the city trust you around trade manifests and money?",
-    entryRequirements: ["Practical Arithmetic completed", "Working stats total 35+", "No active jail sentence"],
+    name: "Grocer",
+    subtitle: "Shelf stock, supply runs, bulk orders, and the noble craft of making small margins very large.",
+    interviewPrompt: "Why should the city trust you with stockrooms, ledgers, and legal retail?",
+    entryRequirements: ["Practical Arithmetic completed", "Working stats total 35+", "Not currently jailed"],
     entryRule: { completedCourses: ["practical-arithmetic"], minimumWorkingTotal: 35, requireNotJailed: true },
-    specialties: ["Trade efficiency", "Market fees later", "Caravan support"],
+    specialties: ["Manual Labor growth", "Intelligence growth", "Final market-discount passive"],
     ranks: [
-      { rank: 1, title: "Ledger Runner", requirementLabel: "Starter", dailyGold: 130, dailyJobPoints: 2, passiveSummary: "+1% trade income efficiency" },
-      { rank: 2, title: "Manifest Clerk", requirementLabel: "Working stats 85+ total", requirementRule: { minimumWorkingTotal: 85 }, dailyGold: 190, dailyJobPoints: 3, passiveSummary: "+1% market fee efficiency" },
-      { rank: 3, title: "Quarter Assessor", requirementLabel: "Working stats 150+ total", requirementRule: { minimumWorkingTotal: 150 }, dailyGold: 280, dailyJobPoints: 4, passiveSummary: "+2% trade income efficiency" },
-      { rank: 4, title: "Route Auditor", requirementLabel: "Working stats 250+ total", requirementRule: { minimumWorkingTotal: 250 }, dailyGold: 380, dailyJobPoints: 5, passiveSummary: "+2% caravan outcome quality" },
-      { rank: 5, title: "Trade Commissioner", requirementLabel: "Working stats 420+ total", requirementRule: { minimumWorkingTotal: 420 }, dailyGold: 520, dailyJobPoints: 6, passiveSummary: "+3% trade efficiency" },
+      {
+        rank: 1,
+        title: "Stock Clerk",
+        requirementLabel: "Starter",
+        dailyGold: 40,
+        dailyJobPoints: 1,
+        workingStatGains: { manualLabor: 1, intelligence: 1 },
+      },
+      {
+        rank: 2,
+        title: "Shop Assistant",
+        requirementLabel: "10 job points and Working stats 65+ total",
+        requirementRule: { minimumWorkingTotal: 65 },
+        dailyGold: 60,
+        dailyJobPoints: 2,
+        workingStatGains: { manualLabor: 1, intelligence: 1 },
+      },
+      {
+        rank: 3,
+        title: "Buyer",
+        requirementLabel: "30 job points and Intelligence 55+",
+        requirementRule: { minimumIntelligence: 55 },
+        dailyGold: 90,
+        dailyJobPoints: 3,
+        workingStatGains: { manualLabor: 1, intelligence: 2 },
+      },
+      {
+        rank: 4,
+        title: "Manager",
+        requirementLabel: "70 job points and Working stats 170+ total",
+        requirementRule: { minimumWorkingTotal: 170 },
+        dailyGold: 125,
+        dailyJobPoints: 4,
+        workingStatGains: { manualLabor: 1, intelligence: 2 },
+      },
+      {
+        rank: 5,
+        title: "Regional Director",
+        requirementLabel: "130 job points and Working stats 260+ total",
+        requirementRule: { minimumWorkingTotal: 260 },
+        dailyGold: 175,
+        dailyJobPoints: 5,
+        workingStatGains: { manualLabor: 2, intelligence: 2 },
+        passiveUnlock: GROCER_SPECIAL,
+      },
     ],
   },
   {
     id: "civic_bureau",
-    name: "Civic Bureau",
-    subtitle: "Permits, records, fines, forms, and the dead-eyed rhythm of bureaucracy.",
-    interviewPrompt: "What makes you suitable for civic administration?",
+    name: "Law",
+    subtitle: "Case files, court procedure, citations, and the sort of authority that travels with paperwork.",
+    interviewPrompt: "Why should Nexis let you near its legal machinery and people it would rather correct?",
     entryRequirements: ["Basic Literacy completed", "Civic Fundamentals completed", "Intelligence 15+"],
     entryRule: { completedCourses: ["basic-literacy", "civic-fundamentals"], minimumIntelligence: 15 },
-    specialties: ["Reputation gains", "Permit processing later", "Contract administration"],
+    specialties: ["Intelligence growth", "Endurance growth", "Final jail-reduction passive"],
     ranks: [
-      { rank: 1, title: "Desk Clerk", requirementLabel: "Starter", dailyGold: 115, dailyJobPoints: 2, passiveSummary: "+1% civic reputation gain" },
-      { rank: 2, title: "Records Scribe", requirementLabel: "Intelligence 60+", requirementRule: { minimumIntelligence: 60 }, dailyGold: 175, dailyJobPoints: 3, passiveSummary: "+1% permit efficiency" },
-      { rank: 3, title: "Permit Officer", requirementLabel: "Intelligence 120+", requirementRule: { minimumIntelligence: 120 }, dailyGold: 255, dailyJobPoints: 4, passiveSummary: "+2% civic reputation gain" },
-      { rank: 4, title: "Registrar", requirementLabel: "Intelligence 200+", requirementRule: { minimumIntelligence: 200 }, dailyGold: 350, dailyJobPoints: 5, passiveSummary: "+2% contract admin success" },
-      { rank: 5, title: "Civic Marshal", requirementLabel: "Intelligence 320+", requirementRule: { minimumIntelligence: 320 }, dailyGold: 480, dailyJobPoints: 6, passiveSummary: "+3% civic gain efficiency" },
+      {
+        rank: 1,
+        title: "Clerk",
+        requirementLabel: "Starter",
+        dailyGold: 35,
+        dailyJobPoints: 1,
+        workingStatGains: { intelligence: 1, endurance: 1 },
+      },
+      {
+        rank: 2,
+        title: "Caseworker",
+        requirementLabel: "10 job points and Intelligence 45+",
+        requirementRule: { minimumIntelligence: 45 },
+        dailyGold: 60,
+        dailyJobPoints: 2,
+        workingStatGains: { intelligence: 1, endurance: 1 },
+      },
+      {
+        rank: 3,
+        title: "Magistrate's Aide",
+        requirementLabel: "30 job points and Intelligence 85+",
+        requirementRule: { minimumIntelligence: 85 },
+        dailyGold: 90,
+        dailyJobPoints: 3,
+        workingStatGains: { intelligence: 2, endurance: 1 },
+      },
+      {
+        rank: 4,
+        title: "Prosecutor",
+        requirementLabel: "70 job points and Intelligence 145+",
+        requirementRule: { minimumIntelligence: 145 },
+        dailyGold: 125,
+        dailyJobPoints: 4,
+        workingStatGains: { intelligence: 2, endurance: 1 },
+      },
+      {
+        rank: 5,
+        title: "Chief Jurist",
+        requirementLabel: "130 job points and Intelligence 220+",
+        requirementRule: { minimumIntelligence: 220 },
+        dailyGold: 170,
+        dailyJobPoints: 5,
+        workingStatGains: { intelligence: 2, endurance: 2 },
+        passiveUnlock: LAW_SPECIAL,
+      },
     ],
   },
   {
     id: "forge_union",
-    name: "Forge Union",
-    subtitle: "Heat, hammering, and very loud arguments about what counts as proper metalwork.",
-    interviewPrompt: "Why should the forge trust your hands, lungs, and patience?",
-    entryRequirements: ["Endurance 12+", "Manual Labor 12+", "Not currently hospitalized"],
-    entryRule: { minimumEndurance: 12, minimumManualLabor: 12, requireNotHospitalized: true },
-    specialties: ["Crafting support", "Material quality later", "Workshop utility"],
+    name: "Casino",
+    subtitle: "Tables, chips, odds, and the deeply respectable business of profiting from bad decisions.",
+    interviewPrompt: "Why should Nexis trust you on the gaming floor when money and impulse are in a knife fight?",
+    entryRequirements: ["Intelligence 12+", "Manual Labor 12+", "Not currently hospitalized"],
+    entryRule: { minimumIntelligence: 12, minimumManualLabor: 12, requireNotHospitalized: true },
+    specialties: ["Intelligence growth", "Manual Labor growth", "Higher late salary"],
     ranks: [
-      { rank: 1, title: "Coal Hand", requirementLabel: "Starter", dailyGold: 125, dailyJobPoints: 2, passiveSummary: "+1% crafting output" },
-      { rank: 2, title: "Hammer Aide", requirementLabel: "Manual Labor 55+", requirementRule: { minimumManualLabor: 55 }, dailyGold: 185, dailyJobPoints: 3, passiveSummary: "+1% material efficiency" },
-      { rank: 3, title: "Journeyman Smith", requirementLabel: "Manual Labor 120+", requirementRule: { minimumManualLabor: 120 }, dailyGold: 270, dailyJobPoints: 4, passiveSummary: "+2% crafting output" },
-      { rank: 4, title: "Tempering Master", requirementLabel: "Manual Labor 210+", requirementRule: { minimumManualLabor: 210 }, dailyGold: 365, dailyJobPoints: 5, passiveSummary: "+2% equipment quality chance" },
-      { rank: 5, title: "Guild Forgewarden", requirementLabel: "Manual Labor 340+", requirementRule: { minimumManualLabor: 340 }, dailyGold: 495, dailyJobPoints: 6, passiveSummary: "+3% workshop efficiency" },
+      {
+        rank: 1,
+        title: "Floor Runner",
+        requirementLabel: "Starter",
+        dailyGold: 45,
+        dailyJobPoints: 1,
+        workingStatGains: { intelligence: 1, manualLabor: 1 },
+      },
+      {
+        rank: 2,
+        title: "Dealer",
+        requirementLabel: "10 job points and Intelligence 35+",
+        requirementRule: { minimumIntelligence: 35 },
+        dailyGold: 70,
+        dailyJobPoints: 2,
+        workingStatGains: { intelligence: 1, manualLabor: 1 },
+      },
+      {
+        rank: 3,
+        title: "Pit Boss",
+        requirementLabel: "30 job points and Intelligence 70+",
+        requirementRule: { minimumIntelligence: 70 },
+        dailyGold: 105,
+        dailyJobPoints: 3,
+        workingStatGains: { intelligence: 2, manualLabor: 1 },
+      },
+      {
+        rank: 4,
+        title: "Operations Manager",
+        requirementLabel: "70 job points and Working stats 180+ total",
+        requirementRule: { minimumWorkingTotal: 180 },
+        dailyGold: 145,
+        dailyJobPoints: 4,
+        workingStatGains: { intelligence: 2, manualLabor: 1 },
+      },
+      {
+        rank: 5,
+        title: "House Director",
+        requirementLabel: "130 job points and Working stats 280+ total",
+        requirementRule: { minimumWorkingTotal: 280 },
+        dailyGold: 200,
+        dailyJobPoints: 5,
+        workingStatGains: { intelligence: 2, manualLabor: 2 },
+      },
     ],
   },
 ];
+
+export function getCivicTrack(trackId: CivicJobTrackId) {
+  return CIVIC_JOB_TRACKS.find((track) => track.id === trackId) ?? null;
+}
+
+export function getWorkingStatLabel(stat: WorkingStatKey) {
+  if (stat === "manualLabor") return "Manual Labor";
+  if (stat === "intelligence") return "Intelligence";
+  return "Endurance";
+}
+
+export function formatWorkingStatGains(gains: Partial<Record<WorkingStatKey, number>>) {
+  return (Object.entries(gains) as Array<[WorkingStatKey, number]>)
+    .filter((entry) => (entry[1] ?? 0) > 0)
+    .map(([stat, amount]) => `+${amount} ${getWorkingStatLabel(stat)}`)
+    .join(" | ");
+}

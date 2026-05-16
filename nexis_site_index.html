@@ -30,6 +30,7 @@
         </a>
         <nav class="topbar__nav" aria-label="Primary">
           <a href="#paths">World Paths</a>
+          <a href="#rankings">Rankings</a>
           <a href="#systems">Core Systems</a>
           <a href="/register">Register</a>
           <a href="/login">Log In</a>
@@ -67,6 +68,15 @@
                 <strong>Pressure and rivalry</strong>
               </div>
             </div>
+
+            <div class="hero__pending-note">
+              <span class="hero__pending-badge">Pending Ladder</span>
+              <p>
+                Realm rankings are being calibrated live from player progression. The
+                current board is provisional, which is a classy way of saying we are
+                finally letting the shard speak for itself.
+              </p>
+            </div>
           </div>
 
           <div class="hero__visual frame frame--visual hero__visual--image">
@@ -94,6 +104,92 @@
                 not one narrow identity.
               </figcaption>
             </figure>
+          </div>
+        </section>
+
+        <section class="section section--rankings" id="rankings">
+          <div class="section-head section-head--split">
+            <div>
+              <p class="eyebrow">Pending Rankings</p>
+              <h2>Realm ladders, once the realm earns them.</h2>
+            </div>
+            <p>
+              Public rankings should feel earned, not fabricated. Until enough real
+              players, guilds, and consortiums exist, the boards stay marked
+              <strong>Pending</strong> instead of pretending a few disposable test
+              ghosts are a civilization.
+            </p>
+          </div>
+
+          <div class="rankings-shell frame">
+            <div class="rankings-shell__summary">
+              <div>
+                <span class="rankings-shell__label">Player Ladder</span>
+                <strong id="player-rankings-status">Pending</strong>
+              </div>
+              <div>
+                <span class="rankings-shell__label">Guild Ladder</span>
+                <strong id="guild-rankings-status">Pending</strong>
+              </div>
+              <div>
+                <span class="rankings-shell__label">Consortium Ladder</span>
+                <strong id="consortium-rankings-status">Pending</strong>
+              </div>
+              <div>
+                <span class="rankings-shell__label">Methods</span>
+                <strong>Players by overall scan, guilds by reputation, consortiums by earnings</strong>
+              </div>
+            </div>
+
+            <div class="ranking-board-grid" aria-live="polite">
+              <section class="ranking-board">
+                <div class="ranking-board__head">
+                  <span class="ranking-board__eyebrow">Citizens</span>
+                  <h3>Player Rankings</h3>
+                </div>
+                <div id="player-rankings" class="rankings-grid">
+                  <article class="ranking-card ranking-card--loading">
+                    <span class="ranking-card__rank">--</span>
+                    <div class="ranking-card__body">
+                      <strong>Pending</strong>
+                      <p class="ranking-card__note">No public player ladder yet. The shard still needs actual citizens, not rehearsal props.</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="ranking-board">
+                <div class="ranking-board__head">
+                  <span class="ranking-board__eyebrow">Factions of Power</span>
+                  <h3>Guild Rankings</h3>
+                </div>
+                <div id="guild-rankings" class="rankings-grid">
+                  <article class="ranking-card ranking-card--loading">
+                    <span class="ranking-card__rank">--</span>
+                    <div class="ranking-card__body">
+                      <strong>Pending</strong>
+                      <p class="ranking-card__note">Guilds will be judged by reputation once enough charters start leaving scars.</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="ranking-board">
+                <div class="ranking-board__head">
+                  <span class="ranking-board__eyebrow">Commerce Houses</span>
+                  <h3>Consortium Rankings</h3>
+                </div>
+                <div id="consortium-rankings" class="rankings-grid">
+                  <article class="ranking-card ranking-card--loading">
+                    <span class="ranking-card__rank">--</span>
+                    <div class="ranking-card__body">
+                      <strong>Pending</strong>
+                      <p class="ranking-card__note">Consortium standings will wake up once real companies start piling up earnings.</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
+            </div>
           </div>
         </section>
 

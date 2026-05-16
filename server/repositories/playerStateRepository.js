@@ -68,18 +68,6 @@ function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function splitJobsRuntimeState(value) {
-  const record = asRecord(value);
-  const civicEmployment = asRecord(record.civicEmployment);
-  const { civicEmployment: _ignored, ...jobsState } = record;
-  return {
-    jobsState,
-    civicEmployment: Object.keys(civicEmployment).length
-      ? civicEmployment
-      : { activeTrackId: null, trackProgress: {} },
-  };
-}
-
 function asNumber(value, fallback) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -89,7 +77,6 @@ function mapPlayerStateRow(row) {
 
   const playerSnapshot = row.player_snapshot ?? {};
   const experience = normalizeExperience(playerSnapshot.experience);
-  const { jobsState, civicEmployment } = splitJobsRuntimeState(row.jobs_state);
 
   return {
     level: normalizeLevel(row.level, experience),
@@ -100,13 +87,15 @@ function mapPlayerStateRow(row) {
     currentJob: row.current_job ?? { current: null },
     runtimeState: {
       player: { ...playerSnapshot, experience, level: normalizeLevel(row.level, experience) },
-      jobs: jobsState,
+      jobs: row.jobs_state ?? {},
       education: row.education_state ?? {},
       arena: row.arena_state ?? {},
       timers: row.timer_state ?? {},
       guild: row.guild_state ?? {},
       consortium: row.consortium_state ?? {},
-      civicEmployment,
+      travel: row.travel_state ?? {},
+      civicEmployment: row.civic_state ?? {},
+      legacy: row.legacy_state ?? {},
     },
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
@@ -118,6 +107,7 @@ export async function createDefaultPlayerState(client, userInternalId) {
     experience: 0,
     level: 1,
   };
+  const emptyState = JSON.stringify({});
   await client.query(
     `
       INSERT INTO player_state (
@@ -134,9 +124,12 @@ export async function createDefaultPlayerState(client, userInternalId) {
         arena_state,
         timer_state,
         guild_state,
-        consortium_state
+        consortium_state,
+        travel_state,
+        civic_state,
+        legacy_state
       )
-      VALUES ($1, 1, 500, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb)
+      VALUES ($1, 1, 500, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb)
       ON CONFLICT (user_internal_id) DO NOTHING
     `,
     [
@@ -146,12 +139,15 @@ export async function createDefaultPlayerState(client, userInternalId) {
       JSON.stringify(DEFAULT_BATTLE_STATS),
       JSON.stringify({ current: null }),
       JSON.stringify(defaultPlayerSnapshot),
-      JSON.stringify({}),
-      JSON.stringify({}),
-      JSON.stringify({}),
-      JSON.stringify({}),
-      JSON.stringify({}),
-      JSON.stringify({}),
+      emptyState,
+      emptyState,
+      emptyState,
+      emptyState,
+      emptyState,
+      emptyState,
+      emptyState,
+      emptyState,
+      emptyState,
     ],
   );
 }
@@ -173,6 +169,9 @@ export async function findPlayerStateByUserInternalId(client, userInternalId) {
         timer_state,
         guild_state,
         consortium_state,
+        travel_state,
+        civic_state,
+        legacy_state,
         created_at,
         updated_at
       FROM player_state
@@ -192,11 +191,6 @@ export async function upsertPlayerRuntimeState(client, userInternalId, runtimeSt
   const workingStats = asRecord(playerSnapshot.workingStats);
   const battleStats = asRecord(playerSnapshot.battleStats);
   const current = asRecord(playerSnapshot.current);
-  const jobsState = asRecord(runtimeState.jobs);
-  const civicEmployment = asRecord(runtimeState.civicEmployment);
-  const persistedJobsState = Object.keys(civicEmployment).length
-    ? { ...jobsState, civicEmployment }
-    : jobsState;
   const normalizedPlayerSnapshot = {
     ...playerSnapshot,
     experience,
@@ -220,6 +214,9 @@ export async function upsertPlayerRuntimeState(client, userInternalId, runtimeSt
         timer_state,
         guild_state,
         consortium_state,
+        travel_state,
+        civic_state,
+        legacy_state,
         updated_at
       )
       VALUES (
@@ -237,6 +234,9 @@ export async function upsertPlayerRuntimeState(client, userInternalId, runtimeSt
         $12::jsonb,
         $13::jsonb,
         $14::jsonb,
+        $15::jsonb,
+        $16::jsonb,
+        $17::jsonb,
         NOW()
       )
       ON CONFLICT (user_internal_id) DO UPDATE SET
@@ -246,13 +246,28 @@ export async function upsertPlayerRuntimeState(client, userInternalId, runtimeSt
         working_stats = EXCLUDED.working_stats,
         battle_stats = EXCLUDED.battle_stats,
         current_job = EXCLUDED.current_job,
-        player_snapshot = EXCLUDED.player_snapshot,
+        player_snapshot = (EXCLUDED.player_snapshot - 'portrait')
+          || CASE
+            WHEN jsonb_typeof(EXCLUDED.player_snapshot->'portrait') = 'object'
+              AND COALESCE(EXCLUDED.player_snapshot->'portrait'->>'imageKey', '') <> ''
+              THEN jsonb_build_object('portrait', EXCLUDED.player_snapshot->'portrait')
+            WHEN jsonb_typeof(player_state.player_snapshot->'portrait') = 'object'
+              AND player_state.player_snapshot->'portrait' <> '{}'::jsonb
+              THEN jsonb_build_object('portrait', player_state.player_snapshot->'portrait')
+            WHEN jsonb_typeof(EXCLUDED.player_snapshot->'portrait') = 'object'
+              AND EXCLUDED.player_snapshot->'portrait' <> '{}'::jsonb
+              THEN jsonb_build_object('portrait', EXCLUDED.player_snapshot->'portrait')
+            ELSE '{}'::jsonb
+          END,
         jobs_state = EXCLUDED.jobs_state,
         education_state = EXCLUDED.education_state,
         arena_state = EXCLUDED.arena_state,
         timer_state = EXCLUDED.timer_state,
         guild_state = EXCLUDED.guild_state,
         consortium_state = EXCLUDED.consortium_state,
+        travel_state = EXCLUDED.travel_state,
+        civic_state = EXCLUDED.civic_state,
+        legacy_state = EXCLUDED.legacy_state,
         updated_at = NOW()
     `,
     [
@@ -264,12 +279,15 @@ export async function upsertPlayerRuntimeState(client, userInternalId, runtimeSt
       JSON.stringify(Object.keys(battleStats).length ? battleStats : DEFAULT_BATTLE_STATS),
       JSON.stringify({ current: current.job ?? null }),
       JSON.stringify(normalizedPlayerSnapshot),
-      JSON.stringify(persistedJobsState),
+      JSON.stringify(asRecord(runtimeState.jobs)),
       JSON.stringify(asRecord(runtimeState.education)),
       JSON.stringify(asRecord(runtimeState.arena)),
       JSON.stringify(asRecord(runtimeState.timers)),
       JSON.stringify(asRecord(runtimeState.guild)),
       JSON.stringify(asRecord(runtimeState.consortium)),
+      JSON.stringify(asRecord(runtimeState.travel)),
+      JSON.stringify(asRecord(runtimeState.civicEmployment)),
+      JSON.stringify(asRecord(runtimeState.legacy)),
     ],
   );
 

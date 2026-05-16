@@ -14,6 +14,11 @@ export type ItemDrop = {
   maxQty: number;
 };
 
+export type RequiredItem = {
+  itemId: string;
+  quantity: number;
+};
+
 export type SubJob = {
   id: string;
   name: string;
@@ -32,6 +37,7 @@ export type SubJob = {
   critJailMinutes?: number;
   critFlavorText: string;
   itemDrops: ItemDrop[];
+  requiredItems?: RequiredItem[];
   primaryStat: "strength" | "dexterity" | "intelligence" | "endurance" | "charisma";
 };
 
@@ -73,6 +79,7 @@ const beginnerAdventurer: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 5,
       critFlavorText: "You ate a poisonous berry by mistake. Your vision blurs...",
+      requiredItems: [{ itemId: "herbalist_gloves", quantity: 1 }],
       primaryStat: "intelligence",
       itemDrops: [
         { itemId: "wild_herb",       itemName: "Wild Herb",       dropChance: 0.40, minQty: 1, maxQty: 3 },
@@ -95,6 +102,7 @@ const beginnerAdventurer: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 10,
       critFlavorText: "A heavy branch swings back and cracks you across the skull.",
+      requiredItems: [{ itemId: "wood_axe", quantity: 1 }],
       primaryStat: "strength",
       itemDrops: [
         { itemId: "rough_wood",  itemName: "Rough Wood",  dropChance: 0.35, minQty: 1, maxQty: 4 },
@@ -116,6 +124,7 @@ const beginnerAdventurer: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 15,
       critFlavorText: "The tunnel groans — a cave-in buries you up to the waist!",
+      requiredItems: [{ itemId: "miners_pick", quantity: 1 }],
       primaryStat: "endurance",
       itemDrops: [
         { itemId: "iron_ore",    itemName: "Iron Ore",    dropChance: 0.30, minQty: 1, maxQty: 3 },
@@ -138,6 +147,7 @@ const beginnerAdventurer: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 5,
       critFlavorText: "The fox turns on you — its teeth sink deep into your hand.",
+      requiredItems: [{ itemId: "hunters_bow", quantity: 1 }],
       primaryStat: "dexterity",
       itemDrops: [
         { itemId: "leather_strip", itemName: "Leather Strip", dropChance: 0.25, minQty: 1, maxQty: 3 },
@@ -159,6 +169,10 @@ const beginnerAdventurer: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 10,
       critFlavorText: "The ruin floor collapses — you plunge into a hidden pit.",
+      requiredItems: [
+        { itemId: "lantern", quantity: 1 },
+        { itemId: "rope", quantity: 1 },
+      ],
       primaryStat: "intelligence",
       itemDrops: [
         { itemId: "common_tome",      itemName: "Common Tome",      dropChance: 0.10, minQty: 1, maxQty: 1 },
@@ -216,6 +230,7 @@ const thievery: JobCategory = {
       critConsequence: "jail",
       critJailMinutes: 20,
       critFlavorText: "The lock was rigged — an alarm bell rings out. Guards close in fast.",
+      requiredItems: [{ itemId: "lockpick_set", quantity: 1 }],
       primaryStat: "dexterity",
       itemDrops: [
         { itemId: "gear_cogs", itemName: "Gear Cogs", dropChance: 0.10, minQty: 1, maxQty: 2 },
@@ -258,6 +273,10 @@ const thievery: JobCategory = {
       critConsequence: "jail",
       critJailMinutes: 30,
       critFlavorText: "A court scribe glances at your work and immediately recognises the forgery.",
+      requiredItems: [
+        { itemId: "forged_seal_kit", quantity: 1 },
+        { itemId: "vial_of_ink", quantity: 1 },
+      ],
       primaryStat: "intelligence",
       itemDrops: [
         { itemId: "enchanted_parchment", itemName: "Enchanted Parchment", dropChance: 0.05, minQty: 1, maxQty: 1 },
@@ -294,6 +313,7 @@ const courier: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 5,
       critFlavorText: "You trip on uneven cobblestones at a full sprint — nasty fall.",
+      requiredItems: [{ itemId: "courier_satchel", quantity: 1 }],
       primaryStat: "endurance",
       itemDrops: [],
     },
@@ -312,6 +332,7 @@ const courier: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 10,
       critFlavorText: "Bandits on the road knew exactly what you were carrying. They didn't hold back.",
+      requiredItems: [{ itemId: "courier_satchel", quantity: 1 }],
       primaryStat: "charisma",
       itemDrops: [
         { itemId: "alchemical_root", itemName: "Alchemical Root", dropChance: 0.08, minQty: 1, maxQty: 2 },
@@ -333,6 +354,7 @@ const courier: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 15,
       critFlavorText: "The cargo wagon hits a rut and overturns — you're pinned beneath a crate.",
+      requiredItems: [{ itemId: "rope", quantity: 1 }],
       primaryStat: "strength",
       itemDrops: [
         { itemId: "iron_rivets",    itemName: "Iron Rivets",    dropChance: 0.10, minQty: 1, maxQty: 3 },
@@ -354,6 +376,10 @@ const courier: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 20,
       critFlavorText: "Border patrol stops you — your cover story doesn't hold. They rough you up before releasing you.",
+      requiredItems: [
+        { itemId: "courier_satchel", quantity: 1 },
+        { itemId: "rations", quantity: 1 },
+      ],
       primaryStat: "endurance",
       itemDrops: [
         { itemId: "old_manuscript",    itemName: "Old Manuscript",    dropChance: 0.05, minQty: 1, maxQty: 1 },
@@ -391,6 +417,7 @@ const labor: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 10,
       critFlavorText: "A loose stone block slips from the cart and crushes your foot.",
+      requiredItems: [{ itemId: "rope", quantity: 1 }],
       primaryStat: "strength",
       itemDrops: [
         { itemId: "iron_ore", itemName: "Iron Ore", dropChance: 0.10, minQty: 1, maxQty: 2 },
@@ -411,6 +438,7 @@ const labor: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 5,
       critFlavorText: "Your shovel blade snaps and the handle cracks back across your face.",
+      requiredItems: [{ itemId: "shovel", quantity: 1 }],
       primaryStat: "endurance",
       itemDrops: [
         { itemId: "scrap_metal", itemName: "Scrap Metal", dropChance: 0.12, minQty: 1, maxQty: 3 },
@@ -432,6 +460,7 @@ const labor: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 15,
       critFlavorText: "The tree falls in completely the wrong direction — you barely dive clear. Barely.",
+      requiredItems: [{ itemId: "wood_axe", quantity: 1 }],
       primaryStat: "strength",
       itemDrops: [
         { itemId: "rough_wood", itemName: "Rough Wood", dropChance: 0.25, minQty: 2, maxQty: 5 },
@@ -453,6 +482,7 @@ const labor: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 10,
       critFlavorText: "A splash of molten metal catches your arm. The burns are deep.",
+      requiredItems: [{ itemId: "smithing_hammer", quantity: 1 }],
       primaryStat: "endurance",
       itemDrops: [
         { itemId: "steel_ingot",    itemName: "Steel Ingot",    dropChance: 0.08, minQty: 1, maxQty: 2 },
@@ -475,6 +505,7 @@ const labor: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 5,
       critFlavorText: "A disturbed bees' nest releases a furious swarm. You run — not fast enough.",
+      requiredItems: [{ itemId: "herbalist_gloves", quantity: 1 }],
       primaryStat: "endurance",
       itemDrops: [
         { itemId: "wild_herb",      itemName: "Wild Herb",      dropChance: 0.30, minQty: 1, maxQty: 3 },
@@ -531,6 +562,10 @@ const deception: JobCategory = {
       critConsequence: "jail",
       critJailMinutes: 20,
       critFlavorText: "The ink chemistry doesn't match the official record. The clerk has seen this trick before.",
+      requiredItems: [
+        { itemId: "vial_of_ink", quantity: 1 },
+        { itemId: "enchanted_parchment", quantity: 1 },
+      ],
       primaryStat: "intelligence",
       itemDrops: [
         { itemId: "enchanted_parchment", itemName: "Enchanted Parchment", dropChance: 0.08, minQty: 1, maxQty: 1 },
@@ -551,6 +586,7 @@ const deception: JobCategory = {
       critConsequence: "jail",
       critJailMinutes: 30,
       critFlavorText: "The real Lord Aldric is dining in the next room. He recognises his own family crest.",
+      requiredItems: [{ itemId: "travel_cloak", quantity: 1 }],
       primaryStat: "charisma",
       itemDrops: [
         { itemId: "magic_tome",       itemName: "Magic Tome",       dropChance: 0.03, minQty: 1, maxQty: 1 },
@@ -572,6 +608,7 @@ const deception: JobCategory = {
       critConsequence: "jail",
       critJailMinutes: 25,
       critFlavorText: "Your mark had the guards waiting. They were tipped off from the start.",
+      requiredItems: [{ itemId: "forged_document", quantity: 1 }],
       primaryStat: "charisma",
       itemDrops: [
         { itemId: "catalyst_powder",    itemName: "Catalyst Powder",    dropChance: 0.04, minQty: 1, maxQty: 1 },

@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { usePlayer } from "../../state/PlayerContext";
-import { getTravelProgress, resolveTravelState } from "../../lib/travelState";
+import { getTravelProgress, readTravelStateFromPlayer } from "../../lib/travelState";
 
 const BLOCKED_WHILE_HOSPITALIZED = new Set([
   "/education",
@@ -53,7 +53,7 @@ const BLOCKED_WHILE_TRAVELING = new Set([
 export default function RouteGuard({ children }: { children: JSX.Element }) {
   const { player, now, isHospitalized, isJailed } = usePlayer();
   const location = useLocation();
-  const isTraveling = getTravelProgress(resolveTravelState(player.internalId, now), now).active;
+  const isTraveling = getTravelProgress(readTravelStateFromPlayer(player), now).active;
 
   if (isHospitalized && BLOCKED_WHILE_HOSPITALIZED.has(location.pathname)) {
     return <Navigate to="/hospital" replace state={{ redirectedFrom: location.pathname }} />;

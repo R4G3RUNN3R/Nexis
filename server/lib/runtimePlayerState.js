@@ -26,195 +26,210 @@ const DEFAULT_BATTLE_STATS = {
   dexterity: 10,
 };
 
-const DEFAULT_PROPERTY = {
-  current: "shack",
-  comfortProvided: 100,
-  installedUpgrades: [],
-};
-
-const DEFAULT_CONDITION = {
-  type: "normal",
-  until: null,
-  reason: null,
-};
-
-const DEFAULT_CURRENCIES = {
-  copper: 0,
-  silver: 0,
-  gold: 500,
-  platinum: 0,
-};
-
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function asWholeNumber(value, fallback = 0) {
+function asNumber(value, fallback = 0) {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return fallback;
-  return Math.max(0, Math.floor(numeric));
-}
-
-function normalizeInventory(value) {
-  const record = asRecord(value);
-  return Object.fromEntries(
-    Object.entries(record)
-      .map(([itemId, qty]) => [itemId, asWholeNumber(qty, 0)])
-      .filter(([, qty]) => qty > 0),
-  );
-}
-
-function normalizeEnhancements(value) {
-  const record = asRecord(value);
-  return Object.fromEntries(
-    Object.entries(record)
-      .map(([itemId, enhancements]) => [
-        itemId,
-        Array.isArray(enhancements)
-          ? Array.from(new Set(enhancements.filter((entry) => typeof entry === "string" && entry.trim()).map((entry) => entry.trim())))
-          : [],
-      ])
-      .filter(([, enhancements]) => enhancements.length > 0),
-  );
-}
-
-function normalizeCurrencies(value, fallbackGold = 500) {
-  const record = asRecord(value);
-  return {
-    copper: asWholeNumber(record.copper, DEFAULT_CURRENCIES.copper),
-    silver: asWholeNumber(record.silver, DEFAULT_CURRENCIES.silver),
-    gold: asWholeNumber(record.gold, fallbackGold),
-    platinum: asWholeNumber(record.platinum, DEFAULT_CURRENCIES.platinum),
-  };
-}
-
-function normalizeCurrentEducation(value) {
-  const record = asRecord(value);
-  if (!record.id || !record.name) return null;
-  return {
-    id: String(record.id),
-    name: String(record.name),
-    startedAt: asWholeNumber(record.startedAt, Date.now()),
-    durationMs: asWholeNumber(record.durationMs, 0),
-  };
-}
-
-function normalizeCurrent(value, currentJob) {
-  const record = asRecord(value);
-  return {
-    education: normalizeCurrentEducation(record.education),
-    job: typeof currentJob === "string" && currentJob ? currentJob : null,
-    travel: typeof record.travel === "string" && record.travel ? record.travel : null,
-  };
-}
-
-function normalizeProperty(value) {
-  const record = asRecord(value);
-  const installedUpgrades = Array.isArray(record.installedUpgrades)
-    ? record.installedUpgrades.filter((entry) => typeof entry === "string" && entry)
-    : [];
-
-  return {
-    current: typeof record.current === "string" && record.current ? record.current : DEFAULT_PROPERTY.current,
-    comfortProvided: asWholeNumber(record.comfortProvided, DEFAULT_PROPERTY.comfortProvided),
-    installedUpgrades,
-  };
+  return Number.isFinite(numeric) ? numeric : fallback;
 }
 
 function normalizeCondition(value) {
   const record = asRecord(value);
-  const type = typeof record.type === "string" ? record.type : DEFAULT_CONDITION.type;
-  if (type !== "hospitalized" && type !== "jailed") {
-    return { ...DEFAULT_CONDITION };
+  const type = typeof record.type === "string" ? record.type : "normal";
+  if (type === "hospitalized" || type === "jailed") {
+    return {
+      type,
+      until: typeof record.until === "number" ? record.until : null,
+      reason: typeof record.reason === "string" ? record.reason : null,
+    };
   }
+  return { type: "normal", until: null, reason: null };
+}
 
+function normalizeTravelState(value) {
+  const record = asRecord(value);
+  const status = record.status === "in_transit" ? "in_transit" : "idle";
   return {
-    type,
-    until: record.until == null ? null : asWholeNumber(record.until, Date.now()),
-    reason: typeof record.reason === "string" && record.reason ? record.reason : null,
+    status,
+    originCityId: typeof record.originCityId === "string" ? record.originCityId : "nexis",
+    destinationCityId: typeof record.destinationCityId === "string" ? record.destinationCityId : null,
+    routeType: typeof record.routeType === "string" ? record.routeType : "road",
+    mode: typeof record.mode === "string" ? record.mode : "caravan",
+    departureAt: typeof record.departureAt === "number" ? record.departureAt : null,
+    arrivalAt: typeof record.arrivalAt === "number" ? record.arrivalAt : null,
+    durationMs: typeof record.durationMs === "number" ? record.durationMs : null,
+    currentCityId: typeof record.currentCityId === "string" ? record.currentCityId : "nexis",
+    arrivalNotice:
+      record.arrivalNotice && typeof record.arrivalNotice === "object"
+        ? {
+            destinationCityId:
+              typeof record.arrivalNotice.destinationCityId === "string"
+                ? record.arrivalNotice.destinationCityId
+                : null,
+            destinationName:
+              typeof record.arrivalNotice.destinationName === "string"
+                ? record.arrivalNotice.destinationName
+                : null,
+            arrivedAt:
+              typeof record.arrivalNotice.arrivedAt === "number"
+                ? record.arrivalNotice.arrivedAt
+                : null,
+          }
+        : null,
   };
 }
 
-function resolveCurrentJob(currentJob) {
-  if (typeof currentJob === "string") return currentJob;
-  const record = asRecord(currentJob);
-  return typeof record.current === "string" && record.current ? record.current : null;
+function normalizeStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .filter((entry) => typeof entry === "string" && entry.trim())
+        .map((entry) => entry.trim()),
+    ),
+  );
+}
+
+function normalizeItemEnhancements(value) {
+  const record = asRecord(value);
+  return Object.fromEntries(
+    Object.entries(record)
+      .map(([itemId, enhancements]) => [itemId, normalizeStringArray(enhancements)])
+      .filter(([, enhancements]) => enhancements.length > 0),
+  );
 }
 
 export function buildMutableRuntimeState(user, playerState) {
-  const runtimeState = asRecord(playerState?.runtimeState);
-  const playerSnapshot = asRecord(runtimeState.player);
-  const rowGold = asWholeNumber(playerState?.gold, 500);
-  const gold = asWholeNumber(playerSnapshot.gold, rowGold);
-  const currencies = normalizeCurrencies(playerSnapshot.currencies, gold);
-  const currentJob = resolveCurrentJob(playerState?.currentJob);
+  const runtime = asRecord(playerState?.runtimeState);
+  const player = asRecord(runtime.player);
+  const current = asRecord(player.current);
+  const travel = normalizeTravelState(runtime.travel ?? current.travel);
+  const gold = Math.max(0, Math.floor(asNumber(player.gold, playerState?.gold ?? 500)));
+  const currencies = {
+    copper: Math.max(0, Math.floor(asNumber(player.currencies?.copper, 0))),
+    silver: Math.max(0, Math.floor(asNumber(player.currencies?.silver, 0))),
+    gold,
+    platinum: Math.max(0, Math.floor(asNumber(player.currencies?.platinum, 0))),
+  };
 
   return {
-    ...runtimeState,
     player: {
-      ...playerSnapshot,
       internalId: user.internalId,
       publicId: user.publicId,
-      name: typeof playerSnapshot.name === "string" && playerSnapshot.name ? playerSnapshot.name : user.firstName,
-      lastName: typeof playerSnapshot.lastName === "string" && playerSnapshot.lastName ? playerSnapshot.lastName : user.lastName,
-      title: typeof playerSnapshot.title === "string" ? playerSnapshot.title : "",
-      experience: asWholeNumber(playerSnapshot.experience, 0),
-      level: asWholeNumber(playerState?.level, 1),
-      rank: typeof playerSnapshot.rank === "string" ? playerSnapshot.rank : "0",
-      daysPlayed: asWholeNumber(playerSnapshot.daysPlayed, 0),
-      gold: currencies.gold,
+      name: typeof player.name === "string" && player.name ? player.name : user.firstName,
+      lastName:
+        typeof player.lastName === "string" && player.lastName ? player.lastName : user.lastName,
+      title: typeof player.title === "string" ? player.title : "",
+      rank: typeof player.rank === "string" ? player.rank : null,
+      ageLabel: typeof player.ageLabel === "string" ? player.ageLabel : "Newly registered",
+      createdAt: typeof player.createdAt === "number" ? player.createdAt : Date.now(),
+      daysPlayed: Math.max(0, Math.floor(asNumber(player.daysPlayed, 0))),
+      experience: Math.max(0, Math.floor(asNumber(player.experience, 0))),
+      level: Math.max(1, Math.floor(asNumber(player.level, playerState?.level ?? 1))),
+      gold,
       currencies,
       isRegistered: true,
-      inventory: normalizeInventory(playerSnapshot.inventory),
-      itemEnhancements: normalizeEnhancements(playerSnapshot.itemEnhancements),
+      inventory: asRecord(player.inventory),
+      itemEnhancements: normalizeItemEnhancements(player.itemEnhancements),
+      property: {
+        current:
+          typeof asRecord(player.property).current === "string"
+            ? asRecord(player.property).current
+            : "shack",
+        comfortProvided: asNumber(asRecord(player.property).comfortProvided, 100),
+        installedUpgrades: Array.isArray(asRecord(player.property).installedUpgrades)
+          ? asRecord(player.property).installedUpgrades.filter((entry) => typeof entry === "string")
+          : [],
+      },
       stats: {
         ...DEFAULT_STATS,
-        ...asRecord(playerSnapshot.stats),
         ...asRecord(playerState?.stats),
+        ...asRecord(player.stats),
       },
       workingStats: {
         ...DEFAULT_WORKING_STATS,
-        ...asRecord(playerSnapshot.workingStats),
         ...asRecord(playerState?.workingStats),
+        ...asRecord(player.workingStats),
       },
       battleStats: {
         ...DEFAULT_BATTLE_STATS,
-        ...asRecord(playerSnapshot.battleStats),
         ...asRecord(playerState?.battleStats),
+        ...asRecord(player.battleStats),
       },
-      property: normalizeProperty(playerSnapshot.property),
-      current: normalizeCurrent(playerSnapshot.current, currentJob),
-      condition: normalizeCondition(playerSnapshot.condition),
+      current: {
+        education: current.education ?? null,
+        job:
+          typeof current.job === "string"
+            ? current.job
+            : typeof asRecord(playerState?.currentJob).current === "string"
+              ? asRecord(playerState.currentJob).current
+              : null,
+        travel,
+        currentCityId:
+          typeof current.currentCityId === "string"
+            ? current.currentCityId
+            : travel.currentCityId,
+      },
+      condition: normalizeCondition(player.condition),
+      portrait: asRecord(player.portrait),
+      bio: asRecord(player.bio),
+      counters: asRecord(player.counters),
     },
+    jobs: asRecord(runtime.jobs),
+    education: asRecord(runtime.education),
+    arena: asRecord(runtime.arena),
+    timers: asRecord(runtime.timers),
+    guild: asRecord(runtime.guild),
+    consortium: asRecord(runtime.consortium),
+    travel,
+    civicEmployment: asRecord(runtime.civicEmployment),
+    legacy: asRecord(runtime.legacy),
   };
 }
 
 export function buildAdminPlayerPayload(user, playerState) {
   const runtimeState = buildMutableRuntimeState(user, playerState);
+  const player = runtimeState.player;
+  const currentJob =
+    typeof player.current?.job === "string" && player.current.job.trim()
+      ? player.current.job
+      : null;
+
   return {
     user: {
       internalId: user.internalId,
       publicId: user.publicId,
-      username: user.username,
+      username: user.username ?? null,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
       displayName: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`.trim(),
-      entityType: user.entityType,
-      privilegeRole: user.privilegeRole,
+      entityType: user.entityType ?? "player",
+      privilegeRole: user.privilegeRole ?? "player",
     },
     player: {
-      level: playerState.level,
-      experience: runtimeState.player.experience,
-      gold: playerState.gold,
-      currencies: runtimeState.player.currencies,
-      stats: runtimeState.player.stats,
-      workingStats: runtimeState.player.workingStats,
-      battleStats: runtimeState.player.battleStats,
-      inventory: runtimeState.player.inventory,
-      itemEnhancements: runtimeState.player.itemEnhancements,
-      currentJob: runtimeState.player.current.job,
-      condition: runtimeState.player.condition,
+      level: Number(player.level ?? 1),
+      experience: Number(player.experience ?? 0),
+      gold: Number(player.gold ?? 0),
+      currencies: {
+        copper: Number(player.currencies?.copper ?? 0),
+        silver: Number(player.currencies?.silver ?? 0),
+        gold: Number(player.currencies?.gold ?? player.gold ?? 0),
+        platinum: Number(player.currencies?.platinum ?? 0),
+      },
+      stats: { ...player.stats },
+      workingStats: { ...player.workingStats },
+      battleStats: { ...player.battleStats },
+      inventory: { ...player.inventory },
+      itemEnhancements: { ...player.itemEnhancements },
+      currentJob,
+      condition: {
+        type: player.condition?.type ?? "normal",
+        until: typeof player.condition?.until === "number" ? player.condition.until : null,
+        reason: typeof player.condition?.reason === "string" ? player.condition.reason : null,
+      },
     },
   };
 }

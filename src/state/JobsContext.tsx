@@ -15,6 +15,7 @@ import React, {
   type PropsWithChildren,
 } from "react";
 import { getCategory, getSubJob, type ItemDrop } from "../data/jobsData";
+import { ITEM_CATALOGUE } from "../data/itemsData";
 import { usePlayer } from "./PlayerContext";
 import { useAuth } from "./AuthContext";
 
@@ -55,6 +56,12 @@ export type JobOutcomeResult = {
   chainCount: number;
 };
 
+export type JobRequirementStatus = {
+  allowed: boolean;
+  reason: string | null;
+  missingItems: { itemId: string; itemName: string; quantity: number; owned: number }[];
+};
+
 type JobsStorageState = {
   categoryProgress: Record<string, CategoryProgress>;  // key: categoryId
   subJobStats: Record<string, SubJobStats>;            // key: categoryId::subJobId
@@ -62,6 +69,7 @@ type JobsStorageState = {
 
 type JobsContextValue = {
   attemptJob: (categoryId: string, subJobId: string) => JobOutcomeResult | null;
+  canAttemptJob: (categoryId: string, subJobId: string) => JobRequirementStatus;
   getCategoryProgress: (categoryId: string) => CategoryProgress;
   getSubJobStats: (categoryId: string, subJobId: string) => SubJobStats;
   // Cooldowns are gone — kept as stub returning 0 so old call-sites don't break
@@ -184,6 +192,39 @@ function rollDrops(
   return drops;
 }
 
+function buildRequirementStatus(player: { inventory: Record<string, number>; stats: { stamina: number } }, subJob: NonNullable<ReturnType<typeof getSubJob>>, isHospitalized: boolean, isJailed: boolean): JobRequirementStatus {
+  const missingItems = (subJob.requiredItems ?? [])
+    .map((requirement) => {
+      const owned = Number(player.inventory?.[requirement.itemId] ?? 0);
+      return {
+        itemId: requirement.itemId,
+        itemName: ITEM_CATALOGUE[requirement.itemId]?.name ?? requirement.itemId,
+        quantity: requirement.quantity,
+        owned,
+      };
+    })
+    .filter((entry) => entry.owned < entry.quantity);
+
+  if (isHospitalized) {
+    return { allowed: false, reason: "You are hospitalized.", missingItems };
+  }
+  if (isJailed) {
+    return { allowed: false, reason: "You are in jail.", missingItems };
+  }
+  if (player.stats.stamina < subJob.staminaCost) {
+    return { allowed: false, reason: "Not enough stamina.", missingItems };
+  }
+  if (missingItems.length > 0) {
+    return {
+      allowed: false,
+      reason: `Missing required item${missingItems.length === 1 ? "" : "s"}.`,
+      missingItems,
+    };
+  }
+
+  return { allowed: true, reason: null, missingItems: [] };
+}
+
 // ─── Context ─────────────────────────────────────────────────────────────────
 
 const JobsContext = createContext<JobsContextValue | null>(null);
@@ -224,6 +265,17 @@ export function JobsProvider({ children }: PropsWithChildren) {
     [storage.subJobStats],
   );
 
+  const canAttemptJob = useCallback(
+    (categoryId: string, subJobId: string): JobRequirementStatus => {
+      const subJob = getSubJob(categoryId, subJobId);
+      if (!subJob) {
+        return { allowed: false, reason: "Operation unavailable.", missingItems: [] };
+      }
+      return buildRequirementStatus(player, subJob, isHospitalized, isJailed);
+    },
+    [player, isHospitalized, isJailed],
+  );
+
   // Cooldowns removed — always return 0 so call-sites don't break
   const getCooldownRemaining = useCallback(() => 0, []);
   const isOnCooldown = useCallback(() => false, []);
@@ -236,9 +288,8 @@ export function JobsProvider({ children }: PropsWithChildren) {
       const subJob = getSubJob(categoryId, subJobId);
       if (!category || !subJob) return null;
 
-      // Gates
-      if (player.stats.stamina < subJob.staminaCost) return null;
-      if (isHospitalized || isJailed) return null;
+      const attemptStatus = buildRequirementStatus(player, subJob, isHospitalized, isJailed);
+      if (!attemptStatus.allowed) return null;
 
       // Spend stamina
       spendStamina(subJob.staminaCost);
@@ -407,13 +458,14 @@ export function JobsProvider({ children }: PropsWithChildren) {
   const value = useMemo<JobsContextValue>(
     () => ({
       attemptJob,
+      canAttemptJob,
       getCategoryProgress,
       getSubJobStats,
       getCooldownRemaining,
       isOnCooldown,
       now,
     }),
-    [attemptJob, getCategoryProgress, getSubJobStats, getCooldownRemaining, isOnCooldown, now],
+    [attemptJob, canAttemptJob, getCategoryProgress, getSubJobStats, getCooldownRemaining, isOnCooldown, now],
   );
 
   return <JobsContext.Provider value={value}>{children}</JobsContext.Provider>;

@@ -1,91 +1,88 @@
-/* ─────────────────────────────────────────────────────────────────────────────
-   Nexis — Stat Bars
-   Compact sidebar layout:
-     [Label:]  [000/000]   [countdown]
-               [========]
-   ───────────────────────────────────────────────────────────────────────────── */
-
 .statbars {
-  padding: 6px 0 10px;
-  border-top: 1px solid #1e2a34;
-  border-bottom: 1px solid #1e2a34;
-  margin-bottom: 8px;
+  padding: 12px;
+  border: 1px solid rgba(205, 220, 233, 0.08);
+  border-radius: 14px;
+  background: rgba(9, 14, 18, 0.72);
 }
 
-/* ─── Row ──────────────────────────────────────────────────────────────────── */
+.statbars__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #8fa0af;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.statbars__header strong {
+  color: #dbe3e9;
+  font-size: 11px;
+}
 
 .sb-row {
   display: flex;
-  align-items: flex-start;
-  gap: 0;
-  padding: 4px 10px 2px;
-  min-height: 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(205, 220, 233, 0.06);
+}
+
+.sb-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.sb-row__copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.sb-row__topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 5px;
 }
 
 .sb-row__label {
-  width: 56px;
-  flex-shrink: 0;
-  font-size: 11px;
+  color: #e9edf1;
+  font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
-  padding-top: 2px;
-  white-space: nowrap;
-  letter-spacing: 0.02em;
-}
-
-.sb-row__middle {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-right: 6px;
 }
 
 .sb-row__nums {
-  font-size: 11px;
-  color: #d0dce8;
+  color: #b6c2cb;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.2;
 }
-
-.sb-over {
-  font-size: 10px;
-  color: #ff9800;
-  font-weight: 700;
-  margin-left: 4px;
-}
-
-/* ─── Bar track ────────────────────────────────────────────────────────────── */
 
 .sb-track {
-  height: 8px;
-  background: #0b1318;
-  border: 1px solid #1c2832;
-  border-radius: 1px;
+  height: 9px;
+  border: 1px solid rgba(205, 220, 233, 0.08);
+  border-radius: 999px;
+  background: #081015;
   overflow: hidden;
-  position: relative;
 }
 
 .sb-fill {
   height: 100%;
-  border-radius: 1px;
-  transition: width 1s linear;
+  border-radius: 999px;
+  transition: width 0.8s ease;
 }
 
-/* ─── Countdown ────────────────────────────────────────────────────────────── */
-
 .sb-row__cd {
-  width: 40px;
-  flex-shrink: 0;
-  text-align: right;
+  min-width: 44px;
+  color: #92a2b0;
   font-size: 11px;
-  font-weight: 600;
-  color: #8ba0b0;
-  padding-top: 2px;
+  font-weight: 700;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
 .sb-row__cd--full {
-  color: #4caf50;
-  font-weight: 700;
+  color: #d8e6bc;
 }

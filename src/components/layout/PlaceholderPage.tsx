@@ -12,15 +12,15 @@ export function PlaceholderPage({ title, hint, description, bullets = [] }: Plac
   return (
     <AppShell
       title={title}
-      hint={hint ?? "This route is active, stable, and ready for a fuller system pass when that feature moves up the queue."}
+      hint={hint ?? "This destination is reserved, but its deeper mechanics are not open yet."}
     >
       <div className="placeholder-wrap">
         <ContentPanel title={title}>
           <div className="placeholder-box">
-            <div className="placeholder-box__title">System staging</div>
+            <div className="placeholder-box__title">Coming Soon</div>
             <p>
               {description ??
-                "This page stays visible so navigation does not break, but the deeper mechanics are still being assembled."}
+                "This destination is visible in the city, but its deeper mechanics are not open yet."}
             </p>
             {bullets.length ? (
               <ul className="placeholder-list">

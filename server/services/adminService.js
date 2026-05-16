@@ -1,11 +1,21 @@
 import { withTransaction } from "../db/pool.js";
 import { HttpError } from "../lib/errors.js";
-import { assertAdministrator } from "../lib/adminAccess.js";
+import { assertAdministrator, assertStaffOrAdmin, isAdministrator } from "../lib/adminAccess.js";
+import { assertAdminActionAllowed } from "../lib/adminActionPolicy.js";
 import { assertPrivilegeRole } from "../lib/userIdentity.js";
 import { buildAdminPlayerPayload, buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
 import { insertAdminAuditLog } from "../repositories/adminAuditRepository.js";
-import { createDefaultPlayerState, findPlayerStateByUserInternalId, upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
-import { findUserByInternalId, findUserByPublicId, searchUsers, updateUserPrivilegeRole } from "../repositories/usersRepository.js";
+import {
+  createDefaultPlayerState,
+  findPlayerStateByUserInternalId,
+  upsertPlayerRuntimeState,
+} from "../repositories/playerStateRepository.js";
+import {
+  findUserByInternalId,
+  findUserByPublicId,
+  searchUsers,
+  updateUserPrivilegeRole,
+} from "../repositories/usersRepository.js";
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -72,6 +82,21 @@ function summarizeBars(stats) {
     comfort: `${asWholeNumber(stats.comfort)} / ${asWholeNumber(stats.maxComfort)}`,
   };
 }
+function readBarRevision(player) {
+  const counters = asRecord(player?.counters);
+  return asWholeNumber(counters.barRevision, 0);
+}
+
+function stampBarRecovery(player) {
+  const counters = asRecord(player.counters);
+  const nextRevision = readBarRevision(player) + 1;
+  player.counters = {
+    ...counters,
+    barRevision: nextRevision,
+    lastBarRecoveryAt: Date.now(),
+  };
+  return nextRevision;
+}
 
 function applyAdminAction(runtimeState, actionType, payload) {
   const player = { ...runtimeState.player };
@@ -79,31 +104,87 @@ function applyAdminAction(runtimeState, actionType, payload) {
   let afterSummary = {};
 
   switch (actionType) {
-    case "fillEnergy":
-      beforeSummary = { energy: player.stats.energy, maxEnergy: player.stats.maxEnergy };
-      player.stats = { ...player.stats, energy: player.stats.maxEnergy };
-      afterSummary = { energy: player.stats.energy, maxEnergy: player.stats.maxEnergy };
+        case "fillEnergy": {
+      const currentEnergy = asWholeNumber(player.stats.energy);
+      const maxEnergy = asWholeNumber(player.stats.maxEnergy, 100);
+      if (currentEnergy >= maxEnergy) {
+        throw new HttpError(409, "Energy is already full.", "ADMIN_BAR_ALREADY_FULL");
+      }
+      beforeSummary = { energy: currentEnergy, maxEnergy, barRevision: readBarRevision(player) };
+      player.stats = { ...player.stats, energy: maxEnergy };
+      const barRevision = stampBarRecovery(player);
+      afterSummary = { energy: asWholeNumber(player.stats.energy), maxEnergy, barRevision };
       break;
-    case "fillStamina":
-      beforeSummary = { stamina: player.stats.stamina, maxStamina: player.stats.maxStamina };
-      player.stats = { ...player.stats, stamina: player.stats.maxStamina };
-      afterSummary = { stamina: player.stats.stamina, maxStamina: player.stats.maxStamina };
+    }
+    case "fillStamina": {
+      const currentStamina = asWholeNumber(player.stats.stamina);
+      const maxStamina = asWholeNumber(player.stats.maxStamina, 10);
+      if (currentStamina >= maxStamina) {
+        throw new HttpError(409, "Stamina is already full.", "ADMIN_BAR_ALREADY_FULL");
+      }
+      beforeSummary = { stamina: currentStamina, maxStamina, barRevision: readBarRevision(player) };
+      player.stats = { ...player.stats, stamina: maxStamina };
+      const barRevision = stampBarRecovery(player);
+      afterSummary = { stamina: asWholeNumber(player.stats.stamina), maxStamina, barRevision };
       break;
-    case "fillHealth":
-      beforeSummary = { health: player.stats.health, maxHealth: player.stats.maxHealth };
-      player.stats = { ...player.stats, health: player.stats.maxHealth };
-      afterSummary = { health: player.stats.health, maxHealth: player.stats.maxHealth };
+    }
+    case "fillHealth": {
+      const currentHealth = asWholeNumber(player.stats.health);
+      const maxHealth = asWholeNumber(player.stats.maxHealth, 100);
+      if (currentHealth >= maxHealth) {
+        throw new HttpError(409, "Health is already full.", "ADMIN_BAR_ALREADY_FULL");
+      }
+      beforeSummary = { health: currentHealth, maxHealth, barRevision: readBarRevision(player) };
+      player.stats = { ...player.stats, health: maxHealth };
+      const barRevision = stampBarRecovery(player);
+      afterSummary = { health: asWholeNumber(player.stats.health), maxHealth, barRevision };
       break;
-    case "fillComfort":
-      beforeSummary = { comfort: player.stats.comfort, maxComfort: player.stats.maxComfort };
-      player.stats = { ...player.stats, comfort: player.stats.maxComfort };
-      afterSummary = { comfort: player.stats.comfort, maxComfort: player.stats.maxComfort };
+    }
+    case "fillComfort": {
+      const currentComfort = asWholeNumber(player.stats.comfort);
+      const maxComfort = asWholeNumber(player.stats.maxComfort, 100);
+      if (currentComfort >= maxComfort) {
+        throw new HttpError(409, "Comfort is already full.", "ADMIN_BAR_ALREADY_FULL");
+      }
+      beforeSummary = { comfort: currentComfort, maxComfort, barRevision: readBarRevision(player) };
+      player.stats = { ...player.stats, comfort: maxComfort };
+      const barRevision = stampBarRecovery(player);
+      afterSummary = { comfort: asWholeNumber(player.stats.comfort), maxComfort, barRevision };
       break;
-    case "fillAllBars":
-      beforeSummary = summarizeBars(player.stats);
-      player.stats = { ...player.stats, energy: player.stats.maxEnergy, stamina: player.stats.maxStamina, health: player.stats.maxHealth, comfort: player.stats.maxComfort };
-      afterSummary = summarizeBars(player.stats);
+    }
+    case "fillAllBars": {
+      const currentBars = {
+        energy: asWholeNumber(player.stats.energy),
+        stamina: asWholeNumber(player.stats.stamina),
+        health: asWholeNumber(player.stats.health),
+        comfort: asWholeNumber(player.stats.comfort),
+      };
+      const maxBars = {
+        energy: asWholeNumber(player.stats.maxEnergy, 100),
+        stamina: asWholeNumber(player.stats.maxStamina, 10),
+        health: asWholeNumber(player.stats.maxHealth, 100),
+        comfort: asWholeNumber(player.stats.maxComfort, 100),
+      };
+      const alreadyFull =
+        currentBars.energy >= maxBars.energy &&
+        currentBars.stamina >= maxBars.stamina &&
+        currentBars.health >= maxBars.health &&
+        currentBars.comfort >= maxBars.comfort;
+      if (alreadyFull) {
+        throw new HttpError(409, "All recovery bars are already full.", "ADMIN_BAR_ALREADY_FULL");
+      }
+      beforeSummary = { ...summarizeBars(player.stats), barRevision: readBarRevision(player) };
+      player.stats = {
+        ...player.stats,
+        energy: maxBars.energy,
+        stamina: maxBars.stamina,
+        health: maxBars.health,
+        comfort: maxBars.comfort,
+      };
+      const barRevision = stampBarRecovery(player);
+      afterSummary = { ...summarizeBars(player.stats), barRevision };
       break;
+    }
     case "setBattleStats": {
       const nextStats = asRecord(payload?.battleStats);
       beforeSummary = { ...player.battleStats };
@@ -207,7 +288,7 @@ function applyAdminAction(runtimeState, actionType, payload) {
 }
 
 export async function searchAdminPlayers(actorUser, queryText) {
-  assertAdministrator(actorUser);
+  assertStaffOrAdmin(actorUser);
   const searchTerm = String(queryText ?? "").trim();
   if (!searchTerm) return [];
 
@@ -225,7 +306,7 @@ export async function searchAdminPlayers(actorUser, queryText) {
 }
 
 export async function getAdminPlayer(actorUser, targetInternalId) {
-  assertAdministrator(actorUser);
+  assertStaffOrAdmin(actorUser);
   return withTransaction(async (client) => {
     const target = await loadTarget(client, targetInternalId);
     return buildAdminPlayerPayload(target.user, target.playerState);
@@ -233,12 +314,13 @@ export async function getAdminPlayer(actorUser, targetInternalId) {
 }
 
 export async function performAdminAction(actorUser, targetInternalId, actionType, payload) {
-  assertAdministrator(actorUser);
+  assertStaffOrAdmin(actorUser);
   const reason = requireReason(payload?.reason);
 
   return withTransaction(async (client) => {
     const actor = await resolveActorIdentity(client, actorUser);
     const target = await loadTarget(client, targetInternalId);
+    const policy = assertAdminActionAllowed(actor, actionType);
 
     if (actionType === "setAccountPrivilegeRole") {
       if (actor.internalId === target.user.internalId) {
@@ -257,7 +339,14 @@ export async function performAdminAction(actorUser, targetInternalId, actionType
         entityType: updatedUser.entityType,
       };
 
-      await insertAdminAuditLog(client, { actor, target: updatedUser, actionType, reason, beforeSummary, afterSummary });
+      await insertAdminAuditLog(client, {
+        actor,
+        target: updatedUser,
+        actionType,
+        reason,
+        beforeSummary: { ...beforeSummary, category: policy.category, actorRole: actor.privilegeRole },
+        afterSummary: { ...afterSummary, category: policy.category, actorRole: actor.privilegeRole },
+      });
 
       return {
         target: buildAdminPlayerPayload(updatedUser, updatedPlayerState),
@@ -270,7 +359,14 @@ export async function performAdminAction(actorUser, targetInternalId, actionType
     const { runtimeState: updatedRuntimeState, beforeSummary, afterSummary } = applyAdminAction(runtimeState, actionType, payload);
     const updatedPlayerState = await upsertPlayerRuntimeState(client, target.user.internalId, updatedRuntimeState);
 
-    await insertAdminAuditLog(client, { actor, target: target.user, actionType, reason, beforeSummary, afterSummary });
+    await insertAdminAuditLog(client, {
+      actor,
+      target: target.user,
+      actionType,
+      reason,
+      beforeSummary: { ...beforeSummary, category: policy.category, actorRole: actor.privilegeRole },
+      afterSummary: { ...afterSummary, category: policy.category, actorRole: actor.privilegeRole },
+    });
 
     return {
       target: buildAdminPlayerPayload(target.user, updatedPlayerState),

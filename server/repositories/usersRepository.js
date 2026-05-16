@@ -112,6 +112,20 @@ export async function updateUserPrivilegeRole(client, internalId, privilegeRole)
   return mapUserRow(result.rows[0]);
 }
 
+export async function updateUserPasswordHash(client, internalId, passwordHash) {
+  const result = await client.query(
+    `
+      UPDATE users
+      SET password_hash = $2
+      WHERE internal_id = $1
+      RETURNING internal_id, public_id, username, email, first_name, last_name, entity_type, privilege_role, created_at
+    `,
+    [internalId, passwordHash],
+  );
+
+  return mapUserRow(result.rows[0]);
+}
+
 export async function searchUsers(client, queryText, limit = 20) {
   const term = String(queryText ?? "").trim();
   if (!term) return [];

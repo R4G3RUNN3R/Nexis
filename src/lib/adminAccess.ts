@@ -1,9 +1,6 @@
-export type EntityType = "player" | "npc" | "system" | "event";
-export type PrivilegeRole = "player" | "staff" | "admin";
-
 export const ABSOLUTE_OWNER_PUBLIC_ID = 1_000_000;
 
-const RESERVED_PRIVILEGED_PUBLIC_IDS = new Set<number>([
+const ADMIN_RESERVED_PUBLIC_IDS = new Set<number>([
   ABSOLUTE_OWNER_PUBLIC_ID,
   1_000_010,
   1_000_011,
@@ -11,36 +8,56 @@ const RESERVED_PRIVILEGED_PUBLIC_IDS = new Set<number>([
   1_000_013,
 ]);
 
-function readPublicId(input: { publicId?: number | null } | number | null | undefined) {
-  if (typeof input === "number") return input;
-  if (input && typeof input === "object" && typeof input.publicId === "number") return input.publicId;
-  return null;
+export type PrivilegeRole = "player" | "staff" | "admin";
+
+export function isAbsoluteOwner(publicId: number | null | undefined) {
+  return publicId === ABSOLUTE_OWNER_PUBLIC_ID;
 }
 
-function readPrivilegeRole(input: { privilegeRole?: string | null; publicId?: number | null } | number | null | undefined) {
-  if (input && typeof input === "object" && typeof input.privilegeRole === "string") {
-    if (input.privilegeRole === "admin" || input.privilegeRole === "staff" || input.privilegeRole === "player") {
-      return input.privilegeRole;
-    }
-  }
-
-  const publicId = readPublicId(input);
-  if (typeof publicId === "number" && RESERVED_PRIVILEGED_PUBLIC_IDS.has(publicId)) {
-    return "admin";
-  }
-
-  return "player";
+export function isAdministratorRole(role: PrivilegeRole | null | undefined) {
+  return role === "admin";
 }
 
-export function isAbsoluteOwner(input: { publicId?: number | null } | number | null | undefined) {
-  return readPublicId(input) === ABSOLUTE_OWNER_PUBLIC_ID;
-}
-
-export function isAdministrator(input: { privilegeRole?: string | null; publicId?: number | null } | number | null | undefined) {
-  return readPrivilegeRole(input) === "admin";
-}
-
-export function isStaffOrAdmin(input: { privilegeRole?: string | null; publicId?: number | null } | number | null | undefined) {
-  const role = readPrivilegeRole(input);
+export function isStaffOrAdminRole(role: PrivilegeRole | null | undefined) {
   return role === "staff" || role === "admin";
+}
+
+export function isAdministrator(
+  publicIdOrOptions: number | null | undefined | { publicId?: number | null; privilegeRole?: PrivilegeRole | null },
+  privilegeRole?: PrivilegeRole | null,
+) {
+  if (typeof publicIdOrOptions === "object" && publicIdOrOptions !== null) {
+    if (typeof publicIdOrOptions.privilegeRole === "string") {
+      return isAdministratorRole(publicIdOrOptions.privilegeRole);
+    }
+
+    return typeof publicIdOrOptions.publicId === "number"
+      && ADMIN_RESERVED_PUBLIC_IDS.has(publicIdOrOptions.publicId);
+  }
+
+  if (typeof privilegeRole === "string") {
+    return isAdministratorRole(privilegeRole);
+  }
+
+  return typeof publicIdOrOptions === "number" && ADMIN_RESERVED_PUBLIC_IDS.has(publicIdOrOptions);
+}
+
+export function isStaffOrAdmin(
+  publicIdOrOptions: number | null | undefined | { publicId?: number | null; privilegeRole?: PrivilegeRole | null },
+  privilegeRole?: PrivilegeRole | null,
+) {
+  if (typeof publicIdOrOptions === "object" && publicIdOrOptions !== null) {
+    if (typeof publicIdOrOptions.privilegeRole === "string") {
+      return isStaffOrAdminRole(publicIdOrOptions.privilegeRole);
+    }
+
+    return typeof publicIdOrOptions.publicId === "number"
+      && ADMIN_RESERVED_PUBLIC_IDS.has(publicIdOrOptions.publicId);
+  }
+
+  if (typeof privilegeRole === "string") {
+    return isStaffOrAdminRole(privilegeRole);
+  }
+
+  return typeof publicIdOrOptions === "number" && ADMIN_RESERVED_PUBLIC_IDS.has(publicIdOrOptions);
 }

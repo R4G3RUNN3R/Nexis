@@ -19,8 +19,8 @@ export default function PublicPageShell({ title, subtitle, children }: PublicPag
     <div className="public-shell">
       <header className="public-topbar">
         <div className="public-topbar__brand">
-          <Link to="/" className="public-topbar__logo">Ashen Crown</Link>
-          <span className="public-topbar__tag">Browser fantasy realm</span>
+          <Link to="/" className="public-topbar__logo">Nexis</Link>
+          <span className="public-topbar__tag">Persistent browser RPG</span>
         </div>
 
         <nav className="public-topbar__nav" aria-label="Public navigation">
@@ -42,7 +42,7 @@ export default function PublicPageShell({ title, subtitle, children }: PublicPag
 
       <main className="public-main">
         <section className="public-hero">
-          <div className="public-hero__eyebrow">Ashen Crown Gazette</div>
+          <div className="public-hero__eyebrow">Nexis Dispatch</div>
           <h1>{title}</h1>
           {subtitle ? <p>{subtitle}</p> : null}
         </section>
@@ -51,7 +51,7 @@ export default function PublicPageShell({ title, subtitle, children }: PublicPag
       </main>
 
       <footer className="public-footer">
-        <div>Ashen Crown public records</div>
+        <div>Nexis public records</div>
         <div className="public-footer__links">
           <Link to="/rules">Rules</Link>
           <Link to="/contact">Contact</Link>

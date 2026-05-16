@@ -1,21 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
-import { ContentPanel } from "../components/layout/ContentPanel";
 import { worldCities, worldRoutes, type WorldCity, type WorldCityId, worldMapTitle } from "../data/worldMapData";
-import { cielCityCopy, cielPageCopy } from "../data/cielPageCopy";
-import { askCiel } from "../lib/ciel-system";
+import { useAuth } from "../state/AuthContext";
+import { usePlayer } from "../state/PlayerContext";
+import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
+import { cancelServerTravel, getServerTravelState, startServerTravel, type ServerPlayerState } from "../lib/authApi";
 import {
-  cancelTravel,
   formatTravelDuration,
   getCityName,
   getTravelProgress,
-  resolveTravelState,
-  startTravel,
+  readTravelStateFromPlayer,
   type PersistedTravelState,
 } from "../lib/travelState";
-import { usePlayer } from "../state/PlayerContext";
-import mapImage from "../assets/maps/nexis-world-map.png";
+import mapImage from "../assets/maps/nexis-world-map-expanded.jpg";
 import "../styles/world-map-ui.css";
 
 const CITY_IMAGES: Record<string, string> = {
@@ -25,6 +23,10 @@ const CITY_IMAGES: Record<string, string> = {
   west: "/images/cities/city_westmarch.png",
   south: "/images/cities/city_embervale.png",
 };
+
+function getFocusedCityId(state: PersistedTravelState): WorldCityId {
+  return state.status === "in_transit" && state.destinationCityId ? state.destinationCityId : state.currentCityId;
+}
 
 function getPinClass(region: WorldCity["region"]) {
   switch (region) {
@@ -43,20 +45,96 @@ function getPinClass(region: WorldCity["region"]) {
 
 export default function TravelPage() {
   const { player } = usePlayer();
+  const { activeAccount, authSource, serverSessionToken } = useAuth();
   const location = useLocation() as { state?: { redirectedFrom?: string } };
   const [now, setNow] = useState(Date.now());
-  const [travelState, setTravelState] = useState<PersistedTravelState>(() => resolveTravelState(player.internalId));
-  const [selectedCityId, setSelectedCityId] = useState<WorldCityId>(() => resolveTravelState(player.internalId).currentCityId);
+  const [travelState, setTravelState] = useState<PersistedTravelState>(() => readTravelStateFromPlayer(player));
+  const [selectedCityId, setSelectedCityId] = useState<WorldCityId>(() => getFocusedCityId(readTravelStateFromPlayer(player)));
+  const [message, setMessage] = useState<string | null>(null);
+  const travelStateSyncRef = useRef<PersistedTravelState>(travelState);
+
+  const applyServerTravelState = useCallback((travel: Record<string, unknown>) => {
+    setTravelState(
+      readTravelStateFromPlayer({
+        current: {
+          travel,
+          currentCityId: travel.currentCityId,
+        },
+      }),
+    );
+  }, []);
+
+  const cacheAndApplyTravelResult = useCallback((result: {
+    playerState: ServerPlayerState;
+    travel: Record<string, unknown>;
+  }) => {
+    if (!activeAccount) return;
+
+    mergeServerStateIntoCache({
+      email: activeAccount.email,
+      user: {
+        internalPlayerId: activeAccount.internalPlayerId,
+        publicId: activeAccount.publicId,
+        firstName: activeAccount.firstName,
+        lastName: activeAccount.lastName,
+      },
+      playerState: result.playerState,
+    });
+    applyServerTravelState(result.travel);
+  }, [activeAccount, applyServerTravelState]);
+
+  const refreshServerTravel = useCallback(async () => {
+    if (authSource !== "server" || !serverSessionToken || !activeAccount) {
+      return;
+    }
+
+    const result = await getServerTravelState(serverSessionToken);
+    if (!("ok" in result) || !result.ok) {
+      setMessage(result.error);
+      return;
+    }
+
+    cacheAndApplyTravelResult(result);
+  }, [activeAccount, authSource, cacheAndApplyTravelResult, serverSessionToken]);
 
   useEffect(() => {
-    setTravelState(resolveTravelState(player.internalId));
-    const timer = window.setInterval(() => {
-      const currentNow = Date.now();
-      setNow(currentNow);
-      setTravelState(resolveTravelState(player.internalId, currentNow));
-    }, 1000);
+    const nextTravelState = readTravelStateFromPlayer(player);
+    const focusedCityId = getFocusedCityId(nextTravelState);
+    const previousTravelState = travelStateSyncRef.current;
+
+    setTravelState(nextTravelState);
+    setSelectedCityId((current) => {
+      const enteredTransit = previousTravelState.status !== "in_transit" && nextTravelState.status === "in_transit";
+      const exitedTransit = previousTravelState.status === "in_transit" && nextTravelState.status !== "in_transit";
+      const currentCityChanged = previousTravelState.currentCityId !== nextTravelState.currentCityId;
+      const transitDestinationChanged =
+        nextTravelState.status === "in_transit" && previousTravelState.destinationCityId !== nextTravelState.destinationCityId;
+
+      if (enteredTransit || exitedTransit || currentCityChanged || transitDestinationChanged) {
+        return focusedCityId;
+      }
+
+      return current;
+    });
+
+    travelStateSyncRef.current = nextTravelState;
+  }, [player]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [player.internalId]);
+  }, []);
+
+  useEffect(() => {
+    if (authSource !== "server" || !serverSessionToken) return undefined;
+    const syncTimer = window.setInterval(() => {
+      const nextState = readTravelStateFromPlayer(player);
+      if (nextState.status === "in_transit") {
+        void refreshServerTravel();
+      }
+    }, 5000);
+    return () => window.clearInterval(syncTimer);
+  }, [authSource, player, refreshServerTravel, serverSessionToken]);
 
   const selectedCity = useMemo(
     () => worldCities.find((city) => city.id === selectedCityId) ?? worldCities[0],
@@ -70,72 +148,123 @@ export default function TravelPage() {
     () => worldRoutes.filter((route) => route.from === selectedCity.id || route.to === selectedCity.id),
     [selectedCity],
   );
+  const cityRouteCounts = useMemo(
+    () =>
+      worldCities.reduce<Record<WorldCityId, number>>((acc, city) => {
+        acc[city.id] = worldRoutes.filter((route) => route.from === city.id || route.to === city.id).length;
+        return acc;
+      }, {} as Record<WorldCityId, number>),
+    [],
+  );
 
-  const pageCopy = cielPageCopy.travel;
-  const cityCopy = cielCityCopy[selectedCity.id] ?? cielPageCopy.city;
   const progress = getTravelProgress(travelState, now);
   const isTraveling = progress.active;
   const destinationName = getCityName(travelState.destinationCityId);
   const originName = getCityName(travelState.originCityId);
   const canTravel = !isTraveling && selectedCity.id !== travelState.currentCityId;
-  const academyLabel = selectedCity.academy ?? (selectedCity.id === "nexis" ? "Ashen Crown Academy of Commerce & Civil Arts" : "None");
+  const academyLabel = selectedCity.academy ?? (selectedCity.id === "nexis" ? "Nexis Academy of Commerce & Civil Arts" : "None");
 
-  function handleTravel() {
-    if (!canTravel) return;
-    const nextState = startTravel(player.internalId, selectedCity.id, Date.now(), {
-      propertyId: player.property.current,
-      installedUpgradeIds: player.property.installedUpgrades,
-    });
-    setTravelState(nextState);
+  async function handleTravel() {
+    if (!canTravel || authSource !== "server" || !serverSessionToken || !activeAccount) return;
+    const result = await startServerTravel(serverSessionToken, selectedCity.id);
+    if (!("ok" in result) || !result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    cacheAndApplyTravelResult(result);
+    setMessage(`Caravan assembled for ${selectedCity.name}.`);
   }
 
-  function handleCancelTravel() {
-    const nextState = cancelTravel(player.internalId, Date.now());
-    setTravelState(nextState);
+  async function handleCancelTravel() {
+    if (authSource !== "server" || !serverSessionToken || !activeAccount) return;
+    const result = await cancelServerTravel(serverSessionToken);
+    if (!("ok" in result) || !result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    cacheAndApplyTravelResult(result);
+    setMessage("The caravan turns back along the road already traveled.");
   }
+
+  useEffect(() => {
+    if (travelState.arrivalNotice?.arrivedAt && travelState.arrivalNotice.destinationName) {
+      setMessage(`Caravan arrived in ${travelState.arrivalNotice.destinationName}.`);
+    }
+  }, [travelState.arrivalNotice?.arrivedAt, travelState.arrivalNotice?.destinationName]);
 
   return (
     <AppShell
       title="Travel"
-      hint={pageCopy.flavor}
+      hint="Plan routes, compare destinations, and track active travel without losing progress when you leave the page."
     >
-      <div className="page-intro-grid">
-        <ContentPanel title="Travel Office">
-          <p className="page-intro__lead">{pageCopy.flavor}</p>
-          <p className="page-intro__body">{pageCopy.alt}</p>
-        </ContentPanel>
-        <ContentPanel title="CIEL">
-          <p className="page-intro__body">{pageCopy.ciel}</p>
-        </ContentPanel>
-      </div>
-
       <div className="travel-layout">
         <section className="travel-panel travel-panel--map">
           <div className="travel-panel__header">{worldMapTitle}</div>
           <div className="travel-map-frame">
-            <img src={mapImage} alt="The world map of Ashen Crown" className="travel-map-image" />
-            {worldCities.map((city) => (
-              <button
-                key={city.id}
-                type="button"
-                className={getPinClass(city.region)}
-                style={{ left: `${city.xPercent}%`, top: `${city.yPercent}%` }}
-                onClick={() => {
-                  setSelectedCityId(city.id);
-                  askCiel("travel_destination", city);
-                }}
-                aria-label={city.name}
-                title={city.name}
-              >
-                <span className="travel-pin__dot" />
-                <span className="travel-pin__label">{city.name}</span>
-              </button>
-            ))}
+            <img src={mapImage} alt="The world map of Nexis" className="travel-map-image" />
+            <div
+              className="travel-map-spotlight"
+              style={{ left: `${selectedCity.xPercent}%`, top: `${selectedCity.yPercent}%` }}
+              aria-hidden
+            />
+            {worldCities.map((city) => {
+              const isSelected = selectedCityId === city.id;
+              const isCurrent = travelState.currentCityId === city.id;
+              const isTransitTarget = isTraveling && travelState.destinationCityId === city.id;
+              return (
+                <button
+                  key={city.id}
+                  type="button"
+                  className={`${getPinClass(city.region)}${isSelected ? " travel-pin--selected" : ""}${isCurrent ? " travel-pin--current" : ""}${isTransitTarget ? " travel-pin--target" : ""}`}
+                  style={{ left: `${city.xPercent}%`, top: `${city.yPercent}%` }}
+                  onClick={() => setSelectedCityId(city.id)}
+                  aria-label={city.name}
+                  title={`${city.name} (Map quick-select)`}
+                >
+                  <span className="travel-pin__dot" />
+                  <span className="travel-pin__label">{city.name}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="travel-destination-registry">
+            <div className="travel-subsection__title">Destination Registry (Authoritative Selector)</div>
+            <div className="travel-destination-registry__hint">
+              Use this list for precise destination selection. Map pins remain quick-select only.
+            </div>
+            <div className="travel-destination-list">
+              {worldCities.map((city) => {
+                const isSelected = selectedCityId === city.id;
+                const isCurrent = travelState.currentCityId === city.id;
+                const isTransitTarget = isTraveling && travelState.destinationCityId === city.id;
+                return (
+                  <button
+                    key={city.id}
+                    type="button"
+                    className={`travel-destination-entry${isSelected ? " travel-destination-entry--selected" : ""}`}
+                    onClick={() => setSelectedCityId(city.id)}
+                    aria-current={isSelected ? "true" : undefined}
+                  >
+                    <div className="travel-destination-entry__name">{city.name}</div>
+                    <div className="travel-destination-entry__meta">{city.subtitle}</div>
+                    <div className="travel-destination-entry__meta">
+                      {cityRouteCounts[city.id]} connected route{cityRouteCounts[city.id] === 1 ? "" : "s"}
+                    </div>
+                    <div className="travel-destination-entry__flags">
+                      {isSelected ? <span className="travel-destination-flag travel-destination-flag--selected">Selected</span> : null}
+                      {isCurrent ? <span className="travel-destination-flag">Current City</span> : null}
+                      {isTransitTarget ? <span className="travel-destination-flag travel-destination-flag--target">Transit Target</span> : null}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </section>
 
         <section className="travel-panel">
-          <div className="travel-panel__header">Selected Destination</div>
+          <div className="travel-panel__header">Caravan Operations</div>
           <div className="travel-card">
             {CITY_IMAGES[selectedCity.id] ? (
               <div className="travel-city-art">
@@ -146,10 +275,7 @@ export default function TravelPage() {
             <div className="travel-card__title">{selectedCity.name}</div>
             <div className="travel-card__subtitle">{selectedCity.subtitle}</div>
 
-            <div className="travel-card__copy-block">
-              <p className="page-intro__lead">{cityCopy.flavor}</p>
-              <p className="page-intro__body">{cityCopy.ciel}</p>
-            </div>
+            {message ? <div className="travel-inline-note">{message}</div> : null}
 
             <div className="travel-card__grid">
               <div className="travel-info">
@@ -157,48 +283,29 @@ export default function TravelPage() {
                 <strong className="travel-info__value">{currentCity.name}</strong>
               </div>
               <div className="travel-info">
-                <span className="travel-info__label">Access Rule</span>
-                <strong className="travel-info__value">{selectedCity.accessRule}</strong>
+                <span className="travel-info__label">Travel Mode</span>
+                <strong className="travel-info__value">{travelState.mode === "personal_wagon" ? "Personal Wagon" : "Caravan"}</strong>
               </div>
               <div className="travel-info">
                 <span className="travel-info__label">Academy</span>
                 <strong className="travel-info__value">{academyLabel}</strong>
               </div>
               <div className="travel-info">
-                <span className="travel-info__label">Travel Feel</span>
+                <span className="travel-info__label">Route Feel</span>
                 <strong className="travel-info__value">{selectedCity.travelFeel}</strong>
               </div>
             </div>
 
             {isTraveling ? (
-              <div
-                style={{
-                  display: "grid",
-                  gap: 8,
-                  marginBottom: 14,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 8,
-                  padding: 12,
-                }}
-              >
-                <strong>Travel In Progress</strong>
-                <div style={{ fontSize: 13, color: "#b7c3cf" }}>
-                  {originName} to {destinationName}
+              <div className="travel-card__status">
+                <strong>Caravan In Transit</strong>
+                <div>{originName} to {destinationName}</div>
+                <div className="travel-progress">
+                  <span style={{ width: `${progress.percent}%` }} />
                 </div>
-                <div style={{ height: 12, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-                  <div
-                    style={{
-                      width: `${progress.percent}%`,
-                      height: "100%",
-                      background: "linear-gradient(90deg, rgba(121,188,255,0.75), rgba(107,227,176,0.75))",
-                    }}
-                  />
-                </div>
-                <div style={{ fontSize: 12, color: "#d7dee6" }}>
-                  {progress.percent}% complete | ETA {formatTravelDuration(progress.remainingMs)}
-                </div>
+                <div>{progress.percent}% complete | ETA {formatTravelDuration(progress.remainingMs)}</div>
                 {location.state?.redirectedFrom ? (
-                  <div style={{ fontSize: 12, color: "#d7c17a" }}>
+                  <div className="travel-inline-note travel-inline-note--warning">
                     {location.state.redirectedFrom} is unavailable while you are in transit.
                   </div>
                 ) : null}
@@ -222,18 +329,18 @@ export default function TravelPage() {
               <button
                 type="button"
                 className="travel-action-button travel-action-button--primary"
-                onClick={handleTravel}
+                onClick={() => void handleTravel()}
                 disabled={!canTravel}
               >
                 {isTraveling
                   ? "Already Traveling"
                   : selectedCity.id === travelState.currentCityId
                     ? "Already Here"
-                    : `Travel to ${selectedCity.name}`}
+                    : `Dispatch Caravan to ${selectedCity.name}`}
               </button>
               {isTraveling ? (
-                <button type="button" className="travel-action-button" onClick={handleCancelTravel}>
-                  Cancel And Return
+                <button type="button" className="travel-action-button" onClick={() => void handleCancelTravel()}>
+                  Turn Caravan Back
                 </button>
               ) : null}
             </div>

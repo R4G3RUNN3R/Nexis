@@ -7,22 +7,23 @@ import {
   type ServerAuthUser,
   type ServerPlayerState,
 } from "../lib/authApi";
-import { allocatePlayerIdentity, migrateStoredAccountIdentities } from "../lib/publicIds";
+import { migrateStoredAccountIdentities } from "../lib/publicIds";
 import {
   mergeServerStateIntoCache,
+  readCachedRuntimeState,
   type CachedRuntimeState,
 } from "../lib/runtimeStateCache";
 
 export type NexisAccount = {
   email: string;
-  password: string;
+  password?: string;
   firstName: string;
   lastName: string;
   createdAt: number;
   publicId: number;
   internalPlayerId: string;
-  entityType: "player" | "npc" | "system" | "event";
-  privilegeRole: "player" | "staff" | "admin";
+  entityType?: ServerAuthUser["entityType"];
+  privilegeRole?: ServerAuthUser["privilegeRole"];
 };
 
 type AuthSource = "local" | "server";
@@ -51,7 +52,11 @@ type AuthContextValue = {
   }) => Promise<AuthResult>;
   login: (email: string, password: string) => Promise<AuthResult>;
   logout: () => void;
-  syncServerRuntimeState: (runtimeState: CachedRuntimeState) => Promise<void>;
+  syncServerRuntimeState: (
+    runtimeState: CachedRuntimeState,
+    options?: { keepalive?: boolean },
+  ) => Promise<void>;
+  refreshServerState: () => Promise<void>;
 };
 
 const ACCOUNTS_KEY = "nexis_accounts";
@@ -136,16 +141,14 @@ function writeSession(state: AuthState) {
 
 function upsertMirroredAccount(
   user: ServerAuthUser,
-  password: string | null,
+  _password: string | null,
   playerState: ServerPlayerState,
 ) {
   const email = normalizeEmail(user.email);
   const existingAccounts = readAccounts();
-  const existingAccount = existingAccounts[email];
 
   const updatedAccount: NexisAccount = {
     email,
-    password: password ?? existingAccount?.password ?? "",
     firstName: user.firstName,
     lastName: user.lastName,
     createdAt: user.createdAt,
@@ -178,15 +181,6 @@ function createServerSessionState(
   };
 }
 
-function createLocalSessionState(email: string): AuthState {
-  return {
-    activeEmail: normalizeEmail(email),
-    authSource: "local",
-    serverSessionToken: null,
-    sessionExpiresAt: null,
-  };
-}
-
 function clearSessionState(): AuthState {
   return {
     activeEmail: null,
@@ -196,84 +190,27 @@ function clearSessionState(): AuthState {
   };
 }
 
-function registerLocally(data: {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-}): {
-  result: AuthResult;
-  accounts: Record<string, NexisAccount>;
-  session: AuthState;
-} {
-  const email = normalizeEmail(data.email);
-  const existing = readAccounts();
-
-  if (existing[email]) {
-    return {
-      result: { ok: false, error: "An account with this email already exists." },
-      accounts: existing,
-      session: readSession(),
-    };
-  }
-
-  const identity = allocatePlayerIdentity(Object.values(existing));
-  const account: NexisAccount = {
-    email,
-    password: data.password,
-    firstName: data.firstName.trim(),
-    lastName: data.lastName.trim(),
-    createdAt: Date.now(),
-    publicId: identity.publicId,
-    internalPlayerId: identity.internalPlayerId,
-    entityType: "player",
-    privilegeRole: "player",
-  };
-
-  const updatedAccounts = { ...existing, [email]: account };
-  writeAccounts(updatedAccounts);
-  const newSession = createLocalSessionState(email);
-  writeSession(newSession);
+function sanitizeRuntimeStateForServer(runtimeState: CachedRuntimeState): CachedRuntimeState {
+  const player = runtimeState.player && typeof runtimeState.player === "object" ? { ...runtimeState.player } : {};
+  const current =
+    player.current && typeof player.current === "object" && !Array.isArray(player.current)
+      ? { ...player.current as Record<string, unknown> }
+      : {};
+  delete current.travel;
+  delete current.currentCityId;
+  delete player.portrait;
+  delete player.guild;
+  delete player.consortium;
+  player.current = current;
 
   return {
-    result: { ok: true },
-    accounts: updatedAccounts,
-    session: newSession,
-  };
-}
-
-function loginLocally(email: string, password: string): {
-  result: AuthResult;
-  accounts: Record<string, NexisAccount>;
-  session: AuthState;
-} {
-  const normalizedEmail = normalizeEmail(email);
-  const existing = readAccounts();
-  const account = existing[normalizedEmail];
-
-  if (!account) {
-    return {
-      result: { ok: false, error: "No account found with that email." },
-      accounts: existing,
-      session: readSession(),
-    };
-  }
-
-  if (account.password !== password) {
-    return {
-      result: { ok: false, error: "Incorrect password." },
-      accounts: existing,
-      session: readSession(),
-    };
-  }
-
-  const newSession = createLocalSessionState(normalizedEmail);
-  writeSession(newSession);
-
-  return {
-    result: { ok: true },
-    accounts: existing,
-    session: newSession,
+    ...runtimeState,
+    player,
+    travel: {},
+    civicEmployment: {},
+    legacy: {},
+    guild: {},
+    consortium: {},
   };
 }
 
@@ -326,11 +263,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
 
       if (result.ok) {
-        const updatedAccounts = upsertMirroredAccount(
-          result.user,
-          readAccounts()[normalizeEmail(result.user.email)]?.password ?? null,
-          result.playerState,
-        );
+        const updatedAccounts = upsertMirroredAccount(result.user, null, result.playerState);
         setAccounts(updatedAccounts);
         setServerHydrationVersion((value) => value + 1);
 
@@ -362,6 +295,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [session]);
 
+  useEffect(() => {
+    if (
+      session.authSource !== "server" ||
+      !session.serverSessionToken ||
+      !session.activeEmail
+    ) {
+      return undefined;
+    }
+
+    const poll = window.setInterval(async () => {
+      const cached = readCachedRuntimeState(session.activeEmail!);
+      const travel = cached.travel;
+      const shouldPollAggressively =
+        travel &&
+        typeof travel === "object" &&
+        travel.status === "in_transit";
+
+      if (!shouldPollAggressively) {
+        return;
+      }
+
+      const result = await getCurrentServerUser(session.serverSessionToken!);
+      if (!("ok" in result) || !result.ok) {
+        return;
+      }
+
+      const updatedAccounts = upsertMirroredAccount(result.user, null, result.playerState);
+      setAccounts(updatedAccounts);
+      setServerHydrationVersion((value) => value + 1);
+    }, 5000);
+
+    return () => window.clearInterval(poll);
+  }, [session.authSource, session.serverSessionToken, session.activeEmail]);
+
   const register = useCallback(
     async (data: {
       firstName: string;
@@ -383,11 +350,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (serverResult.ok) {
-        const updatedAccounts = upsertMirroredAccount(
-          serverResult.user,
-          data.password,
-          serverResult.playerState,
-        );
+        const updatedAccounts = upsertMirroredAccount(serverResult.user, null, serverResult.playerState);
         const nextSession = createServerSessionState(
           serverResult.user.email,
           serverResult.sessionToken,
@@ -401,14 +364,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { ok: true };
       }
 
-      if (!serverResult.unavailable) {
-        return { ok: false, error: serverResult.error };
-      }
-
-      const fallback = registerLocally(data);
-      setAccounts(fallback.accounts);
-      setSession(fallback.session);
-      return fallback.result;
+      return {
+        ok: false,
+        error: serverResult.unavailable
+          ? "Registration service is unavailable right now. Your account was not created, which is annoying but better than inventing a split-brain save file."
+          : serverResult.error,
+      };
     },
     [],
   );
@@ -422,11 +383,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (serverResult.ok) {
-        const updatedAccounts = upsertMirroredAccount(
-          serverResult.user,
-          password,
-          serverResult.playerState,
-        );
+        const updatedAccounts = upsertMirroredAccount(serverResult.user, null, serverResult.playerState);
         const nextSession = createServerSessionState(
           serverResult.user.email,
           serverResult.sessionToken,
@@ -456,11 +413,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (migrationResult.ok) {
-          const updatedAccounts = upsertMirroredAccount(
-            migrationResult.user,
-            localAccount.password,
-            migrationResult.playerState,
-          );
+          const updatedAccounts = upsertMirroredAccount(migrationResult.user, null, migrationResult.playerState);
           const nextSession = createServerSessionState(
             migrationResult.user.email,
             migrationResult.sessionToken,
@@ -475,10 +428,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (migrationResult.unavailable) {
-          const fallback = loginLocally(normalizedEmail, password);
-          setAccounts(fallback.accounts);
-          setSession(fallback.session);
-          return fallback.result;
+          return { ok: false, error: migrationResult.error };
         }
       }
 
@@ -486,10 +436,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, error: serverResult.error };
       }
 
-      const fallback = loginLocally(normalizedEmail, password);
-      setAccounts(fallback.accounts);
-      setSession(fallback.session);
-      return fallback.result;
+      return {
+        ok: false,
+        error: "Login service is unavailable right now. Nexis no longer falls back to local ghost accounts, because that is how progression gets mangled.",
+      };
     },
     [],
   );
@@ -501,7 +451,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const syncServerRuntimeState = useCallback(
-    async (runtimeState: CachedRuntimeState) => {
+    async (
+      runtimeState: CachedRuntimeState,
+      options: { keepalive?: boolean } = {},
+    ) => {
       if (
         session.authSource !== "server" ||
         !session.serverSessionToken ||
@@ -510,7 +463,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const result = await saveCurrentServerState(session.serverSessionToken, runtimeState);
+      const result = await saveCurrentServerState(
+        session.serverSessionToken,
+        sanitizeRuntimeStateForServer(runtimeState),
+        options,
+      );
       if (result.ok) {
         const account = accounts[session.activeEmail];
         if (account) {
@@ -537,6 +494,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [accounts, session],
   );
 
+  const refreshServerState = useCallback(async () => {
+    if (
+      session.authSource !== "server" ||
+      !session.serverSessionToken ||
+      !session.activeEmail
+    ) {
+      return;
+    }
+
+    const result = await getCurrentServerUser(session.serverSessionToken);
+    if (result.ok) {
+      const updatedAccounts = upsertMirroredAccount(result.user, null, result.playerState);
+      setAccounts(updatedAccounts);
+      setServerHydrationVersion((value) => value + 1);
+      return;
+    }
+
+    if (!result.unavailable && result.status === 401) {
+      const nextSession = clearSessionState();
+      writeSession(nextSession);
+      setSession(nextSession);
+    }
+  }, [session]);
+
   const value: AuthContextValue = {
     activeAccount,
     isLoggedIn: activeAccount !== null,
@@ -548,6 +529,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login,
     logout,
     syncServerRuntimeState,
+    refreshServerState,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

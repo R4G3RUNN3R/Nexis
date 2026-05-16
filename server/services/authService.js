@@ -1,15 +1,15 @@
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
-import { SESSION_TTL_HOURS } from "../config/env.js";
+import { PASSWORD_RESET_TTL_MINUTES, SESSION_TTL_HOURS } from "../config/env.js";
 import { query, withTransaction } from "../db/pool.js";
 import { HttpError } from "../lib/errors.js";
-import { getReservedIdentityMeta } from "../lib/userIdentity.js";
 import {
   createDefaultPlayerState,
   findPlayerStateByUserInternalId,
 } from "../repositories/playerStateRepository.js";
 import {
   createSession,
+  deleteSessionsByUserInternalId,
   findSessionUserByTokenHash,
   touchSession,
 } from "../repositories/sessionsRepository.js";
@@ -17,12 +17,24 @@ import {
   createUser,
   findAuthUserByEmail,
   findUserByPublicId,
+  updateUserPasswordHash,
 } from "../repositories/usersRepository.js";
+import {
+  createPasswordResetToken,
+  findPasswordResetTokenByHash,
+  invalidatePasswordResetTokensForUser,
+  markPasswordResetTokenUsed,
+} from "../repositories/passwordResetRepository.js";
+import { sendPasswordResetEmail } from "./emailService.js";
 import {
   allocatePlayerPublicId,
   formatPlayerPublicId,
   reserveMigratedPlayerPublicId,
 } from "./publicIdService.js";
+import { buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
+import { ensureChronicleEntitlement } from "./chronicleService.js";
+import { resolveTravelForRuntimeState } from "./travelService.js";
+import { upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -44,6 +56,14 @@ function makeSessionToken() {
   };
 }
 
+function makeResetToken() {
+  const token = crypto.randomBytes(32).toString("hex");
+  return {
+    plain: token,
+    hash: crypto.createHash("sha256").update(token).digest("hex"),
+  };
+}
+
 function mapApiUser(user) {
   return {
     email: user.email,
@@ -54,8 +74,8 @@ function mapApiUser(user) {
     publicPlayerId: formatPlayerPublicId(user.publicId),
     internalId: user.internalId,
     internalPlayerId: user.internalId,
-    entityType: user.entityType,
-    privilegeRole: user.privilegeRole,
+    entityType: user.entityType ?? "player",
+    privilegeRole: user.privilegeRole ?? "player",
     createdAt: user.createdAt,
   };
 }
@@ -92,14 +112,6 @@ function validateLoginInput({ email, password }) {
   }
 }
 
-function getReservedIdentityDefaults(publicId) {
-  const reserved = getReservedIdentityMeta(publicId);
-  return {
-    entityType: reserved?.entityType ?? "player",
-    privilegeRole: reserved?.defaultPrivilegeRole ?? "player",
-  };
-}
-
 export async function registerUser({ firstName, lastName, email, password, existingPublicId }) {
   validateRegisterInput({ firstName, lastName, email, password });
   const normalizedEmail = normalizeEmail(email);
@@ -133,7 +145,6 @@ export async function registerUser({ firstName, lastName, email, password, exist
         ? await reserveMigratedPlayerPublicId(client, migratedPublicId)
         : await allocatePlayerPublicId(client);
     const passwordHash = await bcrypt.hash(password, 10);
-    const reservedDefaults = getReservedIdentityDefaults(publicId);
     const user = await createUser(client, {
       internalId: makeInternalUserId(),
       publicId,
@@ -142,8 +153,6 @@ export async function registerUser({ firstName, lastName, email, password, exist
       firstName: normalizedFirstName,
       lastName: normalizedLastName,
       passwordHash,
-      entityType: reservedDefaults.entityType,
-      privilegeRole: reservedDefaults.privilegeRole,
     });
 
     await createDefaultPlayerState(client, user.internalId);
@@ -207,10 +216,83 @@ export async function getSessionUser(sessionToken) {
   if (!result) return null;
 
   await touchSession({ query }, tokenHash);
-  const playerState = await loadPlayerState({ query }, result.user.internalId);
+  let playerState = await loadPlayerState({ query }, result.user.internalId);
+  const runtimeState = buildMutableRuntimeState(result.user, playerState);
+  const travelResolution = resolveTravelForRuntimeState(runtimeState);
+  const chronicleResolution = ensureChronicleEntitlement(runtimeState);
+  if (travelResolution.changed || chronicleResolution.changed) {
+    playerState = await upsertPlayerRuntimeState({ query }, result.user.internalId, runtimeState);
+  }
 
   return {
     user: mapApiUser(result.user),
     playerState,
   };
+}
+
+export async function requestPasswordReset({ email }) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    throw new HttpError(400, "Email is required.", "EMAIL_REQUIRED");
+  }
+
+  const result = await withTransaction(async (client) => {
+    const authUser = await findAuthUserByEmail(client, normalizedEmail);
+    if (!authUser) {
+      return { delivered: true };
+    }
+
+    const resetToken = makeResetToken();
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MINUTES * 60 * 1000);
+
+    await invalidatePasswordResetTokensForUser(client, authUser.internalId);
+    await createPasswordResetToken(client, {
+      tokenHash: resetToken.hash,
+      userInternalId: authUser.internalId,
+      expiresAt,
+    });
+
+    return {
+      delivered: true,
+      email: authUser.email,
+      firstName: authUser.firstName,
+      resetToken: resetToken.plain,
+    };
+  });
+
+  if ("resetToken" in result && typeof result.resetToken === "string") {
+    await sendPasswordResetEmail({
+      email: result.email,
+      firstName: result.firstName,
+      resetToken: result.resetToken,
+    });
+  }
+
+  return { delivered: true };
+}
+
+export async function resetPassword({ token, password }) {
+  if (!String(token || "").trim()) {
+    throw new HttpError(400, "Reset token is required.", "RESET_TOKEN_REQUIRED");
+  }
+  if (String(password || "").length < 6) {
+    throw new HttpError(400, "Password must be at least 6 characters.", "PASSWORD_TOO_SHORT");
+  }
+
+  const tokenHash = crypto.createHash("sha256").update(String(token).trim()).digest("hex");
+
+  return withTransaction(async (client) => {
+    const resetRecord = await findPasswordResetTokenByHash(client, tokenHash);
+    if (!resetRecord || resetRecord.used_at) {
+      throw new HttpError(400, "This password reset link is invalid or expired.", "RESET_TOKEN_INVALID");
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    await updateUserPasswordHash(client, resetRecord.user_internal_id, passwordHash);
+    await markPasswordResetTokenUsed(client, tokenHash);
+    await invalidatePasswordResetTokensForUser(client, resetRecord.user_internal_id);
+    await deleteSessionsByUserInternalId(client, resetRecord.user_internal_id);
+
+    return { reset: true };
+  });
 }
