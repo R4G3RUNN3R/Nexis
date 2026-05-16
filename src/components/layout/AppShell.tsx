@@ -132,7 +132,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
         <aside className="sidebar">
           <div className="sidebar-logo">
             <div className="sidebar-logo__title">Nexis</div>
-            <div className="sidebar-logo__subtitle">Live shard operations</div>
+            <div className="sidebar-logo__subtitle">Citizen command</div>
           </div>
 
           <div className="player-card">

@@ -1,4 +1,5 @@
 import { getChronicleStatusForUser, openMonthlyChronicleForUser, setDonorTierForUser, submitChronicleChoiceForUser } from "../services/chronicleService.js";
+import { getAchievementStateForUser, spendLegacyPerkRankForUser } from "../services/achievementService.js";
 import { withTransaction } from "../db/pool.js";
 import { findUserByPublicId } from "../repositories/usersRepository.js";
 import { HttpError } from "../lib/errors.js";
@@ -45,6 +46,24 @@ export async function postDonorTier(req, res, next) {
       throw new HttpError(404, "Target citizen unavailable.", "DONOR_TARGET_NOT_FOUND");
     }
     const result = await setDonorTierForUser(req.auth.user, targetUser, req.body ?? {});
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getLegacyAchievements(req, res, next) {
+  try {
+    const result = await getAchievementStateForUser(req.auth.user);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function postLegacyPerkRank(req, res, next) {
+  try {
+    const result = await spendLegacyPerkRankForUser(req.auth.user, req.body ?? {});
     res.status(200).json(result);
   } catch (error) {
     next(error);

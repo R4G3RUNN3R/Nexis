@@ -694,7 +694,7 @@ export default function GuildsPage() {
                   <StatusRow label="Battle edge" value={`+${guildAcademyBattleEdgePct}%`} />
                 </div>
                 <div className="guild-inline-note">
-                  Academy progress now feeds guild operations directly from authoritative server state instead of decorative copy.
+                  Academy progress contributes to guild operations through the active operations ledger.
                 </div>
               </section>
 

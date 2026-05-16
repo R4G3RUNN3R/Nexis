@@ -52,6 +52,9 @@ function getBuildWeights(runtimeState) {
 
 function normalizeLegacyState(runtimeState) {
   const current = asRecord(runtimeState.legacy);
+  const currentAchievements = asRecord(current.achievements);
+  const currentPerks = asRecord(current.perks);
+  const currentPoints = asRecord(current.points);
   const hiddenTags = Array.isArray(current.hiddenTags)
     ? current.hiddenTags.filter((entry) => typeof entry === "string")
     : [];
@@ -74,6 +77,18 @@ function normalizeLegacyState(runtimeState) {
       titles: Array.isArray(asRecord(current.awards).titles) ? asRecord(current.awards).titles : [],
       artifacts: Array.isArray(asRecord(current.awards).artifacts) ? asRecord(current.awards).artifacts : [],
       residences: Array.isArray(asRecord(current.awards).residences) ? asRecord(current.awards).residences : [],
+    },
+    achievements: {
+      awarded: asRecord(currentAchievements.awarded),
+      progress: asRecord(currentAchievements.progress),
+    },
+    perks: {
+      ranks: asRecord(currentPerks.ranks),
+    },
+    points: {
+      totalEarned: Number.isFinite(Number(currentPoints.totalEarned)) ? Math.max(0, Math.floor(Number(currentPoints.totalEarned))) : 0,
+      totalSpent: Number.isFinite(Number(currentPoints.totalSpent)) ? Math.max(0, Math.floor(Number(currentPoints.totalSpent))) : 0,
+      available: Number.isFinite(Number(currentPoints.available)) ? Math.max(0, Math.floor(Number(currentPoints.available))) : 0,
     },
   };
 }

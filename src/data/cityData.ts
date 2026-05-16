@@ -156,7 +156,7 @@ export const routes: TravelRoute[] = [
     durationMs: 2 * HOUR,
     cost: 500,
     description:
-      "A merchant vessel departs from Nexis harbour heading south to the sacred groves of Embervale. 2-hour voyage; 500 gold ship fare. Weather and piracy risks may apply in future.",
+      "A merchant vessel departs from Nexis harbour heading south to the sacred groves of Embervale. 2-hour voyage; 500 gold ship fare. Posted route risks appear here when active.",
   },
   {
     id: "embervale_to_nexis",
@@ -178,7 +178,7 @@ export const routes: TravelRoute[] = [
     durationMs: 3 * HOUR,
     cost: 750,
     description:
-      "A longer, more perilous sea route westward around the cape to the divided capital of Westmarch. 3-hour voyage; 750 gold ship fare. Weather and piracy risks may apply in future.",
+      "A longer, more perilous sea route westward around the cape to the divided capital of Westmarch. 3-hour voyage; 750 gold ship fare. Posted route risks appear here when active.",
   },
   {
     id: "westmarch_to_nexis",

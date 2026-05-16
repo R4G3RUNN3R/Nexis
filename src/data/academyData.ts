@@ -46,8 +46,8 @@ export const academySystemRules: string[] = [
   "Switching active academy requires a significant gold cost.",
   "Switching active academy requires a real 30-day cooldown from the previous switch timestamp.",
   "Rank rewards can be passive, active, mixed, unlock, branch, or TBD.",
-  "Education and future unlock systems will determine entry requirements later.",
-  "Travel is not wired yet, so locations are currently design-locked but not mechanically enforced.",
+  "Education and regional unlocks determine entry requirements as academy access expands.",
+  "Academy locations are visible now; switching rules unlock as travel and regional requirements are met.",
 ];
 
 export const academyDefinitions: AcademyDefinition[] = [

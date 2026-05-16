@@ -1,11 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
-import {
-  achievements,
-  achievementCategories,
-  type AchievementCategory,
-} from "../data/achievementsData";
+import { achievements, achievementCategories } from "../data/achievementsData";
 import {
   legacyPerks,
   legacyPerkCategories,
@@ -14,20 +10,30 @@ import {
   type LegacyPerk,
   type LegacyPerkCategory,
 } from "../data/legacyPerksData";
+import {
+  getLegacyAchievements,
+  spendLegacyPerkRank,
+  type ApiLegacyAchievementsResponse,
+  type ServerLegacyAchievement,
+} from "../lib/authApi";
+import { writeCachedRuntimeState } from "../lib/runtimeStateCache";
+import { useAuth } from "../state/AuthContext";
 
-const LEGACY_RANKS_KEY = "nexis_legacy_perk_ranks";
+type LegacyPoints = {
+  totalEarned: number;
+  totalSpent: number;
+  available: number;
+};
 
-function readLegacyRanks(): Record<string, number> {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(LEGACY_RANKS_KEY) ?? "{}") as Record<string, number>;
-    return Object.fromEntries(
-      Object.entries(parsed)
-        .map(([key, value]): [string, number] => [key, Math.max(0, Math.floor(Number(value ?? 0)))])
-        .filter(([, value]) => value > 0),
-    );
-  } catch {
-    return {};
-  }
+type DisplayAchievement = ServerLegacyAchievement & {
+  completedOn?: string;
+};
+
+function normalizeFallbackAchievements(): DisplayAchievement[] {
+  return achievements.map((achievement) => ({
+    ...achievement,
+    completed: achievement.progress >= achievement.target,
+  }));
 }
 
 function AchievementProgress({
@@ -111,26 +117,77 @@ function MeritCard({
 }
 
 export default function AchievementsPage() {
+  const { activeAccount, serverHydrationVersion, serverSessionToken } = useAuth();
   const [selectedAchievementCategory, setSelectedAchievementCategory] =
-    useState<AchievementCategory | "All">("All");
+    useState<string | "All">("All");
   const [selectedLegacyCategory, setSelectedLegacyCategory] =
     useState<LegacyPerkCategory | "All">("All");
   const [hideCompleted, setHideCompleted] = useState(false);
-  const [perkRanks, setPerkRanks] = useState<Record<string, number>>(() =>
-    typeof window === "undefined" ? {} : readLegacyRanks(),
-  );
+  const [achievementRows, setAchievementRows] = useState<DisplayAchievement[]>(normalizeFallbackAchievements);
+  const [categoryRows, setCategoryRows] = useState<string[]>(achievementCategories);
+  const [legacyPoints, setLegacyPoints] = useState<LegacyPoints | null>(null);
+  const [perkRanks, setPerkRanks] = useState<Record<string, number>>({});
   const [selectedPerkId, setSelectedPerkId] = useState<string>(legacyPerks[0]?.id ?? "");
+  const [legacyLoading, setLegacyLoading] = useState(false);
+  const [legacyError, setLegacyError] = useState<string | null>(null);
+  const [spendingPerkId, setSpendingPerkId] = useState<string | null>(null);
+
+  const applyLegacyPayload = useCallback(
+    (result: Extract<ApiLegacyAchievementsResponse, { ok: true }>) => {
+      setAchievementRows(result.achievements);
+      setCategoryRows(result.achievementCategories.length ? result.achievementCategories : achievementCategories);
+      setLegacyPoints(result.legacyPoints);
+      setPerkRanks(result.perkRanks);
+      setLegacyError(null);
+      if (activeAccount) {
+        writeCachedRuntimeState(activeAccount.email, { legacy: result.legacy });
+      }
+    },
+    [activeAccount],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLegacyState() {
+      if (!serverSessionToken) {
+        setAchievementRows(normalizeFallbackAchievements());
+        setCategoryRows(achievementCategories);
+        setLegacyPoints(null);
+        setPerkRanks({});
+        setLegacyError("Log in to sync Legacy Points with the server.");
+        return;
+      }
+
+      setLegacyLoading(true);
+      const result = await getLegacyAchievements(serverSessionToken);
+      if (cancelled) return;
+      setLegacyLoading(false);
+
+      if (result.ok) {
+        applyLegacyPayload(result);
+        return;
+      }
+
+      setLegacyError(result.error);
+    }
+
+    void loadLegacyState();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyLegacyPayload, serverHydrationVersion, serverSessionToken]);
 
   const filteredAchievements = useMemo(() => {
-    return achievements.filter((achievement) => {
+    return achievementRows.filter((achievement) => {
       const matchesCategory =
         selectedAchievementCategory === "All" ||
         achievement.category === selectedAchievementCategory;
-      const completed = achievement.progress >= achievement.target;
+      const completed = achievement.completed || achievement.progress >= achievement.target;
       const matchesVisibility = hideCompleted ? !completed : true;
       return matchesCategory && matchesVisibility;
     });
-  }, [selectedAchievementCategory, hideCompleted]);
+  }, [achievementRows, selectedAchievementCategory, hideCompleted]);
 
   const filteredPerks = useMemo(() => {
     return legacyPerks.filter((perk) => {
@@ -138,19 +195,20 @@ export default function AchievementsPage() {
     });
   }, [selectedLegacyCategory]);
 
-  useEffect(() => {
-    window.localStorage.setItem(LEGACY_RANKS_KEY, JSON.stringify(perkRanks));
-  }, [perkRanks]);
-
-  const totalPointsEarned = achievements
-    .filter((achievement) => achievement.progress >= achievement.target)
+  const fallbackEarned = achievementRows
+    .filter((achievement) => achievement.completed || achievement.progress >= achievement.target)
     .reduce((sum, achievement) => sum + achievement.rewardPoints, 0);
-  const totalPointsSpent = Object.entries(perkRanks).reduce((sum, [, rank]) => {
+  const fallbackSpent = Object.entries(perkRanks).reduce((sum, [, rank]) => {
     let local = 0;
     for (let i = 1; i <= rank; i += 1) local += i;
     return sum + local;
   }, 0);
-  const totalPointsAvailable = totalPointsEarned - totalPointsSpent;
+  const totalPointsEarned = legacyPoints?.totalEarned ?? fallbackEarned;
+  const totalPointsSpent = legacyPoints?.totalSpent ?? fallbackSpent;
+  const totalPointsAvailable = legacyPoints?.available ?? Math.max(0, fallbackEarned - fallbackSpent);
+  const completedAchievementCount = achievementRows.filter(
+    (achievement) => achievement.completed || achievement.progress >= achievement.target,
+  ).length;
 
   const selectedPerk =
     filteredPerks.find((perk) => perk.id === selectedPerkId) ??
@@ -161,11 +219,31 @@ export default function AchievementsPage() {
   const selectedPerkRank = selectedPerk ? perkRanks[selectedPerk.id] ?? 0 : 0;
   const nextRank = selectedPerk ? Math.min(selectedPerk.maxRank, selectedPerkRank + 1) : 0;
   const nextRankCost = selectedPerk ? getLegacyRankCost(nextRank) : 0;
+  const canSpend =
+    Boolean(serverSessionToken) &&
+    !legacyLoading &&
+    !spendingPerkId &&
+    selectedPerkRank < (selectedPerk?.maxRank ?? 0) &&
+    totalPointsAvailable >= nextRankCost;
+
+  async function handleSpendSelectedPerk() {
+    if (!serverSessionToken || !selectedPerk || !canSpend) return;
+    setSpendingPerkId(selectedPerk.id);
+    const result = await spendLegacyPerkRank(serverSessionToken, selectedPerk.id);
+    setSpendingPerkId(null);
+
+    if (result.ok) {
+      applyLegacyPayload(result);
+      return;
+    }
+
+    setLegacyError(result.error);
+  }
 
   return (
     <AppShell
       title="Achievements & Legacy"
-      hint="Achievements grant Legacy Points. Legacy ranks cost 1 point for rank 1, 2 for rank 2, and so on."
+      hint="Achievements grant server-tracked Legacy Points. Legacy ranks cost 1 point for rank 1, 2 for rank 2, and so on."
     >
       <div className="legacy-summary-grid">
         <div className="legacy-summary-card">
@@ -179,10 +257,20 @@ export default function AchievementsPage() {
           <strong>{totalPointsSpent}</strong>
         </div>
         <div className="legacy-summary-card">
-          <span className="legacy-summary-card__label">Achievements Completed</span>
+          <span className="legacy-summary-card__label">Legacy Points Earned</span>
           <strong>{totalPointsEarned}</strong>
         </div>
+        <div className="legacy-summary-card">
+          <span className="legacy-summary-card__label">Awards Completed</span>
+          <strong>{completedAchievementCount}</strong>
+        </div>
       </div>
+
+      {legacyLoading || legacyError ? (
+        <div className={`legacy-selected-panel__warning${legacyError ? "" : " legacy-selected-panel__warning--ok"}`}>
+          {legacyError ?? "Syncing Legacy state..."}
+        </div>
+      ) : null}
 
       <div className="legacy-main-grid">
         <div className="legacy-column">
@@ -196,7 +284,7 @@ export default function AchievementsPage() {
                 >
                   All
                 </button>
-                {achievementCategories.map((category) => (
+                {categoryRows.map((category) => (
                   <button
                     key={category}
                     type="button"
@@ -228,7 +316,7 @@ export default function AchievementsPage() {
               </div>
 
               {filteredAchievements.map((achievement) => {
-                const completed = achievement.progress >= achievement.target;
+                const completed = achievement.completed || achievement.progress >= achievement.target;
                 return (
                   <div
                     key={achievement.id}
@@ -300,7 +388,11 @@ export default function AchievementsPage() {
                   {nextRankCost} merit{nextRankCost === 1 ? "" : "s"}.
                 </div>
 
-                {selectedPerkRank >= selectedPerk.maxRank ? (
+                {!serverSessionToken ? (
+                  <div className="legacy-selected-panel__warning">
+                    Log in to spend server-tracked Legacy Points.
+                  </div>
+                ) : selectedPerkRank >= selectedPerk.maxRank ? (
                   <div className="legacy-selected-panel__warning legacy-selected-panel__warning--ok">
                     This merit is already maxed out.
                   </div>
@@ -318,19 +410,10 @@ export default function AchievementsPage() {
                   <button
                     type="button"
                     className="legacy-spend-button"
-                    disabled={selectedPerkRank >= selectedPerk.maxRank || totalPointsAvailable < nextRankCost}
-                    onClick={() => {
-                      if (!selectedPerk) return;
-                      if (selectedPerkRank >= selectedPerk.maxRank) return;
-                      if (totalPointsAvailable < nextRankCost) return;
-
-                      setPerkRanks((current) => ({
-                        ...current,
-                        [selectedPerk.id]: Math.min(selectedPerk.maxRank, (current[selectedPerk.id] ?? 0) + 1),
-                      }));
-                    }}
+                    disabled={!canSpend}
+                    onClick={handleSpendSelectedPerk}
                   >
-                    Spend
+                    {spendingPerkId === selectedPerk.id ? "Spending..." : "Spend"}
                   </button>
                 </div>
               </div>

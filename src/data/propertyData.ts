@@ -245,7 +245,7 @@ export const propertyTiers: PropertyTier[] = [
         description: "Holding cells beneath the keep for captured targets.",
         cost: 80_000,
         comfortBonus: 0,
-        effects: ["Hold captured players for up to 24 hours (future feature)", "Intimidation passive — feared by lower-level players"],
+        effects: ["Custody capacity for capture-oriented systems", "Intimidation passive — feared by lower-level players"],
       },
       {
         id: "keep-armory",

@@ -141,7 +141,7 @@ export function OrganizationBaseTab({
   }
 
   if (loading && !state) {
-    return <div className="guild-inline-note">Loading base ledger from authoritative server data…</div>;
+    return <div className="guild-inline-note">Loading the base ledger…</div>;
   }
 
   if (error) {
@@ -173,7 +173,7 @@ export function OrganizationBaseTab({
             <div className="info-row"><span className="info-row__label">Eligible plots</span><span className="info-row__value">{plots}</span></div>
           </div>
           <div className="guild-inline-note">
-            Acquisition, upkeep, review, confiscation, buyback, and auction logic are all server-authoritative. This tab reads only server truth.
+            Acquisition, upkeep, review, confiscation, buyback, and auction records are handled by the live city ledger.
           </div>
         </section>
       </div>
@@ -257,7 +257,7 @@ export function OrganizationBaseTab({
             <div className="info-row"><span className="info-row__label">Quality factor</span><span className="info-row__value">{(base.mechanicalEffects?.qualityFactor ?? 1).toFixed(3)}x</span></div>
           </div>
           <div className="guild-inline-note">
-            Effects are server-authoritative and applied to guild operations or consortium logistics using this base profile.
+            These effects apply to guild operations or consortium logistics through this base profile.
           </div>
         </section>
 

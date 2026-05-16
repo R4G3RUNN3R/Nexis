@@ -97,6 +97,39 @@ export type ApiChronicleStatusResponse =
     }
   | ApiFailure;
 
+export type ServerLegacyAchievement = {
+  id: string;
+  category: string;
+  name: string;
+  description: string;
+  progress: number;
+  target: number;
+  completed: boolean;
+  completedOn?: string;
+  rewardPoints: number;
+};
+
+export type ApiLegacyAchievementsResponse =
+  | {
+      ok: true;
+      achievementCategories: string[];
+      achievements: ServerLegacyAchievement[];
+      legacyPoints: {
+        totalEarned: number;
+        totalSpent: number;
+        available: number;
+      };
+      perkRanks: Record<string, number>;
+      newlyAwarded: Array<{
+        id: string;
+        name: string;
+        category: string;
+        rewardPoints: number;
+      }>;
+      legacy: Record<string, unknown>;
+    }
+  | ApiFailure;
+
 function asSuccess<T extends Record<string, unknown>>(payload: T): T & { ok: true } {
   return { ok: true, ...payload };
 }
@@ -292,6 +325,60 @@ export function submitChronicleChoice(
           donorTier: result.donorTier ?? {},
           legacy: result.legacy,
           activeRun: result.activeRun,
-        }),
+      }),
   );
+}
+
+export function getLegacyAchievements(sessionToken: string): Promise<ApiLegacyAchievementsResponse> {
+  return requestJson<{
+    achievementCategories: string[];
+    achievements: ServerLegacyAchievement[];
+    legacyPoints: {
+      totalEarned: number;
+      totalSpent: number;
+      available: number;
+    };
+    perkRanks: Record<string, number>;
+    newlyAwarded: Array<{
+      id: string;
+      name: string;
+      category: string;
+      rewardPoints: number;
+    }>;
+    legacy: Record<string, unknown>;
+  }>("/api/legacy/achievements", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function spendLegacyPerkRank(
+  sessionToken: string,
+  perkId: string,
+): Promise<ApiLegacyAchievementsResponse> {
+  return requestJson<{
+    achievementCategories: string[];
+    achievements: ServerLegacyAchievement[];
+    legacyPoints: {
+      totalEarned: number;
+      totalSpent: number;
+      available: number;
+    };
+    perkRanks: Record<string, number>;
+    newlyAwarded: Array<{
+      id: string;
+      name: string;
+      category: string;
+      rewardPoints: number;
+    }>;
+    legacy: Record<string, unknown>;
+  }>("/api/legacy/perks/rank", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+    body: JSON.stringify({ perkId }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }

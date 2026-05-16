@@ -112,6 +112,15 @@ node scripts/canaries/consortium-property-office-canary.mjs
 
 Expected coverage includes consortium plot purchase, sellback, main build, builder assignment, NPC fallback, quality persistence, room build/upgrade, capacity enforcement, upkeep transitions, and cleanup.
 
+Legacy achievement and merit persistence canary:
+
+```bash
+cd /srv/nexis/source/NexisGame
+node scripts/canaries/legacy-achievements-canary.mjs
+```
+
+Expected coverage includes isolated canary registration, baseline achievement award, visible Chronicle entry creation, server-side Legacy Point totals, merit-rank spending, and reload persistence.
+
 ## Recovery Notes
 
 - If `/` shows stale public copy, inspect `/srv/nexis/frontend/current/index.html` and the nginx root/fallback before rebuilding.

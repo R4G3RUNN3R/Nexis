@@ -225,7 +225,7 @@ export default function PropertyDetailPage() {
 
         <UpgradeBlock
           title="Staff & Household Roles"
-          summary="Not just decoration. Staff upgrades should shape comfort, logistics, security, and future systems."
+          summary="Not just decoration. Staff upgrades shape comfort, logistics, and security identity."
           slots={property.staffSlots}
           available={staffOptions}
           selectedIds={selected.staff}
