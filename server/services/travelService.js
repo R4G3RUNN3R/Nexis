@@ -93,24 +93,85 @@ function getTravelPower(runtimeState, hasWorldGeography) {
   return battleAverage * 1.35 + endurance * 0.75 + stamina * 0.9 + level * 7 + (hasWorldGeography ? 30 : -10);
 }
 
-function pickEncounterReward(route, outcome, randomFn) {
+const ENCOUNTER_REWARD_PROFILES = [
+  {
+    tags: ["sea_lane", "smuggling_pressure", "privateer_waters"],
+    goldBase: 36,
+    goldDanger: 58,
+    items: [
+      { itemId: "rations", label: "Rations" },
+      { itemId: "healing_tonic", label: "Healing Tonic" },
+      { itemId: "torn_map", label: "Tattered Map" },
+    ],
+    discoveries: [
+      "a marked tide channel near Blackharbor",
+      "a foreign-goods rumor passed between dock brokers",
+      "a safer pier approach for future escort contracts",
+    ],
+  },
+  {
+    tags: ["warded_woods", "relic_material_trade", "northern_road"],
+    goldBase: 24,
+    goldDanger: 46,
+    items: [
+      { itemId: "wild_herb", label: "Wild Herb" },
+      { itemId: "medicinal_herb", label: "Medicinal Herb" },
+      { itemId: "torn_map", label: "Tattered Map" },
+    ],
+    discoveries: [
+      "a ward lantern marker outside Silverbough",
+      "a relic-caravan footnote worth showing the Conservatory",
+      "a safer herbalist path through the northern verge",
+    ],
+  },
+  {
+    tags: ["forge_road", "material_convoys", "highland_forge_road", "industrial_court_road"],
+    goldBase: 30,
+    goldDanger: 52,
+    items: [
+      { itemId: "coal", label: "Coal" },
+      { itemId: "iron_ore", label: "Iron Ore" },
+      { itemId: "rope", label: "Rope" },
+    ],
+    discoveries: [
+      "a damaged brace marker on the Ironhall road",
+      "a convoy pull-off useful for future material hauls",
+      "a forge-road shortcut that needs a better map later",
+    ],
+  },
+  {
+    tags: ["court_road", "permit_checks", "permit_caravans", "legal_cargo_lane"],
+    goldBase: 28,
+    goldDanger: 44,
+    items: [
+      { itemId: "vial_of_ink", label: "Vial of Ink" },
+      { itemId: "wax_seal", label: "Wax Seal" },
+      { itemId: "rations", label: "Rations" },
+    ],
+    discoveries: [
+      "a Highcourt permit checkpoint with flexible hours",
+      "a court-road clerk who remembers polite travelers",
+      "a stamped detour note that may matter later",
+    ],
+  },
+];
+
+function getRewardProfile(route) {
+  const tags = Array.isArray(route?.encounterTags) ? route.encounterTags : [];
+  return ENCOUNTER_REWARD_PROFILES.find((profile) => profile.tags.some((tag) => tags.includes(tag))) ?? ENCOUNTER_REWARD_PROFILES[0];
+}
+
+function pickEncounterReward(route, outcome, randomFn, hasWorldGeography) {
   if (outcome !== "victory" && outcome !== "costly_victory") return null;
   const routeDanger = clamp(asNumber(route.danger, 0.3), 0, 1);
-  const gold = Math.max(6, Math.round(18 + routeDanger * 42));
-  const experience = outcome === "victory" ? 18 : 10;
-  const itemPool = route.routeType === "sea"
-    ? [
-        { itemId: "rations", label: "Rations" },
-        { itemId: "healing_tonic", label: "Healing Tonic" },
-        { itemId: "torn_map", label: "Tattered Map" },
-      ]
-    : [
-        { itemId: "wild_herb", label: "Wild Herb" },
-        { itemId: "rations", label: "Rations" },
-        { itemId: "rope", label: "Rope" },
-      ];
-  const item = randomFn() < 0.35 ? itemPool[Math.floor(randomFn() * itemPool.length)] : null;
-  return { gold, experience, item, throttled: false };
+  const profile = getRewardProfile(route);
+  const gold = Math.max(6, Math.round(profile.goldBase + routeDanger * profile.goldDanger));
+  const experience = outcome === "victory" ? 22 : 12;
+  const itemChance = outcome === "victory" ? 0.45 : 0.28;
+  const discoveryChance = hasWorldGeography ? 0.42 : 0.14;
+  const item = randomFn() < itemChance ? profile.items[Math.floor(randomFn() * profile.items.length)] : null;
+  const discovery = randomFn() < discoveryChance ? profile.discoveries[Math.floor(randomFn() * profile.discoveries.length)] : null;
+  return { gold, experience, item, discovery, throttled: false };
 }
 
 export function resolveTravelEncounterForRoute(runtimeState, route, now = Date.now(), randomFn = Math.random) {
@@ -154,7 +215,7 @@ export function resolveTravelEncounterForRoute(runtimeState, route, now = Date.n
     outcome = "costly_victory";
   }
 
-  const reward = pickEncounterReward(route, outcome, randomFn);
+  const reward = pickEncounterReward(route, outcome, randomFn, hasWorldGeography);
   const titles = {
     victory: "Encounter Victory",
     costly_victory: "Costly Victory",
@@ -199,7 +260,7 @@ function applyTravelEncounterResult(runtimeState, encounter, now) {
   if (lastRewardAt && now - lastRewardAt < ENCOUNTER_REWARD_COOLDOWN_MS) {
     return {
       ...encounter,
-      reward: { ...reward, gold: 0, experience: 0, item: null, throttled: true },
+      reward: { ...reward, gold: 0, experience: 0, item: null, discovery: null, throttled: true },
       summary: `${encounter.summary} You found no extra spoils this time; the route rewards are still cooling down.`,
     };
   }

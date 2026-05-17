@@ -95,12 +95,23 @@ export type ServerCityOccupant = {
   level: number;
   currentCityId: string;
   isSelf: boolean;
+  sharesGuild?: boolean;
+  sharesConsortium?: boolean;
+};
+
+export type ServerCityPopulation = {
+  visibleCount: number;
+  listLimit: number;
+  peopleLabel?: string;
+  guildmatesVisible: number;
+  consortiumMembersVisible: number;
 };
 
 export type ApiCityPeopleResponse =
   | {
       ok: true;
       city: { id: string; name: string; role: string; peopleLabel?: string };
+      population: ServerCityPopulation;
       people: ServerCityOccupant[];
     }
   | ApiFailure;
@@ -286,7 +297,7 @@ export function getServerTravelState(sessionToken: string): Promise<ApiTravelRes
 }
 
 export function getServerCityPeople(sessionToken: string, cityId: string): Promise<ApiCityPeopleResponse> {
-  return requestJson<{ city: { id: string; name: string; role: string; peopleLabel?: string }; people: ServerCityOccupant[] }>(
+  return requestJson<{ city: { id: string; name: string; role: string; peopleLabel?: string }; population: ServerCityPopulation; people: ServerCityOccupant[] }>(
     `/api/cities/${encodeURIComponent(cityId)}/people`,
     {
       method: "GET",

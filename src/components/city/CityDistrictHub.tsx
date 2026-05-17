@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { ContentPanel } from "../layout/ContentPanel";
 import { getCityDistricts } from "../../data/cityDistricts";
 import { getCityHubContent, type CityService } from "../../data/cityHubData";
+import { getCityAcademyDetail, getCityLocalContracts } from "../../data/cityLoopData";
 import { type WorldCity } from "../../data/worldMapData";
 import { getProfileRoute } from "../../lib/publicIds";
-import { getServerCityPeople, type ServerCityOccupant } from "../../lib/authApi";
+import { getServerCityPeople, type ServerCityOccupant, type ServerCityPopulation } from "../../lib/authApi";
 import { useAuth } from "../../state/AuthContext";
 
 function ServiceLink({ service }: { service: CityService }) {
@@ -43,13 +44,31 @@ function ServiceLink({ service }: { service: CityService }) {
   return <div style={style}>{body}</div>;
 }
 
-function PeopleList({ people, loading, error }: { people: ServerCityOccupant[]; loading: boolean; error: string | null }) {
+function PeopleList({
+  people,
+  population,
+  loading,
+  error,
+}: {
+  people: ServerCityOccupant[];
+  population: ServerCityPopulation | null;
+  loading: boolean;
+  error: string | null;
+}) {
   if (loading) return <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking local presence...</div>;
   if (error) return <div style={{ color: "#d98f8f", fontSize: 13 }}>{error}</div>;
-  if (!people.length) return <div style={{ color: "#9fb0bf", fontSize: 13 }}>No visible citizens are listed in this city right now.</div>;
+
+  const visibleCount = population?.visibleCount ?? people.length;
+  const peopleLabel = population?.peopleLabel ?? "citizens";
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.45)", display: "grid", gap: 4 }}>
+        <div className="info-row"><span className="info-row__label">Visible population</span><span className="info-row__value">{visibleCount} {peopleLabel}</span></div>
+        <div className="info-row"><span className="info-row__label">Guildmates present</span><span className="info-row__value">{population?.guildmatesVisible ?? 0}</span></div>
+        <div className="info-row"><span className="info-row__label">Consortium peers present</span><span className="info-row__value">{population?.consortiumMembersVisible ?? 0}</span></div>
+      </div>
+      {!people.length ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>No visible citizens are listed in this city right now.</div> : null}
       {people.map((person) => (
         <Link
           key={person.publicId}
@@ -71,6 +90,10 @@ function PeopleList({ people, loading, error }: { people: ServerCityOccupant[]; 
             <span style={{ color: "#d8c278", fontSize: 12 }}>{person.isSelf ? "You" : `P${person.publicId}`}</span>
           </div>
           <div style={{ color: "#9fb0bf", fontSize: 12 }}>{person.title} | Level {person.level}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 11, color: "#d0ad74" }}>
+            {person.sharesGuild ? <span>Guildmate</span> : null}
+            {person.sharesConsortium ? <span>Consortium peer</span> : null}
+          </div>
         </Link>
       ))}
     </div>
@@ -80,8 +103,11 @@ function PeopleList({ people, loading, error }: { people: ServerCityOccupant[]; 
 export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const { authSource, serverSessionToken } = useAuth();
   const hub = useMemo(() => getCityHubContent(city.id), [city.id]);
+  const academyDetail = useMemo(() => getCityAcademyDetail(city.id), [city.id]);
+  const localContracts = useMemo(() => getCityLocalContracts(city.id), [city.id]);
   const districts = getCityDistricts(city);
   const [people, setPeople] = useState<ServerCityOccupant[]>([]);
+  const [population, setPopulation] = useState<ServerCityPopulation | null>(null);
   const [peopleError, setPeopleError] = useState<string | null>(null);
   const [peopleLoading, setPeopleLoading] = useState(false);
 
@@ -91,6 +117,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     async function loadPeople() {
       if (authSource !== "server" || !serverSessionToken) {
         setPeople([]);
+        setPopulation(null);
         setPeopleError("Sign in through the live server session to view city presence.");
         return;
       }
@@ -102,10 +129,12 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
       setPeopleLoading(false);
       if (!("ok" in result) || !result.ok) {
         setPeople([]);
+        setPopulation(null);
         setPeopleError(result.error);
         return;
       }
       setPeople(result.people);
+      setPopulation(result.population);
     }
 
     void loadPeople();
@@ -163,7 +192,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
         <ContentPanel title="People">
           <div id="people" style={{ display: "grid", gap: 10 }}>
             <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.peopleIntro}</p>
-            <PeopleList people={people} loading={peopleLoading} error={peopleError} />
+            <PeopleList people={people} population={population} loading={peopleLoading} error={peopleError} />
           </div>
         </ContentPanel>
 
@@ -171,10 +200,33 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
           <div id="academy" style={{ display: "grid", gap: 10 }}>
             <strong>{hub.academy.name}</strong>
             <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.academy.focus}</p>
+            <div className="info-row"><span className="info-row__label">Theme</span><span className="info-row__value">{academyDetail.theme}</span></div>
+            <div className="info-row"><span className="info-row__label">Entry</span><span className="info-row__value">{academyDetail.entryRequirements.join(" | ")}</span></div>
+            <div className="info-row"><span className="info-row__label">Supports</span><span className="info-row__value">{academyDetail.progressionSupports.join(" | ")}</span></div>
             <ServiceLink service={hub.services.academy} />
+            <div style={{ fontSize: 12, color: hub.academy.status === "open" ? "#8ec8a7" : "#d0ad74" }}>
+              {hub.academy.status === "open" ? "Academy access is open here." : academyDetail.lockReason}
+            </div>
             {hub.academy.unlockCourse ? (
               <div style={{ fontSize: 12, color: "#d0ad74" }}>Unlock path: {hub.academy.unlockCourse}</div>
             ) : null}
+          </div>
+        </ContentPanel>
+
+        <ContentPanel title="Local Contracts">
+          <div style={{ display: "grid", gap: 10 }}>
+            {localContracts.map((contract) => (
+              <Link key={contract.id} to={contract.route} className="inline-route-link" style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 6, color: "inherit", textDecoration: "none" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <strong>{contract.title}</strong>
+                  <span style={{ color: contract.risk === "high" ? "#d98f8f" : contract.risk === "moderate" ? "#d0ad74" : "#8ec8a7", fontSize: 12 }}>{contract.risk} risk</span>
+                </div>
+                <div style={{ color: "#d8c278", fontSize: 12 }}>{contract.type}</div>
+                <div style={{ color: "#b7c3cf", fontSize: 13 }}>{contract.summary}</div>
+                <div style={{ color: "#9fb0bf", fontSize: 12 }}>Reward: {contract.reward}</div>
+                <div style={{ color: "#9fb0bf", fontSize: 12 }}>Requirement: {contract.requirement}</div>
+              </Link>
+            ))}
           </div>
         </ContentPanel>
 

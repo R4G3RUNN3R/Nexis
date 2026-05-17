@@ -13,6 +13,7 @@ export type TravelEncounterNotice = {
     gold?: number;
     experience?: number;
     item?: { itemId: string; label: string } | null;
+    discovery?: string | null;
     throttled?: boolean;
   } | null;
   penalties?: Record<string, number> | null;

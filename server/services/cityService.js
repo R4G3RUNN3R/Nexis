@@ -19,7 +19,6 @@ function formatDisplayName(row) {
 
 function mapOccupantRow(row, requestingUser) {
   const snapshot = asRecord(row.player_snapshot);
-  const current = asRecord(snapshot.current);
   const title = typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "Citizen";
   const publicId = Number(row.public_id);
   return {
@@ -29,6 +28,8 @@ function mapOccupantRow(row, requestingUser) {
     level: Math.max(1, Math.floor(asNumber(row.level ?? snapshot.level, 1))),
     currentCityId: normalizeCityId(row.current_city_id),
     isSelf: requestingUser?.publicId === publicId,
+    sharesGuild: Boolean(row.shares_guild),
+    sharesConsortium: Boolean(row.shares_consortium),
   };
 }
 
@@ -42,30 +43,57 @@ export async function getCityPeopleForUser(user, cityId) {
   const candidates = getCityOccupancyCandidates(normalizedCityId);
   const result = await query(
     `
+      WITH viewer_orgs AS (
+        SELECT om.organization_internal_id, o.type AS organization_type
+        FROM organization_members om
+        INNER JOIN organizations o ON o.internal_id = om.organization_internal_id
+        WHERE om.user_internal_id = $2
+      ),
+      city_people AS (
+        SELECT
+          u.internal_id,
+          u.public_id,
+          u.first_name,
+          u.last_name,
+          u.created_at,
+          ps.level,
+          ps.player_snapshot,
+          COALESCE(
+            NULLIF(ps.travel_state->>'currentCityId', ''),
+            NULLIF(ps.player_snapshot->'current'->>'currentCityId', ''),
+            'nexis'
+          ) AS current_city_id
+        FROM users u
+        INNER JOIN player_state ps ON ps.user_internal_id = u.internal_id
+        WHERE COALESCE(
+            NULLIF(ps.travel_state->>'currentCityId', ''),
+            NULLIF(ps.player_snapshot->'current'->>'currentCityId', ''),
+            'nexis'
+          ) = ANY($1::text[])
+          AND COALESCE(ps.travel_state->>'status', 'idle') <> 'in_transit'
+      )
       SELECT
-        u.public_id,
-        u.first_name,
-        u.last_name,
-        ps.level,
-        ps.player_snapshot,
-        COALESCE(
-          NULLIF(ps.travel_state->>'currentCityId', ''),
-          NULLIF(ps.player_snapshot->'current'->>'currentCityId', ''),
-          'nexis'
-        ) AS current_city_id
-      FROM users u
-      INNER JOIN player_state ps ON ps.user_internal_id = u.internal_id
-      WHERE COALESCE(
-          NULLIF(ps.travel_state->>'currentCityId', ''),
-          NULLIF(ps.player_snapshot->'current'->>'currentCityId', ''),
-          'nexis'
-        ) = ANY($1::text[])
-        AND COALESCE(ps.travel_state->>'status', 'idle') <> 'in_transit'
-      ORDER BY COALESCE(ps.level, 1) DESC, u.created_at DESC
+        cp.*,
+        EXISTS (
+          SELECT 1
+          FROM organization_members om
+          INNER JOIN viewer_orgs vo ON vo.organization_internal_id = om.organization_internal_id
+          WHERE om.user_internal_id = cp.internal_id AND vo.organization_type = 'guild'
+        ) AS shares_guild,
+        EXISTS (
+          SELECT 1
+          FROM organization_members om
+          INNER JOIN viewer_orgs vo ON vo.organization_internal_id = om.organization_internal_id
+          WHERE om.user_internal_id = cp.internal_id AND vo.organization_type = 'consortium'
+        ) AS shares_consortium
+      FROM city_people cp
+      ORDER BY COALESCE(cp.level, 1) DESC, cp.created_at DESC
       LIMIT 30
     `,
-    [candidates],
+    [candidates, user.internalId],
   );
+
+  const people = result.rows.map((row) => mapOccupantRow(row, user));
 
   return {
     city: {
@@ -74,6 +102,13 @@ export async function getCityPeopleForUser(user, cityId) {
       role: city.role,
       peopleLabel: city.peopleLabel,
     },
-    people: result.rows.map((row) => mapOccupantRow(row, user)),
+    population: {
+      visibleCount: people.length,
+      listLimit: 30,
+      peopleLabel: city.peopleLabel,
+      guildmatesVisible: people.filter((person) => person.sharesGuild).length,
+      consortiumMembersVisible: people.filter((person) => person.sharesConsortium).length,
+    },
+    people,
   };
 }

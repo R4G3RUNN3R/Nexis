@@ -1,4 +1,8 @@
 import { Link } from "react-router-dom";
+import { getCityHubContent } from "../../data/cityHubData";
+import { getCityLocalContracts } from "../../data/cityLoopData";
+import { readTravelStateFromPlayer } from "../../lib/travelState";
+import { usePlayer } from "../../state/PlayerContext";
 import { groupCityBoardListings, type CityBoardCategory } from "../../data/cityBoardData";
 import "../../styles/city-board.css";
 
@@ -21,6 +25,10 @@ const CATEGORY_STRAPS: Record<CityBoardCategory, string> = {
 };
 
 export default function CityBoardSections() {
+  const { player } = usePlayer();
+  const travelState = readTravelStateFromPlayer(player);
+  const hub = getCityHubContent(travelState.currentCityId);
+  const localContracts = getCityLocalContracts(travelState.currentCityId);
   const groups = groupCityBoardListings();
   const ordered: CityBoardCategory[] = ["civic_jobs", "opportunities", "bounties", "notices", "properties", "personals"];
   const leadListing = groups.civic_jobs[0] ?? groups.opportunities[0];
@@ -30,9 +38,34 @@ export default function CityBoardSections() {
     <div className="city-paper">
       <header className="city-paper__masthead">
         <div className="city-paper__issue">Vol. 1 | Morning Edition</div>
-        <div className="city-paper__title">The Nexis Daily Board</div>
-        <div className="city-paper__tagline">Public postings, civic work, and trouble arranged into columns so people can find things like adults.</div>
+        <div className="city-paper__title">The {hub.displayName} Daily Board</div>
+        <div className="city-paper__tagline">Local postings, civic work, contracts, and trouble arranged into columns so people can find things like adults.</div>
       </header>
+
+      <section className="city-paper__front-page">
+        <article className="city-paper__lead">
+          <div className="city-paper__section-label">Local Contract Lead</div>
+          <h2>{localContracts[0]?.title}</h2>
+          <p>{localContracts[0]?.summary}</p>
+          <div className="city-paper__meta">
+            <span>Reward: {localContracts[0]?.reward}</span>
+            <span>Requires: {localContracts[0]?.requirement}</span>
+          </div>
+          <Link className="city-paper__action" to={localContracts[0]?.route ?? "/city"}>
+            Open contract route
+          </Link>
+        </article>
+        <div className="city-paper__briefs">
+          {localContracts.slice(1).map((contract) => (
+            <article key={contract.id} className="city-paper__brief">
+              <div className="city-paper__section-label">{contract.type}</div>
+              <h3>{contract.title}</h3>
+              <p>{contract.summary}</p>
+              <Link className="city-paper__mini-link" to={contract.route}>Open</Link>
+            </article>
+          ))}
+        </div>
+      </section>
 
       {leadListing ? (
         <section className="city-paper__front-page">

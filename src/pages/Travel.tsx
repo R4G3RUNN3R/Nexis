@@ -52,6 +52,7 @@ function getEncounterRewardText(notice: PersistedTravelState["encounterNotice"])
     reward.gold ? `${reward.gold} gold` : null,
     reward.experience ? `${reward.experience} experience` : null,
     reward.item?.label ?? null,
+    reward.discovery ? `Discovery: ${reward.discovery}` : null,
   ].filter(Boolean);
   return parts.length ? `Reward: ${parts.join(", ")}.` : null;
 }
