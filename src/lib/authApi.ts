@@ -116,6 +116,85 @@ export type ApiCityPeopleResponse =
     }
   | ApiFailure;
 
+export type ServerCityContract = {
+  id: string;
+  cityId: string;
+  title: string;
+  type: string;
+  summary: string;
+  risk: "low" | "moderate" | "high";
+  requirementLabel: string;
+  completion: {
+    staminaCost: number;
+    note: string | null;
+    visitCityId: string | null;
+    visitLabel: string | null;
+    visitComplete: boolean;
+  };
+  reward: {
+    gold?: number;
+    experience?: number;
+    items?: Array<{ itemId: string; label: string; quantity: number }>;
+  };
+  status: "available" | "active" | "completed" | "claimed";
+  acceptedAt: number | null;
+  completedAt: number | null;
+  claimedAt: number | null;
+  visitedCityAt: number | null;
+  canAccept: boolean;
+  canComplete: boolean;
+  canClaim: boolean;
+  blockedReason: string | null;
+};
+
+export type ApiCityContractsResponse =
+  | {
+      ok: true;
+      playerState: ServerPlayerState;
+      city: { id: string; name: string; role: string };
+      currentCityId: string;
+      contracts: ServerCityContract[];
+      message?: string;
+    }
+  | ApiFailure;
+
+export type ServerCityAcademy = {
+  id: string;
+  cityId: string;
+  name: string;
+  theme: string;
+  entryRequirements: string[];
+  requiredCourses: string[];
+  missingCourses: string[];
+  lockReason: string | null;
+  durationMs: number;
+  progressionSupports: string[];
+  reward: Record<string, unknown>;
+  isCompleted: boolean;
+  completedAt: number | null;
+  activeStudy: {
+    academyId: string;
+    cityId: string;
+    startedAt: number;
+    endsAt: number;
+    readyToComplete: boolean;
+    progressPercent: number;
+  } | null;
+  canStart: boolean;
+  canComplete: boolean;
+};
+
+export type ApiCityAcademyResponse =
+  | {
+      ok: true;
+      playerState: ServerPlayerState;
+      city: { id: string; name: string; role: string };
+      currentCityId: string;
+      academy: ServerCityAcademy;
+      message?: string;
+    }
+  | ApiFailure;
+
 export type ApiChronicleStatusResponse =
   | {
       ok: true;
@@ -306,6 +385,92 @@ export function getServerCityPeople(sessionToken: string, cityId: string): Promi
       },
     },
   ).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerCityContracts(sessionToken: string, cityId: string): Promise<ApiCityContractsResponse> {
+  return requestJson<{
+    playerState: ServerPlayerState;
+    city: { id: string; name: string; role: string };
+    currentCityId: string;
+    contracts: ServerCityContract[];
+  }>(`/api/cities/${encodeURIComponent(cityId)}/contracts`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+function runServerCityContractAction(
+  sessionToken: string,
+  contractId: string,
+  action: "accept" | "complete" | "claim",
+): Promise<ApiCityContractsResponse> {
+  return requestJson<{
+    playerState: ServerPlayerState;
+    city: { id: string; name: string; role: string };
+    currentCityId: string;
+    contracts: ServerCityContract[];
+    message?: string;
+  }>(`/api/cities/contracts/${encodeURIComponent(contractId)}/${action}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function acceptServerCityContract(sessionToken: string, contractId: string): Promise<ApiCityContractsResponse> {
+  return runServerCityContractAction(sessionToken, contractId, "accept");
+}
+
+export function completeServerCityContract(sessionToken: string, contractId: string): Promise<ApiCityContractsResponse> {
+  return runServerCityContractAction(sessionToken, contractId, "complete");
+}
+
+export function claimServerCityContract(sessionToken: string, contractId: string): Promise<ApiCityContractsResponse> {
+  return runServerCityContractAction(sessionToken, contractId, "claim");
+}
+
+export function getServerCityAcademy(sessionToken: string, cityId: string): Promise<ApiCityAcademyResponse> {
+  return requestJson<{
+    playerState: ServerPlayerState;
+    city: { id: string; name: string; role: string };
+    currentCityId: string;
+    academy: ServerCityAcademy;
+  }>(`/api/cities/${encodeURIComponent(cityId)}/academy`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+function runServerCityAcademyAction(
+  sessionToken: string,
+  academyId: string,
+  action: "start" | "complete",
+): Promise<ApiCityAcademyResponse> {
+  return requestJson<{
+    playerState: ServerPlayerState;
+    city: { id: string; name: string; role: string };
+    currentCityId: string;
+    academy: ServerCityAcademy;
+    message?: string;
+  }>(`/api/cities/academies/${encodeURIComponent(academyId)}/${action}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function startServerCityAcademy(sessionToken: string, academyId: string): Promise<ApiCityAcademyResponse> {
+  return runServerCityAcademyAction(sessionToken, academyId, "start");
+}
+
+export function completeServerCityAcademy(sessionToken: string, academyId: string): Promise<ApiCityAcademyResponse> {
+  return runServerCityAcademyAction(sessionToken, academyId, "complete");
 }
 
 export function startServerTravel(

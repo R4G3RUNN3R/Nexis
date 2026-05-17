@@ -6,7 +6,20 @@ import { getCityHubContent, type CityService } from "../../data/cityHubData";
 import { getCityAcademyDetail, getCityLocalContracts } from "../../data/cityLoopData";
 import { type WorldCity } from "../../data/worldMapData";
 import { getProfileRoute } from "../../lib/publicIds";
-import { getServerCityPeople, type ServerCityOccupant, type ServerCityPopulation } from "../../lib/authApi";
+import {
+  acceptServerCityContract,
+  claimServerCityContract,
+  completeServerCityAcademy,
+  completeServerCityContract,
+  getServerCityAcademy,
+  getServerCityContracts,
+  getServerCityPeople,
+  startServerCityAcademy,
+  type ServerCityAcademy,
+  type ServerCityContract,
+  type ServerCityOccupant,
+  type ServerCityPopulation,
+} from "../../lib/authApi";
 import { useAuth } from "../../state/AuthContext";
 
 function ServiceLink({ service }: { service: CityService }) {
@@ -100,8 +113,147 @@ function PeopleList({
   );
 }
 
+function formatReward(contract: ServerCityContract) {
+  const parts: string[] = [];
+  if (contract.reward.gold) parts.push(`${contract.reward.gold} gold`);
+  if (contract.reward.experience) parts.push(`${contract.reward.experience} XP`);
+  for (const item of contract.reward.items ?? []) {
+    parts.push(`${item.quantity} ${item.label}`);
+  }
+  return parts.length ? parts.join(" | ") : "Modest local standing";
+}
+
+function formatDuration(ms: number) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) return `${seconds}s`;
+  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+}
+
+function actionButtonStyle(disabled: boolean) {
+  return {
+    border: "1px solid rgba(216,194,120,0.45)",
+    background: disabled ? "rgba(90,93,100,0.22)" : "rgba(216,194,120,0.12)",
+    color: disabled ? "#8d98a4" : "#f0d989",
+    borderRadius: 8,
+    padding: "8px 10px",
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontWeight: 700,
+  } as const;
+}
+
+function ContractCard({
+  contract,
+  busy,
+  onAction,
+}: {
+  contract: ServerCityContract;
+  busy: boolean;
+  onAction: (contractId: string, action: "accept" | "complete" | "claim") => void;
+}) {
+  const riskColor = contract.risk === "high" ? "#d98f8f" : contract.risk === "moderate" ? "#d0ad74" : "#8ec8a7";
+  const nextAction = contract.canClaim ? "claim" : contract.canComplete ? "complete" : contract.canAccept ? "accept" : null;
+  const actionLabel = nextAction === "claim" ? "Claim rewards" : nextAction === "complete" ? "Complete" : "Accept";
+  const disabled = busy || !nextAction;
+
+  return (
+    <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <strong>{contract.title}</strong>
+        <span style={{ color: riskColor, fontSize: 12 }}>{contract.risk} risk</span>
+      </div>
+      <div style={{ color: "#d8c278", fontSize: 12 }}>{contract.type} | {contract.status}</div>
+      <div style={{ color: "#b7c3cf", fontSize: 13 }}>{contract.summary}</div>
+      <div style={{ color: "#9fb0bf", fontSize: 12 }}>Reward: {formatReward(contract)}</div>
+      <div style={{ color: "#9fb0bf", fontSize: 12 }}>Requirement: {contract.requirementLabel}</div>
+      {contract.completion.note ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Completion: {contract.completion.note}</div> : null}
+      {contract.completion.visitCityId ? (
+        <div style={{ color: contract.completion.visitComplete ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>
+          Travel step: {contract.completion.visitComplete ? "visited" : `visit ${contract.completion.visitLabel ?? "the required city"} and return`}
+        </div>
+      ) : null}
+      {contract.blockedReason && !nextAction ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{contract.blockedReason}</div> : null}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => nextAction ? onAction(contract.id, nextAction) : undefined}
+        style={actionButtonStyle(disabled)}
+      >
+        {busy ? "Working..." : actionLabel}
+      </button>
+    </div>
+  );
+}
+
+function AcademyPanel({
+  academy,
+  fallbackName,
+  fallbackFocus,
+  now,
+  busy,
+  onAction,
+}: {
+  academy: ServerCityAcademy | null;
+  fallbackName: string;
+  fallbackFocus: string;
+  now: number;
+  busy: boolean;
+  onAction: (academyId: string, action: "start" | "complete") => void;
+}) {
+  if (!academy) {
+    return (
+      <div style={{ display: "grid", gap: 10 }}>
+        <strong>{fallbackName}</strong>
+        <p style={{ margin: 0, color: "#b7c3cf" }}>{fallbackFocus}</p>
+        <div style={{ color: "#d0ad74", fontSize: 12 }}>Sign in through the live server session to use academy study.</div>
+      </div>
+    );
+  }
+
+  const active = academy.activeStudy;
+  const progress = active
+    ? Math.max(0, Math.min(100, Math.round(((now - active.startedAt) / Math.max(academy.durationMs, 1000)) * 100)))
+    : 0;
+  const remainingMs = active ? Math.max(0, active.endsAt - now) : 0;
+  const nextAction = academy.canComplete ? "complete" : academy.canStart ? "start" : null;
+  const disabled = busy || !nextAction;
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <strong>{academy.name}</strong>
+      <p style={{ margin: 0, color: "#b7c3cf" }}>{academy.theme}</p>
+      <div className="info-row"><span className="info-row__label">Entry</span><span className="info-row__value">{academy.entryRequirements.join(" | ")}</span></div>
+      <div className="info-row"><span className="info-row__label">Supports</span><span className="info-row__value">{academy.progressionSupports.join(" | ")}</span></div>
+      {academy.requiredCourses.length ? (
+        <div className="info-row"><span className="info-row__label">Required courses</span><span className="info-row__value">{academy.requiredCourses.join(" | ")}</span></div>
+      ) : null}
+      {academy.missingCourses.length ? <div style={{ fontSize: 12, color: "#d0ad74" }}>Missing: {academy.missingCourses.join(" | ")}</div> : null}
+      {active ? (
+        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, display: "grid", gap: 6, background: "rgba(7, 13, 20, 0.45)" }}>
+          <div className="info-row"><span className="info-row__label">Study progress</span><span className="info-row__value">{progress}%</span></div>
+          <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+            <div style={{ width: `${progress}%`, height: "100%", background: "#d8c278" }} />
+          </div>
+          <div style={{ color: "#9fb0bf", fontSize: 12 }}>{active.readyToComplete || remainingMs <= 0 ? "Ready to complete." : `Ready in ${formatDuration(remainingMs)}.`}</div>
+        </div>
+      ) : null}
+      {academy.isCompleted ? <div style={{ color: "#8ec8a7", fontSize: 12 }}>Primer completed.</div> : null}
+      {academy.lockReason && !nextAction ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academy.lockReason}</div> : null}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => nextAction ? onAction(academy.id, nextAction) : undefined}
+        style={actionButtonStyle(disabled)}
+      >
+        {busy ? "Working..." : nextAction === "complete" ? "Complete study" : "Start study"}
+      </button>
+    </div>
+  );
+}
+
 export default function CityDistrictHub({ city }: { city: WorldCity }) {
-  const { authSource, serverSessionToken } = useAuth();
+  const { authSource, serverSessionToken, refreshServerState } = useAuth();
   const hub = useMemo(() => getCityHubContent(city.id), [city.id]);
   const academyDetail = useMemo(() => getCityAcademyDetail(city.id), [city.id]);
   const localContracts = useMemo(() => getCityLocalContracts(city.id), [city.id]);
@@ -110,6 +262,21 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const [population, setPopulation] = useState<ServerCityPopulation | null>(null);
   const [peopleError, setPeopleError] = useState<string | null>(null);
   const [peopleLoading, setPeopleLoading] = useState(false);
+  const [contracts, setContracts] = useState<ServerCityContract[]>([]);
+  const [contractsError, setContractsError] = useState<string | null>(null);
+  const [contractsMessage, setContractsMessage] = useState<string | null>(null);
+  const [contractsLoading, setContractsLoading] = useState(false);
+  const [academy, setAcademy] = useState<ServerCityAcademy | null>(null);
+  const [academyError, setAcademyError] = useState<string | null>(null);
+  const [academyMessage, setAcademyMessage] = useState<string | null>(null);
+  const [academyLoading, setAcademyLoading] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const handle = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(handle);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +294,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
       const result = await getServerCityPeople(serverSessionToken, city.id);
       if (cancelled) return;
       setPeopleLoading(false);
-      if (!("ok" in result) || !result.ok) {
+      if (!result.ok) {
         setPeople([]);
         setPopulation(null);
         setPeopleError(result.error);
@@ -142,6 +309,90 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
       cancelled = true;
     };
   }, [authSource, city.id, serverSessionToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCityGameplay() {
+      setContractsMessage(null);
+      setAcademyMessage(null);
+      if (authSource !== "server" || !serverSessionToken) {
+        setContracts([]);
+        setAcademy(null);
+        setContractsError("Sign in through the live server session to use local contracts.");
+        setAcademyError("Sign in through the live server session to use academy study.");
+        return;
+      }
+
+      setContractsLoading(true);
+      setAcademyLoading(true);
+      setContractsError(null);
+      setAcademyError(null);
+      const [contractResult, academyResult] = await Promise.all([
+        getServerCityContracts(serverSessionToken, city.id),
+        getServerCityAcademy(serverSessionToken, city.id),
+      ]);
+      if (cancelled) return;
+      setContractsLoading(false);
+      setAcademyLoading(false);
+
+      if (contractResult.ok) {
+        setContracts(contractResult.contracts);
+      } else {
+        setContracts([]);
+        setContractsError(contractResult.error);
+      }
+
+      if (academyResult.ok) {
+        setAcademy(academyResult.academy);
+      } else {
+        setAcademy(null);
+        setAcademyError(academyResult.error);
+      }
+    }
+
+    void loadCityGameplay();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSource, city.id, serverSessionToken]);
+
+  async function runContractAction(contractId: string, action: "accept" | "complete" | "claim") {
+    if (!serverSessionToken) return;
+    setBusyAction(`contract:${contractId}:${action}`);
+    setContractsMessage(null);
+    setContractsError(null);
+    const result =
+      action === "accept"
+        ? await acceptServerCityContract(serverSessionToken, contractId)
+        : action === "complete"
+          ? await completeServerCityContract(serverSessionToken, contractId)
+          : await claimServerCityContract(serverSessionToken, contractId);
+    setBusyAction(null);
+    if (!result.ok) {
+      setContractsError(result.error);
+      return;
+    }
+    setContracts(result.contracts);
+    setContractsMessage(result.message ?? "Contract updated.");
+    await refreshServerState();
+  }
+
+  async function runAcademyAction(academyId: string, action: "start" | "complete") {
+    if (!serverSessionToken) return;
+    setBusyAction(`academy:${academyId}:${action}`);
+    setAcademyMessage(null);
+    setAcademyError(null);
+    const result = action === "start" ? await startServerCityAcademy(serverSessionToken, academyId) : await completeServerCityAcademy(serverSessionToken, academyId);
+    setBusyAction(null);
+    if (!result.ok) {
+      setAcademyError(result.error);
+      return;
+    }
+    setAcademy(result.academy);
+    setAcademyMessage(result.message ?? "Academy state updated.");
+    await refreshServerState();
+  }
 
   const openServiceCards = [hub.services.market, hub.services.travel, hub.services.consortium, hub.services.guild];
   const localServiceCards = [hub.services.blackMarket, hub.services.citySpecial, hub.services.academy];
@@ -198,35 +449,49 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
 
         <ContentPanel title="Academy">
           <div id="academy" style={{ display: "grid", gap: 10 }}>
-            <strong>{hub.academy.name}</strong>
-            <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.academy.focus}</p>
-            <div className="info-row"><span className="info-row__label">Theme</span><span className="info-row__value">{academyDetail.theme}</span></div>
-            <div className="info-row"><span className="info-row__label">Entry</span><span className="info-row__value">{academyDetail.entryRequirements.join(" | ")}</span></div>
-            <div className="info-row"><span className="info-row__label">Supports</span><span className="info-row__value">{academyDetail.progressionSupports.join(" | ")}</span></div>
+            {academyLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking academy access...</div> : null}
+            {academyError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{academyError}</div> : null}
+            {academyMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{academyMessage}</div> : null}
+            <AcademyPanel
+              academy={academy}
+              fallbackName={hub.academy.name}
+              fallbackFocus={hub.academy.focus}
+              now={now}
+              busy={Boolean(busyAction?.startsWith("academy:"))}
+              onAction={runAcademyAction}
+            />
             <ServiceLink service={hub.services.academy} />
-            <div style={{ fontSize: 12, color: hub.academy.status === "open" ? "#8ec8a7" : "#d0ad74" }}>
-              {hub.academy.status === "open" ? "Academy access is open here." : academyDetail.lockReason}
-            </div>
-            {hub.academy.unlockCourse ? (
-              <div style={{ fontSize: 12, color: "#d0ad74" }}>Unlock path: {hub.academy.unlockCourse}</div>
-            ) : null}
+            {!academy && academyDetail.lockReason ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academyDetail.lockReason}</div> : null}
+            {hub.academy.unlockCourse ? <div style={{ fontSize: 12, color: "#d0ad74" }}>Unlock path: {hub.academy.unlockCourse}</div> : null}
           </div>
         </ContentPanel>
 
         <ContentPanel title="Local Contracts">
           <div style={{ display: "grid", gap: 10 }}>
-            {localContracts.map((contract) => (
-              <Link key={contract.id} to={contract.route} className="inline-route-link" style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 6, color: "inherit", textDecoration: "none" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <strong>{contract.title}</strong>
-                  <span style={{ color: contract.risk === "high" ? "#d98f8f" : contract.risk === "moderate" ? "#d0ad74" : "#8ec8a7", fontSize: 12 }}>{contract.risk} risk</span>
-                </div>
-                <div style={{ color: "#d8c278", fontSize: 12 }}>{contract.type}</div>
-                <div style={{ color: "#b7c3cf", fontSize: 13 }}>{contract.summary}</div>
-                <div style={{ color: "#9fb0bf", fontSize: 12 }}>Reward: {contract.reward}</div>
-                <div style={{ color: "#9fb0bf", fontSize: 12 }}>Requirement: {contract.requirement}</div>
-              </Link>
-            ))}
+            {contractsLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Loading local contracts...</div> : null}
+            {contractsError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{contractsError}</div> : null}
+            {contractsMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{contractsMessage}</div> : null}
+            {contracts.length ? (
+              contracts.map((contract) => (
+                <ContractCard
+                  key={contract.id}
+                  contract={contract}
+                  busy={Boolean(busyAction?.startsWith(`contract:${contract.id}:`))}
+                  onAction={runContractAction}
+                />
+              ))
+            ) : authSource === "server" ? null : (
+              <>
+                <div style={{ color: "#d0ad74", fontSize: 12 }}>Local contracts are server-backed. Sign in to accept, complete, and claim them.</div>
+                {localContracts.map((contract) => (
+                  <div key={contract.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 6 }}>
+                    <strong>{contract.title}</strong>
+                    <div style={{ color: "#d8c278", fontSize: 12 }}>{contract.type}</div>
+                    <div style={{ color: "#b7c3cf", fontSize: 13 }}>{contract.summary}</div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </ContentPanel>
 

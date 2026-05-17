@@ -202,6 +202,8 @@ export function buildMutableRuntimeState(user, playerState) {
       portrait: asRecord(player.portrait),
       bio: asRecord(player.bio),
       counters: asRecord(player.counters),
+      cityContracts: asRecord(player.cityContracts),
+      cityAcademy: asRecord(player.cityAcademy),
     },
     jobs: asRecord(runtime.jobs),
     education: asRecord(runtime.education),
