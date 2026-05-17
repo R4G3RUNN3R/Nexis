@@ -122,10 +122,10 @@ export const worldMapCanonicalSources = [
 
 export const worldCoreAnchors = [
   "Nexis City",
-  "Blackharbor Shadow Port",
-  "Silverbough Arcane Enclave",
-  "Akai Tetsu War Dojo",
-  "Spiritwood Sacred Isle",
+  "Blackharbor",
+  "Silverbough",
+  "Ironhall Forge-City",
+  "Highcourt",
   "Red Sand Wastes",
 ] as const;
 
@@ -214,8 +214,8 @@ export const worldCities: WorldCity[] = [
   },
   {
     id: "north",
-    name: "Silverbough Arcane Enclave",
-    subtitle: "Northern Elven Arcane Belt",
+    name: "Silverbough",
+    subtitle: "Northern Arcane and Healing Enclave",
     region: "north",
     academy: "Silverbough Arcane Conservatory",
     xPercent: 43.8,
@@ -223,7 +223,7 @@ export const worldCities: WorldCity[] = [
     accessRule: "Long northern overland route",
     travelFeel: "A northern ascent into elven highlands and mountain wards.",
     summary:
-      "The northern elven anchor remains fixed in the highland arcane belt and now fronts a broader northern frontier.",
+      "Silverbough anchors northern healing, relic, and arcane routes while fronting the broader highland frontier.",
     notes: [
       "Preserved academy destination.",
       "Primary anchor for northern elf territory.",
@@ -234,16 +234,16 @@ export const worldCities: WorldCity[] = [
   },
   {
     id: "east",
-    name: "Akai Tetsu War Dojo",
-    subtitle: "Eastern Martial Zone",
+    name: "Ironhall Forge-City",
+    subtitle: "Eastern Forge and Labor State",
     region: "east",
-    academy: "Akai Tetsu War Dojo",
+    academy: "Ironhall Enginewright School",
     xPercent: 60.2,
     yPercent: 34.9,
-    accessRule: "Long eastern route by land or controlled coastal passage",
-    travelFeel: "A distant martial coastline that now opens toward larger eastern sea lanes.",
+    accessRule: "Long eastern route by forge road and material convoys",
+    travelFeel: "A furnace-lit route into material yards, forge contracts, and labor halls.",
     summary:
-      "Akai Tetsu remains the eastern martial anchor across water from the core, now tied into future archipelago and convoy networks.",
+      "Ironhall anchors the eastern forge road with materials, labor contracts, and industrial academy routes.",
     notes: [
       "Preserved academy destination.",
       "Supports future eastern warbands and escort contracts.",
@@ -254,7 +254,7 @@ export const worldCities: WorldCity[] = [
   },
   {
     id: "west",
-    name: "Blackharbor Shadow Port",
+    name: "Blackharbor",
     subtitle: "Western Maritime Pivot",
     region: "west",
     academy: "The Iron Writ & Veiled Ledger",
@@ -274,16 +274,16 @@ export const worldCities: WorldCity[] = [
   },
   {
     id: "south",
-    name: "Spiritwood Sacred Isle",
-    subtitle: "Spiritual Grove / Sacred Isle",
+    name: "Highcourt",
+    subtitle: "Southern Law and Prestige Court",
     region: "south",
-    academy: "Verdant Ancestral Circle",
+    academy: "Highcourt Rhetoric and Statecraft Lyceum",
     xPercent: 50.3,
     yPercent: 47.8,
-    accessRule: "Ship required, then inland sacred access",
-    travelFeel: "A sacred maritime approach from the core into spirit-bound territory.",
+    accessRule: "Permit road access through formal civic gates",
+    travelFeel: "A formal route into permits, prestige filings, diplomacy, and court-facing academy pressure.",
     summary:
-      "Spiritwood remains the southeastern sacred island anchor near the core heartland, preserving academy continuity while opening southern expansion paths.",
+      "Highcourt anchors the southern law and prestige route, tying permits, diplomacy, and consortium-facing legal identity into travel.",
     notes: [
       "Preserved southern academy destination.",
       "Canonical Spiritual Grove / Sacred Isle placement retained.",
@@ -342,28 +342,28 @@ export const worldRegions: WorldRegion[] = [
   },
   {
     id: "akai_martial_channel",
-    name: "Akai Martial Channel",
+    name: "Ironhall Forge Corridor",
     kind: "sea",
     status: "fully_wired",
     xPercent: 60.8,
     yPercent: 35.8,
     travelModes: ["ship", "caravan"],
-    factionIdentity: ["martial_orders", "escort_clans"],
-    summary: "Eastern martial sea and shore routes around the Akai Tetsu zone.",
+    factionIdentity: ["forge_orders", "labor_contractors"],
+    summary: "Eastern forge roads and material convoy routes around Ironhall.",
     notes: [
       "Anchors escort and warband route scaffolding.",
     ],
   },
   {
     id: "spiritwood_sacred_isles",
-    name: "Spiritwood Sacred Isles",
+    name: "Highcourt Civic March",
     kind: "archipelago",
     status: "preserved_core",
     xPercent: 50.8,
     yPercent: 48.7,
     travelModes: ["ship", "caravan"],
-    factionIdentity: ["spirit_keepers", "healing_orders"],
-    summary: "Sacred island chain around Spiritwood and the Spiritual Grove.",
+    factionIdentity: ["court_clerks", "diplomatic_houses"],
+    summary: "Formal southern civic routes around Highcourt, permits, and prestige courts.",
     notes: [
       "Core sacred-isle continuity retained.",
       "Gateway toward Myrine waters and southern hazards.",
@@ -521,8 +521,8 @@ export const worldRoutes: WorldRoute[] = [
     to: "east",
     type: "road",
     status: "fully_wired",
-    travelLabel: "Eastern war road",
-    rule: "Long overland route intended to feel far from the capital.",
+    travelLabel: "Eastern forge road",
+    rule: "Long overland route through material convoys, contract yards, and forge checkpoints.",
   },
   {
     id: "route_nexis_west",
@@ -530,7 +530,7 @@ export const worldRoutes: WorldRoute[] = [
     to: "west",
     type: "sea",
     status: "fully_wired",
-    travelLabel: "Western sea crossing",
+    travelLabel: "Blackharbor sea crossing",
     rule: "Requires ship travel once route rules are live.",
   },
   {
@@ -539,8 +539,8 @@ export const worldRoutes: WorldRoute[] = [
     to: "south",
     type: "mixed",
     status: "fully_wired",
-    travelLabel: "Southern sacred approach",
-    rule: "Requires ship travel, then restricted inland access through sacred territory.",
+    travelLabel: "Highcourt diplomatic road",
+    rule: "Requires formal road travel through permit checks, court tolls, and civic gates.",
   },
   {
     id: "route_east_south",
@@ -548,8 +548,8 @@ export const worldRoutes: WorldRoute[] = [
     to: "south",
     type: "sea",
     status: "fully_wired",
-    travelLabel: "South-eastern sea route",
-    rule: "Alternative sea route between the martial east and sacred south.",
+    travelLabel: "Ironhall-Highcourt overland permits",
+    rule: "Permit-heavy overland route between Ironhall contracts and Highcourt filings.",
   },
 ];
 

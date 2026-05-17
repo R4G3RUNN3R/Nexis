@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { worldCities, worldRoutes, type WorldCity, type WorldCityId, worldMapTitle } from "../data/worldMapData";
+import { getCityHubContent } from "../data/cityHubData";
 import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
 import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
@@ -43,6 +44,24 @@ function getPinClass(region: WorldCity["region"]) {
   }
 }
 
+function getEncounterRewardText(notice: PersistedTravelState["encounterNotice"]) {
+  const reward = notice?.reward;
+  if (!reward) return null;
+  if (reward.throttled) return "Route spoils are cooling down.";
+  const parts = [
+    reward.gold ? `${reward.gold} gold` : null,
+    reward.experience ? `${reward.experience} experience` : null,
+    reward.item?.label ?? null,
+  ].filter(Boolean);
+  return parts.length ? `Reward: ${parts.join(", ")}.` : null;
+}
+
+function getEncounterTone(outcome: string) {
+  if (outcome === "turned_back") return "#d98f8f";
+  if (outcome === "costly_victory") return "#d0ad74";
+  return "#d8c278";
+}
+
 export default function TravelPage() {
   const { player } = usePlayer();
   const { activeAccount, authSource, serverSessionToken } = useAuth();
@@ -80,6 +99,7 @@ export default function TravelPage() {
       },
       playerState: result.playerState,
     });
+    window.dispatchEvent(new Event("nexis:player-refresh"));
     applyServerTravelState(result.travel);
   }, [activeAccount, applyServerTravelState]);
 
@@ -162,7 +182,8 @@ export default function TravelPage() {
   const destinationName = getCityName(travelState.destinationCityId);
   const originName = getCityName(travelState.originCityId);
   const canTravel = !isTraveling && selectedCity.id !== travelState.currentCityId;
-  const academyLabel = selectedCity.academy ?? (selectedCity.id === "nexis" ? "Nexis Academy of Commerce & Civil Arts" : "None");
+  const selectedCityHub = getCityHubContent(selectedCity.id);
+  const academyLabel = selectedCityHub.academy.name;
 
   async function handleTravel() {
     if (!canTravel || authSource !== "server" || !serverSessionToken || !activeAccount) return;
@@ -172,7 +193,8 @@ export default function TravelPage() {
       return;
     }
     cacheAndApplyTravelResult(result);
-    setMessage(`Caravan assembled for ${selectedCity.name}.`);
+    const nextTravel = readTravelStateFromPlayer({ current: { travel: result.travel, currentCityId: result.travel.currentCityId } });
+    setMessage(nextTravel.encounterNotice?.summary ?? `Caravan assembled for ${selectedCity.name}.`);
   }
 
   async function handleCancelTravel() {
@@ -276,6 +298,22 @@ export default function TravelPage() {
             <div className="travel-card__subtitle">{selectedCity.subtitle}</div>
 
             {message ? <div className="travel-inline-note">{message}</div> : null}
+
+            {travelState.encounterNotice ? (
+              <div
+                className="travel-card__status"
+                style={{ borderColor: "rgba(216,194,120,0.18)", background: "rgba(7, 13, 20, 0.68)" }}
+              >
+                <strong style={{ color: getEncounterTone(travelState.encounterNotice.outcome) }}>{travelState.encounterNotice.title}</strong>
+                <div>{travelState.encounterNotice.summary}</div>
+                <div>
+                  Route danger {travelState.encounterNotice.routeDanger ?? 0}% | Encounter chance {travelState.encounterNotice.encounterChance ?? 0}% |
+                  {travelState.encounterNotice.hasWorldGeography ? " World Geography applied" : " World Geography missing"}
+                </div>
+                {travelState.encounterNotice.delayMs ? <div>Travel delay: {formatTravelDuration(travelState.encounterNotice.delayMs)}.</div> : null}
+                {getEncounterRewardText(travelState.encounterNotice) ? <div>{getEncounterRewardText(travelState.encounterNotice)}</div> : null}
+              </div>
+            ) : null}
 
             <div className="travel-card__grid">
               <div className="travel-info">

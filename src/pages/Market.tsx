@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
+import { getCityHubContent } from "../data/cityHubData";
 import { ITEM_OPTIONS } from "../data/itemsData";
-import { worldCities } from "../data/worldMapData";
 import { getActiveCivicJobPassives, normalizeCivicEmploymentState } from "../lib/civicJobsState";
 import { readTravelStateFromPlayer } from "../lib/travelState";
 import { usePlayer } from "../state/PlayerContext";
 
-const MARKET_STOCK = [
+const BASE_MARKET_STOCK = [
   { itemId: "rations", price: 35 },
   { itemId: "rope", price: 55 },
   { itemId: "wild_herb", price: 25 },
@@ -31,20 +31,57 @@ const MARKET_STOCK = [
   { itemId: "smithing_hammer", price: 190 },
 ];
 
+const CITY_FEATURED_STOCK: Record<string, Array<{ itemId: string; price: number }>> = {
+  west: [
+    { itemId: "healing_tonic", price: 145 },
+    { itemId: "restorative_elixir", price: 360 },
+    { itemId: "travel_cloak", price: 170 },
+    { itemId: "lockpick_set", price: 250 },
+    { itemId: "courier_satchel", price: 115 },
+  ],
+  north: [
+    { itemId: "rare_herb", price: 150 },
+    { itemId: "healing_root", price: 190 },
+    { itemId: "enchanted_parchment", price: 150 },
+    { itemId: "magic_tome", price: 410 },
+    { itemId: "herbalist_gloves", price: 80 },
+  ],
+  east: [
+    { itemId: "coal", price: 60 },
+    { itemId: "iron_ingot", price: 160 },
+    { itemId: "smithing_hammer", price: 180 },
+    { itemId: "steel_ingot", price: 280 },
+    { itemId: "iron_rivets", price: 90 },
+  ],
+  south: [
+    { itemId: "vial_of_ink", price: 42 },
+    { itemId: "wax_seal", price: 70 },
+    { itemId: "forged_seal_kit", price: 230 },
+    { itemId: "courier_satchel", price: 125 },
+    { itemId: "prestige_goods", price: 500 },
+  ],
+};
+
+function getLocalStock(cityId: string) {
+  const featured = CITY_FEATURED_STOCK[cityId] ?? [];
+  const featuredIds = new Set(featured.map((entry) => entry.itemId));
+  return [...featured, ...BASE_MARKET_STOCK.filter((entry) => !featuredIds.has(entry.itemId))];
+}
+
 export default function MarketPage() {
   const { player, spendGold, addItem } = usePlayer();
   const [message, setMessage] = useState<string | null>(null);
   const travelState = readTravelStateFromPlayer(player);
-  const currentCity = worldCities.find((city) => city.id === travelState.currentCityId) ?? worldCities[0];
+  const cityHub = getCityHubContent(travelState.currentCityId);
   const grocerDiscount = getActiveCivicJobPassives(normalizeCivicEmploymentState(player.current.civicEmployment)).market_discount ?? 0;
   const stock = useMemo(
     () =>
-      MARKET_STOCK.map((entry) => ({
+      getLocalStock(cityHub.cityId).map((entry) => ({
         ...entry,
         adjustedPrice: Math.max(1, Math.round(entry.price * (1 - grocerDiscount / 100))),
         item: ITEM_OPTIONS.find((item) => item.itemId === entry.itemId),
       })),
-    [grocerDiscount],
+    [cityHub.cityId, grocerDiscount],
   );
 
   function buyItem(itemId: string, price: number) {
@@ -57,18 +94,22 @@ export default function MarketPage() {
   }
 
   return (
-    <AppShell title="Market" hint={`Legal trade and vendor stock in ${currentCity.name}. Regional goods will expand as routes and market identity deepen.`}>
+    <AppShell title={cityHub.services.market.label} hint={`Legal trade and vendor stock in ${cityHub.displayName}.`}>
       <div className="page-intro-grid">
-        <ContentPanel title="Market Hall">
-          <p className="page-intro__lead">The market hall lists legal goods, adventure tools, and current local pricing.</p>
-          <p className="page-intro__body">
-            Browse legal goods, stock up on adventure tools, and watch regional trade identity grow around your current city.
-          </p>
+        <ContentPanel title={cityHub.market.name}>
+          <p className="page-intro__lead">{cityHub.market.summary}</p>
+          <div className="info-row">
+            <span className="info-row__label">Imports</span>
+            <span className="info-row__value">{cityHub.market.imports.join(", ")}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-row__label">Exports</span>
+            <span className="info-row__value">{cityHub.market.exports.join(", ")}</span>
+          </div>
         </ContentPanel>
-        <ContentPanel title="Quartermaster Gossip">
-          <p className="page-intro__body">
-            Required-item adventures mean you can no longer rob a ruin with bare hands and optimism. Civilization remains difficult like that.
-          </p>
+        <ContentPanel title="Regional Stock Identity">
+          <p className="page-intro__body">Featured goods: {cityHub.market.featuredGoods.join(", ")}.</p>
+          <p className="page-intro__body">The first rows below are city-weighted stock; common legal goods remain available after them.</p>
         </ContentPanel>
       </div>
 

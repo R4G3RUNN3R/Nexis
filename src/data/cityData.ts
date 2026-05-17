@@ -39,7 +39,7 @@ export type TravelRoute = {
 export const cities: City[] = [
   {
     id: "nexis",
-    name: "Nexis",
+    name: "Nexis City",
     subtitle: "The Capital",
     academy: "Guildhall of Civil Professions",
     academyId: "nexis_professions",
@@ -50,8 +50,8 @@ export const cities: City[] = [
   },
   {
     id: "aethermoor",
-    name: "Aethermoor",
-    subtitle: "The Elven Enclave",
+    name: "Silverbough",
+    subtitle: "The Arcane Healing Enclave",
     academy: "Silverbough Arcane Conservatory",
     academyId: "northern",
     description:
@@ -61,31 +61,31 @@ export const cities: City[] = [
   },
   {
     id: "torvhal",
-    name: "Torvhal",
-    subtitle: "The Blade Fortress",
-    academy: "Akai Tetsu War Dojo",
+    name: "Ironhall",
+    subtitle: "The Forge-City",
+    academy: "Ironhall Enginewright School",
     academyId: "eastern",
     description:
-      "A fortress-city carved from black iron stone, where the clash of steel rings day and night. The Akai Tetsu War Dojo shapes warriors, duelists, and battlefield tacticians in the Eastern combat tradition.",
+      "A fortress-city carved from black iron stone, where the clash of steel rings day and night. The Ironhall Enginewright School shapes forge discipline, war-school fundamentals, and industrial planning.",
     mapPosition: { x: 680, y: 300 },
     isMainCity: false,
   },
   {
     id: "embervale",
-    name: "Embervale",
-    subtitle: "The Sacred Grove",
-    academy: "Verdant Ancestral Circle",
+    name: "Highcourt",
+    subtitle: "The Court of Permits",
+    academy: "Highcourt Rhetoric and Statecraft Lyceum",
     academyId: "southern",
     description:
-      "A sun-drenched wildland sanctuary reachable only by sea, where shaman-druids tend sacred groves and commune with the spirits of earth and life. The Verdant Ancestral Circle initiates healers and revivalists.",
+      "A formal southern city of permits, diplomacy, and prestige. The Highcourt Rhetoric and Statecraft Lyceum teaches civic law, rhetoric, and statecraft.",
     mapPosition: { x: 400, y: 520 },
     isMainCity: false,
   },
   {
     id: "westmarch",
-    name: "Westmarch",
-    subtitle: "The Divided Capital",
-    academy: "The Iron Writ & Veiled Ledger",
+    name: "Blackharbor",
+    subtitle: "The Shadow Port",
+    academy: "Blackharbor Maritime Ledger Academy",
     academyId: "western",
     description:
       "A city split between its gleaming courthouse district and a labyrinthine shadow quarter. The Iron Writ & Veiled Ledger trains both lawful enforcers and shadow brokers — the path chosen defines everything.",

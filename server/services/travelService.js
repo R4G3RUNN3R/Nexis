@@ -6,23 +6,55 @@ import {
   findPlayerStateByUserInternalId,
   upsertPlayerRuntimeState,
 } from "../repositories/playerStateRepository.js";
-import { DEFAULT_CITY_ID, getCityName, getRouteDefinition, isValidCityId } from "../data/travelData.js";
+import {
+  DEFAULT_CITY_ID,
+  getCityName,
+  getRouteDefinition,
+  isValidCityId,
+  normalizeCityId,
+} from "../data/travelData.js";
+
+const TRAVEL_WIN_DELAY_MS = 5 * 60 * 1000;
+const ENCOUNTER_REWARD_COOLDOWN_MS = 15 * 60 * 1000;
+
+function asRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function asNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeEncounterNotice(value) {
+  const record = asRecord(value);
+  if (!Object.keys(record).length) return null;
+  return record;
+}
 
 function cloneTravelState(runtimeState) {
-  return runtimeState.travel && typeof runtimeState.travel === "object"
-    ? { ...runtimeState.travel }
-    : {
-        status: "idle",
-        originCityId: DEFAULT_CITY_ID,
-        destinationCityId: null,
-        routeType: "road",
-        mode: "caravan",
-        departureAt: null,
-        arrivalAt: null,
-        durationMs: null,
-        currentCityId: DEFAULT_CITY_ID,
-        arrivalNotice: null,
-      };
+  const record = asRecord(runtimeState.travel);
+  const currentCityId = normalizeCityId(record.currentCityId, DEFAULT_CITY_ID);
+  return {
+    status: record.status === "in_transit" ? "in_transit" : "idle",
+    originCityId: normalizeCityId(record.originCityId, currentCityId),
+    destinationCityId:
+      typeof record.destinationCityId === "string" && record.destinationCityId
+        ? normalizeCityId(record.destinationCityId, null)
+        : null,
+    routeType: record.routeType === "sea" || record.routeType === "mixed" ? record.routeType : "road",
+    mode: typeof record.mode === "string" ? record.mode : "caravan",
+    departureAt: typeof record.departureAt === "number" ? record.departureAt : null,
+    arrivalAt: typeof record.arrivalAt === "number" ? record.arrivalAt : null,
+    durationMs: typeof record.durationMs === "number" ? record.durationMs : null,
+    currentCityId,
+    arrivalNotice: normalizeEncounterNotice(record.arrivalNotice),
+    encounterNotice: normalizeEncounterNotice(record.encounterNotice),
+  };
 }
 
 function syncTravelOntoPlayer(runtimeState, travelState) {
@@ -32,6 +64,155 @@ function syncTravelOntoPlayer(runtimeState, travelState) {
     currentCityId: travelState.currentCityId,
     travel: travelState,
   };
+}
+
+function hasCompletedCourse(runtimeState, courseId) {
+  const education = asRecord(runtimeState.education);
+  const completedCourses = Array.isArray(education.completedCourses) ? education.completedCourses : [];
+  if (completedCourses.includes(courseId)) return true;
+
+  const completed = asRecord(education.completed);
+  const courseRecord = asRecord(completed[courseId]);
+  return completed[courseId] === true || courseRecord.completed === true;
+}
+
+function getTravelPower(runtimeState, hasWorldGeography) {
+  const player = asRecord(runtimeState.player);
+  const battle = asRecord(player.battleStats);
+  const working = asRecord(player.workingStats);
+  const stats = asRecord(player.stats);
+  const battleAverage =
+    (asNumber(battle.strength, 10) +
+      asNumber(battle.defense, 10) +
+      asNumber(battle.speed, 10) +
+      asNumber(battle.dexterity, 10)) /
+    4;
+  const endurance = asNumber(working.endurance, 10);
+  const stamina = asNumber(stats.stamina, 10);
+  const level = Math.max(1, asNumber(player.level, 1));
+  return battleAverage * 1.35 + endurance * 0.75 + stamina * 0.9 + level * 7 + (hasWorldGeography ? 30 : -10);
+}
+
+function pickEncounterReward(route, outcome, randomFn) {
+  if (outcome !== "victory" && outcome !== "costly_victory") return null;
+  const routeDanger = clamp(asNumber(route.danger, 0.3), 0, 1);
+  const gold = Math.max(6, Math.round(18 + routeDanger * 42));
+  const experience = outcome === "victory" ? 18 : 10;
+  const itemPool = route.routeType === "sea"
+    ? [
+        { itemId: "rations", label: "Rations" },
+        { itemId: "healing_tonic", label: "Healing Tonic" },
+        { itemId: "torn_map", label: "Tattered Map" },
+      ]
+    : [
+        { itemId: "wild_herb", label: "Wild Herb" },
+        { itemId: "rations", label: "Rations" },
+        { itemId: "rope", label: "Rope" },
+      ];
+  const item = randomFn() < 0.35 ? itemPool[Math.floor(randomFn() * itemPool.length)] : null;
+  return { gold, experience, item, throttled: false };
+}
+
+export function resolveTravelEncounterForRoute(runtimeState, route, now = Date.now(), randomFn = Math.random) {
+  const hasWorldGeography = hasCompletedCourse(runtimeState, "world-geography");
+  const routeDanger = clamp(asNumber(route?.danger, 0.3), 0, 1);
+  const durationFactor = clamp(asNumber(route?.durationMs, 10 * 60 * 1000) / (22 * 60 * 1000), 0.15, 1.2);
+  const encounterChance = clamp(0.08 + routeDanger * 0.38 + durationFactor * 0.14 + (hasWorldGeography ? -0.12 : 0.22), 0.05, 0.82);
+  const encounterRoll = randomFn();
+
+  if (encounterRoll > encounterChance) {
+    return null;
+  }
+
+  const routeName = `${getCityName(route.originCityId ?? route.from)} to ${getCityName(route.destinationCityId ?? route.to)}`;
+  const routePower = getTravelPower(runtimeState, hasWorldGeography);
+  const routePressure = 48 + routeDanger * 78 + durationFactor * 24;
+  const handlingRoll = randomFn();
+
+  if ((hasWorldGeography && handlingRoll < 0.32) || (!hasWorldGeography && handlingRoll < 0.08 && routePower > routePressure)) {
+    return {
+      happened: true,
+      outcome: "avoided",
+      title: "Encounter Avoided",
+      summary: hasWorldGeography
+        ? `World Geography helped you read the ${routeName} route and avoid trouble before it found you.`
+        : `You spotted trouble on the ${routeName} route early enough to steer clear, barely.`,
+      hasWorldGeography,
+      encounterChance: Math.round(encounterChance * 100),
+      routeDanger: Math.round(routeDanger * 100),
+      delayMs: 0,
+      reward: null,
+      resolvedAt: now,
+    };
+  }
+
+  const margin = routePower - routePressure + (randomFn() - 0.5) * 70;
+  let outcome = "victory";
+  if (margin < -22) {
+    outcome = hasWorldGeography && randomFn() > 0.4 ? "costly_victory" : "turned_back";
+  } else if (margin < 15) {
+    outcome = "costly_victory";
+  }
+
+  const reward = pickEncounterReward(route, outcome, randomFn);
+  const titles = {
+    victory: "Encounter Victory",
+    costly_victory: "Costly Victory",
+    turned_back: "Turned Back",
+  };
+  const summaries = {
+    victory: `You handled trouble on the ${routeName} route. The caravan continues after a short delay.`,
+    costly_victory: `You forced your way through trouble on the ${routeName} route, but it cost time and stamina.`,
+    turned_back: `The ${routeName} route went badly. The caravan turned back to avoid a worse loss.`,
+  };
+
+  return {
+    happened: true,
+    outcome,
+    title: titles[outcome],
+    summary: summaries[outcome],
+    hasWorldGeography,
+    encounterChance: Math.round(encounterChance * 100),
+    routeDanger: Math.round(routeDanger * 100),
+    delayMs: outcome === "victory" || outcome === "costly_victory" ? TRAVEL_WIN_DELAY_MS : 0,
+    reward,
+    penalties: outcome === "costly_victory" ? { health: 6, stamina: 1 } : outcome === "turned_back" ? { health: 8, stamina: 1 } : null,
+    resolvedAt: now,
+  };
+}
+
+function applyTravelEncounterResult(runtimeState, encounter, now) {
+  if (!encounter) return encounter;
+  const player = runtimeState.player;
+  player.counters = { ...asRecord(player.counters) };
+  player.stats = { ...asRecord(player.stats) };
+
+  if (encounter.penalties) {
+    player.stats.health = Math.max(1, asNumber(player.stats.health, 100) - asNumber(encounter.penalties.health, 0));
+    player.stats.stamina = Math.max(0, asNumber(player.stats.stamina, 10) - asNumber(encounter.penalties.stamina, 0));
+  }
+
+  const reward = encounter.reward;
+  if (!reward) return encounter;
+
+  const lastRewardAt = asNumber(player.counters.lastTravelEncounterRewardAt, 0);
+  if (lastRewardAt && now - lastRewardAt < ENCOUNTER_REWARD_COOLDOWN_MS) {
+    return {
+      ...encounter,
+      reward: { ...reward, gold: 0, experience: 0, item: null, throttled: true },
+      summary: `${encounter.summary} You found no extra spoils this time; the route rewards are still cooling down.`,
+    };
+  }
+
+  player.gold = Math.max(0, Math.floor(asNumber(player.gold, 500) + asNumber(reward.gold, 0)));
+  player.currencies = { ...asRecord(player.currencies), gold: player.gold };
+  player.experience = Math.max(0, Math.floor(asNumber(player.experience, 0) + asNumber(reward.experience, 0)));
+  if (reward.item?.itemId) {
+    player.inventory = { ...asRecord(player.inventory) };
+    player.inventory[reward.item.itemId] = Math.max(0, Math.floor(asNumber(player.inventory[reward.item.itemId], 0) + 1));
+  }
+  player.counters.lastTravelEncounterRewardAt = now;
+  return encounter;
 }
 
 export function resolveTravelForRuntimeState(runtimeState, now = Date.now()) {
@@ -57,6 +238,7 @@ export function resolveTravelForRuntimeState(runtimeState, now = Date.now()) {
         destinationName: getCityName(current.destinationCityId),
         arrivedAt: now,
       },
+      encounterNotice: current.encounterNotice ?? null,
     };
     syncTravelOntoPlayer(runtimeState, resolved);
     return { changed: true, travelState: resolved };
@@ -94,8 +276,9 @@ export async function getTravelStateForUser(user) {
 export async function startTravelForUser(user, payload) {
   return withTransaction(async (client) => {
     const { runtimeState } = await loadRuntimeState(client, user);
-    const destinationCityId = String(payload?.destinationCityId ?? "").trim().toLowerCase();
-    if (!isValidCityId(destinationCityId)) {
+    const rawDestinationCityId = String(payload?.destinationCityId ?? "").trim().toLowerCase();
+    const destinationCityId = normalizeCityId(rawDestinationCityId, "");
+    if (!destinationCityId || !isValidCityId(destinationCityId)) {
       throw new HttpError(400, "Travel destination unavailable.", "TRAVEL_DESTINATION_INVALID");
     }
 
@@ -104,10 +287,7 @@ export async function startTravelForUser(user, payload) {
       throw new HttpError(409, "You are already in transit.", "TRAVEL_ALREADY_ACTIVE");
     }
 
-    const originCityId =
-      typeof current.currentCityId === "string" && current.currentCityId
-        ? current.currentCityId
-        : DEFAULT_CITY_ID;
+    const originCityId = normalizeCityId(current.currentCityId, DEFAULT_CITY_ID);
 
     if (originCityId === destinationCityId) {
       throw new HttpError(400, "You are already in that city.", "TRAVEL_ALREADY_THERE");
@@ -119,6 +299,32 @@ export async function startTravelForUser(user, payload) {
     }
 
     const now = Date.now();
+    const encounter = applyTravelEncounterResult(
+      runtimeState,
+      resolveTravelEncounterForRoute(runtimeState, route, now),
+      now,
+    );
+
+    if (encounter?.outcome === "turned_back") {
+      const nextTravel = {
+        status: "idle",
+        originCityId,
+        destinationCityId: null,
+        routeType: route.routeType,
+        mode: "caravan",
+        departureAt: null,
+        arrivalAt: null,
+        durationMs: null,
+        currentCityId: originCityId,
+        arrivalNotice: null,
+        encounterNotice: encounter,
+      };
+      syncTravelOntoPlayer(runtimeState, nextTravel);
+      const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+      return { playerState, travel: nextTravel };
+    }
+
+    const durationMs = route.durationMs + (encounter?.delayMs ?? 0);
     const nextTravel = {
       status: "in_transit",
       originCityId,
@@ -126,10 +332,11 @@ export async function startTravelForUser(user, payload) {
       routeType: route.routeType,
       mode: "caravan",
       departureAt: now,
-      arrivalAt: now + route.durationMs,
-      durationMs: route.durationMs,
+      arrivalAt: now + durationMs,
+      durationMs,
       currentCityId: originCityId,
       arrivalNotice: null,
+      encounterNotice: encounter,
     };
 
     syncTravelOntoPlayer(runtimeState, nextTravel);
@@ -163,6 +370,7 @@ export async function cancelTravelForUser(user) {
       durationMs: elapsedMs,
       currentCityId: current.currentCityId ?? current.originCityId,
       arrivalNotice: null,
+      encounterNotice: current.encounterNotice ?? null,
     };
 
     syncTravelOntoPlayer(runtimeState, reversed);

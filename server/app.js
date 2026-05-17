@@ -3,6 +3,7 @@ import authRoutes from "./routes/authRoutes.js";
 import stateRoutes from "./routes/stateRoutes.js";
 import siteRoutes from "./routes/siteRoutes.js";
 import travelRoutes from "./routes/travelRoutes.js";
+import cityRoutes from "./routes/cityRoutes.js";
 import civicJobsRoutes from "./routes/civicJobsRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import chronicleRoutes from "./routes/chronicleRoutes.js";
@@ -16,6 +17,7 @@ const ROUTE_MODULES = [
   stateRoutes,
   siteRoutes,
   travelRoutes,
+  cityRoutes,
   civicJobsRoutes,
   profileRoutes,
   chronicleRoutes,

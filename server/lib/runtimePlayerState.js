@@ -98,6 +98,10 @@ function normalizeTravelState(value) {
                 : null,
           }
         : null,
+    encounterNotice:
+      record.encounterNotice && typeof record.encounterNotice === "object"
+        ? record.encounterNotice
+        : null,
   };
 }
 

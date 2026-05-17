@@ -1,5 +1,24 @@
 import { worldCities, type WorldCityId } from "../data/worldMapData";
 
+export type TravelEncounterNotice = {
+  happened?: boolean;
+  outcome: "avoided" | "victory" | "costly_victory" | "turned_back" | string;
+  title: string;
+  summary: string;
+  hasWorldGeography?: boolean;
+  encounterChance?: number;
+  routeDanger?: number;
+  delayMs?: number;
+  reward?: {
+    gold?: number;
+    experience?: number;
+    item?: { itemId: string; label: string } | null;
+    throttled?: boolean;
+  } | null;
+  penalties?: Record<string, number> | null;
+  resolvedAt?: number;
+};
+
 export type PersistedTravelState = {
   status: "idle" | "in_transit";
   currentCityId: WorldCityId;
@@ -15,6 +34,7 @@ export type PersistedTravelState = {
     destinationName: string | null;
     arrivedAt: number | null;
   } | null;
+  encounterNotice: TravelEncounterNotice | null;
 };
 
 const DEFAULT_STATE: PersistedTravelState = {
@@ -28,6 +48,7 @@ const DEFAULT_STATE: PersistedTravelState = {
   arrivalAt: null,
   durationMs: null,
   arrivalNotice: null,
+  encounterNotice: null,
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -54,6 +75,24 @@ function readArrivalNotice(
   };
 }
 
+function readEncounterNotice(value: unknown): TravelEncounterNotice | null {
+  const record = asRecord(value);
+  if (!Object.keys(record).length) return null;
+  return {
+    happened: typeof record.happened === "boolean" ? record.happened : undefined,
+    outcome: typeof record.outcome === "string" ? record.outcome : "avoided",
+    title: typeof record.title === "string" ? record.title : "Travel Encounter",
+    summary: typeof record.summary === "string" ? record.summary : "The route produced a travel encounter.",
+    hasWorldGeography: typeof record.hasWorldGeography === "boolean" ? record.hasWorldGeography : undefined,
+    encounterChance: typeof record.encounterChance === "number" ? record.encounterChance : undefined,
+    routeDanger: typeof record.routeDanger === "number" ? record.routeDanger : undefined,
+    delayMs: typeof record.delayMs === "number" ? record.delayMs : undefined,
+    reward: Object.keys(asRecord(record.reward)).length ? (asRecord(record.reward) as TravelEncounterNotice["reward"]) : null,
+    penalties: Object.keys(asRecord(record.penalties)).length ? asRecord(record.penalties) as Record<string, number> : null,
+    resolvedAt: typeof record.resolvedAt === "number" ? record.resolvedAt : undefined,
+  };
+}
+
 export function readTravelStateFromPlayer(player: { current?: { travel?: unknown; currentCityId?: unknown } } | null | undefined): PersistedTravelState {
   const record = asRecord(player?.current?.travel);
   const currentCityId = asCityId(record.currentCityId ?? player?.current?.currentCityId, "nexis");
@@ -69,6 +108,7 @@ export function readTravelStateFromPlayer(player: { current?: { travel?: unknown
     arrivalAt: typeof record.arrivalAt === "number" ? record.arrivalAt : null,
     durationMs: typeof record.durationMs === "number" ? record.durationMs : null,
     arrivalNotice: readArrivalNotice(record.arrivalNotice, currentCityId),
+    encounterNotice: readEncounterNotice(record.encounterNotice),
   };
 }
 

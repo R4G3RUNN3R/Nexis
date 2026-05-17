@@ -9,6 +9,7 @@ import { resolveDisplayTitle } from "../../lib/titleAccess";
 import { getCityName, getTravelProgress, readTravelStateFromPlayer } from "../../lib/travelState";
 import { isStaffOrAdmin } from "../../lib/adminAccess";
 import { cielLoadingQuotes } from "../../data/cielPageCopy";
+import { getCityHubContent } from "../../data/cityHubData";
 
 type AppShellProps = {
   title?: string;
@@ -71,6 +72,28 @@ function formatGold(amount: number): string {
   return amount.toLocaleString("en-US") + " gp";
 }
 
+function buildCityLocalLinks(cityId: string | null | undefined): Array<[string, string]> {
+  const hub = getCityHubContent(cityId);
+  const links: Array<[string, string]> = [
+    [hub.services.market.label, hub.services.market.route ?? "/market"],
+    ["People", "/city#people"],
+  ];
+
+  if (hub.services.blackMarket.status === "open" && hub.services.blackMarket.route) {
+    links.push(["Black Market", hub.services.blackMarket.route]);
+  }
+
+  links.push(
+    ["City Special", "/city#special"],
+    [hub.services.academy.status === "open" ? "Academy" : "Academy (Locked)", "/city#academy"],
+    ["Travel", "/travel"],
+    ["Consortium", "/consortiums"],
+    ["Guild", "/guilds"],
+  );
+
+  return links;
+}
+
 export function AppShell({ title, hint, children }: AppShellProps) {
   const { player, now, isHospitalized, hospitalRemainingLabel, isJailed, jailRemainingLabel } = usePlayer();
   const { activeAccount, logout } = useAuth();
@@ -119,6 +142,9 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const visibleCore = hiddenRoutes ? core.filter(([, route]) => !hiddenRoutes.has(route)) : core;
   const visibleWorld = hiddenRoutes ? world.filter(([, route]) => !hiddenRoutes.has(route)) : world;
   const visibleFactions = hiddenRoutes ? factions.filter(([, route]) => !hiddenRoutes.has(route)) : factions;
+  const currentCityHub = getCityHubContent(travelState.currentCityId);
+  const useCityLocalSidebar = !isTraveling && currentCityHub.cityId !== "nexis";
+  const visibleCityLocal = buildCityLocalLinks(currentCityHub.cityId).filter(([, route]) => !hiddenRoutes?.has(route.split("#")[0]));
   const adminLinks = canAccessAdmin ? ([["Admin Panel", "/admin"]] as Array<[string, string]>) : [];
   const onProfileSurface =
     location.pathname === profileRoute ||
@@ -180,9 +206,15 @@ export function AppShell({ title, hint, children }: AppShellProps) {
             <div className="sidebar-quote-strip__text">{shellQuote}</div>
           </div>
 
-          <SidebarSection title="Character" links={visibleCore.map(([label, route]) => [label, route === "/profile" ? profileRoute : route])} />
-          <SidebarSection title="Realm" links={visibleWorld} />
-          <SidebarSection title="Orders" links={visibleFactions} />
+          {useCityLocalSidebar ? (
+            <SidebarSection title={currentCityHub.displayName} links={visibleCityLocal} />
+          ) : (
+            <>
+              <SidebarSection title="Character" links={visibleCore.map(([label, route]) => [label, route === "/profile" ? profileRoute : route])} />
+              <SidebarSection title="Realm" links={visibleWorld} />
+              <SidebarSection title="Orders" links={visibleFactions} />
+            </>
+          )}
           <SidebarSection title="Authority" links={adminLinks} />
 
           <div className="sidebar-logout">

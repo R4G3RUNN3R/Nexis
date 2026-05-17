@@ -88,6 +88,23 @@ export type ApiTravelResponse =
     }
   | ApiFailure;
 
+export type ServerCityOccupant = {
+  publicId: number;
+  displayName: string;
+  title: string;
+  level: number;
+  currentCityId: string;
+  isSelf: boolean;
+};
+
+export type ApiCityPeopleResponse =
+  | {
+      ok: true;
+      city: { id: string; name: string; role: string; peopleLabel?: string };
+      people: ServerCityOccupant[];
+    }
+  | ApiFailure;
+
 export type ApiChronicleStatusResponse =
   | {
       ok: true;
@@ -266,6 +283,18 @@ export function getServerTravelState(sessionToken: string): Promise<ApiTravelRes
       Authorization: `Bearer ${sessionToken}`,
     },
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerCityPeople(sessionToken: string, cityId: string): Promise<ApiCityPeopleResponse> {
+  return requestJson<{ city: { id: string; name: string; role: string; peopleLabel?: string }; people: ServerCityOccupant[] }>(
+    `/api/cities/${encodeURIComponent(cityId)}/people`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+      },
+    },
+  ).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
 export function startServerTravel(
