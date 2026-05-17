@@ -79,7 +79,6 @@ const beginnerAdventurer: JobCategory = {
       critConsequence: "hospital",
       critHospitalMinutes: 5,
       critFlavorText: "You ate a poisonous berry by mistake. Your vision blurs...",
-      requiredItems: [{ itemId: "herbalist_gloves", quantity: 1 }],
       primaryStat: "intelligence",
       itemDrops: [
         { itemId: "wild_herb",       itemName: "Wild Herb",       dropChance: 0.40, minQty: 1, maxQty: 3 },

@@ -71,6 +71,7 @@ function getLocalStock(cityId: string) {
 export default function MarketPage() {
   const { player, spendGold, addItem } = usePlayer();
   const [message, setMessage] = useState<string | null>(null);
+  const [buyQuantities, setBuyQuantities] = useState<Record<string, number>>({});
   const travelState = readTravelStateFromPlayer(player);
   const cityHub = getCityHubContent(travelState.currentCityId);
   const grocerDiscount = getActiveCivicJobPassives(normalizeCivicEmploymentState(player.current.civicEmployment)).market_discount ?? 0;
@@ -84,13 +85,25 @@ export default function MarketPage() {
     [cityHub.cityId, grocerDiscount],
   );
 
+  function getBuyQuantity(itemId: string) {
+    return Math.max(1, Math.min(99, Math.floor(Number(buyQuantities[itemId] ?? 1) || 1)));
+  }
+
+  function updateBuyQuantity(itemId: string, rawValue: string) {
+    const nextQuantity = Math.max(1, Math.min(99, Math.floor(Number(rawValue) || 1)));
+    setBuyQuantities((current) => ({ ...current, [itemId]: nextQuantity }));
+  }
+
   function buyItem(itemId: string, price: number) {
-    if (!spendGold(price)) {
-      setMessage("Not enough gold. The market remains stubbornly attached to payment.");
+    const quantity = getBuyQuantity(itemId);
+    const totalPrice = price * quantity;
+    if (!spendGold(totalPrice)) {
+      setMessage(`Not enough gold for ${quantity} item${quantity === 1 ? "" : "s"}. Total needed: ${totalPrice} gold.`);
       return;
     }
-    addItem(itemId, 1);
-    setMessage(`Purchased ${ITEM_OPTIONS.find((item) => item.itemId === itemId)?.name ?? "item"} for ${price} gold.`);
+    addItem(itemId, quantity);
+    const itemName = ITEM_OPTIONS.find((item) => item.itemId === itemId)?.name ?? "item";
+    setMessage(`Purchased ${itemName} x${quantity} for ${totalPrice} gold.`);
   }
 
   return (
@@ -151,9 +164,20 @@ export default function MarketPage() {
                   </span>
                 </div>
                 <div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.item?.description ?? "Vendor stock item."}</div>
-                <div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#b7c3cf", fontSize: 13 }}>
+                    Quantity
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={getBuyQuantity(entry.itemId)}
+                      onChange={(event) => updateBuyQuantity(entry.itemId, event.target.value)}
+                      style={{ width: 72 }}
+                    />
+                  </label>
                   <button type="button" onClick={() => buyItem(entry.itemId, entry.adjustedPrice)}>
-                    Buy Item
+                    Buy {getBuyQuantity(entry.itemId)} ({(entry.adjustedPrice * getBuyQuantity(entry.itemId)).toLocaleString("en-GB")} gold)
                   </button>
                 </div>
               </div>

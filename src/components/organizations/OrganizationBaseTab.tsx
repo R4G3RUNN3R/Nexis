@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   buybackOrganizationBase,
   getOrganizationBaseOwnership,
@@ -173,8 +174,11 @@ export function OrganizationBaseTab({
             <div className="info-row"><span className="info-row__label">Eligible plots</span><span className="info-row__value">{plots}</span></div>
           </div>
           <div className="guild-inline-note">
-            Acquisition, upkeep, review, confiscation, buyback, and auction records are handled by the live city ledger.
+            Next action: open the Property Office to buy a qualified plot or building, then return here to manage upkeep, review, buyback, and base effects.
           </div>
+          <Link to="/city/property-office" className="org-button">
+            Open Property Office
+          </Link>
         </section>
       </div>
     );

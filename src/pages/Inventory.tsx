@@ -152,11 +152,9 @@ export default function InventoryPage() {
               {isEmpty ? <div className="inv-cat-row inv-cat-row--empty">Nothing yet.</div> : null}
             </div>
 
-            {!isEmpty ? (
-              <div className="inv-ledger-note">
-                Use, sell, and crafting actions appear here only when an item has a live action available.
-              </div>
-            ) : null}
+            <div className="inv-ledger-note">
+              Item actions appear only when they are live for that item. Buy supplies in the Market; earn materials through Adventuring, Civic Jobs, and city activity; use or crafting controls will appear here when a held item supports them.
+            </div>
           </ContentPanel>
         </div>
       </div>

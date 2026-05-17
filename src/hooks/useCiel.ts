@@ -85,7 +85,7 @@ function buildPageExplanation(pageTitle?: string): string {
     return "Gold in your pocket is gold at risk. The bank protects it. Loans and interest mechanics come later — for now, it's storage.";
   }
 
-  return "This page is part of Nexis. I know what it's for. You'll understand it when it's fully wired. Until then, ask a better question.";
+  return "This page is part of Nexis. I know what it's for. You'll understand it as the local systems open up. Until then, ask a more specific question.";
 }
 
 // ─── Reply builder — CIEL voice ──────────────────────────────────────────────

@@ -309,6 +309,11 @@ export default function CivicJobsBoard() {
 
       <ContentPanel title="Civic Employment Status">
         <div style={{ display: "grid", gap: 8 }}>
+          {!activeTrack ? (
+            <div style={{ border: "1px solid rgba(213, 160, 122, 0.45)", background: "rgba(81, 50, 27, 0.25)", color: "#f0c39a", padding: 10, borderRadius: 8, fontSize: 13 }}>
+              You are unaffiliated. Choose a track from the Job Directory, review its entry requirements, then use Take Job when available.
+            </div>
+          ) : null}
           <div className="info-row">
             <span className="info-row__label">Current Employment</span>
             <span className="info-row__value">

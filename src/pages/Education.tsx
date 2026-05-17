@@ -271,7 +271,7 @@ export default function Education() {
   const bannerSubtitle = education.activeCourse ? formatRemaining(bannerRemainingMs) : "No active course";
 
   return (
-    <AppShell title="Education" hint="Structured education now follows visible roots instead of reading like a tax return.">
+    <AppShell title="Education" hint="Education is organized into categories, course chains, prerequisites, and system unlocks.">
       <div className="education-page">
         <div className="edu-banner">
           <div className="edu-banner__icon">i</div>
@@ -328,14 +328,14 @@ export default function Education() {
           <section className="edu-panel">
             <div className="edu-panel__header">
               <span>{selectedCategory.name}</span>
-              <span>{selectedCategory.courses.length} roots</span>
+              <span>{selectedCategory.courses.length} courses</span>
             </div>
             <div className="edu-panel__summary">{selectedCategory.description}</div>
             <div className="edu-course-tree">
               {categoryTree.map(({ root, childMap }) => (
                 <div key={root.id} className="edu-root-cluster">
                   <div className="edu-root-cluster__label">
-                    Root {root.code}
+                    Starting course {root.code}
                     {(root.prerequisites ?? []).length ? " | external prerequisite" : ""}
                   </div>
                   <CourseTreeBranch

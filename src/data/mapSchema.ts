@@ -53,6 +53,14 @@ function mapVisibilityFromRegionStatus(status: WorldRegionStatus): MapNodeVisibi
   return "visible";
 }
 
+function publicRegionStatusLabel(status: WorldRegionStatus) {
+  if (status === "deferred") return "rumored";
+  if (status === "scaffolded") return "charted, locked";
+  if (status === "fully_wired") return "open";
+  if (status === "preserved_core") return "core route";
+  return "known";
+}
+
 function buildCityMap(cityId: WorldCityId): MapViewDefinition {
   const city = worldCities.find((entry) => entry.id === cityId) ?? worldCities[0];
   const districts = getCityDistricts(city);
@@ -144,7 +152,7 @@ export const mapViews: MapViewDefinition[] = [
     label: "World Map",
     kind: "world",
     summary:
-      "Expanded macro geography with preserved Nexis core anchors, active city travel routes, and scaffolded regional lanes for later activation.",
+      "Expanded macro geography with preserved Nexis core anchors, active city travel routes, and rumored regional lanes for later discovery.",
     nodes: [
       ...worldCities.map((city) => ({
         id: city.id,
@@ -199,7 +207,7 @@ export const mapViews: MapViewDefinition[] = [
       ...worldScaffoldLinks.map((link) => ({
         from: link.fromNodeId,
         to: link.toNodeId,
-        label: `${link.label} (${link.status.replace(/_/g, " ")})`,
+        label: `${link.label} (${publicRegionStatusLabel(link.status)})`,
         requirements: link.requirements,
         discovery: link.discovery,
       })),

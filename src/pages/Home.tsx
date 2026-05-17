@@ -206,7 +206,7 @@ export default function HomePage() {
 
         <div className="home-grid">
           <div className="home-grid__main">
-            <ContentPanel title="Current Activity" className="panel--heroic">
+            <ContentPanel title="Current Status and Next Steps" className="panel--heroic">
               <div className="info-list">
                 <Row label="Travel" value={travelProgress.active ? `${travelStatus} | ${formatTravelDuration(travelProgress.remainingMs)}` : travelStatus} />
                 <Row label="Education" value={currentEducation ? currentEducation.name : "No active course"} />
@@ -215,10 +215,7 @@ export default function HomePage() {
                 <Row label="Consortium" value={consortiumSummary} />
                 <Row label="Condition" value={conditionLabel} />
               </div>
-            </ContentPanel>
-
-            <ContentPanel title="Operations Board">
-              <div className="home-actions-grid">
+              <div className="home-actions-grid" style={{ marginTop: 14 }}>
                 {quickActions.map((action) => (
                   <ActionLink
                     key={action.label}
@@ -255,15 +252,6 @@ export default function HomePage() {
           </div>
 
           <div className="home-grid__rail">
-            <ContentPanel title="Vital Ledger">
-              <div className="info-list">
-                <Row label="Energy" value={`${player.stats.energy} / ${player.stats.maxEnergy}`} />
-                <Row label="Health" value={`${player.stats.health} / ${player.stats.maxHealth}`} />
-                <Row label="Stamina" value={`${Math.floor(player.stats.stamina)} / ${player.stats.maxStamina}`} />
-                <Row label="Comfort" value={`${player.stats.comfort} / ${player.stats.maxComfort}`} />
-              </div>
-            </ContentPanel>
-
             <ContentPanel title="Realm Standing">
               <div className="info-list">
                 <Row label="Title" value={displayTitle || "Untitled citizen"} />

@@ -374,7 +374,7 @@ export default function TravelPage() {
                   ? "Already Traveling"
                   : selectedCity.id === travelState.currentCityId
                     ? "Already Here"
-                    : `Dispatch Caravan to ${selectedCity.name}`}
+                    : `Depart Now: ${selectedCity.name}`}
               </button>
               {isTraveling ? (
                 <button type="button" className="travel-action-button" onClick={() => void handleCancelTravel()}>

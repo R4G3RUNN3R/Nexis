@@ -46,9 +46,11 @@ export default function CityBoardSections() {
             </div>
             {leadListing.route ? (
               <Link className="city-paper__action" to={leadListing.route}>
-                Read posting
+                Open linked section
               </Link>
-            ) : null}
+            ) : (
+              <span className="city-paper__action" aria-disabled="true">Notice only</span>
+            )}
           </article>
 
           <div className="city-paper__briefs">
@@ -61,7 +63,9 @@ export default function CityBoardSections() {
                   <Link className="city-paper__mini-link" to={listing.route}>
                     Open
                   </Link>
-                ) : null}
+                ) : (
+                  <span className="city-paper__mini-link" aria-disabled="true">Notice only</span>
+                )}
               </article>
             ))}
           </div>
@@ -89,7 +93,9 @@ export default function CityBoardSections() {
                     <Link className="city-paper__mini-link" to={listing.route}>
                       Open section
                     </Link>
-                  ) : null}
+                  ) : (
+                    <span className="city-paper__mini-link" aria-disabled="true">Notice only</span>
+                  )}
                 </article>
               ))}
             </div>

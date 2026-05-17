@@ -276,61 +276,6 @@ export default function GuildsPage() {
     if (options?.message) setMessage(options.message(payload));
   }
 
-  const commandCards = board
-    ? [
-        {
-          label: "Reputation",
-          value: `${board.guildPassives?.reputation?.toLocaleString("en-GB") ?? 0}`,
-          note: `${board.guildPassives?.availablePoints ?? 0} skill points ready`,
-        },
-        {
-          label: "Members",
-          value: `${board.memberDetails?.length ?? board.members.length}`,
-          note: board.settingsView?.invitePolicy ?? "Officer Approval",
-        },
-        {
-          label: "War Readiness",
-          value: `${board.warRoom?.readiness ?? 0}`,
-          note: guildAcademyReadinessPct > 0
-            ? `${board.warRoom?.warRating ?? 0} war rating | +${guildAcademyReadinessPct}% academy`
-            : `${board.warRoom?.warRating ?? 0} war rating`,
-        },
-        {
-          label: "Armory",
-          value: `${board.armory?.items?.reduce((sum: number, entry: { quantity: number }) => sum + entry.quantity, 0) ?? 0} items`,
-          note: `${board.treasury.gold.toLocaleString("en-GB")} gold in treasury`,
-        },
-        {
-          label: "Academy Link",
-          value: `${guildAcademyCompletionPct}%`,
-          note: guildAcademyCompletionPct > 0
-            ? `Survival +${guildAcademySurvivalPct}% | Battle edge +${guildAcademyBattleEdgePct}%`
-            : "No Adventuring/Survival studies completed yet",
-        },
-      ]
-    : [
-        {
-          label: "Founding Cost",
-          value: `${foundingCost.toLocaleString("en-GB")} gold`,
-          note: hasGuildCharter ? "Charter present, so the paperwork only mildly resents you." : "No charter filed. Treasury brute force remains fashionable.",
-        },
-        {
-          label: "Requirement",
-          value: "Name + tag",
-          note: "Guilds keep their banner mark. Consortiums got the tag exemption instead.",
-        },
-        {
-          label: "Interior",
-          value: "Public + internal",
-          note: "Public dossier, members, wars, adventuring, passives, armory, and settings live inside the same guild spine.",
-        },
-        {
-          label: "Current Standing",
-          value: "Unaffiliated",
-          note: "No active guild record tied to this character yet.",
-        },
-      ];
-
   const tabs: Array<{ key: GuildTab; label: string }> = [
     { key: "public", label: "Headquarters" },
     { key: "members", label: "Members" },
@@ -393,25 +338,11 @@ export default function GuildsPage() {
 
   return (
     <AppShell title="Guilds" hint={pageCopy.flavor}>
-      <div className="page-intro-grid">
-        <ContentPanel title="Guildhall Brief">
-          <p className="page-intro__lead">{pageCopy.flavor}</p>
-          <p className="page-intro__body">{pageCopy.alt}</p>
-        </ContentPanel>
-        <ContentPanel title="CIEL">
-          <p className="page-intro__body">{pageCopy.ciel}</p>
-        </ContentPanel>
-      </div>
-
-      <div className="guild-command-strip">
-        {commandCards.map((card) => (
-          <section key={card.label} className="guild-command-card">
-            <div className="guild-command-card__label">{card.label}</div>
-            <div className="guild-command-card__value">{card.value}</div>
-            <div className="guild-command-card__note">{card.note}</div>
-          </section>
-        ))}
-      </div>
+      <ContentPanel title={board ? "Guild Overview" : "Found a Guild"}>
+        <p className="page-intro__lead">{pageCopy.flavor}</p>
+        <p className="page-intro__body">{pageCopy.alt}</p>
+        <p className="page-intro__body">{pageCopy.ciel}</p>
+      </ContentPanel>
 
       {message ? (
         <section className="panel guild-message-panel">
@@ -907,9 +838,13 @@ export default function GuildsPage() {
                         <div className="guild-card__body guild-card__body--small">
                           This now follows the organized-operation spine: plan a quest, staff every slot, wait out the preparation timer, then initiate when all members are okay. Bureaucracy, but with better loot.
                         </div>
-                        <button type="button" className="org-button" disabled={!canManageDoctrine || !(board.guildQuestBoard?.history ?? []).length} onClick={() => runGuildAction(() => replanGuildQuest(serverSessionToken!, board.internalId), { message: () => "Previous crew submitted for planning again." })}>
-                          Plan Last Crew Again
-                        </button>
+                        {(board.guildQuestBoard?.history ?? []).length ? (
+                          <button type="button" className="org-button" disabled={!canManageDoctrine} onClick={() => runGuildAction(() => replanGuildQuest(serverSessionToken!, board.internalId), { message: () => "Previous crew submitted for planning again." })}>
+                            Plan Last Crew Again
+                          </button>
+                        ) : (
+                          <div className="guild-inline-note">No previous quest crew exists yet. Plan a first quest before this shortcut appears.</div>
+                        )}
                       </section>
                     )}
 
@@ -1156,12 +1091,12 @@ export default function GuildsPage() {
                   <div className="guild-card">
                     <div className="guild-card__section-title">Public Charter Settings</div>
                     <div className="org-form">
-                      <input className="org-input" value={settingsDraft.headline} onChange={(event) => setSettingsDraft((current) => ({ ...current, headline: event.target.value }))} placeholder="Headline" />
-                      <input className="org-input" value={settingsDraft.recruitmentStatus} onChange={(event) => setSettingsDraft((current) => ({ ...current, recruitmentStatus: event.target.value }))} placeholder="Recruitment status" />
-                      <input className="org-input" value={settingsDraft.doctrine} onChange={(event) => setSettingsDraft((current) => ({ ...current, doctrine: event.target.value }))} placeholder="Doctrine" />
-                      <input className="org-input" value={settingsDraft.territory} onChange={(event) => setSettingsDraft((current) => ({ ...current, territory: event.target.value }))} placeholder="Territory" />
-                      <input className="org-input" value={settingsDraft.diplomacy} onChange={(event) => setSettingsDraft((current) => ({ ...current, diplomacy: event.target.value }))} placeholder="Diplomacy" />
-                      <textarea className="org-input guild-textarea" value={settingsDraft.publicNotice} onChange={(event) => setSettingsDraft((current) => ({ ...current, publicNotice: event.target.value }))} placeholder="Public notice" />
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Headline<input className="org-input" value={settingsDraft.headline} onChange={(event) => setSettingsDraft((current) => ({ ...current, headline: event.target.value }))} placeholder="Recruitment headline" /></label>
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Recruitment status<input className="org-input" value={settingsDraft.recruitmentStatus} onChange={(event) => setSettingsDraft((current) => ({ ...current, recruitmentStatus: event.target.value }))} placeholder="Open, selective, closed" /></label>
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Doctrine<input className="org-input" value={settingsDraft.doctrine} onChange={(event) => setSettingsDraft((current) => ({ ...current, doctrine: event.target.value }))} placeholder="Guild doctrine" /></label>
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Territory<input className="org-input" value={settingsDraft.territory} onChange={(event) => setSettingsDraft((current) => ({ ...current, territory: event.target.value }))} placeholder="Operating territory" /></label>
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Diplomacy<input className="org-input" value={settingsDraft.diplomacy} onChange={(event) => setSettingsDraft((current) => ({ ...current, diplomacy: event.target.value }))} placeholder="Diplomatic posture" /></label>
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Public notice<textarea className="org-input guild-textarea" value={settingsDraft.publicNotice} onChange={(event) => setSettingsDraft((current) => ({ ...current, publicNotice: event.target.value }))} placeholder="Public notice" /></label>
                     </div>
                   </div>
                 </div>
@@ -1169,8 +1104,8 @@ export default function GuildsPage() {
                   <div className="guild-card">
                     <div className="guild-card__section-title">Command Settings</div>
                     <div className="org-form">
-                      <input className="org-input" value={settingsDraft.invitePolicy} onChange={(event) => setSettingsDraft((current) => ({ ...current, invitePolicy: event.target.value }))} placeholder="Invite policy" />
-                      <input className="org-input" value={settingsDraft.warDoctrine} onChange={(event) => setSettingsDraft((current) => ({ ...current, warDoctrine: event.target.value }))} placeholder="War doctrine" />
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Invite policy<input className="org-input" value={settingsDraft.invitePolicy} onChange={(event) => setSettingsDraft((current) => ({ ...current, invitePolicy: event.target.value }))} placeholder="Invite policy" /></label>
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>War doctrine<input className="org-input" value={settingsDraft.warDoctrine} onChange={(event) => setSettingsDraft((current) => ({ ...current, warDoctrine: event.target.value }))} placeholder="War doctrine" /></label>
                       <button type="button" className="org-button" disabled={!canManageDoctrine} onClick={() => runGuildAction(() => updateGuildSettings(serverSessionToken!, board.internalId, settingsDraft), { message: () => "Guild settings updated. Outsiders will now read the revised doctrine instead of the old one." })}>
                         Save Settings
                       </button>

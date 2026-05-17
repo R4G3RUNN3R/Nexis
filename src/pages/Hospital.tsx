@@ -96,7 +96,7 @@ export default function HospitalPage() {
   return (
     <AppShell
       title={pageTitle}
-      hint={activeCondition === "normal" ? "No active condition." : "Your current condition updates here in real time. Everything else can stop pretending to be accessible."}
+      hint={activeCondition === "normal" ? "Recovery and sentence records appear here when they matter." : "Your current condition updates here in real time."}
     >
       <div className="nexis-grid">
         <div className="nexis-column">
@@ -130,7 +130,7 @@ export default function HospitalPage() {
             ) : null}
 
             {activeCondition === "normal" ? (
-              <div className="hospital-note">{viewMode === "jailed" ? "No active jail sentence. You are currently free." : "No current recovery or jail status. Congratulations on basic functionality."}</div>
+              <div className="hospital-note">{viewMode === "jailed" ? "You are free. Jail records will show sentence timers, reasons, and listed prisoners when detention occurs." : "You are healthy. Hospital records will show recovery timers, reasons, and listed patients if you are injured."}</div>
             ) : null}
           </ContentPanel>
         </div>

@@ -421,7 +421,7 @@ export default function ConsortiumsPage() {
 
         <section className="panel">
           <div className="panel__header">
-            <h2>{board ? "Consortium Board" : "Found a Consortium"}</h2>
+            <h2>{board ? "Company Operations" : "Found a Consortium"}</h2>
           </div>
           <div className="panel__body guild-stack">
             {loadingBoard ? (
@@ -433,7 +433,7 @@ export default function ConsortiumsPage() {
                 <div className="org-surface">
                   <section className="org-hero org-hero--consortium">
                     <div>
-                      <p className="org-eyebrow">Consortium Board</p>
+                      <p className="org-eyebrow">Company Dossier</p>
                       <h2 className="org-hero__title">
                         {board.name} <span>[{formatEntityPublicId("consortium", board.publicId)}]</span>
                       </h2>

@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { ITEM_CATALOGUE } from "../data/itemsData";
@@ -23,6 +24,20 @@ type OutcomeEntry = {
   result: JobOutcomeResult;
   timestamp: number;
 };
+
+const ITEM_ACQUISITION_PATHS: Record<string, Array<{ label: string; to: string; detail: string }>> = {
+  herbalist_gloves: [{ label: "Market", to: "/market", detail: "starter field tools" }],
+  wood_axe: [{ label: "Market", to: "/market", detail: "tool vendors" }],
+  miners_pick: [{ label: "Market", to: "/market", detail: "mining tools" }],
+  hunters_bow: [{ label: "Market", to: "/market", detail: "hunting gear" }],
+  lantern: [{ label: "Market", to: "/market", detail: "travel and ruins gear" }],
+  rope: [{ label: "Market", to: "/market", detail: "common travel stock" }],
+  lockpick_set: [{ label: "Market", to: "/market", detail: "restricted tool stock where available" }],
+};
+
+function getAcquisitionPaths(itemId: string) {
+  return ITEM_ACQUISITION_PATHS[itemId] ?? [{ label: "Market", to: "/market", detail: "check legal city stock first" }];
+}
 
 function OutcomePanel({
   entry,
@@ -269,6 +284,22 @@ function SubJobCard({
         </div>
       )}
 
+      {attemptStatus.missingItems.length > 0 ? (
+        <div className="jobs-low-stamina" style={{ marginTop: 8 }}>
+          <strong>Missing supplies:</strong>{" "}
+          {attemptStatus.missingItems.map((missingItem) => (
+            <span key={`${subJob.id}-path-${missingItem.itemId}`} style={{ display: "block", marginTop: 4 }}>
+              {missingItem.itemName}: {getAcquisitionPaths(missingItem.itemId).map((path, index) => (
+                <span key={`${missingItem.itemId}-${path.to}-${path.label}`}>
+                  {index > 0 ? " or " : ""}
+                  <Link to={path.to}>{path.label}</Link> <span>({path.detail})</span>
+                </span>
+              ))}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       {blocked && attemptStatus.reason ? (
         <div className="jobs-low-stamina" style={{ marginTop: 12 }}>
           {attemptStatus.reason}
@@ -391,7 +422,7 @@ export default function JobsPage() {
           </div>
           {selectedCategory ? (
             <div className="jobs-overview__brief">
-              {selectedCategory.description} {selectedCategory.isIllegal ? "Illegal work draws guards and jail time, because the city remains annoyingly consistent about crime." : "Legal work keeps the gold honest, or at least honest-looking."}
+              {selectedCategory.description} {selectedCategory.isIllegal ? "Illegal work draws guards and jail time, because the city remains annoyingly consistent about crime." : "Legal work keeps the gold honest, or at least honest-looking."} Beginner Adventurer now includes Gather Herbs as a no-gear starter action; tool-gated jobs list where to get missing supplies.
             </div>
           ) : null}
         </ContentPanel>
