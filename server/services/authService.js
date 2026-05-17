@@ -84,6 +84,30 @@ async function loadPlayerState(client, internalId) {
   return findPlayerStateByUserInternalId(client, internalId);
 }
 
+function withResolvedRuntimeState(playerState, runtimeState) {
+  return {
+    ...playerState,
+    runtimeState,
+  };
+}
+
+async function resolvePlayerStateForResponse(client, user, playerState) {
+  const runtimeState = buildMutableRuntimeState(user, playerState);
+  const travelResolution = resolveTravelForRuntimeState(runtimeState);
+  const chronicleResolution = ensureChronicleEntitlement(runtimeState);
+  const currentRuntimePlayer = playerState?.runtimeState?.player ?? {};
+  const accountAgeChanged =
+    currentRuntimePlayer.createdAt !== runtimeState.player.createdAt ||
+    currentRuntimePlayer.daysPlayed !== runtimeState.player.daysPlayed ||
+    currentRuntimePlayer.ageLabel !== runtimeState.player.ageLabel;
+
+  if (travelResolution.changed || chronicleResolution.changed || accountAgeChanged) {
+    return upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+  }
+
+  return withResolvedRuntimeState(playerState, runtimeState);
+}
+
 function validateRegisterInput({ firstName, lastName, email, password }) {
   if (!normalizeName(firstName)) {
     throw new HttpError(400, "First name is required.", "FIRST_NAME_REQUIRED");
@@ -156,7 +180,7 @@ export async function registerUser({ firstName, lastName, email, password, exist
     });
 
     await createDefaultPlayerState(client, user.internalId);
-    const playerState = await loadPlayerState(client, user.internalId);
+    const playerState = await resolvePlayerStateForResponse(client, user, await loadPlayerState(client, user.internalId));
 
     const sessionToken = makeSessionToken();
     const expiresAt = new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000);
@@ -197,7 +221,7 @@ export async function loginUser({ email, password }) {
       userInternalId: authUser.internalId,
       expiresAt,
     });
-    const playerState = await loadPlayerState(client, authUser.internalId);
+    const playerState = await resolvePlayerStateForResponse(client, authUser, await loadPlayerState(client, authUser.internalId));
 
     return {
       user: mapApiUser(authUser),
@@ -216,13 +240,11 @@ export async function getSessionUser(sessionToken) {
   if (!result) return null;
 
   await touchSession({ query }, tokenHash);
-  let playerState = await loadPlayerState({ query }, result.user.internalId);
-  const runtimeState = buildMutableRuntimeState(result.user, playerState);
-  const travelResolution = resolveTravelForRuntimeState(runtimeState);
-  const chronicleResolution = ensureChronicleEntitlement(runtimeState);
-  if (travelResolution.changed || chronicleResolution.changed) {
-    playerState = await upsertPlayerRuntimeState({ query }, result.user.internalId, runtimeState);
-  }
+  const playerState = await resolvePlayerStateForResponse(
+    { query },
+    result.user,
+    await loadPlayerState({ query }, result.user.internalId),
+  );
 
   return {
     user: mapApiUser(result.user),

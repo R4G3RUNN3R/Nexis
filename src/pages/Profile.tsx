@@ -174,8 +174,8 @@ export default function ProfilePage() {
       entityType: "player" as const,
       level: player.level,
       rank: meaningfulRank,
-      ageLabel: `${player.daysPlayed}d`,
-      createdAt: Date.now() - player.daysPlayed * 86400000,
+      ageLabel: player.daysPlayed === 0 ? "Today" : player.daysPlayed === 1 ? "1 day" : `${player.daysPlayed} days`,
+      createdAt: player.createdAt,
       life: {
         current: Number(player.stats.health ?? 0),
         max: Number(player.stats.maxHealth ?? 0),
@@ -231,6 +231,7 @@ export default function ProfilePage() {
     player.current.job,
     player.current.travel,
     player.current.currentCityId,
+    player.createdAt,
     player.daysPlayed,
     player.lastName,
     player.level,

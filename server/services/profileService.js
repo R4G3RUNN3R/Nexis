@@ -42,6 +42,17 @@ function buildTravelSummary(runtimeState) {
     : "In Nexis City";
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function formatAccountAge(createdAt) {
+  const numericCreatedAt = Number(createdAt);
+  if (!Number.isFinite(numericCreatedAt) || numericCreatedAt <= 0) return "Today";
+  const daysPlayed = Math.max(0, Math.floor((Date.now() - numericCreatedAt) / DAY_MS));
+  if (daysPlayed <= 0) return "Today";
+  if (daysPlayed === 1) return "1 day";
+  return `${daysPlayed} days`;
+}
+
 function sanitizeProfileImageKey(value) {
   return typeof value === "string" && PROFILE_IMAGE_KEY_PATTERN.test(value) ? value : null;
 }
@@ -132,7 +143,7 @@ function buildProfileResponse(viewerUser, targetUser, playerState, organizationS
       entityType,
       level: playerState.level ?? 1,
       rank: typeof runtimeState.player.rank === "string" && runtimeState.player.rank ? runtimeState.player.rank : null,
-      ageLabel: typeof runtimeState.player.ageLabel === "string" && runtimeState.player.ageLabel ? runtimeState.player.ageLabel : "Newly registered",
+      ageLabel: formatAccountAge(targetUser.createdAt),
       createdAt: targetUser.createdAt,
       life: {
         current: Number(runtimeState.player.stats?.health ?? 100),

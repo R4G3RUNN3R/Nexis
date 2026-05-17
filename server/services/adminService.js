@@ -27,6 +27,24 @@ function asWholeNumber(value, fallback = 0) {
   return Math.max(0, Math.floor(numeric));
 }
 
+const ADMIN_CURRENCY_CAP = 100_000_000;
+const ADMIN_ITEM_QUANTITY_CAP = 10_000;
+const ADMIN_ITEM_STACK_CAP = 100_000;
+
+function requireAdminWholeNumber(value, { fieldName, min = 0, max, code = "ADMIN_NUMBER_INVALID" }) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || !Number.isInteger(numeric)) {
+    throw new HttpError(400, `${fieldName} must be a whole number.`, code);
+  }
+  if (numeric < min) {
+    throw new HttpError(400, `${fieldName} must be at least ${min}.`, code);
+  }
+  if (typeof max === "number" && numeric > max) {
+    throw new HttpError(400, `${fieldName} cannot exceed ${max.toLocaleString("en-GB")}.`, code);
+  }
+  return numeric;
+}
+
 function requireReason(reason) {
   const trimmed = String(reason ?? "").trim();
   if (trimmed.length < 3) {
@@ -210,12 +228,23 @@ function applyAdminAction(runtimeState, actionType, payload) {
     }
     case "setCurrencies": {
       const nextCurrencies = asRecord(payload?.currencies);
+      const readCurrency = (key) => {
+        if (!Object.prototype.hasOwnProperty.call(nextCurrencies, key)) {
+          return asWholeNumber(player.currencies[key], 0);
+        }
+        return requireAdminWholeNumber(nextCurrencies[key], {
+          fieldName: `${key} currency`,
+          min: 0,
+          max: ADMIN_CURRENCY_CAP,
+          code: "ADMIN_CURRENCY_INVALID",
+        });
+      };
       beforeSummary = { ...player.currencies };
       player.currencies = {
-        copper: asWholeNumber(nextCurrencies.copper, player.currencies.copper),
-        silver: asWholeNumber(nextCurrencies.silver, player.currencies.silver),
-        gold: asWholeNumber(nextCurrencies.gold, player.currencies.gold),
-        platinum: asWholeNumber(nextCurrencies.platinum, player.currencies.platinum),
+        copper: readCurrency("copper"),
+        silver: readCurrency("silver"),
+        gold: readCurrency("gold"),
+        platinum: readCurrency("platinum"),
       };
       player.gold = player.currencies.gold;
       afterSummary = { ...player.currencies };
@@ -230,17 +259,32 @@ function applyAdminAction(runtimeState, actionType, payload) {
     }
     case "addInventoryItem": {
       const itemId = String(payload?.itemId ?? "").trim();
-      const quantity = asWholeNumber(payload?.quantity, 0);
-      if (!itemId || quantity <= 0) throw new HttpError(400, "Item ID and positive quantity are required.", "INVALID_INVENTORY_UPDATE");
-      beforeSummary = { itemId, quantity: player.inventory[itemId] ?? 0 };
-      player.inventory = { ...player.inventory, [itemId]: asWholeNumber(player.inventory[itemId], 0) + quantity };
+      const quantity = requireAdminWholeNumber(payload?.quantity, {
+        fieldName: "Inventory quantity",
+        min: 1,
+        max: ADMIN_ITEM_QUANTITY_CAP,
+        code: "ADMIN_INVENTORY_QUANTITY_INVALID",
+      });
+      if (!itemId) throw new HttpError(400, "Item ID and positive quantity are required.", "INVALID_INVENTORY_UPDATE");
+      const currentQuantity = asWholeNumber(player.inventory[itemId], 0);
+      const nextQuantity = currentQuantity + quantity;
+      if (nextQuantity > ADMIN_ITEM_STACK_CAP) {
+        throw new HttpError(400, `Inventory stack cannot exceed ${ADMIN_ITEM_STACK_CAP.toLocaleString("en-GB")} per item.`, "ADMIN_INVENTORY_STACK_CAP");
+      }
+      beforeSummary = { itemId, quantity: currentQuantity };
+      player.inventory = { ...player.inventory, [itemId]: nextQuantity };
       afterSummary = { itemId, quantity: player.inventory[itemId] };
       break;
     }
     case "removeInventoryItem": {
       const itemId = String(payload?.itemId ?? "").trim();
-      const quantity = asWholeNumber(payload?.quantity, 0);
-      if (!itemId || quantity <= 0) throw new HttpError(400, "Item ID and positive quantity are required.", "INVALID_INVENTORY_UPDATE");
+      const quantity = requireAdminWholeNumber(payload?.quantity, {
+        fieldName: "Inventory quantity",
+        min: 1,
+        max: ADMIN_ITEM_QUANTITY_CAP,
+        code: "ADMIN_INVENTORY_QUANTITY_INVALID",
+      });
+      if (!itemId) throw new HttpError(400, "Item ID and positive quantity are required.", "INVALID_INVENTORY_UPDATE");
       const currentQuantity = asWholeNumber(player.inventory[itemId], 0);
       beforeSummary = { itemId, quantity: currentQuantity };
       const nextQuantity = Math.max(0, currentQuantity - quantity);

@@ -268,7 +268,7 @@ export default function HomePage() {
               <div className="info-list">
                 <Row label="Title" value={displayTitle || "Untitled citizen"} />
                 <Row label="Rank" value={player.rank || "Unranked"} />
-                <Row label="Age" value={`${player.daysPlayed} days`} />
+                <Row label="Age" value={player.daysPlayed === 1 ? "1 day" : `${player.daysPlayed} days`} />
                 <Row label="Household" value={residenceName} />
                 <Row label="Comfort Cap" value={player.property.comfortProvided} />
               </div>

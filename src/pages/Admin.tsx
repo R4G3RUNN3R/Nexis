@@ -23,6 +23,16 @@ const PRIVILEGE_OPTIONS = [
   { value: "admin", label: "Admin" },
 ] as const;
 
+const ADMIN_CURRENCY_CAP = 100_000_000;
+const ADMIN_ITEM_QUANTITY_CAP = 10_000;
+
+function findWholeNumberRangeError(value: number, label: string, min: number, max: number) {
+  if (!Number.isInteger(value)) return `${label} must be a whole number.`;
+  if (value < min) return `${label} must be at least ${min}.`;
+  if (value > max) return `${label} cannot exceed ${max.toLocaleString("en-GB")}.`;
+  return null;
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9fb0bf" }}>{children}</div>;
 }
@@ -58,6 +68,11 @@ export default function AdminPage() {
       privilegeRole: activeAccount?.privilegeRole ?? "player",
     });
   const canUseSensitiveMutations = canManageRoles;
+  const invalidCurrencyEntry = Object.entries(currencies).find(([, value]) => findWholeNumberRangeError(value, "Currency value", 0, ADMIN_CURRENCY_CAP));
+  const currencyValidationError = invalidCurrencyEntry
+    ? findWholeNumberRangeError(invalidCurrencyEntry[1], `${invalidCurrencyEntry[0]} currency`, 0, ADMIN_CURRENCY_CAP)
+    : null;
+  const inventoryQuantityValidationError = findWholeNumberRangeError(inventoryQty, "Inventory quantity", 1, ADMIN_ITEM_QUANTITY_CAP);
 
   useEffect(() => {
     if (!selected) return;
@@ -112,6 +127,14 @@ export default function AdminPage() {
 
   async function runAction(actionType: string, payload: Record<string, unknown>) {
     if (!serverSessionToken || !selected) return;
+    if (actionType === "setCurrencies" && currencyValidationError) {
+      setMessage(currencyValidationError);
+      return;
+    }
+    if ((actionType === "addInventoryItem" || actionType === "removeInventoryItem") && inventoryQuantityValidationError) {
+      setMessage(inventoryQuantityValidationError);
+      return;
+    }
     const result = await postAdminPlayerAction(serverSessionToken, selected.user.internalId, { actionType, reason, ...payload });
     if ("ok" in result && result.ok === false) {
       setMessage(result.error);
@@ -234,11 +257,12 @@ export default function AdminPage() {
                       {Object.entries(currencies).map(([key, value]) => (
                         <label key={key} style={{ display: "grid", gap: 4 }}>
                           <span>{key}</span>
-                          <input type="number" value={value} min={0} onChange={(event) => setCurrencies((current) => ({ ...current, [key]: Number(event.target.value) }))} />
+                          <input type="number" value={value} min={0} max={ADMIN_CURRENCY_CAP} step={1} onChange={(event) => setCurrencies((current) => ({ ...current, [key]: Number(event.target.value) }))} />
                         </label>
                       ))}
                     </div>
-                    <button type="button" onClick={() => runAction("setCurrencies", { currencies })}>{ADMIN_ACTION_POLICIES.setCurrencies.label}</button>
+                    <button type="button" onClick={() => runAction("setCurrencies", { currencies })} disabled={Boolean(currencyValidationError)}>{ADMIN_ACTION_POLICIES.setCurrencies.label}</button>
+                    {currencyValidationError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{currencyValidationError}</div> : null}
 
                     <SectionTitle>Player Job</SectionTitle>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -256,9 +280,10 @@ export default function AdminPage() {
                       <select value={inventoryItemId} onChange={(event) => setInventoryItemId(event.target.value)}>
                         {ITEM_OPTIONS.map((item) => <option key={item.itemId} value={item.itemId}>{item.name}</option>)}
                       </select>
-                      <input type="number" value={inventoryQty} min={1} onChange={(event) => setInventoryQty(Number(event.target.value))} style={{ width: 120 }} />
-                      <button type="button" onClick={() => runAction("addInventoryItem", { itemId: inventoryItemId, quantity: inventoryQty })}>Add Item</button>
-                      <button type="button" onClick={() => runAction("removeInventoryItem", { itemId: inventoryItemId, quantity: inventoryQty })}>Remove Item</button>
+                      <input type="number" value={inventoryQty} min={1} max={ADMIN_ITEM_QUANTITY_CAP} step={1} onChange={(event) => setInventoryQty(Number(event.target.value))} style={{ width: 120 }} />
+                      <button type="button" onClick={() => runAction("addInventoryItem", { itemId: inventoryItemId, quantity: inventoryQty })} disabled={Boolean(inventoryQuantityValidationError)}>Add Item</button>
+                      <button type="button" onClick={() => runAction("removeInventoryItem", { itemId: inventoryItemId, quantity: inventoryQty })} disabled={Boolean(inventoryQuantityValidationError)}>Remove Item</button>
+                      {inventoryQuantityValidationError ? <div style={{ color: "#d98f8f", fontSize: 13, flexBasis: "100%" }}>{inventoryQuantityValidationError}</div> : null}
                     </div>
                     <div style={{ display: "grid", gap: 6 }}>
                       {inventoryRows.length ? inventoryRows.map(([itemId, quantity]) => <div key={itemId}>{itemId}: x{quantity}</div>) : <div>No inventory recorded.</div>}

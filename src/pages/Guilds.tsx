@@ -115,6 +115,9 @@ export default function GuildsPage() {
   const foundingCost = hasGuildCharter ? 50000 : 150000;
   const pageCopy = GUILD_PAGE_COPY;
 
+  useEffect(() => {
+    setMessage(null);
+  }, [activeTab, routeOrganizationPublicId]);
 
   useEffect(() => {
     if (authSource === "server" && serverSessionToken) {
@@ -958,11 +961,17 @@ export default function GuildsPage() {
                             <StatusRow label="Members Required" value={quest.requiredMembers} />
                             <StatusRow label="Guild Rewards" value={`${quest.reputationReward} rep, ${quest.treasuryGoldReward.toLocaleString("en-GB")} gold`} />
                             <StatusRow label="Member Cut" value={`${quest.memberGoldReward.toLocaleString("en-GB")} gold each`} />
-                            <button type="button" className="org-button" disabled={!canManageDoctrine || !quest.canPlan} onClick={() => runGuildAction(() => planGuildQuest(serverSessionToken!, board.internalId, quest.key), { message: () => `${quest.displayName} entered planning.` })}>
+                            <button
+                              type="button"
+                              className="org-button"
+                              disabled={!canManageDoctrine || !quest.canPlan}
+                              title={!canManageDoctrine ? "Only guild leadership can plan quests." : quest.blockedReason ?? "Plan this quest."}
+                              onClick={() => runGuildAction(() => planGuildQuest(serverSessionToken!, board.internalId, quest.key), { message: () => `${quest.displayName} entered planning.` })}
+                            >
                               Plan Quest
                             </button>
-                            <div className={`guild-inline-note${quest.blockedReason ? " guild-inline-note--warning" : ""}`}>
-                              {quest.blockedReason ?? "Ready to enter planning."}
+                            <div className={`guild-inline-note${!canManageDoctrine || quest.blockedReason ? " guild-inline-note--warning" : ""}`}>
+                              {!canManageDoctrine ? "Only guild leadership can plan quests." : quest.blockedReason ?? "Ready to enter planning."}
                             </div>
                           </section>
                         ))}

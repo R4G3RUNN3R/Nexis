@@ -35,6 +35,26 @@ function asNumber(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function resolveCreatedAt(user, player) {
+  const fromUser = asNumber(user?.createdAt, 0);
+  const fromPlayer = asNumber(player?.createdAt, 0);
+  const createdAt = fromUser > 0 ? fromUser : fromPlayer;
+  return createdAt > 0 ? Math.floor(createdAt) : Date.now();
+}
+
+function calculateDaysPlayed(createdAt, now = Date.now()) {
+  return Math.max(0, Math.floor((now - createdAt) / DAY_MS));
+}
+
+function formatAgeLabel(createdAt) {
+  const daysPlayed = calculateDaysPlayed(createdAt);
+  if (daysPlayed <= 0) return "Today";
+  if (daysPlayed === 1) return "1 day";
+  return `${daysPlayed} days`;
+}
+
 function normalizeCondition(value) {
   const record = asRecord(value);
   const type = typeof record.type === "string" ? record.type : "normal";
@@ -113,6 +133,8 @@ export function buildMutableRuntimeState(user, playerState) {
     gold,
     platinum: Math.max(0, Math.floor(asNumber(player.currencies?.platinum, 0))),
   };
+  const createdAt = resolveCreatedAt(user, player);
+  const daysPlayed = calculateDaysPlayed(createdAt);
 
   return {
     player: {
@@ -123,9 +145,9 @@ export function buildMutableRuntimeState(user, playerState) {
         typeof player.lastName === "string" && player.lastName ? player.lastName : user.lastName,
       title: typeof player.title === "string" ? player.title : "",
       rank: typeof player.rank === "string" ? player.rank : null,
-      ageLabel: typeof player.ageLabel === "string" ? player.ageLabel : "Newly registered",
-      createdAt: typeof player.createdAt === "number" ? player.createdAt : Date.now(),
-      daysPlayed: Math.max(0, Math.floor(asNumber(player.daysPlayed, 0))),
+      ageLabel: formatAgeLabel(createdAt),
+      createdAt,
+      daysPlayed,
       experience: Math.max(0, Math.floor(asNumber(player.experience, 0))),
       level: Math.max(1, Math.floor(asNumber(player.level, playerState?.level ?? 1))),
       gold,

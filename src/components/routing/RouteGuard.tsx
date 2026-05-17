@@ -60,7 +60,7 @@ export default function RouteGuard({ children }: { children: JSX.Element }) {
   }
 
   if (isJailed && BLOCKED_WHILE_JAILED.has(location.pathname)) {
-    return <Navigate to="/hospital" replace state={{ redirectedFrom: location.pathname }} />;
+    return <Navigate to="/jail" replace state={{ redirectedFrom: location.pathname }} />;
   }
 
   if (isTraveling && BLOCKED_WHILE_TRAVELING.has(location.pathname)) {

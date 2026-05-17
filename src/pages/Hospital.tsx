@@ -115,9 +115,9 @@ export default function HospitalPage() {
               <InfoRow label="Reason" value={player.condition.reason ?? "No active condition"} />
             </div>
 
-            {location.state?.redirectedFrom ? (
+            {location.state?.redirectedFrom && activeCondition !== "normal" ? (
               <div className="hospital-note hospital-note--redirect">
-                Access to <strong>{location.state.redirectedFrom}</strong> is unavailable while you are {activeCondition === "normal" ? "fine" : activeCondition}.
+                Access to <strong>{location.state.redirectedFrom}</strong> is unavailable while you are {activeCondition}.
               </div>
             ) : null}
 

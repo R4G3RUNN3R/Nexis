@@ -163,8 +163,8 @@ export function TopBar() {
           <input
             className="topbar__search"
             type="search"
-            placeholder="Search users, guilds, consortiums..."
-            aria-label="Search"
+            placeholder="Search citizens and quick links..."
+            aria-label="Search citizens and quick links"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);

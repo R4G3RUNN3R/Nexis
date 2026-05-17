@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
-import { getMapView, mapViews } from "../data/mapSchema";
+import { getCityMap, getMapView, mapViews, type MapNode } from "../data/mapSchema";
 import "../styles/world-map-ui.css";
 
 function formatMapLabel(value: string) {
@@ -8,6 +8,18 @@ function formatMapLabel(value: string) {
     .replace(/_/g, " ")
     .replace(/-/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function mapRouteForViewId(viewId: string) {
+  return viewId === "world" ? "/world-map" : `/maps/${viewId}`;
+}
+
+function getNodeRoute(node: MapNode) {
+  if (node.route) return node.route;
+  const directMap = getMapView(node.id);
+  if (directMap) return mapRouteForViewId(directMap.id);
+  const cityMap = getCityMap(node.id as never);
+  return cityMap ? mapRouteForViewId(cityMap.id) : null;
 }
 
 export default function WorldMapPage() {
@@ -33,7 +45,7 @@ export default function WorldMapPage() {
                   <div key={view.id} className="info-row">
                     <span className="info-row__label">{view.label}</span>
                     <span className="info-row__value info-row__value--accent">
-                      <Link className="inline-route-link" to={view.id === "world" ? "/world-map" : `/maps/${view.id}`}>
+                      <Link className="inline-route-link" to={mapRouteForViewId(view.id)}>
                         Open
                       </Link>
                     </span>
@@ -49,13 +61,27 @@ export default function WorldMapPage() {
             </div>
             <div className="panel__body">
               <div className="info-list">
-                {visibleNodes.map((node) => (
-                  <div key={node.id} className="info-row">
-                    <span className="info-row__label">{node.label}</span>
-                    <span className="info-row__value">{formatMapLabel(node.kind)}</span>
-                  </div>
-                ))}
+                {visibleNodes.map((node) => {
+                  const nodeRoute = getNodeRoute(node);
+                  return (
+                    <div key={node.id} className="info-row">
+                      <span className="info-row__label">{node.label}</span>
+                      <span className="info-row__value">
+                        {nodeRoute ? (
+                          <Link className="inline-route-link" to={nodeRoute}>Open {formatMapLabel(node.kind)}</Link>
+                        ) : (
+                          `${formatMapLabel(node.kind)} - informational`
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
+              {visibleNodes.some((node) => !getNodeRoute(node)) ? (
+                <p style={{ color: "#9fb0bf", fontSize: 13, margin: "10px 0 0" }}>
+                  Informational nodes are visible world markers; nodes with an Open link have an available map, route, or local screen.
+                </p>
+              ) : null}
             </div>
           </section>
         </div>

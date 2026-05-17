@@ -31,6 +31,7 @@ type PlayerState = {
   experience: number;
   level: number;
   rank: string;
+  createdAt: number;
   daysPlayed: number;
   gold: number;
   isRegistered: boolean;
@@ -114,6 +115,17 @@ export function maxStaminaForLevel(level: number): number {
 }
 
 const MAX_PLAYER_LEVEL = 100;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getDaysPlayed(createdAt: number, now = Date.now()) {
+  return Math.max(0, Math.floor((now - createdAt) / DAY_MS));
+}
+
+function resolveCreatedAt(stored: StoredPlayerState, identity?: PlayerIdentity) {
+  const fromIdentity = typeof identity?.createdAt === "number" && identity.createdAt > 0 ? identity.createdAt : null;
+  const fromStored = typeof stored.createdAt === "number" && stored.createdAt > 0 ? stored.createdAt : null;
+  return Math.floor(fromIdentity ?? fromStored ?? Date.now());
+}
 
 function getExperienceToNextLevel(level: number): number {
   return Math.max(50, level * 50);
@@ -195,6 +207,7 @@ const basePlayer: PlayerState = {
   experience: 0,
   level: 1,
   rank: "0",
+  createdAt: Date.now(),
   daysPlayed: 0,
   gold: 500,
   isRegistered: false,
@@ -226,7 +239,9 @@ type StoredPlayerState = Partial<PlayerState> & {
   publicId?: number | null;
 };
 
-function mergePlayer(stored: StoredPlayerState, identity?: { internalPlayerId: string; publicId: number }): PlayerState {
+type PlayerIdentity = { internalPlayerId: string; publicId: number; createdAt?: number };
+
+function mergePlayer(stored: StoredPlayerState, identity?: PlayerIdentity): PlayerState {
   const experience = normalizeExperience(typeof stored.experience === "number" ? stored.experience : basePlayer.experience);
   const level = normalizeLevel(typeof stored.level === "number" ? stored.level : basePlayer.level, experience);
   const mergedStats = { ...basePlayer.stats, ...(stored.stats ?? {}) };
@@ -251,12 +266,15 @@ function mergePlayer(stored: StoredPlayerState, identity?: { internalPlayerId: s
     identity?.publicId ??
     (typeof stored.publicId === "number" ? stored.publicId : basePlayer.publicId);
   const title = sanitizeStoredTitle(typeof stored.title === "string" ? stored.title : basePlayer.title, publicId);
+  const createdAt = resolveCreatedAt(stored, identity);
   return {
     ...basePlayer,
     ...stored,
     internalId,
     publicId,
     title,
+    createdAt,
+    daysPlayed: getDaysPlayed(createdAt),
     experience,
     level,
     stats: mergedStats,
@@ -275,7 +293,7 @@ function mergePlayer(stored: StoredPlayerState, identity?: { internalPlayerId: s
 
 function readStoredPlayer(
   storageKey: string,
-  identity?: { internalPlayerId: string; publicId: number },
+  identity?: PlayerIdentity,
 ): PlayerState {
   if (typeof window === "undefined") return identity ? mergePlayer({}, identity) : basePlayer;
   try {
@@ -323,13 +341,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [player, setPlayer] = useState<PlayerState>(() =>
     readStoredPlayer(
       storageKey,
-      activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined,
+      activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId, createdAt: activeAccount.createdAt } : undefined,
     ),
   );
   const [now, setNow] = useState<number>(() => Date.now());
 
   useLayoutEffect(() => {
-    const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined;
+    const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId, createdAt: activeAccount.createdAt } : undefined;
     const loaded = readStoredPlayer(storageKey, identity);
 
     if (activeAccount) {
@@ -339,6 +357,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         publicId: activeAccount.publicId,
         name: loaded.name || activeAccount.firstName,
         lastName: loaded.lastName || activeAccount.lastName,
+        createdAt: activeAccount.createdAt || loaded.createdAt,
+        daysPlayed: getDaysPlayed(activeAccount.createdAt || loaded.createdAt),
         isRegistered: true,
       };
       setPlayer(seeded);
@@ -350,9 +370,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [storageKey, activeAccount]);
 
   useEffect(() => {
-    const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId } : undefined;
+    const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId, createdAt: activeAccount.createdAt } : undefined;
     setPlayer(readStoredPlayer(storageKey, identity));
   }, [storageKey, activeAccount, serverHydrationVersion]);
+
+  useEffect(() => {
+    function handlePlayerRefresh() {
+      const identity = activeAccount ? { internalPlayerId: activeAccount.internalPlayerId, publicId: activeAccount.publicId, createdAt: activeAccount.createdAt } : undefined;
+      setPlayer(readStoredPlayer(storageKey, identity));
+    }
+
+    window.addEventListener("nexis:player-refresh", handlePlayerRefresh);
+    return () => window.removeEventListener("nexis:player-refresh", handlePlayerRefresh);
+  }, [storageKey, activeAccount]);
 
   useEffect(() => {
     let lastTick = Date.now();
@@ -381,6 +411,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             comfort: parseFloat(newComfort.toFixed(4)),
           },
         };
+        const nextDaysPlayed = getDaysPlayed(prev.createdAt, tickNow);
+        if (next.daysPlayed !== nextDaysPlayed) {
+          next = { ...next, daysPlayed: nextDaysPlayed };
+        }
         if (prev.condition.type === "hospitalized" && prev.condition.until <= tickNow) {
           next = {
             ...next,

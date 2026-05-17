@@ -228,7 +228,7 @@ function PropertyDetailPanel({
               ? "This is your default residence."
               : canAffordProperty
               ? `You have ${formatGold(player.gold)} - you can afford this.`
-              : `You need ${formatGold(tier.price - player.gold)} more gold.`}
+              : `You need ${formatGold(tier.price - player.gold)} more.`}
           </div>
           {canAccess && (isAssignment || tier.price > 0) && (
             <button
