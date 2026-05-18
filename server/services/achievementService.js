@@ -150,6 +150,8 @@ function evaluateAchievementProgress(definition, runtimeState, user) {
   const travel = asRecord(runtimeState.travel);
   const completedCourses = getCompletedCourses(education);
 
+  const counters = asRecord(player.counters);
+
   switch (definition.metric) {
     case "account_registered":
       return user?.internalId ? 1 : 0;
@@ -173,6 +175,16 @@ function evaluateAchievementProgress(definition, runtimeState, user) {
       return hasOrganizationState(runtimeState) ? 1 : 0;
     case "world_nodes_discovered":
       return countDiscoveredWorldNodes(runtimeState);
+    case "skills_unlocked":
+      return asWholeNumber(counters.skillsUnlocked, asArray(player.skills?.unlocked).length);
+    case "skill_evolutions":
+      return asWholeNumber(counters.skillEvolutions, Object.keys(asRecord(player.skills?.evolved)).length);
+    case "combat_resolved":
+      return asWholeNumber(counters.combatWins, 0) + asWholeNumber(counters.combatLosses, 0);
+    case "duels_resolved":
+      return asWholeNumber(counters.duelsResolved, 0);
+    case "academy_stages_completed":
+      return asWholeNumber(counters.academyStagesCompleted, 0);
     default:
       return 0;
   }

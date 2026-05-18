@@ -22,6 +22,7 @@ const core: Array<[string, string]> = [
   ["Profile", "/profile"],
   ["Inventory", "/inventory"],
   ["Education", "/education"],
+  ["Skills", "/skills"],
   ["Adventure", "/adventure"],
   ["Housing", "/housing"],
 ];

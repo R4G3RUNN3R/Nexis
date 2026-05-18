@@ -7,8 +7,10 @@ import {
   upsertPlayerRuntimeState,
 } from "../repositories/playerStateRepository.js";
 import { getCityDefinition, getCityOccupancyCandidates, isValidCityId, normalizeCityId } from "../data/cityData.js";
-import { getAcademyById, getCityAcademy, getCityContract, getCityContracts } from "../data/cityLoopData.js";
+import { getAcademyById, getCityAcademies, getCityAcademy, getCityContract, getCityContracts } from "../data/cityLoopData.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
+import { resolveNpcCombatWithRewards } from "./combatService.js";
+import { unlockSkill } from "./skillService.js";
 
 const CITY_STANDING_TIERS = [
   { value: 0, label: "New Arrival" },
@@ -233,6 +235,10 @@ function applyReward(runtimeState, reward, now) {
     academyState.unlocks = Array.from(new Set([...academyState.unlocks, flag]));
   }
 
+  for (const skillId of asArray(reward.skills).filter((entry) => typeof entry === "string")) {
+    unlockSkill(runtimeState, skillId, "academy", now);
+  }
+
   player.counters = { ...asRecord(player.counters), lastCityGameplayRewardAt: now };
 }
 
@@ -322,6 +328,12 @@ function serializeContract(contract, runtimeState, now = Date.now()) {
       visitLabel: typeof completion.visitLabel === "string" ? completion.visitLabel : null,
       visitComplete,
     },
+    combat: contract.combat ? {
+      enabled: true,
+      opponentId: contract.combat.opponentId,
+      label: contract.combat.label ?? "Contract encounter",
+      summary: contract.combat.summary ?? "This contract can trigger a live combat check.",
+    } : null,
     reward: contract.reward,
     status: standingLocked && status === "available" ? "locked" : status,
     acceptedAt: typeof record.acceptedAt === "number" ? record.acceptedAt : null,
@@ -567,11 +579,24 @@ export async function completeCityContractForUser(user, contractId) {
 
     const serialized = assertContractAction(contract, runtimeState, "complete");
     const now = Date.now();
+    let combat = null;
+    if (contract.combat?.opponentId) {
+      combat = resolveNpcCombatWithRewards(runtimeState, contract.combat.opponentId, { context: "city_contract", now, playerName: user.firstName || "You", bonusSkillXp: 1 });
+      if (combat.winner !== "player") {
+        const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+        return {
+          playerState,
+          ...serializeContractsForCity(contract.cityId, buildMutableRuntimeState(user, playerState)),
+          combat,
+          message: `${contract.title} is still active. ${contract.combat.label ?? "The contract encounter"} pushed you back.`,
+        };
+      }
+    }
     consumeStamina(runtimeState, serialized.completion.staminaCost);
     const record = getContractRecord(runtimeState, contract.id);
-    setContractRecord(runtimeState, contract.id, { ...record, status: "completed", completedAt: now });
+    setContractRecord(runtimeState, contract.id, { ...record, status: "completed", completedAt: now, combatResolvedAt: combat ? now : record.combatResolvedAt ?? null });
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
-    return { playerState, ...serializeContractsForCity(contract.cityId, buildMutableRuntimeState(user, playerState)), message: `${contract.title} completed. Claim the rewards when ready.` };
+    return { playerState, ...serializeContractsForCity(contract.cityId, buildMutableRuntimeState(user, playerState)), combat, message: `${contract.title} completed. Claim the rewards when ready.` };
   });
 }
 
@@ -628,7 +653,8 @@ export async function getCityAcademyForUser(user, cityId) {
     const { playerState, runtimeState } = await loadRuntimeState(client, user);
     const normalizedCityId = normalizeCityId(cityId, "");
     if (!normalizedCityId || !isValidCityId(normalizedCityId)) throw new HttpError(400, "City unavailable.", "CITY_INVALID");
-    return { playerState, city: getCityDefinition(normalizedCityId), currentCityId: getCurrentCityId(runtimeState), academy: serializeAcademy(getCityAcademy(normalizedCityId), runtimeState) };
+    const academies = getCityAcademies(normalizedCityId).map((academy) => serializeAcademy(academy, runtimeState));
+    return { playerState, city: getCityDefinition(normalizedCityId), currentCityId: getCurrentCityId(runtimeState), academy: academies[0] ?? serializeAcademy(getCityAcademy(normalizedCityId), runtimeState), academies };
   });
 }
 
@@ -653,7 +679,8 @@ export async function startCityAcademyForUser(user, academyId) {
 
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     const nextRuntimeState = buildMutableRuntimeState(user, playerState);
-    return { playerState, city: getCityDefinition(academy.cityId), currentCityId: getCurrentCityId(nextRuntimeState), academy: serializeAcademy(academy, nextRuntimeState), message: `${academy.name}: ${stage.title} started.` };
+    const academies = getCityAcademies(academy.cityId).map((entry) => serializeAcademy(entry, nextRuntimeState));
+    return { playerState, city: getCityDefinition(academy.cityId), currentCityId: getCurrentCityId(nextRuntimeState), academy: serializeAcademy(academy, nextRuntimeState), academies, message: `${academy.name}: ${stage.title} started.` };
   });
 }
 
@@ -689,6 +716,7 @@ export async function completeCityAcademyForUser(user, academyId) {
 
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     const nextRuntimeState = buildMutableRuntimeState(user, playerState);
-    return { playerState, city: getCityDefinition(academy.cityId), currentCityId: getCurrentCityId(nextRuntimeState), academy: serializeAcademy(academy, nextRuntimeState), message: `${academy.name}: ${stage.title} completed.` };
+    const academies = getCityAcademies(academy.cityId).map((entry) => serializeAcademy(entry, nextRuntimeState));
+    return { playerState, city: getCityDefinition(academy.cityId), currentCityId: getCurrentCityId(nextRuntimeState), academy: serializeAcademy(academy, nextRuntimeState), academies, message: `${academy.name}: ${stage.title} completed.` };
   });
 }

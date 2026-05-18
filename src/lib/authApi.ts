@@ -148,6 +148,12 @@ export type ServerCityContract = {
     experience?: number;
     items?: Array<{ itemId: string; label: string; quantity: number }>;
   };
+  combat: {
+    enabled: boolean;
+    opponentId: string;
+    label: string;
+    summary: string;
+  } | null;
   status: "available" | "active" | "completed" | "claimed" | "locked";
   acceptedAt: number | null;
   completedAt: number | null;
@@ -172,6 +178,7 @@ export type ApiCityContractsResponse =
       currentCityId: string;
       standing: ServerCityStanding;
       contracts: ServerCityContract[];
+      combat?: ServerCombatResult | null;
       message?: string;
     }
   | ApiFailure;
@@ -233,6 +240,7 @@ export type ApiCityAcademyResponse =
       city: { id: string; name: string; role: string };
       currentCityId: string;
       academy: ServerCityAcademy;
+      academies?: ServerCityAcademy[];
       message?: string;
     }
   | ApiFailure;
@@ -403,6 +411,102 @@ export type ApiLegacyAchievementsResponse =
       }>;
       legacy: Record<string, unknown>;
     }
+  | ApiFailure;
+
+
+export type ServerSkill = {
+  id: string;
+  name: string;
+  family: string;
+  slotType: "active" | "passive";
+  kind: "active" | "passive";
+  tier: number;
+  summary: string;
+  unlocked: boolean;
+  lockReason: string | null;
+  requiredCourses: string[];
+  requiredFlags: string[];
+  requiredSkills: string[];
+  xp: number;
+  xpToEvolve: number | null;
+  progressPercent: number;
+  evolvesTo: string | null;
+  evolvedTo: string | null;
+  combat: Record<string, unknown>;
+};
+
+export type ServerSkillsPayload = {
+  slotConfig: { activeSlots: number; passiveSlots: number };
+  families: string[];
+  activeSlots: Array<string | null>;
+  passiveSlots: Array<string | null>;
+  unlockedCount: number;
+  skills: ServerSkill[];
+  unlockHistory: Array<Record<string, unknown>>;
+};
+
+export type ApiSkillsResponse =
+  | { ok: true; playerState: ServerPlayerState; skills: ServerSkillsPayload; message?: string }
+  | ApiFailure;
+
+export type ServerCombatLogEntry = {
+  turn: number;
+  actor: string;
+  target: string;
+  skillId: string | null;
+  skillName: string;
+  outcome: "hit" | "crit" | "miss";
+  damage: number;
+  heal?: number;
+  message: string;
+};
+
+export type ServerCombatResult = {
+  context: string;
+  opponent: { id: string; name: string; level: number; summary?: string | null };
+  winner: "player" | "opponent" | "draw";
+  outcome: "victory" | "defeat" | "draw";
+  player: { health: number; maxHealth: number };
+  opponentState: { health: number; maxHealth: number };
+  activeSkills: Array<{ id: string; name: string }>;
+  passiveSkills: string[];
+  log: ServerCombatLogEntry[];
+  skillEvents: Array<Record<string, unknown>>;
+  reward?: Record<string, unknown> | null;
+  resolvedAt: number;
+};
+
+export type ServerArenaCombatPayload = {
+  opponents: Array<{ id: string; name: string; tier: number; summary: string; level: number; reward: Record<string, unknown> }>;
+  history: Array<Record<string, unknown>>;
+  lastResult: ServerCombatResult | null;
+};
+
+export type ApiArenaCombatResponse =
+  | { ok: true; playerState: ServerPlayerState; arena: ServerArenaCombatPayload; result?: ServerCombatResult; message?: string }
+  | ApiFailure;
+
+export type ServerDuelSummary = {
+  id: string;
+  status: string;
+  cityId: string;
+  challenger: { publicId: number; name: string };
+  target: { publicId: number; name: string };
+  createdAt: number;
+  resolvedAt?: number;
+  winner?: { publicId: number; name: string };
+  loser?: { publicId: number; name: string };
+  result?: ServerCombatResult;
+};
+
+export type ServerDuelsPayload = {
+  incoming: ServerDuelSummary[];
+  outgoing: ServerDuelSummary[];
+  history: ServerDuelSummary[];
+};
+
+export type ApiDuelsResponse =
+  | { ok: true; playerState: ServerPlayerState; duels: ServerDuelsPayload; result?: ServerCombatResult; message?: string }
   | ApiFailure;
 
 function asSuccess<T extends Record<string, unknown>>(payload: T): T & { ok: true } {
@@ -581,6 +685,7 @@ function runServerCityContractAction(
     currentCityId: string;
     standing: ServerCityStanding;
     contracts: ServerCityContract[];
+    combat?: ServerCombatResult | null;
     message?: string;
   }>(`/api/cities/contracts/${encodeURIComponent(contractId)}/${action}`, {
     method: "POST",
@@ -630,6 +735,7 @@ function runServerCityAcademyAction(
     city: { id: string; name: string; role: string };
     currentCityId: string;
     academy: ServerCityAcademy;
+    academies?: ServerCityAcademy[];
     message?: string;
   }>(`/api/cities/academies/${encodeURIComponent(academyId)}/${action}`, {
     method: "POST",
@@ -746,6 +852,64 @@ export function cancelServerTravel(sessionToken: string): Promise<ApiTravelRespo
     headers: {
       Authorization: `Bearer ${sessionToken}`,
     },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+
+export function getServerSkills(sessionToken: string): Promise<ApiSkillsResponse> {
+  return requestJson<{ playerState: ServerPlayerState; skills: ServerSkillsPayload }>("/api/skills", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function slotServerSkill(
+  sessionToken: string,
+  slotType: "active" | "passive",
+  slotIndex: number,
+  skillId: string | null,
+): Promise<ApiSkillsResponse> {
+  return requestJson<{ playerState: ServerPlayerState; skills: ServerSkillsPayload; message?: string }>("/api/skills/slot", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ slotType, slotIndex, skillId }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerArenaCombat(sessionToken: string): Promise<ApiArenaCombatResponse> {
+  return requestJson<{ playerState: ServerPlayerState; arena: ServerArenaCombatPayload }>("/api/arena/combat", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function sparServerArenaOpponent(sessionToken: string, opponentId: string): Promise<ApiArenaCombatResponse> {
+  return requestJson<{ playerState: ServerPlayerState; arena: ServerArenaCombatPayload; result: ServerCombatResult; message?: string }>(`/api/arena/combat/spar/${encodeURIComponent(opponentId)}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerDuels(sessionToken: string): Promise<ApiDuelsResponse> {
+  return requestJson<{ playerState: ServerPlayerState; duels: ServerDuelsPayload }>("/api/duels", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function challengeServerDuel(sessionToken: string, targetPublicId: number): Promise<ApiDuelsResponse> {
+  return requestJson<{ playerState: ServerPlayerState; duels: ServerDuelsPayload; message?: string }>("/api/duels/challenge", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ targetPublicId }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function respondServerDuel(sessionToken: string, duelId: string, action: "accept" | "decline"): Promise<ApiDuelsResponse> {
+  return requestJson<{ playerState: ServerPlayerState; duels: ServerDuelsPayload; result?: ServerCombatResult; message?: string }>(`/api/duels/${encodeURIComponent(duelId)}/respond`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ action }),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

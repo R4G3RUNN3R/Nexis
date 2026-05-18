@@ -19,6 +19,7 @@ function contract({
   reward,
   standingReward = 1,
   minimumStanding = 0,
+  combat = null,
   chronicle,
 }) {
   return {
@@ -41,6 +42,7 @@ function contract({
         : `Complete the work while present in the issuing city.`,
     },
     reward,
+    combat,
     chronicle,
   };
 }
@@ -79,6 +81,7 @@ export const CITY_CONTRACTS = {
       visitCityId: "south",
       visitLabel: "Highcourt",
       reward: { gold: 110, experience: 24, items: [item("wax_seal", "Wax Seal")] },
+      combat: { opponentId: "training_squire", label: "Watchhouse checkpoint spar", summary: "A watch trainee tests whether you can carry a sealed notice under pressure." },
       chronicle: { title: "Watch Packet Delivered", summary: "Finished a cross-city messenger run between Nexis City and Highcourt." },
     }),
     contract({
@@ -148,6 +151,7 @@ export const CITY_CONTRACTS = {
       requirementLabel: "Must be in Blackharbor. Street Survival improves future covert contracts.",
       staminaCost: 3,
       reward: { gold: 170, experience: 34, items: [item("torn_map", "Tattered Map")] },
+      combat: { opponentId: "dock_bruiser", label: "Dockside pressure", summary: "A bruiser objects to your interest in the quiet manifest." },
       chronicle: { title: "Quiet Manifest Recovered", summary: "Recovered a Blackharbor slip that several people were pretending not to need." },
     }),
     contract({
@@ -216,6 +220,7 @@ export const CITY_CONTRACTS = {
       requirementLabel: "Must be in Silverbough. World Geography improves later ward routes.",
       staminaCost: 2,
       reward: { gold: 105, experience: 22, items: [item("wild_herb", "Wild Herb", 2)] },
+      combat: { opponentId: "ward_stray", label: "Ward-struck stray", summary: "Something panicked and bright crosses the lantern path." },
       chronicle: { title: "Ward Lantern Walk", summary: "Logged a patrol of Silverbough's outer ward lanterns." },
     }),
     contract({
@@ -283,6 +288,7 @@ export const CITY_CONTRACTS = {
       visitCityId: "nexis",
       visitLabel: "Nexis City",
       reward: { gold: 125, experience: 27, items: [item("rope", "Rope")] },
+      combat: { opponentId: "forge_rowdy", label: "Forge-road shakedown", summary: "A rowdy tries to tax the bridge brace crew with both hands." },
       chronicle: { title: "Bridge Brace Crew", summary: "Supported a forge-road repair crew out of Ironhall." },
     }),
     contract({
@@ -349,6 +355,7 @@ export const CITY_CONTRACTS = {
       requirementLabel: "Must be in Highcourt. Rhetoric will deepen this route later.",
       staminaCost: 2,
       reward: { gold: 132, experience: 29 },
+      combat: { opponentId: "court_challenger", label: "Courtly challenge", summary: "A rival escort insists the proper form is a spar before the walk." },
       chronicle: { title: "Diplomatic Escort", summary: "Handled a first Highcourt prestige errand among the permit offices." },
     }),
     contract({
@@ -401,72 +408,216 @@ function stage({ id, title, summary, requiredCourses = [], requiredStanding = 0,
   };
 }
 
+function academy({ id, cityId, name, theme, progressionSupports, lockReason, stages }) {
+  return { id, cityId, name, theme, progressionSupports, lockReason, stages };
+}
+
 export const CITY_ACADEMIES = {
-  nexis: {
-    id: "nexis-hall-of-letters",
-    cityId: "nexis",
-    name: "Hall of Letters",
-    theme: "Civic administration, watch procedure, public law, and practical city operations.",
-    progressionSupports: ["Civic Jobs", "permits", "city board work", "organization administration"],
-    lockReason: "Travel to Nexis City to study here.",
-    stages: [
-      stage({ id: "primer", title: "Civic Primer", summary: "Learn the basic registry map, watch desk flow, and permit vocabulary.", reward: { experience: 28, workingStats: { intelligence: 1 }, flags: ["academy_nexis_letters_primer"] }, chronicle: { title: "Hall of Letters Primer", summary: "Completed the first Hall of Letters primer for city administration." } }),
-      stage({ id: "dispatch", title: "Dispatch Practice", summary: "Coordinate short city messages without losing the office that owns the stamp.", requiredStanding: 2, reward: { experience: 36, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_nexis_dispatch_practice"] }, chronicle: { title: "Civic Dispatch Practice", summary: "Advanced through Nexis dispatch practice in the Hall of Letters." } }),
-      stage({ id: "permit-law", title: "Permit Law Basics", summary: "Study the practical difference between legal authority and someone being loud at a counter.", requiredStanding: 4, reward: { experience: 46, workingStats: { intelligence: 2 }, flags: ["academy_nexis_permit_law"] }, chronicle: { title: "Permit Law Basics", summary: "Completed a Nexis City academy step in practical permit law." } }),
-    ],
-  },
-  west: {
-    id: "blackharbor-tidewright-academy",
-    cityId: "west",
-    name: "Tidewright Academy",
-    theme: "Maritime routing, covert manifests, corsair law, and cargo-risk judgment.",
-    progressionSupports: ["sea routes", "cargo contracts", "black-market reads", "consortium logistics"],
-    lockReason: "World Geography is required before the docks trust your route judgment.",
-    stages: [
-      stage({ id: "primer", title: "Tide Primer", summary: "Read tide marks, dock bells, and the basic lies cargo brokers tell on paperwork.", requiredCourses: ["world-geography"], reward: { experience: 34, workingStats: { endurance: 1 }, flags: ["academy_blackharbor_tide_primer"] }, chronicle: { title: "Tidewright Primer", summary: "Completed a Blackharbor primer on tides, cargo, and quiet manifests." } }),
-      stage({ id: "manifest", title: "Manifest Handling", summary: "Practice catching mismatched cargo records before they become someone else's plausible deniability.", requiredCourses: ["world-geography"], requiredStanding: 2, reward: { experience: 42, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_blackharbor_manifest_handling"] }, chronicle: { title: "Manifest Handling", summary: "Advanced through Blackharbor manifest-handling study." } }),
-      stage({ id: "corsair-law", title: "Corsair Law Readings", summary: "Study the border between escort work, salvage rights, and extremely confident theft.", requiredCourses: ["world-geography"], requiredStanding: 4, reward: { experience: 52, workingStats: { endurance: 2 }, flags: ["academy_blackharbor_corsair_law"] }, chronicle: { title: "Corsair Law Readings", summary: "Completed a Blackharbor academy step in corsair law and cargo risk." } }),
-    ],
-  },
-  north: {
-    id: "silverbough-argent-bough-lyceum",
-    cityId: "north",
-    name: "Argent Bough Lyceum",
-    theme: "Arcane field ethics, healing theory, ward literacy, and relic handling.",
-    progressionSupports: ["healing jobs", "relic contracts", "ward patrols", "discovery events"],
-    lockReason: "World Geography is required before Silverbough's outer wards open to you.",
-    stages: [
-      stage({ id: "primer", title: "Ward Primer", summary: "Learn how Silverbough marks safe paths, sick paths, and paths with academic opinions.", requiredCourses: ["world-geography"], reward: { experience: 34, workingStats: { intelligence: 1 }, flags: ["academy_silverbough_ward_primer"] }, chronicle: { title: "Argent Bough Primer", summary: "Completed a Silverbough primer in ward literacy and healing theory." } }),
-      stage({ id: "healing-circle", title: "Healing Circle Practice", summary: "Study herb handling, triage manners, and why impatient patients are still patients.", requiredCourses: ["world-geography"], requiredStanding: 2, reward: { experience: 42, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_silverbough_healing_circle"] }, chronicle: { title: "Healing Circle Practice", summary: "Advanced through Silverbough healing-circle academy work." } }),
-      stage({ id: "relic-ethics", title: "Relic Ethics", summary: "Learn which relics can be moved, which can be copied, and which are best admired from elsewhere.", requiredCourses: ["world-geography"], requiredStanding: 4, reward: { experience: 52, workingStats: { intelligence: 2 }, flags: ["academy_silverbough_relic_ethics"] }, chronicle: { title: "Relic Ethics", summary: "Completed a Silverbough academy step in relic ethics and ward caution." } }),
-    ],
-  },
-  east: {
-    id: "ironhall-enginewright-hall",
-    cityId: "east",
-    name: "Enginewright Hall",
-    theme: "Forge discipline, war-school basics, enginewright ledgers, and material planning.",
-    progressionSupports: ["forge contracts", "material markets", "repair work", "industrial consortium loops"],
-    lockReason: "Practical Arithmetic is required before Ironhall lets you touch serious ledgers.",
-    stages: [
-      stage({ id: "primer", title: "Foundry Primer", summary: "Read order slips, heat marks, and the warning signs of a shop about to become interesting.", requiredCourses: ["practical-arithmetic"], reward: { experience: 36, workingStats: { manualLabor: 1 }, battleStats: { strength: 1 }, flags: ["academy_ironhall_foundry_primer"] }, chronicle: { title: "Enginewright Primer", summary: "Completed an Ironhall primer on material ledgers and forge discipline." } }),
-      stage({ id: "material-ledgers", title: "Material Ledgers", summary: "Track ore, coal, braces, and the tragic destiny of every missing rivet.", requiredCourses: ["practical-arithmetic"], requiredStanding: 2, reward: { experience: 44, workingStats: { manualLabor: 1, intelligence: 1 }, flags: ["academy_ironhall_material_ledgers"] }, chronicle: { title: "Material Ledger Practice", summary: "Advanced through Ironhall material-ledger academy work." } }),
-      stage({ id: "bracewright", title: "Bracewright Methods", summary: "Study road brace work and foundry safety without becoming part of either lesson.", requiredCourses: ["practical-arithmetic"], requiredStanding: 4, reward: { experience: 54, workingStats: { manualLabor: 2 }, battleStats: { defense: 1 }, flags: ["academy_ironhall_bracewright_methods"] }, chronicle: { title: "Bracewright Methods", summary: "Completed an Ironhall academy step in bracewright methods." } }),
-    ],
-  },
-  south: {
-    id: "highcourt-college-of-civic-law",
-    cityId: "south",
-    name: "College of Civic Law",
-    theme: "Rhetoric, civic law, statecraft, diplomacy, and prestige administration.",
-    progressionSupports: ["legal filings", "prestige markets", "permits", "diplomatic errands"],
-    lockReason: "Civic Fundamentals is required before Highcourt accepts your petitions as study material.",
-    stages: [
-      stage({ id: "primer", title: "Civic Law Primer", summary: "Learn court routing, filing etiquette, and why every seal has three witnesses.", requiredCourses: ["civic-fundamentals"], reward: { experience: 36, workingStats: { intelligence: 1 }, flags: ["academy_highcourt_civic_law_primer"] }, chronicle: { title: "Civic Law Primer", summary: "Completed a Highcourt primer in law, rhetoric, and permits." } }),
-      stage({ id: "petition-review", title: "Petition Review", summary: "Sort public petitions into the categories: urgent, valid, expensive, and politically inconvenient.", requiredCourses: ["civic-fundamentals"], requiredStanding: 2, reward: { experience: 44, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_highcourt_petition_review"] }, chronicle: { title: "Petition Review", summary: "Advanced through Highcourt petition-review academy work." } }),
-      stage({ id: "statecraft-rhetoric", title: "Statecraft Rhetoric", summary: "Practice formal argument for audiences who can weaponize silence.", requiredCourses: ["civic-fundamentals"], requiredStanding: 4, reward: { experience: 54, workingStats: { intelligence: 2 }, flags: ["academy_highcourt_statecraft_rhetoric"] }, chronicle: { title: "Statecraft Rhetoric", summary: "Completed a Highcourt academy step in rhetoric and statecraft." } }),
-    ],
-  },
+  nexis: [
+    academy({
+      id: "nexis-hall-of-letters",
+      cityId: "nexis",
+      name: "Hall of Letters",
+      theme: "Civic administration, watch procedure, public law, and practical city operations.",
+      progressionSupports: ["Civic Jobs", "permits", "city board work", "organization administration"],
+      lockReason: "Travel to Nexis City to study here.",
+      stages: [
+        stage({ id: "primer", title: "Civic Primer", summary: "Learn the registry map, watch desk flow, and permit vocabulary.", reward: { experience: 28, workingStats: { intelligence: 1 }, flags: ["academy_nexis_letters_primer"], skills: ["civic_focus"] }, chronicle: { title: "Hall of Letters Primer", summary: "Completed the first Hall of Letters primer for city administration." } }),
+        stage({ id: "dispatch", title: "Dispatch Practice", summary: "Coordinate short city messages without losing the office that owns the stamp.", requiredStanding: 2, reward: { experience: 36, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_nexis_dispatch_practice"], skills: ["route_sense"] }, chronicle: { title: "Civic Dispatch Practice", summary: "Advanced through Nexis dispatch practice in the Hall of Letters." } }),
+        stage({ id: "permit-law", title: "Permit Law Basics", summary: "Study the practical difference between legal authority and someone being loud at a counter.", requiredStanding: 4, reward: { experience: 46, workingStats: { intelligence: 2 }, flags: ["academy_nexis_permit_law"], skills: ["civic_focus"] }, chronicle: { title: "Permit Law Basics", summary: "Completed a Nexis City academy step in practical permit law." } }),
+      ],
+    }),
+    academy({
+      id: "nexis-watchhouse-ordered-steel",
+      cityId: "nexis",
+      name: "Watchhouse of Ordered Steel",
+      theme: "Disciplined patrol work, shield lines, nonlethal pressure, and street defense.",
+      progressionSupports: ["starter combat", "duels", "watch contracts", "city protection"],
+      lockReason: "Travel to Nexis City and complete the local watch primer.",
+      stages: [
+        stage({ id: "primer", title: "Ordered Steel Primer", summary: "Learn stance, footwork, and how not to wave steel near civilians.", reward: { experience: 30, battleStats: { defense: 1 }, flags: ["academy_nexis_watch_primer"], skills: ["shield_bash", "guarded_footwork"] }, chronicle: { title: "Ordered Steel Primer", summary: "Joined basic watchhouse combat study in Nexis City." } }),
+        stage({ id: "patrol-forms", title: "Patrol Forms", summary: "Practice controlled pressure for crowded streets and anxious markets.", requiredStanding: 2, reward: { experience: 40, battleStats: { defense: 1, speed: 1 }, flags: ["academy_nexis_watch_patrol_forms"], skills: ["shield_bash"] }, chronicle: { title: "Patrol Forms", summary: "Advanced watchhouse patrol forms in Nexis City." } }),
+        stage({ id: "shield-line", title: "Shield Line Control", summary: "Hold a line, break a rush, and keep the paperwork mercifully short.", requiredStanding: 4, reward: { experience: 52, battleStats: { defense: 2 }, flags: ["academy_nexis_watch_shield_line"], skills: ["bulwark_slam"] }, chronicle: { title: "Shield Line Control", summary: "Completed a Nexis watchhouse shield-line stage." } }),
+      ],
+    }),
+    academy({
+      id: "nexis-chamber-public-ledger",
+      cityId: "nexis",
+      name: "Chamber of Public Ledger",
+      theme: "Public accounts, trade permits, audit trails, and honest numbers with suspicious handwriting.",
+      progressionSupports: ["market permits", "trade contracts", "consortium ledgers", "public administration"],
+      lockReason: "Practical Arithmetic is required before ledger study opens.",
+      stages: [
+        stage({ id: "primer", title: "Ledger Primer", summary: "Read civic ledgers and spot numbers that are trying to sneak away.", requiredCourses: ["practical-arithmetic"], reward: { experience: 32, workingStats: { intelligence: 1 }, flags: ["academy_nexis_ledger_primer"], skills: ["civic_focus"] }, chronicle: { title: "Ledger Primer", summary: "Completed a Nexis public-ledger primer." } }),
+        stage({ id: "audit-chain", title: "Audit Chain", summary: "Trace permit fees through offices without accepting the phrase probably fine.", requiredCourses: ["practical-arithmetic"], requiredStanding: 2, reward: { experience: 42, workingStats: { intelligence: 2 }, flags: ["academy_nexis_audit_chain"] }, chronicle: { title: "Audit Chain", summary: "Advanced public ledger audit study." } }),
+        stage({ id: "public-accounts", title: "Public Accounts", summary: "Balance city-facing accounts and avoid becoming the cautionary memo.", requiredCourses: ["practical-arithmetic"], requiredStanding: 4, reward: { experience: 54, workingStats: { intelligence: 2, endurance: 1 }, flags: ["academy_nexis_public_accounts"] }, chronicle: { title: "Public Accounts", summary: "Completed public accounts study in Nexis City." } }),
+      ],
+    }),
+  ],
+  west: [
+    academy({
+      id: "blackharbor-tidewright-institute",
+      cityId: "west",
+      name: "Tidewright Institute",
+      theme: "Maritime routing, cargo timing, foreign piers, and route-risk judgment.",
+      progressionSupports: ["sea routes", "cargo contracts", "route discovery", "dock markets"],
+      lockReason: "World Geography is required before the docks trust your route judgment.",
+      stages: [
+        stage({ id: "primer", title: "Tide Primer", summary: "Read tide marks, dock bells, and the basic lies cargo brokers tell on paperwork.", requiredCourses: ["world-geography"], reward: { experience: 34, workingStats: { endurance: 1 }, flags: ["academy_blackharbor_tide_primer"], skills: ["quick_shot", "route_sense"] }, chronicle: { title: "Tidewright Primer", summary: "Completed a Blackharbor primer on tides, cargo, and quiet manifests." } }),
+        stage({ id: "manifest", title: "Manifest Handling", summary: "Catch mismatched cargo records before they become someone else's plausible deniability.", requiredCourses: ["world-geography"], requiredStanding: 2, reward: { experience: 42, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_blackharbor_manifest_handling"], skills: ["quick_shot"] }, chronicle: { title: "Manifest Handling", summary: "Advanced through Blackharbor manifest-handling study." } }),
+        stage({ id: "harbor-routes", title: "Harbor Route Tables", summary: "Chart safer approaches and which alleys charge unofficial tolls.", requiredCourses: ["world-geography"], requiredStanding: 4, reward: { experience: 54, workingStats: { endurance: 2 }, flags: ["academy_blackharbor_harbor_routes"], skills: ["split_shot"] }, chronicle: { title: "Harbor Route Tables", summary: "Completed a Tidewright Institute route stage." } }),
+      ],
+    }),
+    academy({
+      id: "blackharbor-nightwake-lodge",
+      cityId: "west",
+      name: "Nightwake Lodge",
+      theme: "Covert movement, under-market reads, hand work, and surviving bad rooms.",
+      progressionSupports: ["black market", "covert contracts", "rogue skills", "duels"],
+      lockReason: "Street Survival is required before Nightwake instructors stop laughing.",
+      stages: [
+        stage({ id: "primer", title: "Nightwake Primer", summary: "Learn quiet entries, cleaner exits, and when not to ask who owns a crate.", requiredCourses: ["street-survival"], reward: { experience: 36, battleStats: { dexterity: 1 }, flags: ["academy_blackharbor_nightwake_primer"], skills: ["pickpocket", "slipstep", "night_market_eye"] }, chronicle: { title: "Nightwake Primer", summary: "Entered Blackharbor's covert Nightwake study." } }),
+        stage({ id: "shadow-hands", title: "Shadow Hands", summary: "Practice pressure-light theft and quick disengagement under docklight.", requiredCourses: ["street-survival"], requiredStanding: 2, reward: { experience: 46, battleStats: { dexterity: 1, speed: 1 }, flags: ["academy_blackharbor_shadow_hands"], skills: ["shadow_swipe"] }, chronicle: { title: "Shadow Hands", summary: "Advanced covert hand work in Blackharbor." } }),
+        stage({ id: "quiet-room", title: "Quiet Room Trials", summary: "Work through a controlled under-market scenario where every door is a question.", requiredCourses: ["street-survival"], requiredStanding: 4, reward: { experience: 58, battleStats: { dexterity: 2 }, flags: ["academy_blackharbor_quiet_room"], skills: ["ghoststep"] }, chronicle: { title: "Quiet Room Trials", summary: "Completed a Nightwake Lodge quiet-room trial." } }),
+      ],
+    }),
+    academy({
+      id: "blackharbor-corsairs-discipline-yard",
+      cityId: "west",
+      name: "Corsair's Discipline Yard",
+      theme: "Escort pressure, boarding discipline, hard bargaining, and controlled aggression.",
+      progressionSupports: ["escort contracts", "arena sparring", "maritime combat", "cargo protection"],
+      lockReason: "World Geography and local standing are needed before corsair drills open.",
+      stages: [
+        stage({ id: "primer", title: "Corsair Yard Primer", summary: "Practice rope-line movement, escort formations, and decisive threat reads.", requiredCourses: ["world-geography"], requiredStanding: 1, reward: { experience: 38, battleStats: { strength: 1 }, flags: ["academy_blackharbor_corsair_primer"], skills: ["quick_shot"] }, chronicle: { title: "Corsair Yard Primer", summary: "Started Blackharbor corsair discipline study." } }),
+        stage({ id: "boarding-drills", title: "Boarding Drills", summary: "Work tight-space pressure and controlled strikes around cargo lanes.", requiredCourses: ["world-geography"], requiredStanding: 3, reward: { experience: 50, battleStats: { strength: 1, speed: 1 }, flags: ["academy_blackharbor_boarding_drills"], skills: ["split_shot"] }, chronicle: { title: "Boarding Drills", summary: "Advanced through Blackharbor boarding drills." } }),
+        stage({ id: "escort-command", title: "Escort Command", summary: "Lead a small escort through simulated pier pressure without losing the manifest.", requiredCourses: ["world-geography"], requiredStanding: 5, reward: { experience: 62, battleStats: { strength: 1, defense: 1 }, flags: ["academy_blackharbor_escort_command"], skills: ["storm_volley"] }, chronicle: { title: "Escort Command", summary: "Completed Corsair's Discipline Yard escort command study." } }),
+      ],
+    }),
+  ],
+  north: [
+    academy({
+      id: "silverbough-argent-bough-lyceum",
+      cityId: "north",
+      name: "Argent Bough Lyceum",
+      theme: "Arcane field ethics, ward literacy, and relic handling.",
+      progressionSupports: ["arcane skills", "relic contracts", "ward patrols", "discovery events"],
+      lockReason: "World Geography is required before Silverbough's outer wards open to you.",
+      stages: [
+        stage({ id: "primer", title: "Ward Primer", summary: "Learn how Silverbough marks safe paths, sick paths, and paths with academic opinions.", requiredCourses: ["world-geography"], reward: { experience: 34, workingStats: { intelligence: 1 }, flags: ["academy_silverbough_argent_primer"], skills: ["firebolt", "ward_literacy"] }, chronicle: { title: "Argent Bough Primer", summary: "Completed a Silverbough primer in ward literacy and arcane ethics." } }),
+        stage({ id: "field-cant", title: "Field Cant", summary: "Practice stable ward language while things nearby glow impolitely.", requiredCourses: ["world-geography"], requiredStanding: 2, reward: { experience: 44, workingStats: { intelligence: 1 }, flags: ["academy_silverbough_field_cant"], skills: ["flame_burst"] }, chronicle: { title: "Field Cant", summary: "Advanced through Argent Bough field cant." } }),
+        stage({ id: "relic-ethics", title: "Relic Ethics", summary: "Learn which relics can be moved, copied, or admired from a safer elsewhere.", requiredCourses: ["world-geography"], requiredStanding: 4, reward: { experience: 56, workingStats: { intelligence: 2 }, flags: ["academy_silverbough_relic_ethics"], skills: ["inferno_wave"] }, chronicle: { title: "Relic Ethics", summary: "Completed a Silverbough academy step in relic ethics." } }),
+      ],
+    }),
+    academy({
+      id: "silverbough-verdant-hospice",
+      cityId: "north",
+      name: "Verdant Hospice",
+      theme: "Healing practice, triage manners, herb handling, and patient survival.",
+      progressionSupports: ["support skills", "healing contracts", "travel endurance", "party utility"],
+      lockReason: "World Geography is required before hospice field routes open.",
+      stages: [
+        stage({ id: "primer", title: "Hospice Primer", summary: "Learn clean hands, herb sorting, and the first rule of not making injuries worse.", requiredCourses: ["world-geography"], reward: { experience: 34, workingStats: { endurance: 1 }, flags: ["academy_silverbough_hospice_primer"], skills: ["mend"] }, chronicle: { title: "Hospice Primer", summary: "Started Verdant Hospice healing study." } }),
+        stage({ id: "renewal-practice", title: "Renewal Practice", summary: "Stabilize field injuries while everyone involved develops opinions.", requiredCourses: ["world-geography"], requiredStanding: 2, reward: { experience: 44, workingStats: { endurance: 1, intelligence: 1 }, flags: ["academy_silverbough_renewal_practice"], skills: ["renewal"] }, chronicle: { title: "Renewal Practice", summary: "Advanced healing practice in Silverbough." } }),
+        stage({ id: "warded-triage", title: "Warded Triage", summary: "Work near active wards without confusing treatment with fireworks.", requiredCourses: ["world-geography"], requiredStanding: 4, reward: { experience: 56, workingStats: { endurance: 2 }, flags: ["academy_silverbough_warded_triage"], skills: ["lifebloom_ward"] }, chronicle: { title: "Warded Triage", summary: "Completed Verdant Hospice warded triage study." } }),
+      ],
+    }),
+    academy({
+      id: "silverbough-house-quiet-leaves",
+      cityId: "north",
+      name: "House of Quiet Leaves",
+      theme: "Mystic stealth, quiet movement, listening discipline, and forest-edge caution.",
+      progressionSupports: ["shadow skills", "scouting contracts", "discovery", "travel encounter handling"],
+      lockReason: "Street Survival is required before quiet-leaf work opens.",
+      stages: [
+        stage({ id: "primer", title: "Quiet Leaves Primer", summary: "Learn how to move around a warded grove without insulting the grove.", requiredCourses: ["street-survival"], reward: { experience: 36, battleStats: { dexterity: 1 }, flags: ["academy_silverbough_quiet_leaves_primer"], skills: ["slipstep", "firebolt"] }, chronicle: { title: "Quiet Leaves Primer", summary: "Began Silverbough quiet-leaf discipline." } }),
+        stage({ id: "listening-path", title: "Listening Path", summary: "Read what the path is telling you before the path has to repeat itself.", requiredCourses: ["street-survival"], requiredStanding: 2, reward: { experience: 46, battleStats: { dexterity: 1, speed: 1 }, flags: ["academy_silverbough_listening_path"], skills: ["ghoststep"] }, chronicle: { title: "Listening Path", summary: "Advanced quiet movement through Silverbough's listening path." } }),
+        stage({ id: "leaf-veil", title: "Leaf Veil", summary: "Practice controlled disappearance without pretending it is magic. Mostly.", requiredCourses: ["street-survival"], requiredStanding: 4, reward: { experience: 58, battleStats: { dexterity: 2 }, flags: ["academy_silverbough_leaf_veil"], skills: ["night_veil"] }, chronicle: { title: "Leaf Veil", summary: "Completed House of Quiet Leaves veil study." } }),
+      ],
+    }),
+  ],
+  east: [
+    academy({
+      id: "ironhall-foundry-collegium",
+      cityId: "east",
+      name: "Foundry Collegium",
+      theme: "Forge discipline, material flow, heavy work, and useful respect for heat.",
+      progressionSupports: ["forge contracts", "material markets", "heavy skills", "industrial work"],
+      lockReason: "Practical Arithmetic is required before Ironhall lets you touch serious ledgers.",
+      stages: [
+        stage({ id: "primer", title: "Foundry Primer", summary: "Read order slips, heat marks, and the warning signs of a shop about to become interesting.", requiredCourses: ["practical-arithmetic"], reward: { experience: 36, workingStats: { manualLabor: 1 }, battleStats: { strength: 1 }, flags: ["academy_ironhall_foundry_primer"], skills: ["hammerfall", "foundry_stance"] }, chronicle: { title: "Foundry Primer", summary: "Completed an Ironhall primer on material ledgers and forge discipline." } }),
+        stage({ id: "material-ledgers", title: "Material Ledgers", summary: "Track ore, coal, braces, and the tragic destiny of every missing rivet.", requiredCourses: ["practical-arithmetic"], requiredStanding: 2, reward: { experience: 44, workingStats: { manualLabor: 1, intelligence: 1 }, flags: ["academy_ironhall_material_ledgers"], skills: ["hammerfall"] }, chronicle: { title: "Material Ledger Practice", summary: "Advanced through Ironhall material-ledger academy work." } }),
+        stage({ id: "bracewright", title: "Bracewright Methods", summary: "Study road brace work and foundry safety without becoming part of either lesson.", requiredCourses: ["practical-arithmetic"], requiredStanding: 4, reward: { experience: 54, workingStats: { manualLabor: 2 }, battleStats: { defense: 1 }, flags: ["academy_ironhall_bracewright_methods"], skills: ["anvil_crash"] }, chronicle: { title: "Bracewright Methods", summary: "Completed an Ironhall academy step in bracewright methods." } }),
+      ],
+    }),
+    academy({
+      id: "ironhall-red-anvil-war-school",
+      cityId: "east",
+      name: "Red Anvil War School",
+      theme: "War-yard discipline, heavy forms, shield work, and controlled impact.",
+      progressionSupports: ["melee skills", "arena", "combat contracts", "duels"],
+      lockReason: "Local Ironhall standing is required before the war yard takes you seriously.",
+      stages: [
+        stage({ id: "primer", title: "Red Anvil Primer", summary: "Learn how to hit hard without advertising where your feet went wrong.", requiredStanding: 1, reward: { experience: 38, battleStats: { strength: 1 }, flags: ["academy_ironhall_red_anvil_primer"], skills: ["shield_bash", "hammerfall"] }, chronicle: { title: "Red Anvil Primer", summary: "Started Ironhall war-school discipline." } }),
+        stage({ id: "impact-line", title: "Impact Line", summary: "Practice heavy pressure, shield checks, and enough restraint to keep the yard intact.", requiredStanding: 3, reward: { experience: 50, battleStats: { strength: 1, defense: 1 }, flags: ["academy_ironhall_impact_line"], skills: ["bulwark_slam", "anvil_crash"] }, chronicle: { title: "Impact Line", summary: "Advanced through Red Anvil impact-line drills." } }),
+        stage({ id: "furnace-drill", title: "Furnace Drill", summary: "A final pressure drill for people who have mistaken bruises for punctuation.", requiredStanding: 5, reward: { experience: 64, battleStats: { strength: 2 }, flags: ["academy_ironhall_furnace_drill"], skills: ["furnace_breaker", "bastion_break"] }, chronicle: { title: "Furnace Drill", summary: "Completed Red Anvil War School furnace drills." } }),
+      ],
+    }),
+    academy({
+      id: "ironhall-enginewright-hall",
+      cityId: "east",
+      name: "Enginewright Hall",
+      theme: "Artifice basics, engine ledgers, spark discipline, and material planning.",
+      progressionSupports: ["arcane utility", "forge devices", "repair work", "industrial consortium loops"],
+      lockReason: "Practical Arithmetic is required before enginewright study opens.",
+      stages: [
+        stage({ id: "primer", title: "Enginewright Primer", summary: "Learn the mercy of labels, switches, and not touching the live coil.", requiredCourses: ["practical-arithmetic"], reward: { experience: 36, workingStats: { intelligence: 1 }, flags: ["academy_ironhall_enginewright_primer"], skills: ["spark_coil"] }, chronicle: { title: "Enginewright Primer", summary: "Started Ironhall enginewright study." } }),
+        stage({ id: "arc-circuit", title: "Arc Circuit", summary: "Thread basic current through controlled parts instead of your own poor hands.", requiredCourses: ["practical-arithmetic"], requiredStanding: 2, reward: { experience: 46, workingStats: { intelligence: 1, manualLabor: 1 }, flags: ["academy_ironhall_arc_circuit"], skills: ["arc_lash"] }, chronicle: { title: "Arc Circuit", summary: "Advanced through Enginewright Hall current work." } }),
+        stage({ id: "chain-current", title: "Chain Current Bench", summary: "Balance repeat current and machine timing without teaching the bench to scream.", requiredCourses: ["practical-arithmetic"], requiredStanding: 4, reward: { experience: 58, workingStats: { intelligence: 2 }, flags: ["academy_ironhall_chain_current_bench"], skills: ["chain_current"] }, chronicle: { title: "Chain Current Bench", summary: "Completed Enginewright Hall chain-current study." } }),
+      ],
+    }),
+  ],
+  south: [
+    academy({
+      id: "highcourt-orators-academy",
+      cityId: "south",
+      name: "Orator's Academy",
+      theme: "Rhetoric, presence, pressure, and public argument that leaves marks politely.",
+      progressionSupports: ["prestige contracts", "duels", "leadership", "court access"],
+      lockReason: "Civic Fundamentals is required before formal rhetoric study opens.",
+      stages: [
+        stage({ id: "primer", title: "Orator Primer", summary: "Learn posture, argument shape, and the fine art of not filling silence too early.", requiredCourses: ["civic-fundamentals"], reward: { experience: 36, workingStats: { intelligence: 1 }, flags: ["academy_highcourt_orator_primer"], skills: ["courtly_pressure"] }, chronicle: { title: "Orator Primer", summary: "Started Highcourt orator study." } }),
+        stage({ id: "chamber-voice", title: "Chamber Voice", summary: "Carry an argument through a room that has expensive ways to ignore you.", requiredCourses: ["civic-fundamentals"], requiredStanding: 2, reward: { experience: 46, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_highcourt_chamber_voice"], skills: ["courtly_pressure"] }, chronicle: { title: "Chamber Voice", summary: "Advanced Highcourt chamber rhetoric." } }),
+        stage({ id: "public-rebuke", title: "Public Rebuke", summary: "Practice formal pressure without letting it become a tavern argument in finer shoes.", requiredCourses: ["civic-fundamentals"], requiredStanding: 4, reward: { experience: 58, workingStats: { intelligence: 2 }, flags: ["academy_highcourt_public_rebuke"], skills: ["courtly_pressure"] }, chronicle: { title: "Public Rebuke", summary: "Completed Orator's Academy public rebuke study." } }),
+      ],
+    }),
+    academy({
+      id: "highcourt-college-of-civic-law",
+      cityId: "south",
+      name: "College of Civic Law",
+      theme: "Civic law, permits, petition flow, and legal administration.",
+      progressionSupports: ["legal filings", "prestige markets", "permits", "diplomatic errands"],
+      lockReason: "Civic Fundamentals is required before Highcourt accepts your petitions as study material.",
+      stages: [
+        stage({ id: "primer", title: "Civic Law Primer", summary: "Learn court routing, filing etiquette, and why every seal has three witnesses.", requiredCourses: ["civic-fundamentals"], reward: { experience: 36, workingStats: { intelligence: 1 }, flags: ["academy_highcourt_civic_law_primer"], skills: ["civic_focus"] }, chronicle: { title: "Civic Law Primer", summary: "Completed a Highcourt primer in law, rhetoric, and permits." } }),
+        stage({ id: "petition-review", title: "Petition Review", summary: "Sort public petitions into urgent, valid, expensive, and politically inconvenient.", requiredCourses: ["civic-fundamentals"], requiredStanding: 2, reward: { experience: 44, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_highcourt_petition_review"], skills: ["civic_focus"] }, chronicle: { title: "Petition Review", summary: "Advanced through Highcourt petition-review academy work." } }),
+        stage({ id: "statecraft-rhetoric", title: "Statecraft Rhetoric", summary: "Practice formal argument for audiences who can weaponize silence.", requiredCourses: ["civic-fundamentals"], requiredStanding: 4, reward: { experience: 54, workingStats: { intelligence: 2 }, flags: ["academy_highcourt_statecraft_rhetoric"], skills: ["courtly_pressure"] }, chronicle: { title: "Statecraft Rhetoric", summary: "Completed a Highcourt academy step in rhetoric and statecraft." } }),
+      ],
+    }),
+    academy({
+      id: "highcourt-sunspire-institute-statecraft",
+      cityId: "south",
+      name: "Sunspire Institute of Statecraft",
+      theme: "Leadership, permits, diplomacy, public pressure, and state-facing strategy.",
+      progressionSupports: ["consortium leadership", "advanced permits", "diplomacy", "prestige city specials"],
+      lockReason: "Civic Fundamentals and Practical Arithmetic are required before Sunspire study opens.",
+      stages: [
+        stage({ id: "primer", title: "Statecraft Primer", summary: "Learn how influence moves through offices without touching the floor.", requiredCourses: ["civic-fundamentals", "practical-arithmetic"], reward: { experience: 40, workingStats: { intelligence: 1 }, flags: ["academy_highcourt_statecraft_primer"], skills: ["courtly_pressure"] }, chronicle: { title: "Statecraft Primer", summary: "Started Sunspire statecraft study in Highcourt." } }),
+        stage({ id: "permit-diplomacy", title: "Permit Diplomacy", summary: "Negotiate with forms, clerks, and rival interests in that order, ideally.", requiredCourses: ["civic-fundamentals", "practical-arithmetic"], requiredStanding: 2, reward: { experience: 50, workingStats: { intelligence: 2 }, flags: ["academy_highcourt_permit_diplomacy"], skills: ["civic_focus"] }, chronicle: { title: "Permit Diplomacy", summary: "Advanced through Sunspire permit diplomacy." } }),
+        stage({ id: "council-brief", title: "Council Brief", summary: "Prepare a governing brief with enough spine to survive the room reading it.", requiredCourses: ["civic-fundamentals", "practical-arithmetic"], requiredStanding: 5, reward: { experience: 64, workingStats: { intelligence: 2, endurance: 1 }, flags: ["academy_highcourt_council_brief"], skills: ["courtly_pressure"] }, chronicle: { title: "Council Brief", summary: "Completed Sunspire Institute council brief study." } }),
+      ],
+    }),
+  ],
 };
 
 export function getCityContracts(cityId) {
@@ -481,12 +632,16 @@ export function getCityContract(contractId) {
   return null;
 }
 
-export function getCityAcademy(cityId) {
+export function getCityAcademies(cityId) {
   return CITY_ACADEMIES[cityId] ?? CITY_ACADEMIES.nexis;
 }
 
+export function getCityAcademy(cityId) {
+  return getCityAcademies(cityId)[0] ?? CITY_ACADEMIES.nexis[0];
+}
+
 export function getAcademyById(academyId) {
-  return Object.values(CITY_ACADEMIES).find((academy) => academy.id === academyId) ?? null;
+  return Object.values(CITY_ACADEMIES).flat().find((academy) => academy.id === academyId) ?? null;
 }
 
 export function getAcademyStage(academy, stageId) {

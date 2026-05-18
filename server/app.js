@@ -10,6 +10,9 @@ import chronicleRoutes from "./routes/chronicleRoutes.js";
 import organizationRoutes from "./routes/organizationRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import adminOrganizationRoutes from "./routes/adminOrganizationRoutes.js";
+import skillRoutes from "./routes/skillRoutes.js";
+import arenaCombatRoutes from "./routes/arenaCombatRoutes.js";
+import duelRoutes from "./routes/duelRoutes.js";
 import { DatabaseUnavailableError, HttpError } from "./lib/errors.js";
 
 const ROUTE_MODULES = [
@@ -22,6 +25,9 @@ const ROUTE_MODULES = [
   profileRoutes,
   chronicleRoutes,
   organizationRoutes,
+  skillRoutes,
+  arenaCombatRoutes,
+  duelRoutes,
   adminRoutes,
   adminOrganizationRoutes,
 ];

@@ -174,6 +174,7 @@ function ContractCard({
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Reward: {formatReward(contract)}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing: +{contract.standingReward} | Required: {contract.minimumStanding}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Requirement: {contract.requirementLabel}</div>
+      {contract.combat ? <div style={{ color: "#d0ad74", fontSize: 12 }}>Combat check: {contract.combat.label} - {contract.combat.summary}</div> : null}
       {contract.runs > 0 ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Completed runs: {contract.runs}</div> : null}
       {refreshText ? <div style={{ color: contract.canRefresh ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{refreshText}</div> : null}
       {contract.completion.note ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Completion: {contract.completion.note}</div> : null}
@@ -336,6 +337,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const [contractsMessage, setContractsMessage] = useState<string | null>(null);
   const [contractsLoading, setContractsLoading] = useState(false);
   const [academy, setAcademy] = useState<ServerCityAcademy | null>(null);
+  const [academies, setAcademies] = useState<ServerCityAcademy[]>([]);
   const [academyError, setAcademyError] = useState<string | null>(null);
   const [academyMessage, setAcademyMessage] = useState<string | null>(null);
   const [academyLoading, setAcademyLoading] = useState(false);
@@ -394,6 +396,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
         setContracts([]);
         setStanding(null);
         setAcademy(null);
+        setAcademies([]);
         setSpecials([]);
         setContractsError("Sign in through the live server session to use local contracts.");
         setAcademyError("Sign in through the live server session to use academy study.");
@@ -428,8 +431,10 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
 
       if (academyResult.ok) {
         setAcademy(academyResult.academy);
+        setAcademies(academyResult.academies ?? [academyResult.academy]);
       } else {
         setAcademy(null);
+        setAcademies([]);
         setAcademyError(academyResult.error);
       }
 
@@ -483,6 +488,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
       return;
     }
     setAcademy(result.academy);
+    setAcademies(result.academies ?? [result.academy]);
     setAcademyMessage(result.message ?? "Academy state updated.");
     await refreshServerState();
   }
@@ -568,14 +574,27 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
             {academyLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking academy access...</div> : null}
             {academyError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{academyError}</div> : null}
             {academyMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{academyMessage}</div> : null}
-            <AcademyPanel
-              academy={academy}
-              fallbackName={hub.academy.name}
-              fallbackFocus={hub.academy.focus}
-              now={now}
-              busy={Boolean(busyAction?.startsWith("academy:"))}
-              onAction={runAcademyAction}
-            />
+            {(academies.length ? academies : academy ? [academy] : []).map((academyEntry) => (
+              <AcademyPanel
+                key={academyEntry.id}
+                academy={academyEntry}
+                fallbackName={hub.academy.name}
+                fallbackFocus={hub.academy.focus}
+                now={now}
+                busy={Boolean(busyAction?.startsWith("academy:"))}
+                onAction={runAcademyAction}
+              />
+            ))}
+            {!academies.length && !academy ? (
+              <AcademyPanel
+                academy={null}
+                fallbackName={hub.academy.name}
+                fallbackFocus={hub.academy.focus}
+                now={now}
+                busy={Boolean(busyAction?.startsWith("academy:"))}
+                onAction={runAcademyAction}
+              />
+            ) : null}
             <ServiceLink service={hub.services.academy} />
             {!academy && academyDetail.lockReason ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academyDetail.lockReason}</div> : null}
             {hub.academy.unlockCourse ? <div style={{ fontSize: 12, color: "#d0ad74" }}>Unlock path: {hub.academy.unlockCourse}</div> : null}

@@ -6,6 +6,8 @@ import {
   findPlayerStateByUserInternalId,
   upsertPlayerRuntimeState,
 } from "../repositories/playerStateRepository.js";
+import { getTravelOpponentForRoute } from "../data/combatData.js";
+import { resolveCombat } from "./combatService.js";
 import {
   DEFAULT_CITY_ID,
   getCityName,
@@ -207,12 +209,20 @@ export function resolveTravelEncounterForRoute(runtimeState, route, now = Date.n
     };
   }
 
-  const margin = routePower - routePressure + (randomFn() - 0.5) * 70;
+  const opponent = getTravelOpponentForRoute(route);
+  const combat = resolveCombat(runtimeState, opponent, {
+    context: "travel",
+    now,
+    randomFn,
+    bonusSkillXp: hasWorldGeography ? 1 : 0,
+    rounds: hasWorldGeography ? 8 : 7,
+  });
+  const healthRatio = combat.player.maxHealth > 0 ? combat.player.health / combat.player.maxHealth : 0;
   let outcome = "victory";
-  if (margin < -22) {
-    outcome = hasWorldGeography && randomFn() > 0.4 ? "costly_victory" : "turned_back";
-  } else if (margin < 15) {
-    outcome = "costly_victory";
+  if (combat.winner === "player") {
+    outcome = healthRatio > 0.48 || hasWorldGeography ? "victory" : "costly_victory";
+  } else {
+    outcome = hasWorldGeography && randomFn() > 0.38 ? "costly_victory" : "turned_back";
   }
 
   const reward = pickEncounterReward(route, outcome, randomFn, hasWorldGeography);
@@ -237,6 +247,16 @@ export function resolveTravelEncounterForRoute(runtimeState, route, now = Date.n
     routeDanger: Math.round(routeDanger * 100),
     delayMs: outcome === "victory" || outcome === "costly_victory" ? TRAVEL_WIN_DELAY_MS : 0,
     reward,
+    combat: {
+      opponent: combat.opponent,
+      winner: combat.winner,
+      outcome: combat.outcome,
+      player: combat.player,
+      opponentState: combat.opponentState,
+      activeSkills: combat.activeSkills,
+      skillEvents: combat.skillEvents,
+      log: combat.log.slice(0, 8),
+    },
     penalties: outcome === "costly_victory" ? { health: 6, stamina: 1 } : outcome === "turned_back" ? { health: 8, stamina: 1 } : null,
     resolvedAt: now,
   };

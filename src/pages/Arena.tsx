@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
+import ServerCombatBoard from "../components/arena/ServerCombatBoard";
 import { getPropertyBattleTrainingMultiplier } from "../data/propertyData";
 import { getArenaStateKey } from "../lib/arenaState";
 import { usePlayer } from "../state/PlayerContext";
@@ -303,6 +304,8 @@ export default function ArenaPage() {
 
           {isHospitalized ? <div className="arena-status-banner">You cannot train while hospitalized.</div> : null}
           {isJailed ? <div className="arena-status-banner arena-status-banner--locked">You cannot use standard arenas while jailed.</div> : null}
+
+          <ServerCombatBoard />
 
           {toast ? (
             <div className="arena-toast">
