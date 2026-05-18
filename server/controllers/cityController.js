@@ -6,6 +6,7 @@ import {
   getCityAcademyForUser,
   getCityContractsForUser,
   getCityPeopleForUser,
+  refreshCityContractForUser,
   startCityAcademyForUser,
 } from "../services/cityService.js";
 
@@ -48,6 +49,15 @@ export async function completeCityContract(req, res, next) {
 export async function claimCityContract(req, res, next) {
   try {
     const result = await claimCityContractForUser(req.auth.user, req.params.contractId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function refreshCityContract(req, res, next) {
+  try {
+    const result = await refreshCityContractForUser(req.auth.user, req.params.contractId);
     res.status(200).json(result);
   } catch (error) {
     next(error);

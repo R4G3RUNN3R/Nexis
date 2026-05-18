@@ -116,6 +116,17 @@ export type ApiCityPeopleResponse =
     }
   | ApiFailure;
 
+export type ServerCityStanding = {
+  cityId: string;
+  value: number;
+  tier: string;
+  nextTierAt: number | null;
+  nextTierLabel: string | null;
+  contractCompletions: number;
+  academyStagesCompleted: number;
+  updatedAt: number | null;
+};
+
 export type ServerCityContract = {
   id: string;
   cityId: string;
@@ -136,14 +147,19 @@ export type ServerCityContract = {
     experience?: number;
     items?: Array<{ itemId: string; label: string; quantity: number }>;
   };
-  status: "available" | "active" | "completed" | "claimed";
+  status: "available" | "active" | "completed" | "claimed" | "locked";
   acceptedAt: number | null;
   completedAt: number | null;
   claimedAt: number | null;
   visitedCityAt: number | null;
+  refreshAvailableAt: number | null;
+  runs: number;
+  minimumStanding: number;
+  standingReward: number;
   canAccept: boolean;
   canComplete: boolean;
   canClaim: boolean;
+  canRefresh: boolean;
   blockedReason: string | null;
 };
 
@@ -153,6 +169,7 @@ export type ApiCityContractsResponse =
       playerState: ServerPlayerState;
       city: { id: string; name: string; role: string };
       currentCityId: string;
+      standing: ServerCityStanding;
       contracts: ServerCityContract[];
       message?: string;
     }
@@ -170,16 +187,40 @@ export type ServerCityAcademy = {
   durationMs: number;
   progressionSupports: string[];
   reward: Record<string, unknown>;
+  standing: ServerCityStanding;
+  stages: ServerCityAcademyStage[];
+  currentStageId: string | null;
   isCompleted: boolean;
   completedAt: number | null;
   activeStudy: {
     academyId: string;
+    stageId: string;
     cityId: string;
     startedAt: number;
     endsAt: number;
     readyToComplete: boolean;
     progressPercent: number;
   } | null;
+  canStart: boolean;
+  canComplete: boolean;
+};
+
+export type ServerCityAcademyStage = {
+  id: string;
+  title: string;
+  summary: string;
+  durationMs: number;
+  requiredCourses: string[];
+  missingCourses: string[];
+  requiredStanding: number;
+  standingMissing: number;
+  entryRequirements: string[];
+  reward: Record<string, unknown>;
+  standingReward: number;
+  status: "available" | "active" | "completed" | "locked";
+  lockReason: string | null;
+  completedAt: number | null;
+  activeStudy: ServerCityAcademy["activeStudy"];
   canStart: boolean;
   canComplete: boolean;
 };
@@ -392,6 +433,7 @@ export function getServerCityContracts(sessionToken: string, cityId: string): Pr
     playerState: ServerPlayerState;
     city: { id: string; name: string; role: string };
     currentCityId: string;
+    standing: ServerCityStanding;
     contracts: ServerCityContract[];
   }>(`/api/cities/${encodeURIComponent(cityId)}/contracts`, {
     method: "GET",
@@ -404,12 +446,13 @@ export function getServerCityContracts(sessionToken: string, cityId: string): Pr
 function runServerCityContractAction(
   sessionToken: string,
   contractId: string,
-  action: "accept" | "complete" | "claim",
+  action: "accept" | "complete" | "claim" | "refresh",
 ): Promise<ApiCityContractsResponse> {
   return requestJson<{
     playerState: ServerPlayerState;
     city: { id: string; name: string; role: string };
     currentCityId: string;
+    standing: ServerCityStanding;
     contracts: ServerCityContract[];
     message?: string;
   }>(`/api/cities/contracts/${encodeURIComponent(contractId)}/${action}`, {
@@ -430,6 +473,10 @@ export function completeServerCityContract(sessionToken: string, contractId: str
 
 export function claimServerCityContract(sessionToken: string, contractId: string): Promise<ApiCityContractsResponse> {
   return runServerCityContractAction(sessionToken, contractId, "claim");
+}
+
+export function refreshServerCityContract(sessionToken: string, contractId: string): Promise<ApiCityContractsResponse> {
+  return runServerCityContractAction(sessionToken, contractId, "refresh");
 }
 
 export function getServerCityAcademy(sessionToken: string, cityId: string): Promise<ApiCityAcademyResponse> {

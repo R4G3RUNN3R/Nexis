@@ -14,11 +14,13 @@ import {
   getServerCityAcademy,
   getServerCityContracts,
   getServerCityPeople,
+  refreshServerCityContract,
   startServerCityAcademy,
   type ServerCityAcademy,
   type ServerCityContract,
   type ServerCityOccupant,
   type ServerCityPopulation,
+  type ServerCityStanding,
 } from "../../lib/authApi";
 import { useAuth } from "../../state/AuthContext";
 
@@ -150,12 +152,13 @@ function ContractCard({
 }: {
   contract: ServerCityContract;
   busy: boolean;
-  onAction: (contractId: string, action: "accept" | "complete" | "claim") => void;
+  onAction: (contractId: string, action: "accept" | "complete" | "claim" | "refresh") => void;
 }) {
   const riskColor = contract.risk === "high" ? "#d98f8f" : contract.risk === "moderate" ? "#d0ad74" : "#8ec8a7";
-  const nextAction = contract.canClaim ? "claim" : contract.canComplete ? "complete" : contract.canAccept ? "accept" : null;
-  const actionLabel = nextAction === "claim" ? "Claim rewards" : nextAction === "complete" ? "Complete" : "Accept";
+  const nextAction = contract.canRefresh ? "refresh" : contract.canClaim ? "claim" : contract.canComplete ? "complete" : contract.canAccept ? "accept" : null;
+  const actionLabel = nextAction === "refresh" ? "Renew contract" : nextAction === "claim" ? "Claim rewards" : nextAction === "complete" ? "Complete" : "Accept";
   const disabled = busy || !nextAction;
+  const refreshText = contract.refreshAvailableAt ? `Refresh: ${new Date(contract.refreshAvailableAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : null;
 
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 8 }}>
@@ -166,7 +169,10 @@ function ContractCard({
       <div style={{ color: "#d8c278", fontSize: 12 }}>{contract.type} | {contract.status}</div>
       <div style={{ color: "#b7c3cf", fontSize: 13 }}>{contract.summary}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Reward: {formatReward(contract)}</div>
+      <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing: +{contract.standingReward} | Required: {contract.minimumStanding}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Requirement: {contract.requirementLabel}</div>
+      {contract.runs > 0 ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Completed runs: {contract.runs}</div> : null}
+      {refreshText ? <div style={{ color: contract.canRefresh ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{refreshText}</div> : null}
       {contract.completion.note ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Completion: {contract.completion.note}</div> : null}
       {contract.completion.visitCityId ? (
         <div style={{ color: contract.completion.visitComplete ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>
@@ -212,9 +218,7 @@ function AcademyPanel({
   }
 
   const active = academy.activeStudy;
-  const progress = active
-    ? Math.max(0, Math.min(100, Math.round(((now - active.startedAt) / Math.max(academy.durationMs, 1000)) * 100)))
-    : 0;
+  const progress = active ? Math.max(0, Math.min(100, Math.round(((now - active.startedAt) / Math.max(academy.durationMs, 1000)) * 100))) : 0;
   const remainingMs = active ? Math.max(0, active.endsAt - now) : 0;
   const nextAction = academy.canComplete ? "complete" : academy.canStart ? "start" : null;
   const disabled = busy || !nextAction;
@@ -223,30 +227,42 @@ function AcademyPanel({
     <div style={{ display: "grid", gap: 10 }}>
       <strong>{academy.name}</strong>
       <p style={{ margin: 0, color: "#b7c3cf" }}>{academy.theme}</p>
-      <div className="info-row"><span className="info-row__label">Entry</span><span className="info-row__value">{academy.entryRequirements.join(" | ")}</span></div>
+      <div className="info-row"><span className="info-row__label">Local standing</span><span className="info-row__value">{academy.standing.value} | {academy.standing.tier}</span></div>
       <div className="info-row"><span className="info-row__label">Supports</span><span className="info-row__value">{academy.progressionSupports.join(" | ")}</span></div>
-      {academy.requiredCourses.length ? (
-        <div className="info-row"><span className="info-row__label">Required courses</span><span className="info-row__value">{academy.requiredCourses.join(" | ")}</span></div>
-      ) : null}
-      {academy.missingCourses.length ? <div style={{ fontSize: 12, color: "#d0ad74" }}>Missing: {academy.missingCourses.join(" | ")}</div> : null}
       {active ? (
         <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, display: "grid", gap: 6, background: "rgba(7, 13, 20, 0.45)" }}>
+          <div className="info-row"><span className="info-row__label">Active stage</span><span className="info-row__value">{academy.stages.find((stage) => stage.id === active.stageId)?.title ?? active.stageId}</span></div>
           <div className="info-row"><span className="info-row__label">Study progress</span><span className="info-row__value">{progress}%</span></div>
           <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
             <div style={{ width: `${progress}%`, height: "100%", background: "#d8c278" }} />
           </div>
-          <div style={{ color: "#9fb0bf", fontSize: 12 }}>{active.readyToComplete || remainingMs <= 0 ? "Ready to complete." : `Ready in ${formatDuration(remainingMs)}.`}</div>
+          <div style={{ color: "#9fb0bf", fontSize: 12 }}>{active.readyToComplete || remainingMs <= 0 ? "Ready to complete if you are in the academy city." : `Ready in ${formatDuration(remainingMs)}.`}</div>
         </div>
       ) : null}
-      {academy.isCompleted ? <div style={{ color: "#8ec8a7", fontSize: 12 }}>Primer completed.</div> : null}
-      {academy.lockReason && !nextAction ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academy.lockReason}</div> : null}
+      <div style={{ display: "grid", gap: 8 }}>
+        {academy.stages.map((stage, index) => (
+          <div key={stage.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: stage.status === "active" ? "rgba(216,194,120,0.08)" : "rgba(7, 13, 20, 0.45)", display: "grid", gap: 5 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <strong>{index + 1}. {stage.title}</strong>
+              <span style={{ color: stage.status === "completed" ? "#8ec8a7" : stage.status === "locked" ? "#d0ad74" : "#d8c278", fontSize: 12 }}>{stage.status}</span>
+            </div>
+            <div style={{ color: "#b7c3cf", fontSize: 13 }}>{stage.summary}</div>
+            <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing required: {stage.requiredStanding} | Reward standing: +{stage.standingReward}</div>
+            {stage.requiredCourses.length ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Courses: {stage.requiredCourses.join(" | ")}</div> : null}
+            {stage.missingCourses.length ? <div style={{ color: "#d0ad74", fontSize: 12 }}>Missing: {stage.missingCourses.join(" | ")}</div> : null}
+            {stage.lockReason && stage.status !== "available" ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{stage.lockReason}</div> : null}
+          </div>
+        ))}
+      </div>
+      {academy.isCompleted ? <div style={{ color: "#8ec8a7", fontSize: 12 }}>Academy chain complete.</div> : null}
+      {academy.lockReason && !nextAction && !academy.isCompleted ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academy.lockReason}</div> : null}
       <button
         type="button"
         disabled={disabled}
         onClick={() => nextAction ? onAction(academy.id, nextAction) : undefined}
         style={actionButtonStyle(disabled)}
       >
-        {busy ? "Working..." : nextAction === "complete" ? "Complete study" : "Start study"}
+        {busy ? "Working..." : nextAction === "complete" ? "Complete stage" : "Start next stage"}
       </button>
     </div>
   );
@@ -263,6 +279,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const [peopleError, setPeopleError] = useState<string | null>(null);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [contracts, setContracts] = useState<ServerCityContract[]>([]);
+  const [standing, setStanding] = useState<ServerCityStanding | null>(null);
   const [contractsError, setContractsError] = useState<string | null>(null);
   const [contractsMessage, setContractsMessage] = useState<string | null>(null);
   const [contractsLoading, setContractsLoading] = useState(false);
@@ -318,6 +335,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
       setAcademyMessage(null);
       if (authSource !== "server" || !serverSessionToken) {
         setContracts([]);
+        setStanding(null);
         setAcademy(null);
         setContractsError("Sign in through the live server session to use local contracts.");
         setAcademyError("Sign in through the live server session to use academy study.");
@@ -338,8 +356,10 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
 
       if (contractResult.ok) {
         setContracts(contractResult.contracts);
+        setStanding(contractResult.standing);
       } else {
         setContracts([]);
+        setStanding(null);
         setContractsError(contractResult.error);
       }
 
@@ -357,7 +377,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     };
   }, [authSource, city.id, serverSessionToken]);
 
-  async function runContractAction(contractId: string, action: "accept" | "complete" | "claim") {
+  async function runContractAction(contractId: string, action: "accept" | "complete" | "claim" | "refresh") {
     if (!serverSessionToken) return;
     setBusyAction(`contract:${contractId}:${action}`);
     setContractsMessage(null);
@@ -367,13 +387,16 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
         ? await acceptServerCityContract(serverSessionToken, contractId)
         : action === "complete"
           ? await completeServerCityContract(serverSessionToken, contractId)
-          : await claimServerCityContract(serverSessionToken, contractId);
+          : action === "refresh"
+            ? await refreshServerCityContract(serverSessionToken, contractId)
+            : await claimServerCityContract(serverSessionToken, contractId);
     setBusyAction(null);
     if (!result.ok) {
       setContractsError(result.error);
       return;
     }
     setContracts(result.contracts);
+    setStanding(result.standing);
     setContractsMessage(result.message ?? "Contract updated.");
     await refreshServerState();
   }
@@ -422,6 +445,12 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
               <span className="info-row__label">Property Flavor</span>
               <span className="info-row__value">{hub.propertyFlavor}</span>
             </div>
+            {standing ? (
+              <>
+                <div className="info-row"><span className="info-row__label">Local standing</span><span className="info-row__value">{standing.value} | {standing.tier}</span></div>
+                <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing unlocks stronger local contracts and later academy stages.</div>
+              </>
+            ) : null}
           </div>
         </ContentPanel>
 

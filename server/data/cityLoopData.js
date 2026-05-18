@@ -1,38 +1,73 @@
 const FIVE_MINUTES = 5 * 60 * 1000;
+const CONTRACT_REFRESH_MS = 20 * 60 * 1000;
+
+function item(itemId, label, quantity = 1) {
+  return { itemId, label, quantity };
+}
+
+function contract({
+  id,
+  cityId,
+  title,
+  type,
+  summary,
+  risk = "low",
+  requirementLabel,
+  staminaCost = 1,
+  visitCityId = null,
+  visitLabel = null,
+  reward,
+  standingReward = 1,
+  minimumStanding = 0,
+  chronicle,
+}) {
+  return {
+    id,
+    cityId,
+    title,
+    type,
+    summary,
+    risk,
+    requirementLabel,
+    minimumStanding,
+    standingReward,
+    refreshMs: CONTRACT_REFRESH_MS,
+    completion: {
+      staminaCost,
+      visitCityId,
+      visitLabel,
+      note: visitCityId
+        ? `Visit ${visitLabel}, then return to the issuing city to close the contract.`
+        : `Complete the work while present in the issuing city.`,
+    },
+    reward,
+    chronicle,
+  };
+}
 
 export const CITY_CONTRACTS = {
   nexis: [
-    {
+    contract({
       id: "nexis-registry-errands",
       cityId: "nexis",
       title: "Registry Errand Circuit",
       type: "Civic errand",
       summary: "Carry stamped forms between the Registry, market clerks, and the watch desk before the ink dries.",
-      risk: "low",
       requirementLabel: "Open to new citizens. Costs 1 stamina to complete.",
-      completion: { staminaCost: 1, note: "Complete the circuit while in Nexis City." },
-      reward: { gold: 55, experience: 12, items: [{ itemId: "vial_of_ink", label: "Vial of Ink", quantity: 1 }] },
-      chronicle: {
-        title: "First Registry Circuit",
-        summary: "Completed a starter civic errand through the Nexis Registry.",
-      },
-    },
-    {
+      reward: { gold: 55, experience: 12, items: [item("vial_of_ink", "Vial of Ink")] },
+      chronicle: { title: "First Registry Circuit", summary: "Completed a starter civic errand through the Nexis Registry." },
+    }),
+    contract({
       id: "nexis-permit-runner",
       cityId: "nexis",
       title: "Permit Runner Shift",
       type: "Permit work",
       summary: "Verify simple trade permits and deliver corrections to vendors trying to call mistakes tradition.",
-      risk: "low",
       requirementLabel: "Open to citizens. General Studies improves later permit work.",
-      completion: { staminaCost: 1, note: "Finish the shift at the Nexis City Board." },
       reward: { gold: 68, experience: 14 },
-      chronicle: {
-        title: "Permit Runner",
-        summary: "Handled a clean permit shift in the starter capital.",
-      },
-    },
-    {
+      chronicle: { title: "Permit Runner", summary: "Handled a clean permit shift in the starter capital." },
+    }),
+    contract({
       id: "nexis-watch-messenger",
       cityId: "nexis",
       title: "Watch Messenger Route",
@@ -40,21 +75,44 @@ export const CITY_CONTRACTS = {
       summary: "Run a sealed notice from the watch desk to a Highcourt clerk and return with the receipt.",
       risk: "moderate",
       requirementLabel: "Travel to Highcourt and return to Nexis City before claiming.",
-      completion: {
-        staminaCost: 2,
-        visitCityId: "south",
-        visitLabel: "Highcourt",
-        note: "Visit Highcourt with the packet, then return to Nexis City.",
-      },
-      reward: { gold: 110, experience: 24, items: [{ itemId: "wax_seal", label: "Wax Seal", quantity: 1 }] },
-      chronicle: {
-        title: "Watch Packet Delivered",
-        summary: "Finished a cross-city messenger run between Nexis City and Highcourt.",
-      },
-    },
+      staminaCost: 2,
+      visitCityId: "south",
+      visitLabel: "Highcourt",
+      reward: { gold: 110, experience: 24, items: [item("wax_seal", "Wax Seal")] },
+      chronicle: { title: "Watch Packet Delivered", summary: "Finished a cross-city messenger run between Nexis City and Highcourt." },
+    }),
+    contract({
+      id: "nexis-market-permit-audit",
+      cityId: "nexis",
+      title: "Market Permit Audit",
+      type: "Market registry",
+      summary: "Check stall permits against city ledgers and mark vendors who think expiration dates are decorative.",
+      requirementLabel: "Requires 2 Nexis standing. Costs 2 stamina.",
+      staminaCost: 2,
+      minimumStanding: 2,
+      standingReward: 2,
+      reward: { gold: 125, experience: 28, items: [item("ledger_page", "Ledger Page")] },
+      chronicle: { title: "Permit Audit", summary: "Earned enough civic trust to audit Nexis market permits." },
+    }),
+    contract({
+      id: "nexis-civic-dispatch-chain",
+      cityId: "nexis",
+      title: "Civic Dispatch Chain",
+      type: "Trusted city work",
+      summary: "Coordinate notices across the watch, court desk, and Property Office without letting any office blame the others.",
+      risk: "moderate",
+      requirementLabel: "Requires 4 Nexis standing and a Highcourt check-in.",
+      staminaCost: 3,
+      visitCityId: "south",
+      visitLabel: "Highcourt",
+      minimumStanding: 4,
+      standingReward: 2,
+      reward: { gold: 165, experience: 36, items: [item("sealed_notice", "Sealed Notice")] },
+      chronicle: { title: "Civic Dispatch Chain", summary: "Handled a trusted dispatch chain for Nexis City offices." },
+    }),
   ],
   west: [
-    {
+    contract({
       id: "blackharbor-cargo-tally",
       cityId: "west",
       title: "Cargo Tally at Low Tide",
@@ -62,14 +120,11 @@ export const CITY_CONTRACTS = {
       summary: "Count crates, check seals, and flag suspicious potion imports before the harbor books close.",
       risk: "moderate",
       requirementLabel: "Must be in Blackharbor. Costs 2 stamina to complete.",
-      completion: { staminaCost: 2, note: "Complete the tally in Blackharbor's dock market." },
-      reward: { gold: 96, experience: 18, items: [{ itemId: "healing_tonic", label: "Healing Tonic", quantity: 1 }] },
-      chronicle: {
-        title: "Blackharbor Cargo Tally",
-        summary: "Worked the low-tide import tally in Blackharbor.",
-      },
-    },
-    {
+      staminaCost: 2,
+      reward: { gold: 96, experience: 18, items: [item("healing_tonic", "Healing Tonic")] },
+      chronicle: { title: "Blackharbor Cargo Tally", summary: "Worked the low-tide import tally in Blackharbor." },
+    }),
+    contract({
       id: "blackharbor-escort-watch",
       cityId: "west",
       title: "Pier Escort Watch",
@@ -77,19 +132,13 @@ export const CITY_CONTRACTS = {
       summary: "Guard foreign goods from pier to counting room through streets full of interested strangers.",
       risk: "high",
       requirementLabel: "Escort the manifest to Highcourt and return to Blackharbor.",
-      completion: {
-        staminaCost: 2,
-        visitCityId: "south",
-        visitLabel: "Highcourt",
-        note: "Visit Highcourt with the manifest, then return to Blackharbor.",
-      },
-      reward: { gold: 145, experience: 30, items: [{ itemId: "rations", label: "Rations", quantity: 1 }] },
-      chronicle: {
-        title: "Pier Escort Completed",
-        summary: "Protected a Blackharbor manifest through court-road pressure.",
-      },
-    },
-    {
+      staminaCost: 2,
+      visitCityId: "south",
+      visitLabel: "Highcourt",
+      reward: { gold: 145, experience: 30, items: [item("rations", "Rations")] },
+      chronicle: { title: "Pier Escort Completed", summary: "Protected a Blackharbor manifest through court-road pressure." },
+    }),
+    contract({
       id: "blackharbor-quiet-manifest",
       cityId: "west",
       title: "Quiet Manifest Recovery",
@@ -97,31 +146,53 @@ export const CITY_CONTRACTS = {
       summary: "Recover a missing cargo slip without asking why everyone knows which slip it is.",
       risk: "high",
       requirementLabel: "Must be in Blackharbor. Street Survival improves future covert contracts.",
-      completion: { staminaCost: 3, note: "Resolve the manifest dispute in Blackharbor." },
-      reward: { gold: 170, experience: 34, items: [{ itemId: "torn_map", label: "Tattered Map", quantity: 1 }] },
-      chronicle: {
-        title: "Quiet Manifest Recovered",
-        summary: "Recovered a Blackharbor slip that several people were pretending not to need.",
-      },
-    },
+      staminaCost: 3,
+      reward: { gold: 170, experience: 34, items: [item("torn_map", "Tattered Map")] },
+      chronicle: { title: "Quiet Manifest Recovered", summary: "Recovered a Blackharbor slip that several people were pretending not to need." },
+    }),
+    contract({
+      id: "blackharbor-foreign-tonic-ledger",
+      cityId: "west",
+      title: "Foreign Tonic Ledger",
+      type: "Potion import",
+      summary: "Match tonic imports against dockside stamps before the crate count develops a personality.",
+      risk: "moderate",
+      requirementLabel: "Requires 2 Blackharbor standing. Costs 2 stamina.",
+      staminaCost: 2,
+      minimumStanding: 2,
+      standingReward: 2,
+      reward: { gold: 138, experience: 29, items: [item("healing_tonic", "Healing Tonic"), item("vial_of_ink", "Vial of Ink")] },
+      chronicle: { title: "Tonic Ledger Balanced", summary: "Balanced a Blackharbor tonic import ledger before customs could misplace it." },
+    }),
+    contract({
+      id: "blackharbor-harbor-chain-escort",
+      cityId: "west",
+      title: "Harbor Chain Escort",
+      type: "Trusted port escort",
+      summary: "Escort a chain crew through the underdock while brokers pretend not to watch from three doorways.",
+      risk: "high",
+      requirementLabel: "Requires 4 Blackharbor standing and a Nexis delivery return.",
+      staminaCost: 3,
+      visitCityId: "nexis",
+      visitLabel: "Nexis City",
+      minimumStanding: 4,
+      standingReward: 2,
+      reward: { gold: 190, experience: 40, items: [item("rope", "Rope"), item("foreign_token", "Foreign Token")] },
+      chronicle: { title: "Harbor Chain Escort", summary: "Earned enough dock trust to escort a Blackharbor harbor-chain crew." },
+    }),
   ],
   north: [
-    {
+    contract({
       id: "silverbough-herb-circle",
       cityId: "north",
       title: "Herb Circle Supply Run",
       type: "Healing supply",
       summary: "Gather, sort, and deliver field herbs for healers who can spot lazy work from across a room.",
-      risk: "low",
       requirementLabel: "Must be in Silverbough. Costs 1 stamina to complete.",
-      completion: { staminaCost: 1, note: "Deliver sorted herbs to the Silverbough healing circle." },
-      reward: { gold: 76, experience: 16, items: [{ itemId: "medicinal_herb", label: "Medicinal Herb", quantity: 1 }] },
-      chronicle: {
-        title: "Herb Circle Supply",
-        summary: "Helped Silverbough's healers keep their herb circle stocked.",
-      },
-    },
-    {
+      reward: { gold: 76, experience: 16, items: [item("medicinal_herb", "Medicinal Herb")] },
+      chronicle: { title: "Herb Circle Supply", summary: "Helped Silverbough's healers keep their herb circle stocked." },
+    }),
+    contract({
       id: "silverbough-relic-rubbing",
       cityId: "north",
       title: "Relic Rubbing Intake",
@@ -129,19 +200,13 @@ export const CITY_CONTRACTS = {
       summary: "Deliver temple rubbings to Nexis archivists, then return them flat, dry, and mysterious.",
       risk: "moderate",
       requirementLabel: "Visit Nexis City and return to Silverbough.",
-      completion: {
-        staminaCost: 2,
-        visitCityId: "nexis",
-        visitLabel: "Nexis City",
-        note: "Take the rubbings to Nexis City, then return to Silverbough.",
-      },
-      reward: { gold: 118, experience: 26, items: [{ itemId: "relic_note", label: "Relic Note", quantity: 1 }] },
-      chronicle: {
-        title: "Relic Intake Logged",
-        summary: "Carried a Silverbough relic rubbing through a proper archive intake.",
-      },
-    },
-    {
+      staminaCost: 2,
+      visitCityId: "nexis",
+      visitLabel: "Nexis City",
+      reward: { gold: 118, experience: 26, items: [item("relic_note", "Relic Note")] },
+      chronicle: { title: "Relic Intake Logged", summary: "Carried a Silverbough relic rubbing through a proper archive intake." },
+    }),
+    contract({
       id: "silverbough-ward-lantern",
       cityId: "north",
       title: "Ward Lantern Walk",
@@ -149,16 +214,42 @@ export const CITY_CONTRACTS = {
       summary: "Check northern-path lantern wards and report which lights flicker like they know something.",
       risk: "moderate",
       requirementLabel: "Must be in Silverbough. World Geography improves later ward routes.",
-      completion: { staminaCost: 2, note: "Finish the ward walk outside Silverbough." },
-      reward: { gold: 105, experience: 22, items: [{ itemId: "wild_herb", label: "Wild Herb", quantity: 2 }] },
-      chronicle: {
-        title: "Ward Lantern Walk",
-        summary: "Logged a patrol of Silverbough's outer ward lanterns.",
-      },
-    },
+      staminaCost: 2,
+      reward: { gold: 105, experience: 22, items: [item("wild_herb", "Wild Herb", 2)] },
+      chronicle: { title: "Ward Lantern Walk", summary: "Logged a patrol of Silverbough's outer ward lanterns." },
+    }),
+    contract({
+      id: "silverbough-shrine-supply-cart",
+      cityId: "north",
+      title: "Shrine Supply Cart",
+      type: "Shrine supply",
+      summary: "Move clean linens, herbs, and ward-safe oils to shrine attendants who notice everything.",
+      requirementLabel: "Requires 2 Silverbough standing. Costs 2 stamina.",
+      staminaCost: 2,
+      minimumStanding: 2,
+      standingReward: 2,
+      reward: { gold: 130, experience: 30, items: [item("medicinal_herb", "Medicinal Herb"), item("wild_herb", "Wild Herb")] },
+      chronicle: { title: "Shrine Cart Delivered", summary: "Delivered a trusted Silverbough shrine supply cart." },
+    }),
+    contract({
+      id: "silverbough-moonwell-ward-audit",
+      cityId: "north",
+      title: "Moonwell Ward Audit",
+      type: "Trusted ward work",
+      summary: "Audit moonwell ward markers and return with notes that do not glow for the wrong reasons.",
+      risk: "moderate",
+      requirementLabel: "Requires 4 Silverbough standing and an Ironhall material check.",
+      staminaCost: 3,
+      visitCityId: "east",
+      visitLabel: "Ironhall",
+      minimumStanding: 4,
+      standingReward: 2,
+      reward: { gold: 175, experience: 38, items: [item("ward_shard", "Ward Shard")] },
+      chronicle: { title: "Moonwell Ward Audit", summary: "Earned enough Silverbough trust to audit moonwell ward markers." },
+    }),
   ],
   east: [
-    {
+    contract({
       id: "ironhall-ore-yard",
       cityId: "east",
       title: "Ore Yard Haul",
@@ -166,29 +257,21 @@ export const CITY_CONTRACTS = {
       summary: "Move ore, coal, and rivets between yard scales and forge benches without inventing injuries.",
       risk: "moderate",
       requirementLabel: "Must be in Ironhall. Manual Labor improves later forge work.",
-      completion: { staminaCost: 2, note: "Finish the haul inside Ironhall's ore yard." },
-      reward: { gold: 90, experience: 18, items: [{ itemId: "iron_ore", label: "Iron Ore", quantity: 2 }] },
-      chronicle: {
-        title: "Ore Yard Haul",
-        summary: "Took a first paid shift in Ironhall's material yards.",
-      },
-    },
-    {
+      staminaCost: 2,
+      reward: { gold: 90, experience: 18, items: [item("iron_ore", "Iron Ore", 2)] },
+      chronicle: { title: "Ore Yard Haul", summary: "Took a first paid shift in Ironhall's material yards." },
+    }),
+    contract({
       id: "ironhall-forge-order",
       cityId: "east",
       title: "Forge Order Rush",
       type: "Craft contract",
       summary: "Run order slips between smiths, armor fitters, and component lockers before the shouting starts.",
-      risk: "low",
       requirementLabel: "Must be in Ironhall. Practical Arithmetic unlocks better ledger work.",
-      completion: { staminaCost: 1, note: "Close the rush order at the Foundry counter." },
-      reward: { gold: 82, experience: 17, items: [{ itemId: "coal", label: "Coal", quantity: 1 }] },
-      chronicle: {
-        title: "Forge Order Closed",
-        summary: "Kept an Ironhall forge order moving before the benches jammed.",
-      },
-    },
-    {
+      reward: { gold: 82, experience: 17, items: [item("coal", "Coal")] },
+      chronicle: { title: "Forge Order Closed", summary: "Kept an Ironhall forge order moving before the benches jammed." },
+    }),
+    contract({
       id: "ironhall-bridge-brace",
       cityId: "east",
       title: "Bridge Brace Repair",
@@ -196,56 +279,67 @@ export const CITY_CONTRACTS = {
       summary: "Inspect road braces on the forge route where every loose bolt has ambitions.",
       risk: "moderate",
       requirementLabel: "Visit Nexis City for city permit bolts, then return to Ironhall.",
-      completion: {
-        staminaCost: 2,
-        visitCityId: "nexis",
-        visitLabel: "Nexis City",
-        note: "Fetch permit bolts from Nexis City, then return to Ironhall.",
-      },
-      reward: { gold: 125, experience: 27, items: [{ itemId: "rope", label: "Rope", quantity: 1 }] },
-      chronicle: {
-        title: "Bridge Brace Crew",
-        summary: "Supported a forge-road repair crew out of Ironhall.",
-      },
-    },
+      staminaCost: 2,
+      visitCityId: "nexis",
+      visitLabel: "Nexis City",
+      reward: { gold: 125, experience: 27, items: [item("rope", "Rope")] },
+      chronicle: { title: "Bridge Brace Crew", summary: "Supported a forge-road repair crew out of Ironhall." },
+    }),
+    contract({
+      id: "ironhall-component-locker-sweep",
+      cityId: "east",
+      title: "Component Locker Sweep",
+      type: "Trusted workshop",
+      summary: "Inventory component lockers before the apprentices classify everything as probably important.",
+      requirementLabel: "Requires 2 Ironhall standing. Costs 2 stamina.",
+      staminaCost: 2,
+      minimumStanding: 2,
+      standingReward: 2,
+      reward: { gold: 136, experience: 31, items: [item("iron_ore", "Iron Ore"), item("coal", "Coal")] },
+      chronicle: { title: "Component Sweep", summary: "Handled a trusted component locker sweep for Ironhall." },
+    }),
+    contract({
+      id: "ironhall-foundry-safety-brace",
+      cityId: "east",
+      title: "Foundry Safety Brace",
+      type: "Trusted foundry repair",
+      summary: "Fit safety braces near the old foundry gantry and avoid becoming a cautionary diagram.",
+      risk: "high",
+      requirementLabel: "Requires 4 Ironhall standing and a Silverbough ward check.",
+      staminaCost: 3,
+      visitCityId: "north",
+      visitLabel: "Silverbough",
+      minimumStanding: 4,
+      standingReward: 2,
+      reward: { gold: 185, experience: 41, items: [item("steel_brace", "Steel Brace")] },
+      chronicle: { title: "Foundry Brace Work", summary: "Earned enough Ironhall trust to work foundry safety braces." },
+    }),
   ],
   south: [
-    {
+    contract({
       id: "highcourt-seal-filing",
       cityId: "south",
       title: "Seal Filing Queue",
       type: "Legal filing",
       summary: "File permit seals, log petition references, and learn why patience counts as civic ammunition.",
-      risk: "low",
       requirementLabel: "Must be in Highcourt. Civic Fundamentals unlocks better filings.",
-      completion: { staminaCost: 1, note: "Finish the filing queue at Highcourt." },
-      reward: { gold: 88, experience: 17, items: [{ itemId: "wax_seal", label: "Wax Seal", quantity: 1 }] },
-      chronicle: {
-        title: "Highcourt Filing",
-        summary: "Survived a Highcourt seal filing queue with dignity mostly intact.",
-      },
-    },
-    {
+      reward: { gold: 88, experience: 17, items: [item("wax_seal", "Wax Seal")] },
+      chronicle: { title: "Highcourt Filing", summary: "Survived a Highcourt seal filing queue with dignity mostly intact." },
+    }),
+    contract({
       id: "highcourt-archive-delivery",
       cityId: "south",
       title: "Archive Delivery in Triplicate",
       type: "Archive delivery",
       summary: "Carry court archives between offices while each duplicate finds exactly the suspicious clerk it deserves.",
-      risk: "low",
       requirementLabel: "Visit Nexis City archive intake, then return to Highcourt.",
-      completion: {
-        staminaCost: 2,
-        visitCityId: "nexis",
-        visitLabel: "Nexis City",
-        note: "Visit Nexis City archive intake, then return to Highcourt.",
-      },
-      reward: { gold: 120, experience: 25, items: [{ itemId: "vial_of_ink", label: "Vial of Ink", quantity: 1 }] },
-      chronicle: {
-        title: "Archive Delivery",
-        summary: "Completed a Highcourt archive delivery without losing any duplicate paperwork.",
-      },
-    },
-    {
+      staminaCost: 2,
+      visitCityId: "nexis",
+      visitLabel: "Nexis City",
+      reward: { gold: 120, experience: 25, items: [item("vial_of_ink", "Vial of Ink")] },
+      chronicle: { title: "Archive Delivery", summary: "Completed a Highcourt archive delivery without losing any duplicate paperwork." },
+    }),
+    contract({
       id: "highcourt-diplomatic-escort",
       cityId: "south",
       title: "Diplomatic Escort Note",
@@ -253,15 +347,59 @@ export const CITY_CONTRACTS = {
       summary: "Escort a minor envoy across the permit district, which is mostly walking slowly near expensive arguments.",
       risk: "moderate",
       requirementLabel: "Must be in Highcourt. Rhetoric will deepen this route later.",
-      completion: { staminaCost: 2, note: "Close the escort note in Highcourt's permit district." },
+      staminaCost: 2,
       reward: { gold: 132, experience: 29 },
-      chronicle: {
-        title: "Diplomatic Escort",
-        summary: "Handled a first Highcourt prestige errand among the permit offices.",
-      },
-    },
+      chronicle: { title: "Diplomatic Escort", summary: "Handled a first Highcourt prestige errand among the permit offices." },
+    }),
+    contract({
+      id: "highcourt-petition-review-packet",
+      cityId: "south",
+      title: "Petition Review Packet",
+      type: "Trusted legal review",
+      summary: "Sort citizen petitions by urgency, jurisdiction, and how loudly the petitioner has been sighing.",
+      requirementLabel: "Requires 2 Highcourt standing. Costs 2 stamina.",
+      staminaCost: 2,
+      minimumStanding: 2,
+      standingReward: 2,
+      reward: { gold: 142, experience: 32, items: [item("sealed_notice", "Sealed Notice")] },
+      chronicle: { title: "Petition Packet", summary: "Reviewed a trusted Highcourt petition packet." },
+    }),
+    contract({
+      id: "highcourt-noble-errand-ledger",
+      cityId: "south",
+      title: "Noble Errand Ledger",
+      type: "Prestige ledger",
+      summary: "Balance noble errand requests against permits, favors, and the blessed absence of common sense.",
+      risk: "moderate",
+      requirementLabel: "Requires 4 Highcourt standing and a Blackharbor import check.",
+      staminaCost: 3,
+      visitCityId: "west",
+      visitLabel: "Blackharbor",
+      minimumStanding: 4,
+      standingReward: 2,
+      reward: { gold: 195, experience: 42, items: [item("court_token", "Court Token")] },
+      chronicle: { title: "Noble Errand Ledger", summary: "Handled a trusted Highcourt noble errand ledger." },
+    }),
   ],
 };
+
+function stage({ id, title, summary, requiredCourses = [], requiredStanding = 0, reward, standingReward = 2, chronicle }) {
+  return {
+    id,
+    title,
+    summary,
+    durationMs: FIVE_MINUTES,
+    requiredCourses,
+    requiredStanding,
+    entryRequirements: [
+      requiredStanding ? `${requiredStanding} local standing` : "Local presence",
+      ...requiredCourses.map((courseId) => `Complete ${courseId}`),
+    ],
+    reward,
+    standingReward,
+    chronicle,
+  };
+}
 
 export const CITY_ACADEMIES = {
   nexis: {
@@ -269,111 +407,65 @@ export const CITY_ACADEMIES = {
     cityId: "nexis",
     name: "Hall of Letters",
     theme: "Civic administration, watch procedure, public law, and practical city operations.",
-    entryRequirements: ["Be present in Nexis City", "Open to all registered citizens"],
-    requiredCourses: [],
-    lockReason: "Travel to Nexis City to study here.",
-    durationMs: FIVE_MINUTES,
     progressionSupports: ["Civic Jobs", "permits", "city board work", "organization administration"],
-    reward: {
-      experience: 28,
-      workingStats: { intelligence: 1 },
-      flags: ["academy_nexis_letters_intro"],
-    },
-    chronicle: {
-      title: "Entered the Hall of Letters",
-      summary: "Started practical civic study in Nexis City's Hall of Letters.",
-      completionTitle: "Hall of Letters Primer",
-      completionSummary: "Completed the first Hall of Letters primer for city administration.",
-    },
+    lockReason: "Travel to Nexis City to study here.",
+    stages: [
+      stage({ id: "primer", title: "Civic Primer", summary: "Learn the basic registry map, watch desk flow, and permit vocabulary.", reward: { experience: 28, workingStats: { intelligence: 1 }, flags: ["academy_nexis_letters_primer"] }, chronicle: { title: "Hall of Letters Primer", summary: "Completed the first Hall of Letters primer for city administration." } }),
+      stage({ id: "dispatch", title: "Dispatch Practice", summary: "Coordinate short city messages without losing the office that owns the stamp.", requiredStanding: 2, reward: { experience: 36, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_nexis_dispatch_practice"] }, chronicle: { title: "Civic Dispatch Practice", summary: "Advanced through Nexis dispatch practice in the Hall of Letters." } }),
+      stage({ id: "permit-law", title: "Permit Law Basics", summary: "Study the practical difference between legal authority and someone being loud at a counter.", requiredStanding: 4, reward: { experience: 46, workingStats: { intelligence: 2 }, flags: ["academy_nexis_permit_law"] }, chronicle: { title: "Permit Law Basics", summary: "Completed a Nexis City academy step in practical permit law." } }),
+    ],
   },
   west: {
     id: "blackharbor-tidewright-academy",
     cityId: "west",
     name: "Tidewright Academy",
     theme: "Maritime routing, covert manifests, corsair law, and cargo-risk judgment.",
-    entryRequirements: ["Be present in Blackharbor", "Complete World Geography"],
-    requiredCourses: ["world-geography"],
-    lockReason: "World Geography is required before the docks trust your route judgment.",
-    durationMs: FIVE_MINUTES,
     progressionSupports: ["sea routes", "cargo contracts", "black-market reads", "consortium logistics"],
-    reward: {
-      experience: 34,
-      workingStats: { endurance: 1 },
-      flags: ["academy_blackharbor_tidewright_intro"],
-    },
-    chronicle: {
-      title: "Tidewright Enrollment",
-      summary: "Joined Blackharbor's Tidewright Academy for port-route handling.",
-      completionTitle: "Tidewright Primer",
-      completionSummary: "Completed a first Blackharbor primer on tides, cargo, and quiet manifests.",
-    },
+    lockReason: "World Geography is required before the docks trust your route judgment.",
+    stages: [
+      stage({ id: "primer", title: "Tide Primer", summary: "Read tide marks, dock bells, and the basic lies cargo brokers tell on paperwork.", requiredCourses: ["world-geography"], reward: { experience: 34, workingStats: { endurance: 1 }, flags: ["academy_blackharbor_tide_primer"] }, chronicle: { title: "Tidewright Primer", summary: "Completed a Blackharbor primer on tides, cargo, and quiet manifests." } }),
+      stage({ id: "manifest", title: "Manifest Handling", summary: "Practice catching mismatched cargo records before they become someone else's plausible deniability.", requiredCourses: ["world-geography"], requiredStanding: 2, reward: { experience: 42, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_blackharbor_manifest_handling"] }, chronicle: { title: "Manifest Handling", summary: "Advanced through Blackharbor manifest-handling study." } }),
+      stage({ id: "corsair-law", title: "Corsair Law Readings", summary: "Study the border between escort work, salvage rights, and extremely confident theft.", requiredCourses: ["world-geography"], requiredStanding: 4, reward: { experience: 52, workingStats: { endurance: 2 }, flags: ["academy_blackharbor_corsair_law"] }, chronicle: { title: "Corsair Law Readings", summary: "Completed a Blackharbor academy step in corsair law and cargo risk." } }),
+    ],
   },
   north: {
     id: "silverbough-argent-bough-lyceum",
     cityId: "north",
     name: "Argent Bough Lyceum",
     theme: "Arcane field ethics, healing theory, ward literacy, and relic handling.",
-    entryRequirements: ["Be present in Silverbough", "Complete World Geography"],
-    requiredCourses: ["world-geography"],
-    lockReason: "World Geography is required before Silverbough's outer wards open to you.",
-    durationMs: FIVE_MINUTES,
     progressionSupports: ["healing jobs", "relic contracts", "ward patrols", "discovery events"],
-    reward: {
-      experience: 34,
-      workingStats: { intelligence: 1 },
-      flags: ["academy_silverbough_lyceum_intro"],
-    },
-    chronicle: {
-      title: "Argent Bough Enrollment",
-      summary: "Entered Silverbough's Lyceum for ward and relic basics.",
-      completionTitle: "Argent Bough Primer",
-      completionSummary: "Completed a first Silverbough primer in ward literacy and healing theory.",
-    },
+    lockReason: "World Geography is required before Silverbough's outer wards open to you.",
+    stages: [
+      stage({ id: "primer", title: "Ward Primer", summary: "Learn how Silverbough marks safe paths, sick paths, and paths with academic opinions.", requiredCourses: ["world-geography"], reward: { experience: 34, workingStats: { intelligence: 1 }, flags: ["academy_silverbough_ward_primer"] }, chronicle: { title: "Argent Bough Primer", summary: "Completed a Silverbough primer in ward literacy and healing theory." } }),
+      stage({ id: "healing-circle", title: "Healing Circle Practice", summary: "Study herb handling, triage manners, and why impatient patients are still patients.", requiredCourses: ["world-geography"], requiredStanding: 2, reward: { experience: 42, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_silverbough_healing_circle"] }, chronicle: { title: "Healing Circle Practice", summary: "Advanced through Silverbough healing-circle academy work." } }),
+      stage({ id: "relic-ethics", title: "Relic Ethics", summary: "Learn which relics can be moved, which can be copied, and which are best admired from elsewhere.", requiredCourses: ["world-geography"], requiredStanding: 4, reward: { experience: 52, workingStats: { intelligence: 2 }, flags: ["academy_silverbough_relic_ethics"] }, chronicle: { title: "Relic Ethics", summary: "Completed a Silverbough academy step in relic ethics and ward caution." } }),
+    ],
   },
   east: {
     id: "ironhall-enginewright-hall",
     cityId: "east",
     name: "Enginewright Hall",
     theme: "Forge discipline, war-school basics, enginewright ledgers, and material planning.",
-    entryRequirements: ["Be present in Ironhall", "Complete Practical Arithmetic"],
-    requiredCourses: ["practical-arithmetic"],
-    lockReason: "Practical Arithmetic is required before Ironhall lets you touch serious ledgers.",
-    durationMs: FIVE_MINUTES,
     progressionSupports: ["forge contracts", "material markets", "repair work", "industrial consortium loops"],
-    reward: {
-      experience: 36,
-      workingStats: { manualLabor: 1 },
-      battleStats: { strength: 1 },
-      flags: ["academy_ironhall_enginewright_intro"],
-    },
-    chronicle: {
-      title: "Enginewright Enrollment",
-      summary: "Took a first seat in Ironhall's Enginewright Hall.",
-      completionTitle: "Enginewright Primer",
-      completionSummary: "Completed a first Ironhall primer on material ledgers and forge discipline.",
-    },
+    lockReason: "Practical Arithmetic is required before Ironhall lets you touch serious ledgers.",
+    stages: [
+      stage({ id: "primer", title: "Foundry Primer", summary: "Read order slips, heat marks, and the warning signs of a shop about to become interesting.", requiredCourses: ["practical-arithmetic"], reward: { experience: 36, workingStats: { manualLabor: 1 }, battleStats: { strength: 1 }, flags: ["academy_ironhall_foundry_primer"] }, chronicle: { title: "Enginewright Primer", summary: "Completed an Ironhall primer on material ledgers and forge discipline." } }),
+      stage({ id: "material-ledgers", title: "Material Ledgers", summary: "Track ore, coal, braces, and the tragic destiny of every missing rivet.", requiredCourses: ["practical-arithmetic"], requiredStanding: 2, reward: { experience: 44, workingStats: { manualLabor: 1, intelligence: 1 }, flags: ["academy_ironhall_material_ledgers"] }, chronicle: { title: "Material Ledger Practice", summary: "Advanced through Ironhall material-ledger academy work." } }),
+      stage({ id: "bracewright", title: "Bracewright Methods", summary: "Study road brace work and foundry safety without becoming part of either lesson.", requiredCourses: ["practical-arithmetic"], requiredStanding: 4, reward: { experience: 54, workingStats: { manualLabor: 2 }, battleStats: { defense: 1 }, flags: ["academy_ironhall_bracewright_methods"] }, chronicle: { title: "Bracewright Methods", summary: "Completed an Ironhall academy step in bracewright methods." } }),
+    ],
   },
   south: {
     id: "highcourt-college-of-civic-law",
     cityId: "south",
     name: "College of Civic Law",
     theme: "Rhetoric, civic law, statecraft, diplomacy, and prestige administration.",
-    entryRequirements: ["Be present in Highcourt", "Complete Civic Fundamentals"],
-    requiredCourses: ["civic-fundamentals"],
-    lockReason: "Civic Fundamentals is required before Highcourt accepts your petitions as study material.",
-    durationMs: FIVE_MINUTES,
     progressionSupports: ["legal filings", "prestige markets", "permits", "diplomatic errands"],
-    reward: {
-      experience: 36,
-      workingStats: { intelligence: 1 },
-      flags: ["academy_highcourt_civic_law_intro"],
-    },
-    chronicle: {
-      title: "Civic Law Enrollment",
-      summary: "Entered Highcourt's College of Civic Law for statecraft basics.",
-      completionTitle: "Civic Law Primer",
-      completionSummary: "Completed a first Highcourt primer in law, rhetoric, and permits.",
-    },
+    lockReason: "Civic Fundamentals is required before Highcourt accepts your petitions as study material.",
+    stages: [
+      stage({ id: "primer", title: "Civic Law Primer", summary: "Learn court routing, filing etiquette, and why every seal has three witnesses.", requiredCourses: ["civic-fundamentals"], reward: { experience: 36, workingStats: { intelligence: 1 }, flags: ["academy_highcourt_civic_law_primer"] }, chronicle: { title: "Civic Law Primer", summary: "Completed a Highcourt primer in law, rhetoric, and permits." } }),
+      stage({ id: "petition-review", title: "Petition Review", summary: "Sort public petitions into the categories: urgent, valid, expensive, and politically inconvenient.", requiredCourses: ["civic-fundamentals"], requiredStanding: 2, reward: { experience: 44, workingStats: { intelligence: 1, endurance: 1 }, flags: ["academy_highcourt_petition_review"] }, chronicle: { title: "Petition Review", summary: "Advanced through Highcourt petition-review academy work." } }),
+      stage({ id: "statecraft-rhetoric", title: "Statecraft Rhetoric", summary: "Practice formal argument for audiences who can weaponize silence.", requiredCourses: ["civic-fundamentals"], requiredStanding: 4, reward: { experience: 54, workingStats: { intelligence: 2 }, flags: ["academy_highcourt_statecraft_rhetoric"] }, chronicle: { title: "Statecraft Rhetoric", summary: "Completed a Highcourt academy step in rhetoric and statecraft." } }),
+    ],
   },
 };
 
@@ -383,8 +475,8 @@ export function getCityContracts(cityId) {
 
 export function getCityContract(contractId) {
   for (const contracts of Object.values(CITY_CONTRACTS)) {
-    const contract = contracts.find((entry) => entry.id === contractId);
-    if (contract) return contract;
+    const contractEntry = contracts.find((entry) => entry.id === contractId);
+    if (contractEntry) return contractEntry;
   }
   return null;
 }
@@ -395,4 +487,9 @@ export function getCityAcademy(cityId) {
 
 export function getAcademyById(academyId) {
   return Object.values(CITY_ACADEMIES).find((academy) => academy.id === academyId) ?? null;
+}
+
+export function getAcademyStage(academy, stageId) {
+  if (!academy || !Array.isArray(academy.stages)) return null;
+  return academy.stages.find((stageEntry) => stageEntry.id === stageId) ?? null;
 }
