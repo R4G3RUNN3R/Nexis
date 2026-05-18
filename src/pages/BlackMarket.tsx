@@ -4,13 +4,24 @@ import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { getCityHubContent } from "../data/cityHubData";
 import { ITEM_OPTIONS } from "../data/itemsData";
-import { buyServerBlackMarketItem, getServerBlackMarket, type ServerCityBlackMarket, type ServerCityEconomyStock } from "../lib/authApi";
+import {
+  buyServerBlackMarketItem,
+  getServerBlackMarket,
+  sellServerBlackMarketItem,
+  type ServerCityBlackMarket,
+  type ServerCityEconomyStock,
+  type ServerCitySellOffer,
+} from "../lib/authApi";
 import { readTravelStateFromPlayer } from "../lib/travelState";
 import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
 
-function getBuyQuantity(itemId: string, quantities: Record<string, number>) {
-  return Math.max(1, Math.min(99, Math.floor(Number(quantities[itemId] ?? 1) || 1)));
+function getQuantity(itemId: string, quantities: Record<string, number>, max = 99) {
+  return Math.max(1, Math.min(max, Math.floor(Number(quantities[itemId] ?? 1) || 1)));
+}
+
+function getItemName(itemId: string) {
+  return ITEM_OPTIONS.find((option) => option.itemId === itemId)?.name ?? itemId;
 }
 
 function UnderMarketStockCard({
@@ -26,15 +37,14 @@ function UnderMarketStockCard({
   onQuantityChange: (itemId: string, value: string) => void;
   onBuy: (itemId: string) => void;
 }) {
-  const item = ITEM_OPTIONS.find((option) => option.itemId === entry.itemId);
   const disabled = busy || !entry.canBuy;
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <strong>{item?.name ?? entry.itemId}</strong>
+        <strong>{getItemName(entry.itemId)}</strong>
         <span>{entry.price.toLocaleString("en-GB")} gold</span>
       </div>
-      <div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.description || item?.description || "Under-market stock."}</div>
+      <div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.description}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Source: {entry.source} | Tier: {entry.tier}</div>
       {entry.lockReason ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{entry.lockReason}</div> : null}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -44,6 +54,43 @@ function UnderMarketStockCard({
         </label>
         <button type="button" disabled={disabled} onClick={() => onBuy(entry.itemId)}>
           {busy ? "Buying..." : `Buy ${quantity} (${(entry.price * quantity).toLocaleString("en-GB")} gold)`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UnderMarketSellCard({
+  offer,
+  quantity,
+  busy,
+  onQuantityChange,
+  onSell,
+}: {
+  offer: ServerCitySellOffer;
+  quantity: number;
+  busy: boolean;
+  onQuantityChange: (itemId: string, value: string, max: number) => void;
+  onSell: (itemId: string) => void;
+}) {
+  const disabled = busy || !offer.canSell;
+  return (
+    <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <strong>{getItemName(offer.itemId)}</strong>
+        <span>{offer.unitPrice.toLocaleString("en-GB")} gold each</span>
+      </div>
+      <div style={{ color: "#b7c3cf", fontSize: 13 }}>{offer.note ?? "Fence quote."}</div>
+      <div style={{ color: "#9fb0bf", fontSize: 12 }}>Owned: {offer.ownedQuantity} | Standing required: {offer.minimumStanding ?? 0}</div>
+      {offer.requiredCourses.length ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Requires: {offer.requiredCourses.join(" | ")}</div> : null}
+      {offer.lockReason ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{offer.lockReason}</div> : null}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#b7c3cf", fontSize: 13 }}>
+          Quantity
+          <input type="number" min={1} max={Math.max(1, offer.ownedQuantity)} value={quantity} onChange={(event) => onQuantityChange(offer.itemId, event.target.value, offer.ownedQuantity)} style={{ width: 72 }} />
+        </label>
+        <button type="button" disabled={disabled} onClick={() => onSell(offer.itemId)}>
+          {busy ? "Fencing..." : `Fence ${quantity} (${(offer.unitPrice * quantity).toLocaleString("en-GB")} gold)`}
         </button>
       </div>
     </div>
@@ -60,6 +107,7 @@ export default function BlackMarketPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [buyQuantities, setBuyQuantities] = useState<Record<string, number>>({});
+  const [sellQuantities, setSellQuantities] = useState<Record<string, number>>({});
   const [busyItem, setBusyItem] = useState<string | null>(null);
 
   useEffect(() => {
@@ -94,10 +142,15 @@ export default function BlackMarketPage() {
     setBuyQuantities((current) => ({ ...current, [itemId]: nextQuantity }));
   }
 
+  function updateSellQuantity(itemId: string, rawValue: string, max: number) {
+    const nextQuantity = Math.max(1, Math.min(Math.max(1, max), Math.floor(Number(rawValue) || 1)));
+    setSellQuantities((current) => ({ ...current, [itemId]: nextQuantity }));
+  }
+
   async function buyItem(itemId: string) {
     if (!serverSessionToken) return;
-    const quantity = getBuyQuantity(itemId, buyQuantities);
-    setBusyItem(itemId);
+    const quantity = getQuantity(itemId, buyQuantities);
+    setBusyItem(`buy:${itemId}`);
     setMessage(null);
     setError(null);
     const result = await buyServerBlackMarketItem(serverSessionToken, cityHub.cityId, itemId, quantity);
@@ -108,6 +161,24 @@ export default function BlackMarketPage() {
     }
     setBlackMarket(result.blackMarket);
     setMessage(result.message ?? "Under-market purchase completed.");
+    await refreshServerState();
+  }
+
+  async function sellItem(itemId: string) {
+    if (!serverSessionToken || !blackMarket) return;
+    const offer = blackMarket.sellOffers.find((entry) => entry.itemId === itemId);
+    const quantity = getQuantity(itemId, sellQuantities, offer?.ownedQuantity ?? 1);
+    setBusyItem(`sell:${itemId}`);
+    setMessage(null);
+    setError(null);
+    const result = await sellServerBlackMarketItem(serverSessionToken, cityHub.cityId, itemId, quantity);
+    setBusyItem(null);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setBlackMarket(result.blackMarket);
+    setMessage(result.message ?? "Under-market sale completed.");
     await refreshServerState();
   }
 
@@ -126,7 +197,7 @@ export default function BlackMarketPage() {
             <div className="info-row"><span className="info-row__label">Standing required</span><span className="info-row__value">{blackMarket.minimumStanding}</span></div>
             <div className="info-row"><span className="info-row__label">Required courses</span><span className="info-row__value">{blackMarket.requiredCourses.length ? blackMarket.requiredCourses.join(", ") : "None"}</span></div>
             {!blackMarket.canOpen ? <div style={{ color: "#d0ad74", fontSize: 13 }}>{blackMarket.lockReason}</div> : null}
-            {blackMarket.canOpen ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>Access open. Purchases remain city-local and server verified.</div> : null}
+            {blackMarket.canOpen ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>Access open. Buying and fencing remain city-local and server verified.</div> : null}
           </div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
@@ -137,21 +208,38 @@ export default function BlackMarketPage() {
       </ContentPanel>
 
       {blackMarket ? (
-        <ContentPanel title="Under-Market Stock">
-          <div style={{ display: "grid", gap: 10 }}>
-            <div className="info-row"><span className="info-row__label">Available Gold</span><span className="info-row__value">{player.gold.toLocaleString("en-GB")} gold</span></div>
-            {blackMarket.stock.map((entry) => (
-              <UnderMarketStockCard
-                key={entry.itemId}
-                entry={entry}
-                quantity={getBuyQuantity(entry.itemId, buyQuantities)}
-                busy={busyItem === entry.itemId}
-                onQuantityChange={updateBuyQuantity}
-                onBuy={buyItem}
-              />
-            ))}
-          </div>
-        </ContentPanel>
+        <div className="page-intro-grid">
+          <ContentPanel title="Under-Market Stock">
+            <div style={{ display: "grid", gap: 10 }}>
+              <div className="info-row"><span className="info-row__label">Available Gold</span><span className="info-row__value">{player.gold.toLocaleString("en-GB")} gold</span></div>
+              {blackMarket.stock.map((entry) => (
+                <UnderMarketStockCard
+                  key={entry.itemId}
+                  entry={entry}
+                  quantity={getQuantity(entry.itemId, buyQuantities)}
+                  busy={busyItem === `buy:${entry.itemId}`}
+                  onQuantityChange={updateBuyQuantity}
+                  onBuy={buyItem}
+                />
+              ))}
+            </div>
+          </ContentPanel>
+          <ContentPanel title="Fence Offers">
+            <div style={{ display: "grid", gap: 10 }}>
+              {!blackMarket.sellOffers.length ? <div style={{ color: "#d0ad74", fontSize: 13 }}>No carried goods match this city's under-market buyers.</div> : null}
+              {blackMarket.sellOffers.map((offer) => (
+                <UnderMarketSellCard
+                  key={offer.itemId}
+                  offer={offer}
+                  quantity={getQuantity(offer.itemId, sellQuantities, offer.ownedQuantity)}
+                  busy={busyItem === `sell:${offer.itemId}`}
+                  onQuantityChange={updateSellQuantity}
+                  onSell={sellItem}
+                />
+              ))}
+            </div>
+          </ContentPanel>
+        </div>
       ) : null}
     </AppShell>
   );

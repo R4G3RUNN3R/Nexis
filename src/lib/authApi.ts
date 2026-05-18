@@ -253,6 +253,47 @@ export type ServerCityEconomyStock = {
   lockReason: string | null;
 };
 
+export type ServerCitySellOffer = {
+  itemId: string;
+  category?: string;
+  sourceCityId?: string;
+  sourceCityName?: string;
+  unitPrice: number;
+  quantity: number;
+  totalPrice: number;
+  ownedQuantity: number;
+  minimumStanding?: number;
+  requiredCourses: string[];
+  missingCourses: string[];
+  standingMissing?: number;
+  note?: string;
+  bestDestination?: { cityId: string; cityName: string; price: number } | null;
+  canSell: boolean;
+  lockReason: string | null;
+};
+
+export type ServerTradeOpportunity = {
+  itemId: string;
+  category: string;
+  buyCityId: string;
+  buyCityName: string;
+  buyPrice: number;
+  bestSellCityId: string;
+  bestSellCityName: string;
+  bestSellPrice: number;
+  expectedMargin: number;
+  requiredCourses: string[];
+  missingCourses: string[];
+  lockReason: string | null;
+  note: string;
+};
+
+export type ServerCargoSummary = {
+  carriedTradeGoods: number;
+  currentCityLiquidationValue: number;
+  bestCurrentSale: ServerCitySellOffer | null;
+};
+
 export type ServerCityMarket = {
   cityId: string;
   name: string;
@@ -260,7 +301,11 @@ export type ServerCityMarket = {
   imports: string[];
   exports: string[];
   discountPercent: number;
+  sellBonusPercent: number;
   stock: ServerCityEconomyStock[];
+  sellOffers: ServerCitySellOffer[];
+  tradeOpportunities: ServerTradeOpportunity[];
+  cargoSummary: ServerCargoSummary;
 };
 
 export type ServerCitySpecialAction = {
@@ -294,6 +339,7 @@ export type ServerCityBlackMarket = {
   canOpen: boolean;
   lockReason: string | null;
   stock: ServerCityEconomyStock[];
+  sellOffers: ServerCitySellOffer[];
 };
 
 type CityEconomyBaseResponse = {
@@ -621,6 +667,19 @@ export function buyServerCityMarketItem(
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
+export function sellServerCityMarketItem(
+  sessionToken: string,
+  cityId: string,
+  itemId: string,
+  quantity: number,
+): Promise<ApiCityMarketResponse> {
+  return requestJson<Omit<ApiCityMarketResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/market/${encodeURIComponent(itemId)}/sell`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ quantity }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
 export function getServerCitySpecials(sessionToken: string, cityId: string): Promise<ApiCitySpecialsResponse> {
   return requestJson<Omit<ApiCitySpecialsResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/specials`, {
     method: "GET",
@@ -649,6 +708,19 @@ export function buyServerBlackMarketItem(
   quantity: number,
 ): Promise<ApiCityBlackMarketResponse> {
   return requestJson<Omit<ApiCityBlackMarketResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/black-market/${encodeURIComponent(itemId)}/buy`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ quantity }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function sellServerBlackMarketItem(
+  sessionToken: string,
+  cityId: string,
+  itemId: string,
+  quantity: number,
+): Promise<ApiCityBlackMarketResponse> {
+  return requestJson<Omit<ApiCityBlackMarketResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/black-market/${encodeURIComponent(itemId)}/sell`, {
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
     body: JSON.stringify({ quantity }),

@@ -201,3 +201,73 @@ export function getCitySpecialById(specialId) {
 export function getCityBlackMarket(cityId) {
   return CITY_BLACK_MARKETS[cityId] ?? CITY_BLACK_MARKETS.nexis;
 }
+
+function tradeGood({ itemId, sourceCityId, category, requiredCourses = [], sellPrices, note }) {
+  return { itemId, sourceCityId, category, requiredCourses, sellPrices, note };
+}
+
+function fenceGood({ itemId, price, requiredCourses = [], minimumStanding = 0, note }) {
+  return { itemId, price, requiredCourses, minimumStanding, note };
+}
+
+export const LEGAL_TRADE_GOODS = [
+  tradeGood({ itemId: "healing_tonic", sourceCityId: "west", category: "Potion import", sellPrices: { nexis: 118, west: 84, north: 142, east: 110, south: 145 }, note: "Port tonics move best toward healer and court cities." }),
+  tradeGood({ itemId: "restorative_elixir", sourceCityId: "west", category: "Premium potion", requiredCourses: ["world-geography"], sellPrices: { nexis: 350, west: 250, north: 410, east: 330, south: 430 }, note: "High-value imports need route literacy before vendors trust the paperwork." }),
+  tradeGood({ itemId: "foreign_token", sourceCityId: "west", category: "Foreign cargo marker", requiredCourses: ["world-geography"], sellPrices: { nexis: 205, west: 130, north: 198, east: 185, south: 235 }, note: "Highcourt and Nexis clerks pay for clean foreign introductions." }),
+  tradeGood({ itemId: "wild_herb", sourceCityId: "north", category: "Common herb", sellPrices: { nexis: 28, west: 34, north: 12, east: 26, south: 30 }, note: "Cheap Silverbough herbs fill basic apothecary demand elsewhere." }),
+  tradeGood({ itemId: "medicinal_herb", sourceCityId: "north", category: "Medicinal herb", sellPrices: { nexis: 62, west: 78, north: 34, east: 58, south: 72 }, note: "Blackharbor crews and Highcourt clinics both pay above northern source value." }),
+  tradeGood({ itemId: "rare_herb", sourceCityId: "north", category: "Rare herb", requiredCourses: ["world-geography"], sellPrices: { nexis: 145, west: 175, north: 95, east: 138, south: 165 }, note: "Rare northern stock benefits from geography-backed route confidence." }),
+  tradeGood({ itemId: "relic_note", sourceCityId: "north", category: "Relic paperwork", requiredCourses: ["world-geography"], sellPrices: { nexis: 178, west: 150, north: 105, east: 160, south: 190 }, note: "Relic notes sell to archives and permit desks, not random fruit stalls. Thankfully." }),
+  tradeGood({ itemId: "coal", sourceCityId: "east", category: "Forge fuel", sellPrices: { nexis: 65, west: 58, north: 72, east: 34, south: 62 }, note: "Silverbough ward boilers and Nexis workshops buy Ironhall coal above yard rates." }),
+  tradeGood({ itemId: "iron_ore", sourceCityId: "east", category: "Ore", sellPrices: { nexis: 94, west: 88, north: 80, east: 50, south: 96 }, note: "Nexis and Highcourt pay more for clean Ironhall ore shipments." }),
+  tradeGood({ itemId: "iron_ingot", sourceCityId: "east", category: "Refined metal", requiredCourses: ["practical-arithmetic"], sellPrices: { nexis: 158, west: 150, north: 145, east: 105, south: 174 }, note: "Ingot arbitrage requires arithmetic because metal ledgers are where hope goes to be itemized." }),
+  tradeGood({ itemId: "steel_ingot", sourceCityId: "east", category: "Premium metal", requiredCourses: ["practical-arithmetic"], sellPrices: { nexis: 288, west: 270, north: 260, east: 198, south: 320 }, note: "Highcourt commissions pay heavily for trusted steel." }),
+  tradeGood({ itemId: "vial_of_ink", sourceCityId: "south", category: "Legal supply", sellPrices: { nexis: 52, west: 58, north: 48, east: 44, south: 28 }, note: "Highcourt ink is cheap at court and useful everywhere bureaucracy has happened." }),
+  tradeGood({ itemId: "wax_seal", sourceCityId: "south", category: "Permit supply", sellPrices: { nexis: 84, west: 82, north: 74, east: 70, south: 48 }, note: "Seals travel well to offices that ran out and are pretending they planned ahead." }),
+  tradeGood({ itemId: "sealed_notice", sourceCityId: "south", category: "Formal notice", requiredCourses: ["civic-fundamentals"], sellPrices: { nexis: 165, west: 150, north: 142, east: 145, south: 98 }, note: "Formal notices are strongest in civic centers once the player understands the rules." }),
+  tradeGood({ itemId: "prestige_goods", sourceCityId: "south", category: "Luxury goods", requiredCourses: ["practical-arithmetic"], sellPrices: { nexis: 525, west: 540, north: 500, east: 485, south: 350 }, note: "Luxury arbitrage is readable after practical commerce math." }),
+  tradeGood({ itemId: "courier_satchel", sourceCityId: "west", category: "Travel gear", sellPrices: { nexis: 126, west: 84, north: 118, east: 122, south: 132 }, note: "Courier gear sells best where paperwork and travel collide." }),
+];
+
+export const BLACK_MARKET_FENCES = {
+  nexis: [
+    fenceGood({ itemId: "stolen_coin", price: 38, note: "Backroom coin buyers keep starter underworld sales small." }),
+    fenceGood({ itemId: "lockpick", price: 72, note: "Simple tools move quietly in the capital." }),
+    fenceGood({ itemId: "forged_document", price: 155, minimumStanding: 4, note: "Capital papers need trusted contacts." }),
+  ],
+  west: [
+    fenceGood({ itemId: "stolen_coin", price: 55, note: "Dockside fences like portable value." }),
+    fenceGood({ itemId: "lockpick_set", price: 170, note: "Underdock crews buy practical tools." }),
+    fenceGood({ itemId: "forged_document", price: 185, note: "Elastic cargo papers sell well in Blackharbor." }),
+    fenceGood({ itemId: "foreign_token", price: 205, note: "Foreign markers can be flipped through brokers." }),
+    fenceGood({ itemId: "restorative_elixir", price: 285, minimumStanding: 2, note: "Premium import fencing requires dock trust." }),
+  ],
+  north: [
+    fenceGood({ itemId: "ancient_fragment", price: 210, note: "Relic whispers buy fragments under the table." }),
+    fenceGood({ itemId: "relic_note", price: 185, note: "Catalog notes are valuable to the wrong collectors." }),
+    fenceGood({ itemId: "ward_shard", price: 245, minimumStanding: 4, note: "Restricted ward pieces need trusted scholar contacts." }),
+  ],
+  east: [
+    fenceGood({ itemId: "gear_cogs", price: 130, note: "Unofficial benches buy precision parts." }),
+    fenceGood({ itemId: "steel_brace", price: 260, minimumStanding: 4, note: "Restricted braces move through industrial side doors." }),
+    fenceGood({ itemId: "tempered_steel", price: 310, minimumStanding: 4, note: "Tempered stock needs quiet forge contacts." }),
+  ],
+  south: [
+    fenceGood({ itemId: "forged_seal_kit", price: 190, note: "Influence desks buy risky seal kits with very polite silence." }),
+    fenceGood({ itemId: "forged_document", price: 210, note: "Court-adjacent false papers are valuable and dangerous." }),
+    fenceGood({ itemId: "court_token", price: 260, minimumStanding: 4, note: "Introduction tokens require trusted Highcourt contacts." }),
+    fenceGood({ itemId: "prestige_goods", price: 430, minimumStanding: 4, note: "Prestige goods can be liquidated through quiet noble channels." }),
+  ],
+};
+
+export function getLegalTradeGoods() {
+  return LEGAL_TRADE_GOODS;
+}
+
+export function getLegalTradeGood(itemId) {
+  return LEGAL_TRADE_GOODS.find((entry) => entry.itemId === itemId) ?? null;
+}
+
+export function getBlackMarketFence(cityId) {
+  return BLACK_MARKET_FENCES[cityId] ?? BLACK_MARKET_FENCES.nexis;
+}

@@ -16,6 +16,8 @@ import {
   getBlackMarketForUser,
   getCityMarketForUser,
   getCitySpecialsForUser,
+  sellBlackMarketItemForUser,
+  sellCityMarketItemForUser,
   useCitySpecialForUser,
 } from "../services/cityEconomyService.js";
 
@@ -118,6 +120,15 @@ export async function buyCityMarketItem(req, res, next) {
   }
 }
 
+export async function sellCityMarketItem(req, res, next) {
+  try {
+    const result = await sellCityMarketItemForUser(req.auth.user, req.params.cityId, req.params.itemId, req.body?.quantity);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getCitySpecials(req, res, next) {
   try {
     const result = await getCitySpecialsForUser(req.auth.user, req.params.cityId);
@@ -148,6 +159,15 @@ export async function getBlackMarket(req, res, next) {
 export async function buyBlackMarketItem(req, res, next) {
   try {
     const result = await buyBlackMarketItemForUser(req.auth.user, req.params.cityId, req.params.itemId, req.body?.quantity);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function sellBlackMarketItem(req, res, next) {
+  try {
+    const result = await sellBlackMarketItemForUser(req.auth.user, req.params.cityId, req.params.itemId, req.body?.quantity);
     res.status(200).json(result);
   } catch (error) {
     next(error);

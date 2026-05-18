@@ -8,10 +8,13 @@ import {
 } from "../repositories/playerStateRepository.js";
 import { getCityDefinition, isValidCityId, normalizeCityId } from "../data/cityData.js";
 import {
+  getBlackMarketFence,
   getCityBlackMarket,
   getCityMarketProfile,
   getCitySpecialById,
   getCitySpecials,
+  getLegalTradeGood,
+  getLegalTradeGoods,
 } from "../data/cityEconomyData.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
 
@@ -182,6 +185,131 @@ function applyItems(player, items) {
   }
 }
 
+function getInventoryQuantity(runtimeState, itemId) {
+  return Math.max(0, Math.floor(asNumber(asRecord(runtimeState.player?.inventory)[itemId], 0)));
+}
+
+function removeItems(player, itemId, quantity) {
+  player.inventory = { ...asRecord(player.inventory) };
+  const owned = Math.max(0, Math.floor(asNumber(player.inventory[itemId], 0)));
+  if (owned < quantity) {
+    throw new HttpError(409, `You only have ${owned} of this item to sell.`, "CITY_MARKET_SELL_INSUFFICIENT_ITEM");
+  }
+  const nextQuantity = owned - quantity;
+  if (nextQuantity > 0) player.inventory[itemId] = nextQuantity;
+  else delete player.inventory[itemId];
+}
+
+function getLegalSellBonusPercent(runtimeState) {
+  const completed = new Set(getCompletedCourses(runtimeState));
+  let bonus = 0;
+  if (completed.has("practical-arithmetic")) bonus += 5;
+  if (completed.has("commerce-1") || completed.has("trade-1")) bonus += 3;
+  return bonus;
+}
+
+function applySellBonus(price, bonusPercent) {
+  return Math.max(1, Math.floor(asNumber(price, 1) * (1 + Math.max(0, bonusPercent) / 100)));
+}
+
+function getLegalSellPrice(good, cityId, runtimeState) {
+  const rawPrice = asNumber(asRecord(good.sellPrices)[cityId], 0);
+  if (rawPrice <= 0) return null;
+  return applySellBonus(rawPrice, getLegalSellBonusPercent(runtimeState));
+}
+
+function getBestLegalDestination(good, originCityId, runtimeState) {
+  let best = null;
+  for (const [cityId, rawPrice] of Object.entries(asRecord(good.sellPrices))) {
+    if (cityId === originCityId) continue;
+    const price = applySellBonus(rawPrice, getLegalSellBonusPercent(runtimeState));
+    if (!best || price > best.price) {
+      best = { cityId, cityName: getCityDefinition(cityId).name, price };
+    }
+  }
+  return best;
+}
+
+function serializeLegalSellOffer(good, runtimeState, context, quantity = 1) {
+  const ownedQuantity = getInventoryQuantity(runtimeState, good.itemId);
+  const missingCourses = getMissingCourses(runtimeState, good.requiredCourses ?? []);
+  const unitPrice = getLegalSellPrice(good, context.cityId, runtimeState);
+  const totalPrice = unitPrice ? unitPrice * quantity : 0;
+  const reasons = [];
+  if (context.inTransit) reasons.push("Finish current travel before selling local goods.");
+  if (!context.isCurrentCity) reasons.push(`Travel to ${context.city.name} to sell to this market.`);
+  if (unitPrice === null) reasons.push(`${context.city.name} is not buying this good right now.`);
+  if (ownedQuantity < quantity) reasons.push(`You have ${ownedQuantity}; selling ${quantity} requires more stock.`);
+  if (missingCourses.length) reasons.push(`Requires ${missingCourses.join(", ")} to sell this trade lot confidently.`);
+  const bestDestination = getBestLegalDestination(good, context.cityId, runtimeState);
+
+  return {
+    itemId: good.itemId,
+    category: good.category,
+    sourceCityId: good.sourceCityId,
+    sourceCityName: getCityDefinition(good.sourceCityId).name,
+    unitPrice: unitPrice ?? 0,
+    quantity,
+    totalPrice,
+    ownedQuantity,
+    requiredCourses: good.requiredCourses ?? [],
+    missingCourses,
+    note: good.note,
+    bestDestination,
+    canSell: reasons.length === 0,
+    lockReason: reasons[0] ?? null,
+  };
+}
+
+function getLegalSellOffers(runtimeState, context, quantity = 1) {
+  return getLegalTradeGoods()
+    .filter((good) => getInventoryQuantity(runtimeState, good.itemId) > 0)
+    .map((good) => serializeLegalSellOffer(good, runtimeState, context, Math.min(quantity, getInventoryQuantity(runtimeState, good.itemId))))
+    .sort((left, right) => right.unitPrice - left.unitPrice);
+}
+
+function getCargoSummary(runtimeState, context) {
+  const offers = getLegalSellOffers(runtimeState, context, 1);
+  const carriedTradeGoods = offers.reduce((total, offer) => total + offer.ownedQuantity, 0);
+  const currentCityLiquidationValue = offers.reduce((total, offer) => total + offer.unitPrice * offer.ownedQuantity, 0);
+  return {
+    carriedTradeGoods,
+    currentCityLiquidationValue,
+    bestCurrentSale: offers[0] ?? null,
+  };
+}
+
+function serializeTradeOpportunities(profile, runtimeState, discountPercent) {
+  const opportunities = [];
+  for (const stockItem of profile.stock) {
+    const good = getLegalTradeGood(stockItem.itemId);
+    if (!good) continue;
+    const buyPrice = applyDiscount(stockItem.price, discountPercent);
+    const bestDestination = getBestLegalDestination(good, profile.cityId, runtimeState);
+    if (!bestDestination) continue;
+    const missingCourses = getMissingCourses(runtimeState, good.requiredCourses ?? []);
+    opportunities.push({
+      itemId: good.itemId,
+      category: good.category,
+      buyCityId: profile.cityId,
+      buyCityName: getCityDefinition(profile.cityId).name,
+      buyPrice,
+      bestSellCityId: bestDestination.cityId,
+      bestSellCityName: bestDestination.cityName,
+      bestSellPrice: bestDestination.price,
+      expectedMargin: bestDestination.price - buyPrice,
+      requiredCourses: good.requiredCourses ?? [],
+      missingCourses,
+      lockReason: missingCourses.length ? `Requires ${missingCourses.join(", ")} to use this route cleanly.` : null,
+      note: good.note,
+    });
+  }
+  return opportunities
+    .filter((entry) => entry.expectedMargin > 0 || entry.missingCourses.length)
+    .sort((left, right) => right.expectedMargin - left.expectedMargin)
+    .slice(0, 6);
+}
+
 function applyGold(runtimeState, nextGold) {
   const player = runtimeState.player;
   const gold = Math.max(0, Math.floor(asNumber(nextGold, 0)));
@@ -280,7 +408,11 @@ function serializeMarketProfile(profile, runtimeState, quantity = 1) {
       imports: profile.imports,
       exports: profile.exports,
       discountPercent,
+      sellBonusPercent: getLegalSellBonusPercent(runtimeState),
       stock: profile.stock.map((entry) => serializeStockItem({ ...entry, price: applyDiscount(entry.price, discountPercent) }, runtimeState, context, quantity)),
+      sellOffers: getLegalSellOffers(runtimeState, context, quantity),
+      tradeOpportunities: serializeTradeOpportunities(profile, runtimeState, discountPercent),
+      cargoSummary: getCargoSummary(runtimeState, context),
     },
   };
 }
@@ -307,8 +439,46 @@ function serializeBlackMarket(blackMarket, runtimeState, quantity = 1) {
       canOpen,
       lockReason,
       stock: blackMarket.stock.map((entry) => serializeStockItem(entry, runtimeState, context, quantity, canOpen)),
+      sellOffers: getBlackMarketSellOffers(blackMarket, runtimeState, context, quantity, canOpen),
     },
   };
+}
+
+function serializeBlackMarketSellOffer(fenceItem, blackMarket, runtimeState, context, quantity = 1, marketOpen = true) {
+  const ownedQuantity = getInventoryQuantity(runtimeState, fenceItem.itemId);
+  const requiredCourses = [...(blackMarket.requiredCourses ?? []), ...(fenceItem.requiredCourses ?? [])];
+  const missingCourses = getMissingCourses(runtimeState, requiredCourses);
+  const minimumStanding = Math.max(Math.floor(asNumber(blackMarket.minimumStanding, 0)), Math.floor(asNumber(fenceItem.minimumStanding, 0)));
+  const standingMissing = Math.max(0, minimumStanding - context.standing.value);
+  const unitPrice = Math.max(1, Math.floor(asNumber(fenceItem.price, 1)));
+  const reasons = [];
+  if (!marketOpen) reasons.push(blackMarket.lockReason ?? "This under-market is locked.");
+  if (context.inTransit) reasons.push("Finish current travel before fencing goods.");
+  if (!context.isCurrentCity) reasons.push(`Travel to ${context.city.name} to use this under-market.`);
+  if (ownedQuantity < quantity) reasons.push(`You have ${ownedQuantity}; fencing ${quantity} requires more stock.`);
+  if (standingMissing > 0) reasons.push(`Requires ${minimumStanding} ${context.city.name} standing. Current standing: ${context.standing.value}.`);
+  if (missingCourses.length) reasons.push(`Requires ${missingCourses.join(", ")} to fence this safely.`);
+  return {
+    itemId: fenceItem.itemId,
+    unitPrice,
+    quantity,
+    totalPrice: unitPrice * quantity,
+    ownedQuantity,
+    minimumStanding,
+    requiredCourses,
+    missingCourses,
+    standingMissing,
+    note: fenceItem.note,
+    canSell: reasons.length === 0,
+    lockReason: reasons[0] ?? null,
+  };
+}
+
+function getBlackMarketSellOffers(blackMarket, runtimeState, context, quantity = 1, marketOpen = true) {
+  return getBlackMarketFence(blackMarket.cityId)
+    .filter((entry) => getInventoryQuantity(runtimeState, entry.itemId) > 0)
+    .map((entry) => serializeBlackMarketSellOffer(entry, blackMarket, runtimeState, context, Math.min(quantity, getInventoryQuantity(runtimeState, entry.itemId)), marketOpen))
+    .sort((left, right) => right.unitPrice - left.unitPrice);
 }
 
 function serializeSpecial(special, runtimeState, now = Date.now()) {
@@ -403,6 +573,38 @@ export async function buyCityMarketItemForUser(user, cityId, itemId, quantityInp
   });
 }
 
+export async function sellCityMarketItemForUser(user, cityId, itemId, quantityInput) {
+  return withTransaction(async (client) => {
+    const quantity = validateQuantity(quantityInput);
+    const { runtimeState } = await loadRuntimeState(client, user);
+    const profile = getCityMarketProfile(assertCity(cityId));
+    const good = getLegalTradeGood(itemId);
+    if (!good) throw new HttpError(404, "This item is not accepted by legal trade buyers.", "CITY_MARKET_SELL_ITEM_NOT_FOUND");
+    const context = getEconomyContext(runtimeState, profile.cityId);
+    const offer = serializeLegalSellOffer(good, runtimeState, context, quantity);
+    if (!offer.canSell) throw new HttpError(409, offer.lockReason ?? "This item cannot be sold here right now.", "CITY_MARKET_SELL_BLOCKED");
+    removeItems(runtimeState.player, itemId, quantity);
+    applyGold(runtimeState, asNumber(runtimeState.player.gold, 0) + offer.totalPrice);
+    const now = Date.now();
+    runtimeState.player.counters = {
+      ...asRecord(runtimeState.player.counters),
+      cityMarketSales: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.cityMarketSales, 0) + quantity)),
+      firstCityMarketSaleAt: runtimeState.player.counters?.firstCityMarketSaleAt ?? now,
+      lastCityMarketSaleAt: now,
+    };
+    if (!runtimeState.player.counters.firstTradeSaleChronicleAt) {
+      runtimeState.player.counters.firstTradeSaleChronicleAt = now;
+      addLegacyEntry(runtimeState, { id: `trade_sale_${user.internalId}_${now}`, title: "First Trade Sale", summary: `Sold trade goods in ${context.city.name}.`, kind: "trade", awardedAt: now });
+    }
+    const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+    return {
+      playerState,
+      ...serializeMarketProfile(profile, buildMutableRuntimeState(user, playerState), quantity),
+      message: `Sold ${itemId} x${quantity} for ${offer.totalPrice} gold in ${context.city.name}.`,
+    };
+  });
+}
+
 export async function getCitySpecialsForUser(user, cityId) {
   return withTransaction(async (client) => {
     const { playerState, runtimeState } = await loadRuntimeState(client, user);
@@ -449,6 +651,35 @@ export async function useCitySpecialForUser(user, specialId) {
       playerState,
       ...serializeSpecials(special.cityId, buildMutableRuntimeState(user, playerState), now),
       message: `${special.name} completed. Rewards delivered and local standing updated.`,
+    };
+  });
+}
+
+export async function sellBlackMarketItemForUser(user, cityId, itemId, quantityInput) {
+  return withTransaction(async (client) => {
+    const quantity = validateQuantity(quantityInput);
+    const { runtimeState } = await loadRuntimeState(client, user);
+    const blackMarket = getCityBlackMarket(assertCity(cityId));
+    const context = getEconomyContext(runtimeState, blackMarket.cityId);
+    const marketState = serializeBlackMarket(blackMarket, runtimeState, quantity);
+    const fenceItem = getBlackMarketFence(blackMarket.cityId).find((entry) => entry.itemId === itemId);
+    if (!fenceItem) throw new HttpError(404, "This under-market is not buying that item.", "CITY_BLACK_MARKET_SELL_ITEM_NOT_FOUND");
+    const offer = serializeBlackMarketSellOffer(fenceItem, blackMarket, runtimeState, context, quantity, marketState.blackMarket.canOpen);
+    if (!offer.canSell) throw new HttpError(409, offer.lockReason ?? "This item cannot be fenced here right now.", "CITY_BLACK_MARKET_SELL_BLOCKED");
+    removeItems(runtimeState.player, itemId, quantity);
+    applyGold(runtimeState, asNumber(runtimeState.player.gold, 0) + offer.totalPrice);
+    const now = Date.now();
+    runtimeState.player.counters = {
+      ...asRecord(runtimeState.player.counters),
+      blackMarketSales: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.blackMarketSales, 0) + quantity)),
+      firstBlackMarketSaleAt: runtimeState.player.counters?.firstBlackMarketSaleAt ?? now,
+      lastBlackMarketSaleAt: now,
+    };
+    const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+    return {
+      playerState,
+      ...serializeBlackMarket(blackMarket, buildMutableRuntimeState(user, playerState), quantity),
+      message: `Fenced ${itemId} x${quantity} for ${offer.totalPrice} gold in ${context.city.name}.`,
     };
   });
 }
