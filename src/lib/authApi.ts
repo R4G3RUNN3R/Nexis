@@ -33,6 +33,7 @@ export type ServerPlayerState = {
     civicEmployment?: Record<string, unknown>;
     travel?: Record<string, unknown>;
     legacy?: Record<string, unknown>;
+    citySpecials?: Record<string, unknown>;
   };
   createdAt: number;
   updatedAt: number;
@@ -234,6 +235,86 @@ export type ApiCityAcademyResponse =
       academy: ServerCityAcademy;
       message?: string;
     }
+  | ApiFailure;
+
+export type ServerCityEconomyStock = {
+  itemId: string;
+  price: number;
+  quantity: number;
+  totalPrice: number;
+  tier: string;
+  source: string;
+  description: string;
+  minimumStanding: number;
+  requiredCourses: string[];
+  missingCourses: string[];
+  standingMissing: number;
+  canBuy: boolean;
+  lockReason: string | null;
+};
+
+export type ServerCityMarket = {
+  cityId: string;
+  name: string;
+  summary: string;
+  imports: string[];
+  exports: string[];
+  discountPercent: number;
+  stock: ServerCityEconomyStock[];
+};
+
+export type ServerCitySpecialAction = {
+  id: string;
+  cityId: string;
+  name: string;
+  summary: string;
+  actionLabel: string;
+  costGold: number;
+  minimumStanding: number;
+  requiredCourses: string[];
+  missingCourses: string[];
+  standingMissing: number;
+  cooldownMs: number;
+  cooldownUntil: number | null;
+  cooldownRemainingMs: number;
+  reward: Record<string, unknown>;
+  runs: number;
+  canUse: boolean;
+  lockReason: string | null;
+};
+
+export type ServerCityBlackMarket = {
+  cityId: string;
+  name: string;
+  summary: string;
+  minimumStanding: number;
+  requiredCourses: string[];
+  missingCourses: string[];
+  standingMissing: number;
+  canOpen: boolean;
+  lockReason: string | null;
+  stock: ServerCityEconomyStock[];
+};
+
+type CityEconomyBaseResponse = {
+  playerState: ServerPlayerState;
+  city: { id: string; name: string; role: string };
+  currentCityId: string;
+  isCurrentCity: boolean;
+  standing: ServerCityStanding;
+  message?: string;
+};
+
+export type ApiCityMarketResponse =
+  | (CityEconomyBaseResponse & { ok: true; market: ServerCityMarket })
+  | ApiFailure;
+
+export type ApiCitySpecialsResponse =
+  | (CityEconomyBaseResponse & { ok: true; specials: ServerCitySpecialAction[] })
+  | ApiFailure;
+
+export type ApiCityBlackMarketResponse =
+  | (CityEconomyBaseResponse & { ok: true; blackMarket: ServerCityBlackMarket })
   | ApiFailure;
 
 export type ApiChronicleStatusResponse =
@@ -518,6 +599,60 @@ export function startServerCityAcademy(sessionToken: string, academyId: string):
 
 export function completeServerCityAcademy(sessionToken: string, academyId: string): Promise<ApiCityAcademyResponse> {
   return runServerCityAcademyAction(sessionToken, academyId, "complete");
+}
+
+export function getServerCityMarket(sessionToken: string, cityId: string): Promise<ApiCityMarketResponse> {
+  return requestJson<Omit<ApiCityMarketResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/market`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function buyServerCityMarketItem(
+  sessionToken: string,
+  cityId: string,
+  itemId: string,
+  quantity: number,
+): Promise<ApiCityMarketResponse> {
+  return requestJson<Omit<ApiCityMarketResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/market/${encodeURIComponent(itemId)}/buy`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ quantity }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerCitySpecials(sessionToken: string, cityId: string): Promise<ApiCitySpecialsResponse> {
+  return requestJson<Omit<ApiCitySpecialsResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/specials`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function useServerCitySpecial(sessionToken: string, specialId: string): Promise<ApiCitySpecialsResponse> {
+  return requestJson<Omit<ApiCitySpecialsResponse & { ok: true }, "ok">>(`/api/cities/specials/${encodeURIComponent(specialId)}/use`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerBlackMarket(sessionToken: string, cityId: string): Promise<ApiCityBlackMarketResponse> {
+  return requestJson<Omit<ApiCityBlackMarketResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/black-market`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function buyServerBlackMarketItem(
+  sessionToken: string,
+  cityId: string,
+  itemId: string,
+  quantity: number,
+): Promise<ApiCityBlackMarketResponse> {
+  return requestJson<Omit<ApiCityBlackMarketResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/black-market/${encodeURIComponent(itemId)}/buy`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ quantity }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
 export function startServerTravel(

@@ -74,13 +74,13 @@ const CITY_HUBS: Record<WorldCityId, CityHubContent> = {
     },
     special: {
       name: "City Board Bureau",
-      summary: "Starter notices, public work, and civic contracts remain centered here.",
+      summary: "Registry packets, dispatch vouchers, public work, and civic services remain centered here.",
       status: "open",
     },
     services: {
       market: { label: "Nexis City Market", route: "/market", status: "open", summary: "Legal capital market." },
       people: { label: "People", route: "/city#people", status: "open", summary: "Current public presence in the city." },
-      blackMarket: { label: "Black Market", route: "/black-market", status: "locked", summary: "Underworld access is gated.", lockReason: "Requires Shadowcraft or black market access unlocks." },
+      blackMarket: { label: "Black Market", route: "/black-market", status: "locked", summary: "Underworld access is gated.", lockReason: "Requires Street Survival and 4 Nexis City standing." },
       citySpecial: { label: "City Special", route: "/city#special", status: "open", summary: "City Board Bureau." },
       academy: { label: "Academy", route: "/city#academy", status: "open", summary: "Civic Academy presence." },
       travel: { label: "Travel", route: "/travel", status: "open", summary: "Capital travel gate." },
@@ -88,7 +88,7 @@ const CITY_HUBS: Record<WorldCityId, CityHubContent> = {
       guild: { label: "Guild", route: "/guilds", status: "open", summary: "Guild management." },
     },
     lockedContent: [
-      { label: "Black Market", reason: "Underworld trade requires shady access.", unlockPath: "Street Survival -> Shadowcraft / black market unlocks" },
+      { label: "Black Market", reason: "Underworld trade requires Street Survival and local standing outside Blackharbor.", unlockPath: "Street Survival + 4 local standing" },
     ],
   },
   west: {
@@ -115,7 +115,7 @@ const CITY_HUBS: Record<WorldCityId, CityHubContent> = {
     },
     special: {
       name: "Harbor Exchange",
-      summary: "Cargo escort flavor, potion import notices, and smuggling pressure are surfaced here for future contract loops.",
+      summary: "Potion import lots and cargo broker introductions give Blackharbor a direct port-service loop.",
       status: "open",
     },
     services: {
@@ -156,13 +156,13 @@ const CITY_HUBS: Record<WorldCityId, CityHubContent> = {
     },
     special: {
       name: "Conservatory Petition Desk",
-      summary: "Relic sightings, herb requests, and healing petitions are organized for later academy missions.",
+      summary: "Shrine petitions and relic appraisal tokens turn Silverbough standing into practical supplies.",
       status: "open",
     },
     services: {
       market: { label: "Silverbough Market", route: "/market", status: "open", summary: "Herbs, relics, and healing tools." },
       people: { label: "People", route: "/city#people", status: "open", summary: "Public city presence." },
-      blackMarket: { label: "Black Market", status: "locked", summary: "No open under-market.", lockReason: "Silverbough keeps illegal relic trade sealed behind future discovery gates." },
+      blackMarket: { label: "Black Market", status: "locked", summary: "No open under-market.", lockReason: "Silverbough seals illicit relic trade behind World Geography and trusted local standing." },
       citySpecial: { label: "City Special", route: "/city#special", status: "open", summary: "Conservatory petitions." },
       academy: { label: "Academy", route: "/city#academy", status: "locked", summary: "Arcane Conservatory.", lockReason: "Requires World Geography." },
       travel: { label: "Travel", route: "/travel", status: "open", summary: "Northern routes." },
@@ -197,13 +197,13 @@ const CITY_HUBS: Record<WorldCityId, CityHubContent> = {
     },
     special: {
       name: "Contract Forge",
-      summary: "Material orders and labor contracts are staged here for future crafting and city-work loops.",
+      summary: "Material requisitions and forge commission slots convert Ironhall access into real workshop stock.",
       status: "open",
     },
     services: {
       market: { label: "Ironhall Market", route: "/market", status: "open", summary: "Forge tools and materials." },
       people: { label: "People", route: "/city#people", status: "open", summary: "Public city presence." },
-      blackMarket: { label: "Black Market", status: "locked", summary: "No open under-market.", lockReason: "Industrial sabotage channels are future covert content." },
+      blackMarket: { label: "Black Market", status: "locked", summary: "No open under-market.", lockReason: "Industrial backchannels require Practical Arithmetic, Street Survival, and trusted local standing." },
       citySpecial: { label: "City Special", route: "/city#special", status: "open", summary: "Contract Forge." },
       academy: { label: "Academy", route: "/city#academy", status: "locked", summary: "Enginewright School.", lockReason: "Requires Practical Arithmetic." },
       travel: { label: "Travel", route: "/travel", status: "open", summary: "Forge-road departures." },
@@ -238,13 +238,13 @@ const CITY_HUBS: Record<WorldCityId, CityHubContent> = {
     },
     special: {
       name: "Permit Court",
-      summary: "Prestige, filings, and legal permissions are surfaced here for future title and organization loops.",
+      summary: "Legal seal packets and noble introductions turn Highcourt standing into useful permit-facing goods.",
       status: "open",
     },
     services: {
       market: { label: "Highcourt Market", route: "/market", status: "open", summary: "Permits and prestige goods." },
       people: { label: "People", route: "/city#people", status: "open", summary: "Public city presence." },
-      blackMarket: { label: "Black Market", status: "locked", summary: "No public under-market.", lockReason: "Highcourt covert influence requires future legal/intrigue unlocks." },
+      blackMarket: { label: "Black Market", status: "locked", summary: "No public under-market.", lockReason: "Highcourt covert influence requires Civic Fundamentals and trusted local standing." },
       citySpecial: { label: "City Special", route: "/city#special", status: "open", summary: "Permit Court." },
       academy: { label: "Academy", route: "/city#academy", status: "locked", summary: "Rhetoric and Statecraft Lyceum.", lockReason: "Requires Civic Fundamentals." },
       travel: { label: "Travel", route: "/travel", status: "open", summary: "Diplomatic routes." },

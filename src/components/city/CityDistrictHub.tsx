@@ -14,10 +14,13 @@ import {
   getServerCityAcademy,
   getServerCityContracts,
   getServerCityPeople,
+  getServerCitySpecials,
   refreshServerCityContract,
   startServerCityAcademy,
+  useServerCitySpecial,
   type ServerCityAcademy,
   type ServerCityContract,
+  type ServerCitySpecialAction,
   type ServerCityOccupant,
   type ServerCityPopulation,
   type ServerCityStanding,
@@ -192,6 +195,55 @@ function ContractCard({
   );
 }
 
+function formatSpecialReward(action: ServerCitySpecialAction) {
+  const reward = action.reward as {
+    items?: Array<{ itemId?: string; label?: string; quantity?: number }>;
+    experience?: number;
+    cityStanding?: number;
+  };
+  const parts: string[] = [];
+  for (const item of reward.items ?? []) {
+    parts.push(`${item.quantity ?? 1} ${item.label ?? item.itemId ?? "item"}`);
+  }
+  if (reward.experience) parts.push(`${reward.experience} XP`);
+  if (reward.cityStanding) parts.push(`+${reward.cityStanding} standing`);
+  return parts.length ? parts.join(" | ") : "Local benefit";
+}
+
+function formatCooldown(ms: number) {
+  if (ms <= 0) return "Ready";
+  const minutes = Math.ceil(ms / 60000);
+  return `${minutes}m cooldown`;
+}
+
+function SpecialActionCard({
+  action,
+  busy,
+  onUse,
+}: {
+  action: ServerCitySpecialAction;
+  busy: boolean;
+  onUse: (specialId: string) => void;
+}) {
+  const disabled = busy || !action.canUse;
+  return (
+    <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <strong>{action.name}</strong>
+        <span style={{ color: action.canUse ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{action.canUse ? "Available" : "Locked"}</span>
+      </div>
+      <div style={{ color: "#b7c3cf", fontSize: 13 }}>{action.summary}</div>
+      <div style={{ color: "#9fb0bf", fontSize: 12 }}>Cost: {action.costGold} gold | Reward: {formatSpecialReward(action)}</div>
+      <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing required: {action.minimumStanding} | Uses: {action.runs} | {formatCooldown(action.cooldownRemainingMs)}</div>
+      {action.requiredCourses.length ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Courses: {action.requiredCourses.join(" | ")}</div> : null}
+      {action.lockReason ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{action.lockReason}</div> : null}
+      <button type="button" disabled={disabled} onClick={() => onUse(action.id)} style={actionButtonStyle(disabled)}>
+        {busy ? "Working..." : action.actionLabel}
+      </button>
+    </div>
+  );
+}
+
 function AcademyPanel({
   academy,
   fallbackName,
@@ -287,6 +339,10 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const [academyError, setAcademyError] = useState<string | null>(null);
   const [academyMessage, setAcademyMessage] = useState<string | null>(null);
   const [academyLoading, setAcademyLoading] = useState(false);
+  const [specials, setSpecials] = useState<ServerCitySpecialAction[]>([]);
+  const [specialsError, setSpecialsError] = useState<string | null>(null);
+  const [specialsMessage, setSpecialsMessage] = useState<string | null>(null);
+  const [specialsLoading, setSpecialsLoading] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
@@ -333,26 +389,33 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     async function loadCityGameplay() {
       setContractsMessage(null);
       setAcademyMessage(null);
+      setSpecialsMessage(null);
       if (authSource !== "server" || !serverSessionToken) {
         setContracts([]);
         setStanding(null);
         setAcademy(null);
+        setSpecials([]);
         setContractsError("Sign in through the live server session to use local contracts.");
         setAcademyError("Sign in through the live server session to use academy study.");
+        setSpecialsError("Sign in through the live server session to use city special actions.");
         return;
       }
 
       setContractsLoading(true);
       setAcademyLoading(true);
+      setSpecialsLoading(true);
       setContractsError(null);
       setAcademyError(null);
-      const [contractResult, academyResult] = await Promise.all([
+      setSpecialsError(null);
+      const [contractResult, academyResult, specialsResult] = await Promise.all([
         getServerCityContracts(serverSessionToken, city.id),
         getServerCityAcademy(serverSessionToken, city.id),
+        getServerCitySpecials(serverSessionToken, city.id),
       ]);
       if (cancelled) return;
       setContractsLoading(false);
       setAcademyLoading(false);
+      setSpecialsLoading(false);
 
       if (contractResult.ok) {
         setContracts(contractResult.contracts);
@@ -368,6 +431,13 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
       } else {
         setAcademy(null);
         setAcademyError(academyResult.error);
+      }
+
+      if (specialsResult.ok) {
+        setSpecials(specialsResult.specials);
+      } else {
+        setSpecials([]);
+        setSpecialsError(specialsResult.error);
       }
     }
 
@@ -414,6 +484,23 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     }
     setAcademy(result.academy);
     setAcademyMessage(result.message ?? "Academy state updated.");
+    await refreshServerState();
+  }
+
+  async function runSpecialAction(specialId: string) {
+    if (!serverSessionToken) return;
+    setBusyAction(`special:${specialId}`);
+    setSpecialsMessage(null);
+    setSpecialsError(null);
+    const result = await useServerCitySpecial(serverSessionToken, specialId);
+    setBusyAction(null);
+    if (!result.ok) {
+      setSpecialsError(result.error);
+      return;
+    }
+    setSpecials(result.specials);
+    setStanding(result.standing);
+    setSpecialsMessage(result.message ?? "City special completed.");
     await refreshServerState();
   }
 
@@ -528,6 +615,17 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
           <div id="special" style={{ display: "grid", gap: 10 }}>
             <strong>{hub.special.name}</strong>
             <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.special.summary}</p>
+            {specialsLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking local services...</div> : null}
+            {specialsError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{specialsError}</div> : null}
+            {specialsMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{specialsMessage}</div> : null}
+            {specials.length ? specials.map((action) => (
+              <SpecialActionCard
+                key={action.id}
+                action={action}
+                busy={busyAction === `special:${action.id}`}
+                onUse={runSpecialAction}
+              />
+            )) : null}
             <ServiceLink service={hub.services.citySpecial} />
           </div>
         </ContentPanel>

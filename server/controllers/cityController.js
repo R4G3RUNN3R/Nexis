@@ -10,6 +10,15 @@ import {
   startCityAcademyForUser,
 } from "../services/cityService.js";
 
+import {
+  buyBlackMarketItemForUser,
+  buyCityMarketItemForUser,
+  getBlackMarketForUser,
+  getCityMarketForUser,
+  getCitySpecialsForUser,
+  useCitySpecialForUser,
+} from "../services/cityEconomyService.js";
+
 export async function getCityPeople(req, res, next) {
   try {
     const result = await getCityPeopleForUser(req.auth.user, req.params.cityId);
@@ -85,6 +94,60 @@ export async function startCityAcademy(req, res, next) {
 export async function completeCityAcademy(req, res, next) {
   try {
     const result = await completeCityAcademyForUser(req.auth.user, req.params.academyId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCityMarket(req, res, next) {
+  try {
+    const result = await getCityMarketForUser(req.auth.user, req.params.cityId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function buyCityMarketItem(req, res, next) {
+  try {
+    const result = await buyCityMarketItemForUser(req.auth.user, req.params.cityId, req.params.itemId, req.body?.quantity);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCitySpecials(req, res, next) {
+  try {
+    const result = await getCitySpecialsForUser(req.auth.user, req.params.cityId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function useCitySpecial(req, res, next) {
+  try {
+    const result = await useCitySpecialForUser(req.auth.user, req.params.specialId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getBlackMarket(req, res, next) {
+  try {
+    const result = await getBlackMarketForUser(req.auth.user, req.params.cityId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function buyBlackMarketItem(req, res, next) {
+  try {
+    const result = await buyBlackMarketItemForUser(req.auth.user, req.params.cityId, req.params.itemId, req.body?.quantity);
     res.status(200).json(result);
   } catch (error) {
     next(error);

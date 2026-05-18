@@ -83,6 +83,13 @@ export const ITEM_CATALOGUE: Record<string, ItemDefinition> = {
   alchemists_notes: { name: "Alchemist's Notes", category: "Alchemy", description: "Field notes from someone who probably exploded only once." },
   catalyst_powder: { name: "Catalyst Powder", category: "Alchemy", description: "Reactive dust for brews, devices, and very poor impulse control." },
   philosophers_salt: { name: "Philosopher's Salt", category: "Alchemy", description: "Rare crystalline salt reserved for elite compounds and worse decisions." },
+  ledger_page: { name: "Ledger Page", category: "Document", description: "Registry-grade ledger stock for civic audits and contract paperwork." },
+  sealed_notice: { name: "Sealed Notice", category: "Document", description: "Official notice packet used by watch desks, courts, and dispatch offices." },
+  foreign_token: { name: "Foreign Token", category: "Valuables", description: "Dock-broker token used to prove a cargo introduction is not imaginary." },
+  relic_note: { name: "Relic Note", category: "Relic", description: "Catalog note tied to academy-adjacent relic appraisal work." },
+  ward_shard: { name: "Ward Shard", category: "Relic", description: "Restricted ward fragment prized by Silverbough scholars and terrible planners." },
+  steel_brace: { name: "Steel Brace", category: "Refined Material", description: "Industrial brace stock used in heavier forge and construction commissions." },
+  court_token: { name: "Court Token", category: "Luxury", description: "Formal introduction token with just enough prestige to open better doors." },
 };
 
 export const ITEM_OPTIONS = Object.entries(ITEM_CATALOGUE)

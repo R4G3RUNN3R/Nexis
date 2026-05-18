@@ -2,19 +2,31 @@ import { Router } from "express";
 import { requireSession } from "../middleware/requireSession.js";
 import {
   acceptCityContract,
+  buyBlackMarketItem,
+  buyCityMarketItem,
   claimCityContract,
   completeCityAcademy,
   completeCityContract,
+  getBlackMarket,
   getCityAcademy,
   getCityContracts,
+  getCityMarket,
   getCityPeople,
+  getCitySpecials,
   refreshCityContract,
   startCityAcademy,
+  useCitySpecial,
 } from "../controllers/cityController.js";
 
 const router = Router();
 
 router.get("/cities/:cityId/people", requireSession, getCityPeople);
+router.get("/cities/:cityId/market", requireSession, getCityMarket);
+router.post("/cities/:cityId/market/:itemId/buy", requireSession, buyCityMarketItem);
+router.get("/cities/:cityId/specials", requireSession, getCitySpecials);
+router.post("/cities/specials/:specialId/use", requireSession, useCitySpecial);
+router.get("/cities/:cityId/black-market", requireSession, getBlackMarket);
+router.post("/cities/:cityId/black-market/:itemId/buy", requireSession, buyBlackMarketItem);
 router.get("/cities/:cityId/contracts", requireSession, getCityContracts);
 router.post("/cities/contracts/:contractId/accept", requireSession, acceptCityContract);
 router.post("/cities/contracts/:contractId/complete", requireSession, completeCityContract);
