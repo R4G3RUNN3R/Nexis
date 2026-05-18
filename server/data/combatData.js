@@ -7,6 +7,7 @@ export const NPC_OPPONENTS = {
     level: 1,
     health: 70,
     battleStats: { strength: 8, defense: 8, speed: 8, dexterity: 8 },
+    lootFamily: "arena",
     reward: { gold: 18, experience: 16, skillXp: 12 },
   },
   road_cutpurse: {
@@ -17,7 +18,8 @@ export const NPC_OPPONENTS = {
     level: 1,
     health: 68,
     battleStats: { strength: 9, defense: 7, speed: 12, dexterity: 12 },
-    reward: { gold: 24, experience: 20, skillXp: 12, item: { itemId: "rations", label: "Rations" } },
+    lootFamily: "bandit",
+    reward: { gold: 24, experience: 20, skillXp: 12, item: { itemId: "rations", label: "Travel Rations" } },
   },
   dock_bruiser: {
     id: "dock_bruiser",
@@ -27,7 +29,8 @@ export const NPC_OPPONENTS = {
     level: 2,
     health: 92,
     battleStats: { strength: 14, defense: 12, speed: 9, dexterity: 9 },
-    reward: { gold: 34, experience: 28, skillXp: 14, item: { itemId: "rope", label: "Rope" } },
+    lootFamily: "pirate",
+    reward: { gold: 34, experience: 28, skillXp: 14, item: { itemId: "rope_kit", label: "Rope Kit" } },
   },
   ward_stray: {
     id: "ward_stray",
@@ -37,6 +40,7 @@ export const NPC_OPPONENTS = {
     level: 2,
     health: 86,
     battleStats: { strength: 11, defense: 10, speed: 13, dexterity: 12 },
+    lootFamily: "beast",
     reward: { gold: 28, experience: 30, skillXp: 14, item: { itemId: "wild_herb", label: "Wild Herb" } },
   },
   forge_rowdy: {
@@ -47,6 +51,7 @@ export const NPC_OPPONENTS = {
     level: 2,
     health: 96,
     battleStats: { strength: 15, defense: 14, speed: 8, dexterity: 8 },
+    lootFamily: "bandit",
     reward: { gold: 32, experience: 28, skillXp: 14, item: { itemId: "coal", label: "Coal" } },
   },
   court_challenger: {
@@ -57,7 +62,20 @@ export const NPC_OPPONENTS = {
     level: 2,
     health: 88,
     battleStats: { strength: 10, defense: 12, speed: 13, dexterity: 14 },
+    lootFamily: "city_enforcer",
     reward: { gold: 38, experience: 30, skillXp: 14, item: { itemId: "wax_seal", label: "Wax Seal" } },
+  },
+
+  relic_guardian: {
+    id: "relic_guardian",
+    name: "Relic Guardian",
+    tier: 3,
+    summary: "A warded construct whose patience expired several centuries ago.",
+    level: 4,
+    health: 118,
+    battleStats: { strength: 16, defense: 18, speed: 10, dexterity: 12 },
+    lootFamily: "relic_guardian",
+    reward: { gold: 46, experience: 42, skillXp: 18 },
   },
   arena_veteran: {
     id: "arena_veteran",
@@ -67,6 +85,7 @@ export const NPC_OPPONENTS = {
     level: 4,
     health: 126,
     battleStats: { strength: 18, defense: 17, speed: 16, dexterity: 16 },
+    lootFamily: "arena",
     reward: { gold: 55, experience: 44, skillXp: 18 },
   },
 };

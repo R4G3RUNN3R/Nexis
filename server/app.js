@@ -13,6 +13,7 @@ import adminOrganizationRoutes from "./routes/adminOrganizationRoutes.js";
 import skillRoutes from "./routes/skillRoutes.js";
 import arenaCombatRoutes from "./routes/arenaCombatRoutes.js";
 import duelRoutes from "./routes/duelRoutes.js";
+import itemRoutes from "./routes/itemRoutes.js";
 import { DatabaseUnavailableError, HttpError } from "./lib/errors.js";
 
 const ROUTE_MODULES = [
@@ -28,6 +29,7 @@ const ROUTE_MODULES = [
   skillRoutes,
   arenaCombatRoutes,
   duelRoutes,
+  itemRoutes,
   adminRoutes,
   adminOrganizationRoutes,
 ];

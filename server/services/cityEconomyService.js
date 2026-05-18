@@ -17,6 +17,7 @@ import {
   getLegalTradeGoods,
 } from "../data/cityEconomyData.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
+import { getItemDisplayName, getItemSummary } from "../data/itemData.js";
 
 const MAX_PURCHASE_QUANTITY = 99;
 const CITY_STANDING_TIERS = [
@@ -245,6 +246,7 @@ function serializeLegalSellOffer(good, runtimeState, context, quantity = 1) {
 
   return {
     itemId: good.itemId,
+    item: getItemSummary(good.itemId),
     category: good.category,
     sourceCityId: good.sourceCityId,
     sourceCityName: getCityDefinition(good.sourceCityId).name,
@@ -290,6 +292,7 @@ function serializeTradeOpportunities(profile, runtimeState, discountPercent) {
     const missingCourses = getMissingCourses(runtimeState, good.requiredCourses ?? []);
     opportunities.push({
       itemId: good.itemId,
+      item: getItemSummary(good.itemId),
       category: good.category,
       buyCityId: profile.cityId,
       buyCityName: getCityDefinition(profile.cityId).name,
@@ -367,12 +370,13 @@ function serializeStockItem(stockItem, runtimeState, context, quantity = 1, mark
 
   return {
     itemId: stockItem.itemId,
+    item: getItemSummary(stockItem.itemId),
     price,
     quantity,
     totalPrice,
     tier: stockItem.tier ?? "core",
     source: stockItem.source ?? "local",
-    description: stockItem.description ?? "Local stock.",
+    description: stockItem.description ?? getItemSummary(stockItem.itemId)?.shortDescription ?? "Local stock.",
     minimumStanding,
     requiredCourses: stockItem.requiredCourses ?? [],
     missingCourses,
@@ -460,6 +464,7 @@ function serializeBlackMarketSellOffer(fenceItem, blackMarket, runtimeState, con
   if (missingCourses.length) reasons.push(`Requires ${missingCourses.join(", ")} to fence this safely.`);
   return {
     itemId: fenceItem.itemId,
+    item: getItemSummary(fenceItem.itemId),
     unitPrice,
     quantity,
     totalPrice: unitPrice * quantity,
@@ -568,7 +573,7 @@ export async function buyCityMarketItemForUser(user, cityId, itemId, quantityInp
     return {
       playerState,
       ...serializeMarketProfile(profile, buildMutableRuntimeState(user, playerState), quantity),
-      message: `Purchased ${stockItem.itemId} x${quantity} for ${purchase.totalPrice} gold.`,
+      message: `Purchased ${getItemDisplayName(stockItem.itemId)} x${quantity} for ${purchase.totalPrice} gold.`,
     };
   });
 }
@@ -600,7 +605,7 @@ export async function sellCityMarketItemForUser(user, cityId, itemId, quantityIn
     return {
       playerState,
       ...serializeMarketProfile(profile, buildMutableRuntimeState(user, playerState), quantity),
-      message: `Sold ${itemId} x${quantity} for ${offer.totalPrice} gold in ${context.city.name}.`,
+      message: `Sold ${getItemDisplayName(itemId)} x${quantity} for ${offer.totalPrice} gold in ${context.city.name}.`,
     };
   });
 }
@@ -679,7 +684,7 @@ export async function sellBlackMarketItemForUser(user, cityId, itemId, quantityI
     return {
       playerState,
       ...serializeBlackMarket(blackMarket, buildMutableRuntimeState(user, playerState), quantity),
-      message: `Fenced ${itemId} x${quantity} for ${offer.totalPrice} gold in ${context.city.name}.`,
+      message: `Fenced ${getItemDisplayName(itemId)} x${quantity} for ${offer.totalPrice} gold in ${context.city.name}.`,
     };
   });
 }
@@ -710,7 +715,7 @@ export async function buyBlackMarketItemForUser(user, cityId, itemId, quantityIn
     return {
       playerState,
       ...serializeBlackMarket(blackMarket, buildMutableRuntimeState(user, playerState), quantity),
-      message: `Purchased ${stockItem.itemId} x${quantity} for ${purchase.totalPrice} gold from the under-market.`,
+      message: `Purchased ${getItemDisplayName(stockItem.itemId)} x${quantity} for ${purchase.totalPrice} gold from the under-market.`,
     };
   });
 }

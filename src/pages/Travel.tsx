@@ -51,7 +51,7 @@ function getEncounterRewardText(notice: PersistedTravelState["encounterNotice"])
   const parts = [
     reward.gold ? `${reward.gold} gold` : null,
     reward.experience ? `${reward.experience} experience` : null,
-    reward.item?.label ?? null,
+    ...(Array.isArray(reward.items) ? reward.items.map((item) => item?.label ? `${item.label}${item.quantity ? ` x${item.quantity}` : ""}` : null) : [reward.item?.label ?? null]),
     reward.discovery ? `Discovery: ${reward.discovery}` : null,
   ].filter(Boolean);
   return parts.length ? `Reward: ${parts.join(", ")}.` : null;

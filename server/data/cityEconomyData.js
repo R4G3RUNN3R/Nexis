@@ -15,7 +15,7 @@ export const CITY_MARKET_PROFILES = {
     exports: ["permits", "civic dispatches", "starter equipment"],
     stock: [
       stock({ itemId: "rations", price: 35, description: "Cheap capital travel food." }),
-      stock({ itemId: "rope", price: 55, description: "General utility cordage." }),
+      stock({ itemId: "rope_kit", price: 55, description: "General utility cordage." }),
       stock({ itemId: "courier_satchel", price: 115, description: "Favored by registry runners." }),
       stock({ itemId: "vial_of_ink", price: 42, source: "civic", description: "Locally common filing supply." }),
       stock({ itemId: "wax_seal", price: 72, source: "civic", minimumStanding: 2, description: "Standing-checked civic seal stock." }),
@@ -33,12 +33,12 @@ export const CITY_MARKET_PROFILES = {
     stock: [
       stock({ itemId: "healing_tonic", price: 120, source: "imported", description: "Cheaper at the port than inland." }),
       stock({ itemId: "restorative_elixir", price: 335, tier: "specialty", source: "imported", minimumStanding: 2, description: "Trusted import stock." }),
-      stock({ itemId: "travel_cloak", price: 165, source: "maritime", description: "Dock-weather travel gear." }),
+      stock({ itemId: "shadow_cloak", price: 165, source: "maritime", description: "Dock-weather travel gear." }),
       stock({ itemId: "courier_satchel", price: 112, source: "cargo", description: "Port messenger stock." }),
       stock({ itemId: "rations", price: 32, source: "ship stores", description: "Ship-ready provisions." }),
       stock({ itemId: "foreign_token", price: 175, tier: "specialty", minimumStanding: 2, description: "Broker token for trusted cargo introductions." }),
       stock({ itemId: "torn_map", price: 155, tier: "specialty", requiredCourses: ["world-geography"], description: "Route scrap sold to literate travelers." }),
-      stock({ itemId: "rope", price: 48, source: "dock", description: "Dock rope is everywhere, mercifully." }),
+      stock({ itemId: "rope_kit", price: 48, source: "dock", description: "Dock rope is everywhere, mercifully." }),
     ],
   },
   north: {
@@ -52,7 +52,7 @@ export const CITY_MARKET_PROFILES = {
       stock({ itemId: "medicinal_herb", price: 48, source: "local", description: "Cheaper near the healing circles." }),
       stock({ itemId: "rare_herb", price: 130, tier: "specialty", minimumStanding: 2, description: "Trusted herb-court stock." }),
       stock({ itemId: "healing_root", price: 170, tier: "specialty", minimumStanding: 2, description: "Potent root from warded suppliers." }),
-      stock({ itemId: "enchanted_parchment", price: 140, source: "arcane", requiredCourses: ["world-geography"], description: "Parchment handled through conservatory channels." }),
+      stock({ itemId: "arcane_ink", price: 140, source: "arcane", requiredCourses: ["world-geography"], description: "Parchment handled through conservatory channels." }),
       stock({ itemId: "relic_note", price: 145, tier: "specialty", requiredCourses: ["world-geography"], description: "Catalog note for academy-adjacent relic work." }),
       stock({ itemId: "herbalist_gloves", price: 78, source: "local", description: "Protective harvest gloves." }),
       stock({ itemId: "ward_shard", price: 220, tier: "specialty", minimumStanding: 4, requiredCourses: ["world-geography"], description: "Restricted ward fragment for trusted researchers." }),
@@ -69,7 +69,7 @@ export const CITY_MARKET_PROFILES = {
       stock({ itemId: "iron_ore", price: 72, source: "ore yard", description: "Cheaper near the yards." }),
       stock({ itemId: "iron_ingot", price: 138, source: "forge", description: "Local refined stock." }),
       stock({ itemId: "iron_rivets", price: 76, source: "workshop", description: "Every brace asks for these eventually." }),
-      stock({ itemId: "smithing_hammer", price: 170, source: "forge", description: "Locally balanced hammer." }),
+      stock({ itemId: "calibrated_hammer", price: 170, source: "forge", description: "Locally balanced hammer." }),
       stock({ itemId: "miners_pick", price: 158, source: "labor hall", description: "Common industrial tool." }),
       stock({ itemId: "steel_ingot", price: 255, tier: "specialty", minimumStanding: 2, description: "Trusted forge stock." }),
       stock({ itemId: "steel_brace", price: 310, tier: "specialty", minimumStanding: 4, requiredCourses: ["practical-arithmetic"], description: "Restricted bracewright stock." }),
@@ -88,7 +88,7 @@ export const CITY_MARKET_PROFILES = {
       stock({ itemId: "forged_seal_kit", price: 240, tier: "specialty", minimumStanding: 2, description: "Legal-adjacent seal kit sold under watchful eyebrows." }),
       stock({ itemId: "prestige_goods", price: 460, tier: "specialty", minimumStanding: 2, description: "Refined goods for court-facing status." }),
       stock({ itemId: "court_token", price: 210, tier: "specialty", minimumStanding: 4, requiredCourses: ["civic-fundamentals"], description: "Introduction token for trusted petitioners." }),
-      stock({ itemId: "engraved_goblet", price: 390, tier: "luxury", minimumStanding: 4, description: "Highcourt ceremony stock." }),
+      stock({ itemId: "prestige_goods", price: 390, tier: "luxury", minimumStanding: 4, description: "Highcourt ceremony stock." }),
       stock({ itemId: "sealed_notice", price: 135, source: "court", minimumStanding: 2, description: "Formal notice bundle for trusted errands." }),
     ],
   },
@@ -126,7 +126,7 @@ export const CITY_BLACK_MARKETS = {
     requiredCourses: ["street-survival"],
     lockReason: "Requires Street Survival and 4 Nexis City standing.",
     stock: [
-      stock({ itemId: "lockpick", price: 115, source: "backroom", description: "Single pick from a quiet stall." }),
+      stock({ itemId: "lockpick_set", price: 115, source: "backroom", description: "Single pick from a quiet stall." }),
       stock({ itemId: "forged_document", price: 260, source: "backroom", minimumStanding: 4, description: "Capital forged paper with risk baked in." }),
     ],
   },
@@ -182,6 +182,42 @@ export const CITY_BLACK_MARKETS = {
   },
 };
 
+
+CITY_MARKET_PROFILES.nexis.stock.push(
+  stock({ itemId: "field_bandage", price: 28, source: "civic clinic", description: "Starter medical stock for early fights." }),
+  stock({ itemId: "quick_knife", price: 95, source: "starter arms", description: "Fast light blade for early loadouts." }),
+  stock({ itemId: "hunter_shortbow", price: 120, source: "starter arms", description: "Compact bow for ranged starter builds." }),
+  stock({ itemId: "watch_baton", price: 82, source: "watch surplus", description: "Basic defensive civic weapon." }),
+);
+CITY_MARKET_PROFILES.west.stock.push(
+  stock({ itemId: "rope_kit", price: 34, source: "dock", description: "Fresh rope kit from the cargo piers." }),
+  stock({ itemId: "cargo_seals", price: 64, source: "customs", description: "Cargo seals for maritime paperwork and trade." }),
+  stock({ itemId: "smoke_pellet", price: 52, source: "quiet stall", requiredCourses: ["street-survival"], description: "Covert pellet that primes a combat escape edge." }),
+  stock({ itemId: "corsair_boots", price: 175, tier: "specialty", minimumStanding: 2, description: "Deck boots for fast maritime fighters." }),
+);
+CITY_MARKET_PROFILES.north.stock.push(
+  stock({ itemId: "field_bandage", price: 22, source: "hospice", description: "Clean Silverbough medical wraps." }),
+  stock({ itemId: "ward_salts", price: 52, source: "ward stall", description: "Consumable ward salts for the next fight." }),
+  stock({ itemId: "focus_draught", price: 55, source: "lyceum", description: "Study draught for energy recovery." }),
+  stock({ itemId: "grove_focus", price: 220, tier: "specialty", minimumStanding: 2, requiredCourses: ["world-geography"], description: "Silverbough focus for healing and ward-minded builds." }),
+);
+CITY_MARKET_PROFILES.east.stock.push(
+  stock({ itemId: "iron_warhammer", price: 240, tier: "specialty", minimumStanding: 2, description: "Heavy Ironhall weapon for strength builds." }),
+  stock({ itemId: "brigandine_plate", price: 260, tier: "specialty", minimumStanding: 2, description: "Forge-made armor for safer contracts." }),
+  stock({ itemId: "enginewright_goggles", price: 185, source: "engine bench", requiredCourses: ["practical-arithmetic"], description: "Workshop gear for enginewright and accuracy builds." }),
+  stock({ itemId: "forge_tongs", price: 66, source: "forge", description: "Profession tool for material work." }),
+);
+CITY_MARKET_PROFILES.south.stock.push(
+  stock({ itemId: "court_signet_ring", price: 180, tier: "specialty", minimumStanding: 2, description: "Prestige accessory for legal and market play." }),
+  stock({ itemId: "oath_sigil", price: 150, source: "oath desk", requiredCourses: ["civic-fundamentals"], description: "Civic charm with defensive utility." }),
+  stock({ itemId: "focus_draught", price: 62, source: "court study", description: "Energy draught for office and academy work." }),
+);
+CITY_BLACK_MARKETS.west.stock.push(
+  stock({ itemId: "shadow_cloak", price: 230, source: "underdock", requiredCourses: ["street-survival"], description: "Covert armor for Blackharbor shadow work." }),
+  stock({ itemId: "poison_vial", price: 72, source: "underdock", requiredCourses: ["street-survival"], description: "One-fight critical edge, sold quietly." }),
+  stock({ itemId: "contraband_satchel", price: 145, source: "underdock", requiredCourses: ["street-survival"], description: "Smuggler bag for risky cargo routes." }),
+);
+
 export function getCityMarketProfile(cityId) {
   return CITY_MARKET_PROFILES[cityId] ?? CITY_MARKET_PROFILES.nexis;
 }
@@ -232,7 +268,7 @@ export const LEGAL_TRADE_GOODS = [
 export const BLACK_MARKET_FENCES = {
   nexis: [
     fenceGood({ itemId: "stolen_coin", price: 38, note: "Backroom coin buyers keep starter underworld sales small." }),
-    fenceGood({ itemId: "lockpick", price: 72, note: "Simple tools move quietly in the capital." }),
+    fenceGood({ itemId: "lockpick_set", price: 72, note: "Simple tools move quietly in the capital." }),
     fenceGood({ itemId: "forged_document", price: 155, minimumStanding: 4, note: "Capital papers need trusted contacts." }),
   ],
   west: [

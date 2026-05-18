@@ -7,6 +7,7 @@ import {
   upsertPlayerRuntimeState,
 } from "../repositories/playerStateRepository.js";
 import { getTravelOpponentForRoute } from "../data/combatData.js";
+import { rollLoot } from "../data/lootData.js";
 import { resolveCombat } from "./combatService.js";
 import {
   DEFAULT_CITY_ID,
@@ -21,6 +22,10 @@ const ENCOUNTER_REWARD_COOLDOWN_MS = 15 * 60 * 1000;
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
 }
 
 function asNumber(value, fallback = 0) {
@@ -226,6 +231,8 @@ export function resolveTravelEncounterForRoute(runtimeState, route, now = Date.n
   }
 
   const reward = pickEncounterReward(route, outcome, randomFn, hasWorldGeography);
+  const lootDrops = outcome === "victory" || outcome === "costly_victory" ? rollLoot(opponent.lootFamily ?? "bandit", randomFn) : [];
+  if (reward && lootDrops.length) reward.items = [...(reward.item ? [reward.item] : []), ...lootDrops];
   const titles = {
     victory: "Encounter Victory",
     costly_victory: "Costly Victory",
@@ -280,7 +287,7 @@ function applyTravelEncounterResult(runtimeState, encounter, now) {
   if (lastRewardAt && now - lastRewardAt < ENCOUNTER_REWARD_COOLDOWN_MS) {
     return {
       ...encounter,
-      reward: { ...reward, gold: 0, experience: 0, item: null, discovery: null, throttled: true },
+      reward: { ...reward, gold: 0, experience: 0, item: null, items: [], discovery: null, throttled: true },
       summary: `${encounter.summary} You found no extra spoils this time; the route rewards are still cooling down.`,
     };
   }
@@ -288,9 +295,14 @@ function applyTravelEncounterResult(runtimeState, encounter, now) {
   player.gold = Math.max(0, Math.floor(asNumber(player.gold, 500) + asNumber(reward.gold, 0)));
   player.currencies = { ...asRecord(player.currencies), gold: player.gold };
   player.experience = Math.max(0, Math.floor(asNumber(player.experience, 0) + asNumber(reward.experience, 0)));
-  if (reward.item?.itemId) {
+  const rewardItems = asArray(reward.items).length ? asArray(reward.items) : reward.item?.itemId ? [reward.item] : [];
+  if (rewardItems.length) {
     player.inventory = { ...asRecord(player.inventory) };
-    player.inventory[reward.item.itemId] = Math.max(0, Math.floor(asNumber(player.inventory[reward.item.itemId], 0) + 1));
+    for (const item of rewardItems) {
+      if (!item?.itemId) continue;
+      const quantity = Math.max(1, Math.floor(asNumber(item.quantity, 1)));
+      player.inventory[item.itemId] = Math.max(0, Math.floor(asNumber(player.inventory[item.itemId], 0) + quantity));
+    }
   }
   player.counters.lastTravelEncounterRewardAt = now;
   return encounter;

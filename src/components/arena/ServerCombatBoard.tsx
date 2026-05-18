@@ -25,6 +25,12 @@ function actionStyle(disabled: boolean) {
 
 function CombatResultPanel({ result }: { result: ServerCombatResult | null }) {
   if (!result) return <div style={{ color: "#9fb0bf", fontSize: 13 }}>No server combat resolved yet.</div>;
+  const reward = (result.reward ?? {}) as { gold?: number; experience?: number; items?: Array<{ itemId: string; label?: string; quantity?: number }> };
+  const rewardBits = [
+    reward.gold ? `${reward.gold} gold` : null,
+    reward.experience ? `${reward.experience} XP` : null,
+    ...(reward.items ?? []).map((item) => `${item.label ?? item.itemId} x${item.quantity ?? 1}`),
+  ].filter(Boolean);
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.48)", display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -34,6 +40,7 @@ function CombatResultPanel({ result }: { result: ServerCombatResult | null }) {
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>You: {result.player.health}/{result.player.maxHealth} | Opponent: {result.opponentState.health}/{result.opponentState.maxHealth}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Skills: {result.activeSkills.map((skill) => skill.name).join(" | ") || "Basic pressure"}</div>
       {result.skillEvents.length ? <div style={{ color: "#8ec8a7", fontSize: 12 }}>Skill XP: {result.skillEvents.map((event) => `${String(event.name ?? event.skillId)} +${String(event.xpGained ?? 0)}`).join(" | ")}</div> : null}
+      {rewardBits.length ? <div style={{ color: "#d8c278", fontSize: 12 }}>Rewards: {rewardBits.join(" | ")}</div> : null}
       <div style={{ display: "grid", gap: 5 }}>
         {result.log.slice(0, 8).map((entry, index) => <div key={`${entry.turn}-${index}`} style={{ color: "#b7c3cf", fontSize: 12 }}>{entry.message}</div>)}
       </div>

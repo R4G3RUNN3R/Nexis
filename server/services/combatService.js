@@ -1,5 +1,7 @@
 import { getNpcOpponent } from "../data/combatData.js";
 import { getSkillDefinition, getSkillDefinitions } from "../data/skillData.js";
+import { rollLoot } from "../data/lootData.js";
+import { getEquipmentStatTotalsForRuntimeState } from "./itemService.js";
 import { getSlottedSkillIds, grantSkillXp, syncUnlockedSkills, unlockSkill } from "./skillService.js";
 
 function asRecord(value) {
@@ -73,12 +75,27 @@ function getCombatSkills(runtimeState) {
   return activeIds.length ? activeIds : ["quick_strike"];
 }
 
+function addEffectTotals(target, source) {
+  for (const [key, value] of Object.entries(asRecord(source))) {
+    target[key] = asNumber(target[key], 0) + asNumber(value, 0);
+  }
+}
+
 function buildPlayerCombatant(runtimeState, name = "You") {
   const player = asRecord(runtimeState.player);
   const stats = asRecord(player.stats);
   const battle = asRecord(player.battleStats);
   const passive = applyPassiveEffects(runtimeState);
-  const maxHealth = Math.max(30, asNumber(stats.maxHealth, 100) + passive.effects.maxHealthBonus);
+  const equipment = getEquipmentStatTotalsForRuntimeState(runtimeState);
+  const effects = { ...asRecord(passive.effects) };
+  addEffectTotals(effects, equipment.combatModifiers);
+  addEffectTotals(effects, equipment.passiveEffects);
+  const pendingCombat = asRecord(asRecord(player.itemBuffs).pendingCombat);
+  if (pendingCombat.effect) {
+    effects[pendingCombat.effect] = asNumber(effects[pendingCombat.effect], 0) + asNumber(pendingCombat.amount, 0);
+  }
+  const combinedPassive = { ids: passive.ids, effects };
+  const maxHealth = Math.max(30, asNumber(stats.maxHealth, 100) + asNumber(effects.maxHealthBonus, 0) + asNumber(equipment.stats?.maxHealth, 0));
   return {
     side: "player",
     name,
@@ -86,12 +103,14 @@ function buildPlayerCombatant(runtimeState, name = "You") {
     maxHealth,
     health: clamp(asNumber(stats.health, maxHealth), 1, maxHealth),
     battleStats: {
-      strength: Math.max(1, asNumber(battle.strength, 10)),
-      defense: Math.max(1, asNumber(battle.defense, 10)),
-      speed: Math.max(1, asNumber(battle.speed, 10)),
-      dexterity: Math.max(1, asNumber(battle.dexterity, 10)),
+      strength: Math.max(1, asNumber(battle.strength, 10) + asNumber(equipment.battleStats?.strength, 0)),
+      defense: Math.max(1, asNumber(battle.defense, 10) + asNumber(equipment.battleStats?.defense, 0)),
+      speed: Math.max(1, asNumber(battle.speed, 10) + asNumber(equipment.battleStats?.speed, 0)),
+      dexterity: Math.max(1, asNumber(battle.dexterity, 10) + asNumber(equipment.battleStats?.dexterity, 0)),
     },
-    passive,
+    passive: combinedPassive,
+    equipmentTotals: equipment,
+    pendingCombatItem: pendingCombat.itemId ? pendingCombat : null,
   };
 }
 
@@ -224,6 +243,12 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
 
   const playerRecord = asRecord(runtimeState.player);
   playerRecord.stats = { ...asRecord(playerRecord.stats), health: Math.max(1, Math.round(player.health)) };
+  if (player.pendingCombatItem) {
+    const itemBuffs = { ...asRecord(playerRecord.itemBuffs) };
+    delete itemBuffs.pendingCombat;
+    itemBuffs.lastConsumedCombatBuff = { ...player.pendingCombatItem, consumedAt: now, context: options.context ?? "combat" };
+    playerRecord.itemBuffs = itemBuffs;
+  }
   playerRecord.counters = {
     ...asRecord(playerRecord.counters),
     combatRoundsResolved: Math.max(0, Math.floor(asNumber(playerRecord.counters?.combatRoundsResolved, 0))) + log.length,
@@ -248,26 +273,33 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
   };
 }
 
-export function applyCombatReward(runtimeState, reward, context = "combat", now = Date.now()) {
+export function applyCombatReward(runtimeState, reward, context = "combat", now = Date.now(), extraDrops = []) {
   const player = asRecord(runtimeState.player);
   const gold = Math.max(0, Math.floor(asNumber(player.gold, 500) + asNumber(reward.gold, 0)));
   player.gold = gold;
   player.currencies = { ...asRecord(player.currencies), gold };
   player.experience = Math.max(0, Math.floor(asNumber(player.experience, 0) + asNumber(reward.experience, 0)));
-  if (reward.item?.itemId) {
+  const items = [];
+  if (reward.item?.itemId) items.push({ itemId: reward.item.itemId, label: reward.item.label, quantity: 1 });
+  for (const item of asArray(reward.items)) if (item?.itemId) items.push({ ...item, quantity: Math.max(1, Math.floor(asNumber(item.quantity, 1))) });
+  for (const item of asArray(extraDrops)) if (item?.itemId) items.push({ ...item, quantity: Math.max(1, Math.floor(asNumber(item.quantity, 1))) });
+  if (items.length) {
     player.inventory = { ...asRecord(player.inventory) };
-    player.inventory[reward.item.itemId] = Math.max(0, Math.floor(asNumber(player.inventory[reward.item.itemId], 0) + 1));
+    for (const item of items) {
+      player.inventory[item.itemId] = Math.max(0, Math.floor(asNumber(player.inventory[item.itemId], 0) + asNumber(item.quantity, 1)));
+    }
   }
   player.counters = {
     ...asRecord(player.counters),
     combatRewardsClaimed: Math.max(0, Math.floor(asNumber(player.counters?.combatRewardsClaimed, 0))) + 1,
+    lootDropsReceived: Math.max(0, Math.floor(asNumber(player.counters?.lootDropsReceived, 0))) + items.length,
     lastCombatRewardAt: now,
   };
   runtimeState.player = player;
   if (context === "arena") {
     addLegacyEntry(runtimeState, { id: `arena_spar_${now}`, title: "Arena Sparring Won", summary: "Won an arena sparring match using the live combat engine.", kind: "combat", awardedAt: now });
   }
-  return { gold: asNumber(reward.gold, 0), experience: asNumber(reward.experience, 0), item: reward.item ?? null };
+  return { gold: asNumber(reward.gold, 0), experience: asNumber(reward.experience, 0), items };
 }
 
 export function resolveNpcCombatWithRewards(runtimeState, opponentId, options = {}) {
@@ -276,7 +308,8 @@ export function resolveNpcCombatWithRewards(runtimeState, opponentId, options = 
   const result = resolveCombat(runtimeState, opponent, options);
   let reward = null;
   if (result.winner === "player") {
-    reward = applyCombatReward(runtimeState, opponent.reward ?? {}, options.context ?? "combat", now);
+    const drops = rollLoot(opponent.lootFamily ?? options.lootFamily ?? "bandit", options.randomFn ?? Math.random);
+    reward = applyCombatReward(runtimeState, opponent.reward ?? {}, options.context ?? "combat", now, drops);
   }
   return { ...result, reward };
 }

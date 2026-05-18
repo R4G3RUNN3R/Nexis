@@ -158,6 +158,8 @@ export function buildMutableRuntimeState(user, playerState) {
       currencies,
       isRegistered: true,
       inventory: asRecord(player.inventory),
+      equipment: asRecord(player.equipment),
+      itemBuffs: asRecord(player.itemBuffs),
       itemEnhancements: normalizeItemEnhancements(player.itemEnhancements),
       property: {
         current:

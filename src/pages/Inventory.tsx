@@ -1,70 +1,254 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { ITEM_CATALOGUE } from "../data/itemsData";
+import {
+  equipServerItem,
+  getServerItemInventory,
+  unequipServerItem,
+  useServerItem,
+  type ServerEquipmentSlot,
+  type ServerInventoryEntry,
+  type ServerItemSummary,
+} from "../lib/authApi";
+import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
 import "../styles/inventory.css";
 
 const CATEGORY_COLOUR: Record<string, string> = {
-  Herb: "#4caf50",
-  Ore: "#9e9e9e",
-  Material: "#8d6e63",
-  Relic: "#ab47bc",
-  Valuables: "#ffd740",
+  Academy: "#d7cfb0",
+  "Black Market": "#b58bd9",
   Consumable: "#26c6da",
-  Tool: "#ff9800",
-  Equipment: "#78909c",
-  Weapon: "#d98672",
-  Armor: "#c6cfd5",
-  Shield: "#dfd4a4",
-  Alchemy: "#9fd39b",
-  Agriculture: "#c4c97c",
-  Textile: "#d2b0e1",
-  Luxury: "#f1c6a4",
-  Document: "#d7cfb0",
-  "Refined Material": "#8fb2bf",
+  Equipment: "#c6cfd5",
+  Loot: "#d98672",
+  Material: "#8d9a72",
+  Tool: "#ffb45c",
+  "Trade Good": "#ffd06f",
+  Uncatalogued: "#7e8a96",
 };
 
 function getCategoryColour(category: string): string {
-  return CATEGORY_COLOUR[category] ?? "#546e7a";
+  return CATEGORY_COLOUR[category] ?? "#8fa0ad";
+}
+
+function fallbackSummary(itemId: string): ServerItemSummary {
+  const local = ITEM_CATALOGUE[itemId];
+  const displayName = local?.name ?? itemId.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return {
+    id: itemId,
+    displayName,
+    category: local?.category ?? "Uncatalogued",
+    subtype: local?.category ?? "Uncatalogued",
+    rarity: "common",
+    equipSlot: null,
+    allowedSlots: [],
+    stackLimit: 99,
+    valueBuy: 0,
+    valueSell: 0,
+    cityBias: "neutral",
+    sourceCity: "neutral",
+    statModifiers: {},
+    combatModifiers: {},
+    useEffects: [],
+    requirements: {},
+    lockReasonText: null,
+    shortDescription: local?.description ?? "This item is recorded locally while the server catalogue is unavailable.",
+    flavorText: "Server item metadata will appear when the live session is connected.",
+    sourceTags: [],
+    academyTags: [],
+    iconKey: `${itemId}_icon`,
+    iconBrief: "Pending server icon metadata.",
+    iconPalette: ["#8fa0ad", "#202a33", "#d7cfb0"],
+    iconSilhouette: "ledger-object",
+    iconRarityFrame: "plain-iron",
+    effectSummary: [],
+  };
+}
+
+function ItemMeta({ item }: { item: ServerItemSummary }) {
+  return (
+    <div style={{ display: "grid", gap: 5 }}>
+      <div style={{ color: "#b7c3cf", fontSize: 13 }}>{item.shortDescription}</div>
+      <div style={{ color: "#8293a3", fontSize: 12 }}>{item.flavorText}</div>
+      {item.effectSummary.length ? (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {item.effectSummary.slice(0, 4).map((effect) => (
+            <span key={effect} style={{ border: "1px solid rgba(255,255,255,0.08)", padding: "2px 6px", color: "#d8c278", fontSize: 12 }}>
+              {effect}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div style={{ color: "#748494", fontSize: 11 }}>
+        Icon: {item.iconKey} | {item.iconSilhouette} | {item.iconRarityFrame}
+      </div>
+    </div>
+  );
+}
+
+function EquipmentSlotCard({ slot, busy, onUnequip }: { slot: ServerEquipmentSlot; busy: boolean; onUnequip: (slot: string) => void }) {
+  return (
+    <div style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(8,13,18,0.58)", padding: 10, display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <strong style={{ textTransform: "capitalize" }}>{slot.slot.replace(/[0-9]/g, " $&")}</strong>
+        {slot.item ? <span style={{ color: getCategoryColour(slot.item.category), fontSize: 12 }}>{slot.item.rarity}</span> : <span style={{ color: "#748494", fontSize: 12 }}>Empty</span>}
+      </div>
+      {slot.item ? (
+        <>
+          <div>{slot.item.displayName}</div>
+          <ItemMeta item={slot.item} />
+          <button type="button" disabled={busy} onClick={() => onUnequip(slot.slot)}>
+            {busy ? "Updating..." : "Unequip"}
+          </button>
+        </>
+      ) : (
+        <div style={{ color: "#8293a3", fontSize: 13 }}>No item equipped in this slot.</div>
+      )}
+    </div>
+  );
+}
+
+function InventoryRow({
+  entry,
+  busy,
+  onEquip,
+  onUse,
+}: {
+  entry: ServerInventoryEntry;
+  busy: boolean;
+  onEquip: (item: ServerItemSummary) => void;
+  onUse: (item: ServerItemSummary) => void;
+}) {
+  const item = entry.item ?? fallbackSummary(entry.itemId);
+  const equippable = item.allowedSlots.length > 0;
+  const usable = item.useEffects.length > 0;
+  return (
+    <div className="inv-table__row" style={{ alignItems: "start" }}>
+      <span className="inv-table__item">
+        <span className="inv-table__item-name">{item.displayName}</span>
+        <span style={{ color: "#748494", fontSize: 11 }}>{item.rarity} | {item.subtype}</span>
+      </span>
+      <span className="inv-table__category" style={{ color: getCategoryColour(item.category) }}>{item.category}</span>
+      <span className="inv-table__description"><ItemMeta item={item} /></span>
+      <span className="inv-table__qty" style={{ display: "grid", gap: 6 }}>
+        x {entry.quantity}
+        {equippable ? <button type="button" disabled={busy} onClick={() => onEquip(item)}>{busy ? "Updating..." : "Equip"}</button> : null}
+        {usable ? <button type="button" disabled={busy} onClick={() => onUse(item)}>{busy ? "Using..." : "Use"}</button> : null}
+      </span>
+    </div>
+  );
 }
 
 export default function InventoryPage() {
   const { player } = usePlayer();
-  const inventory = player.inventory ?? {};
+  const { authSource, serverSessionToken, refreshServerState } = useAuth();
+  const [serverEntries, setServerEntries] = useState<ServerInventoryEntry[] | null>(null);
+  const [equipment, setEquipment] = useState<ServerEquipmentSlot[]>([]);
+  const [equipmentTotals, setEquipmentTotals] = useState<Record<string, Record<string, number>>>({});
+  const [catalogueCount, setCatalogueCount] = useState<number | null>(null);
   const [activeCategory, setActiveCategory] = useState("All");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const entries = Object.entries(inventory)
-    .filter(([, quantity]) => quantity > 0)
-    .map(([itemId, quantity]) => {
-      const info = ITEM_CATALOGUE[itemId] ?? {
-        name: "Uncatalogued Item",
-        category: "Uncatalogued",
-        description: "A holding recorded by the ledger but not yet catalogued for public display.",
-      };
+  useEffect(() => {
+    let cancelled = false;
+    async function loadInventory() {
+      if (authSource !== "server" || !serverSessionToken) {
+        setServerEntries(null);
+        setEquipment([]);
+        setCatalogueCount(null);
+        return;
+      }
+      setError(null);
+      const result = await getServerItemInventory(serverSessionToken);
+      if (cancelled) return;
+      if (!result.ok) {
+        setError(result.error);
+        setServerEntries(null);
+        return;
+      }
+      setServerEntries(result.inventory);
+      setEquipment(result.equipment);
+      setEquipmentTotals(result.equipmentTotals);
+      setCatalogueCount(result.catalogueCount);
+    }
+    void loadInventory();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSource, serverSessionToken]);
 
-      return { itemId, quantity, ...info };
-    })
-    .sort((left, right) => left.category.localeCompare(right.category) || left.name.localeCompare(right.name));
+  const entries = useMemo<ServerInventoryEntry[]>(() => {
+    if (serverEntries) return serverEntries;
+    return Object.entries(player.inventory ?? {})
+      .filter(([, quantity]) => quantity > 0)
+      .map(([itemId, quantity]) => ({ itemId, quantity, item: fallbackSummary(itemId) }))
+      .sort((left, right) => (left.item?.category ?? "").localeCompare(right.item?.category ?? "") || (left.item?.displayName ?? left.itemId).localeCompare(right.item?.displayName ?? right.itemId));
+  }, [player.inventory, serverEntries]);
 
-  const isEmpty = entries.length === 0;
   const categoryTotals = entries.reduce<Record<string, number>>((accumulator, entry) => {
-    accumulator[entry.category] = (accumulator[entry.category] ?? 0) + entry.quantity;
+    const category = entry.item?.category ?? "Uncatalogued";
+    accumulator[category] = (accumulator[category] ?? 0) + entry.quantity;
     return accumulator;
   }, {});
-  const categories = useMemo(
-    () => ["All", ...Object.keys(categoryTotals).sort((left, right) => left.localeCompare(right))],
-    [categoryTotals],
-  );
-  const visibleEntries = activeCategory === "All"
-    ? entries
-    : entries.filter((entry) => entry.category === activeCategory);
+  const categories = useMemo(() => ["All", ...Object.keys(categoryTotals).sort((left, right) => left.localeCompare(right))], [categoryTotals]);
+  const visibleEntries = activeCategory === "All" ? entries : entries.filter((entry) => (entry.item?.category ?? "Uncatalogued") === activeCategory);
+  const isEmpty = entries.length === 0;
+
+  async function runInventoryAction(actionKey: string, action: () => Promise<void>) {
+    setBusyAction(actionKey);
+    setMessage(null);
+    setError(null);
+    try {
+      await action();
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function refreshFromResult(result: Awaited<ReturnType<typeof getServerItemInventory>>) {
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setServerEntries(result.inventory);
+    setEquipment(result.equipment);
+    setEquipmentTotals(result.equipmentTotals);
+    setCatalogueCount(result.catalogueCount);
+    setMessage(result.message ?? "Inventory updated.");
+    await refreshServerState();
+  }
+
+  function equipItem(item: ServerItemSummary) {
+    if (!serverSessionToken) return;
+    void runInventoryAction(`equip:${item.id}`, async () => {
+      await refreshFromResult(await equipServerItem(serverSessionToken, item.id, item.allowedSlots[0] ?? null));
+    });
+  }
+
+  function unequipSlot(slot: string) {
+    if (!serverSessionToken) return;
+    void runInventoryAction(`unequip:${slot}`, async () => {
+      await refreshFromResult(await unequipServerItem(serverSessionToken, slot));
+    });
+  }
+
+  function useItem(item: ServerItemSummary) {
+    if (!serverSessionToken) return;
+    void runInventoryAction(`use:${item.id}`, async () => {
+      await refreshFromResult(await useServerItem(serverSessionToken, item.id, 1));
+    });
+  }
 
   return (
-    <AppShell
-      title="Inventory"
-      hint="Your held items, materials, tools, and relics are grouped into readable categories with live quantities."
-    >
+    <AppShell title="Inventory" hint="Server-backed items, equipment, consumables, market goods, loot, and academy rewards.">
+      {error ? <ContentPanel title="Inventory Notice"><strong>{error}</strong></ContentPanel> : null}
+      {message ? <ContentPanel title="Inventory Notice"><strong>{message}</strong></ContentPanel> : null}
+      {authSource !== "server" ? (
+        <ContentPanel title="Local Ledger"><strong>Live equipment actions require a server session.</strong></ContentPanel>
+      ) : null}
+
       <div className="nexis-grid">
         <div className="nexis-column nexis-column--wide">
           <ContentPanel title={`Items (${entries.length} types)`}>
@@ -72,52 +256,24 @@ export default function InventoryPage() {
               <div className="inv-empty">
                 <div className="inv-empty__icon">[ ]</div>
                 <div className="inv-empty__title">Your inventory is empty.</div>
-                <div className="inv-empty__sub">
-                  Complete jobs to gather materials. Beginner adventuring, salvage, and street work will start filling this up.
-                </div>
+                <div className="inv-empty__sub">Buy supplies, complete contracts, win fights, or finish academy stages to start filling this ledger.</div>
               </div>
             ) : (
               <div className="inv-ledger">
                 <div className="inv-ledger__headline">
                   <div className="inv-ledger__title">Nexis Holdings Ledger</div>
-                  <div className="inv-ledger__subtitle">
-                    Clean stock counts, readable categories, and a ledger that only shows actions currently available.
-                  </div>
+                  <div className="inv-ledger__subtitle">Items now carry rarity, effects, sources, and icon-ready metadata instead of pretending every object is a sad spreadsheet cell.</div>
                 </div>
-
                 <div className="inv-filter-bar">
                   {categories.map((category) => (
-                    <button
-                      key={category}
-                      type="button"
-                      className={`inv-filter-chip${category === activeCategory ? " inv-filter-chip--active" : ""}`}
-                      onClick={() => setActiveCategory(category)}
-                    >
-                      {category}
-                      {category === "All" ? ` (${entries.length})` : ` (${categoryTotals[category] ?? 0})`}
+                    <button key={category} type="button" className={`inv-filter-chip${category === activeCategory ? " inv-filter-chip--active" : ""}`} onClick={() => setActiveCategory(category)}>
+                      {category}{category === "All" ? ` (${entries.length})` : ` (${categoryTotals[category] ?? 0})`}
                     </button>
                   ))}
                 </div>
-
                 <div className="inv-table">
-                  <div className="inv-table__head">
-                    <span>Item</span>
-                    <span>Category</span>
-                    <span>Description</span>
-                    <span>Qty</span>
-                  </div>
-                  {visibleEntries.map(({ itemId, quantity, name, category, description }) => (
-                    <div key={itemId} className="inv-table__row">
-                      <span className="inv-table__item">
-                        <span className="inv-table__item-name">{name}</span>
-                      </span>
-                      <span className="inv-table__category" style={{ color: getCategoryColour(category) }}>
-                        {category}
-                      </span>
-                      <span className="inv-table__description">{description}</span>
-                      <span className="inv-table__qty">x {quantity}</span>
-                    </div>
-                  ))}
+                  <div className="inv-table__head"><span>Item</span><span>Category</span><span>Details</span><span>Qty / Action</span></div>
+                  {visibleEntries.map((entry) => <InventoryRow key={entry.itemId} entry={entry} busy={Boolean(busyAction)} onEquip={equipItem} onUse={useItem} />)}
                 </div>
               </div>
             )}
@@ -125,36 +281,24 @@ export default function InventoryPage() {
         </div>
 
         <div className="nexis-column">
+          <ContentPanel title="Loadout">
+            <div style={{ display: "grid", gap: 10 }}>
+              {equipment.length ? equipment.map((slot) => <EquipmentSlotCard key={slot.slot} slot={slot} busy={busyAction === `unequip:${slot.slot}`} onUnequip={unequipSlot} />) : <div className="inv-cat-row inv-cat-row--empty">Server loadout will appear here after login.</div>}
+            </div>
+          </ContentPanel>
+
           <ContentPanel title="Summary">
             <div className="info-list">
-              <div className="info-row">
-                <span className="info-row__label">Item types</span>
-                <span className="info-row__value">{entries.length}</span>
-              </div>
-              <div className="info-row">
-                <span className="info-row__label">Total items</span>
-                <span className="info-row__value">
-                  {entries.reduce((sum, entry) => sum + entry.quantity, 0)}
-                </span>
-              </div>
+              <div className="info-row"><span className="info-row__label">Item types</span><span className="info-row__value">{entries.length}</span></div>
+              <div className="info-row"><span className="info-row__label">Total items</span><span className="info-row__value">{entries.reduce((sum, entry) => sum + entry.quantity, 0)}</span></div>
+              {catalogueCount !== null ? <div className="info-row"><span className="info-row__label">Server catalogue</span><span className="info-row__value">{catalogueCount} authored items</span></div> : null}
             </div>
-
             <div className="inv-categories">
               <div className="inv-categories__title">By category</div>
-              {Object.entries(categoryTotals).map(([category, total]) => (
-                <div key={category} className="inv-cat-row">
-                  <span className="inv-cat-row__label" style={{ color: getCategoryColour(category) }}>
-                    {category}
-                  </span>
-                  <span className="inv-cat-row__count">{total}</span>
-                </div>
-              ))}
+              {Object.entries(categoryTotals).map(([category, total]) => <div key={category} className="inv-cat-row"><span className="inv-cat-row__label" style={{ color: getCategoryColour(category) }}>{category}</span><span className="inv-cat-row__count">{total}</span></div>)}
               {isEmpty ? <div className="inv-cat-row inv-cat-row--empty">Nothing yet.</div> : null}
             </div>
-
-            <div className="inv-ledger-note">
-              Item actions appear only when they are live for that item. Buy supplies in the Market; earn materials through Adventuring, Civic Jobs, and city activity; use or crafting controls will appear here when a held item supports them.
-            </div>
+            <div className="inv-ledger-note">Equipment totals: {Object.entries(equipmentTotals).flatMap(([group, values]) => Object.entries(values ?? {}).map(([key, value]) => `${key} ${Number(value) >= 0 ? "+" : ""}${value} (${group})`)).slice(0, 8).join(" | ") || "No equipped bonuses yet."}</div>
           </ContentPanel>
         </div>
       </div>

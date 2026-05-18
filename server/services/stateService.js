@@ -82,6 +82,9 @@ function mergeRuntimeState(existingRuntime, payload) {
       },
       stats: mergedStats,
       counters: mergedCounters,
+      inventory: existingPlayer.inventory ?? payloadPlayer.inventory ?? {},
+      equipment: existingPlayer.equipment ?? payloadPlayer.equipment ?? {},
+      itemBuffs: existingPlayer.itemBuffs ?? payloadPlayer.itemBuffs ?? {},
       portrait: existingPlayer.portrait ?? {},
     },
     // These are server-authoritative now. The browser can report state around

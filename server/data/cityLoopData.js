@@ -1,3 +1,5 @@
+import { ACADEMY_ITEM_REWARDS, getItemDisplayName } from "./itemData.js";
+
 const FIVE_MINUTES = 5 * 60 * 1000;
 const CONTRACT_REFRESH_MS = 20 * 60 * 1000;
 
@@ -631,6 +633,31 @@ export function getCityContract(contractId) {
   }
   return null;
 }
+
+
+function attachAcademyItemRewards() {
+  for (const academies of Object.values(CITY_ACADEMIES)) {
+    for (const academy of academies) {
+      const rewards = ACADEMY_ITEM_REWARDS[academy.id] ?? [];
+      academy.itemRewards = rewards.map((itemId) => ({ itemId, label: getItemDisplayName(itemId), quantity: 1 }));
+      if (!Array.isArray(academy.stages) || rewards.length === 0) continue;
+      const firstStage = academy.stages[0];
+      const finalStage = academy.stages[academy.stages.length - 1];
+      firstStage.reward = { ...firstStage.reward, items: [...(firstStage.reward?.items ?? [])] };
+      if (!firstStage.reward.items.some((entry) => entry.itemId === rewards[0])) {
+        firstStage.reward.items.push({ itemId: rewards[0], label: getItemDisplayName(rewards[0]), quantity: 1 });
+      }
+      if (rewards[1]) {
+        finalStage.reward = { ...finalStage.reward, items: [...(finalStage.reward?.items ?? [])] };
+        if (!finalStage.reward.items.some((entry) => entry.itemId === rewards[1])) {
+          finalStage.reward.items.push({ itemId: rewards[1], label: getItemDisplayName(rewards[1]), quantity: 1 });
+        }
+      }
+    }
+  }
+}
+
+attachAcademyItemRewards();
 
 export function getCityAcademies(cityId) {
   return CITY_ACADEMIES[cityId] ?? CITY_ACADEMIES.nexis;

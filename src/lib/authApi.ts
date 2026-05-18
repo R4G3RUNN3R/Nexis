@@ -245,8 +245,67 @@ export type ApiCityAcademyResponse =
     }
   | ApiFailure;
 
+export type ServerItemSummary = {
+  id: string;
+  displayName: string;
+  category: string;
+  subtype: string;
+  rarity: string;
+  equipSlot: string | null;
+  allowedSlots: string[];
+  stackLimit: number;
+  valueBuy: number;
+  valueSell: number;
+  cityBias: string;
+  sourceCity: string;
+  statModifiers: Record<string, Record<string, number>>;
+  combatModifiers: Record<string, number>;
+  useEffects: Array<Record<string, unknown>>;
+  requirements: Record<string, unknown>;
+  lockReasonText: string | null;
+  shortDescription: string;
+  flavorText: string;
+  sourceTags: string[];
+  academyTags: string[];
+  iconKey: string;
+  iconBrief: string;
+  iconPalette: string[];
+  iconSilhouette: string;
+  iconRarityFrame: string;
+  effectSummary: string[];
+};
+
+export type ServerInventoryEntry = {
+  itemId: string;
+  quantity: number;
+  item: ServerItemSummary | null;
+};
+
+export type ServerEquipmentSlot = {
+  slot: string;
+  itemId: string | null;
+  item: ServerItemSummary | null;
+  effects: string[];
+};
+
+export type ApiItemInventoryResponse =
+  | {
+      ok: true;
+      playerState: ServerPlayerState;
+      inventory: ServerInventoryEntry[];
+      equipment: ServerEquipmentSlot[];
+      equipmentSlots: string[];
+      equipmentTotals: Record<string, Record<string, number>>;
+      itemBuffs: Record<string, unknown>;
+      iconManifest: Array<Record<string, unknown>>;
+      catalogueCount: number;
+      message?: string | null;
+    }
+  | ApiFailure;
+
 export type ServerCityEconomyStock = {
   itemId: string;
+  item?: ServerItemSummary | null;
   price: number;
   quantity: number;
   totalPrice: number;
@@ -263,6 +322,7 @@ export type ServerCityEconomyStock = {
 
 export type ServerCitySellOffer = {
   itemId: string;
+  item?: ServerItemSummary | null;
   category?: string;
   sourceCityId?: string;
   sourceCityName?: string;
@@ -282,6 +342,7 @@ export type ServerCitySellOffer = {
 
 export type ServerTradeOpportunity = {
   itemId: string;
+  item?: ServerItemSummary | null;
   category: string;
   buyCityId: string;
   buyCityName: string;
@@ -830,6 +891,37 @@ export function sellServerBlackMarketItem(
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
     body: JSON.stringify({ quantity }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerItemInventory(sessionToken: string): Promise<ApiItemInventoryResponse> {
+  return requestJson<Omit<ApiItemInventoryResponse & { ok: true }, "ok">>("/api/items/inventory", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function equipServerItem(sessionToken: string, itemId: string, slot?: string | null): Promise<ApiItemInventoryResponse> {
+  return requestJson<Omit<ApiItemInventoryResponse & { ok: true }, "ok">>("/api/items/equip", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ itemId, slot }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function unequipServerItem(sessionToken: string, slot: string): Promise<ApiItemInventoryResponse> {
+  return requestJson<Omit<ApiItemInventoryResponse & { ok: true }, "ok">>("/api/items/unequip", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ slot }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function useServerItem(sessionToken: string, itemId: string, quantity = 1): Promise<ApiItemInventoryResponse> {
+  return requestJson<Omit<ApiItemInventoryResponse & { ok: true }, "ok">>("/api/items/use", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ itemId, quantity }),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

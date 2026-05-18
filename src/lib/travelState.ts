@@ -12,7 +12,8 @@ export type TravelEncounterNotice = {
   reward?: {
     gold?: number;
     experience?: number;
-    item?: { itemId: string; label: string } | null;
+    item?: { itemId: string; label: string; quantity?: number } | null;
+    items?: Array<{ itemId: string; label: string; quantity?: number }>;
     discovery?: string | null;
     throttled?: boolean;
   } | null;
