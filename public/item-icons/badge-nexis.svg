@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="badge nexis item icon">
+  <rect width="48" height="48" rx="6" fill="#293542"/>
+  <path d="M24 6l13 8v20l-13 8-13-8V14z M18 18h12v12H18z" fill="none" stroke="#d6d0bd" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#d6d0bd" opacity="0.8"/>
+</svg>

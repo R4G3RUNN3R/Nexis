@@ -159,6 +159,9 @@ export function buildMutableRuntimeState(user, playerState) {
       isRegistered: true,
       inventory: asRecord(player.inventory),
       equipment: asRecord(player.equipment),
+      equipmentMaintenance: asRecord(player.equipmentMaintenance),
+      equipmentLoadouts: asRecord(player.equipmentLoadouts),
+      crafting: asRecord(player.crafting),
       itemBuffs: asRecord(player.itemBuffs),
       itemEnhancements: normalizeItemEnhancements(player.itemEnhancements),
       property: {

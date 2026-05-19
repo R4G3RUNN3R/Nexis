@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="trade good item icon">
+  <rect width="48" height="48" rx="6" fill="#302719"/>
+  <path d="M10 16h28v24H10z M10 16l14-7 14 7 M24 9v31" fill="none" stroke="#ffd06f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#ffd06f" opacity="0.8"/>
+</svg>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="badge highcourt item icon">
+  <rect width="48" height="48" rx="6" fill="#3c1830"/>
+  <path d="M24 8l12 28H12z M14 36h20v5H14z" fill="none" stroke="#f1d889" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#f1d889" opacity="0.8"/>
+</svg>

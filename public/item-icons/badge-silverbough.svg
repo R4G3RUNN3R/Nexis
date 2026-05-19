@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="badge silverbough item icon">
+  <rect width="48" height="48" rx="6" fill="#183126"/>
+  <path d="M24 40V12 M24 24c-8-10-16-4-14 5 9 1 13-2 14-5 1 3 5 6 14 5 2-9-6-15-14-5z" fill="none" stroke="#6aa981" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#6aa981" opacity="0.8"/>
+</svg>

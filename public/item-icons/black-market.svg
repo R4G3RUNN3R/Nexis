@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="black market item icon">
+  <rect width="48" height="48" rx="6" fill="#1a1324"/>
+  <path d="M12 28c3-10 21-10 24 0-3 10-21 10-24 0zm12-6a6 6 0 100 12 6 6 0 000-12z" fill="none" stroke="#b58bd9" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#b58bd9" opacity="0.8"/>
+</svg>

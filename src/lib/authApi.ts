@@ -268,6 +268,7 @@ export type ServerItemSummary = {
   sourceTags: string[];
   academyTags: string[];
   iconKey: string;
+  iconUrl?: string;
   iconBrief: string;
   iconPalette: string[];
   iconSilhouette: string;
@@ -299,6 +300,90 @@ export type ApiItemInventoryResponse =
       itemBuffs: Record<string, unknown>;
       iconManifest: Array<Record<string, unknown>>;
       catalogueCount: number;
+      message?: string | null;
+    }
+  | ApiFailure;
+
+export type ServerCraftingRequirement = {
+  itemId: string;
+  item: ServerItemSummary | null;
+  quantity: number;
+  owned: number;
+  missing: number;
+};
+
+export type ServerCraftingOutput = {
+  itemId: string;
+  item: ServerItemSummary | null;
+  quantity: number;
+};
+
+export type ServerCraftingRecipe = {
+  id: string;
+  cityId: string;
+  city: { id: string; name: string };
+  family: string;
+  title: string;
+  summary: string;
+  requirementsText: string;
+  minimumStanding: number;
+  requiredCourses: string[];
+  requiredAcademyUnlocks: string[];
+  goldCost: number;
+  inputs: ServerCraftingRequirement[];
+  outputs: ServerCraftingOutput[];
+  currentCityId: string;
+  canCraft: boolean;
+  lockReason: string | null;
+};
+
+export type ServerSalvageOption = {
+  itemId: string;
+  item: ServerItemSummary | null;
+  ownedQuantity: number;
+  yieldItems: ServerCraftingOutput[];
+  canSalvage: boolean;
+  lockReason: string | null;
+};
+
+export type ServerRepairOption = {
+  slot: string;
+  itemId: string | null;
+  item: ServerItemSummary | null;
+  maintained: boolean;
+  bonusUntil: number | null;
+  canRepair: boolean;
+  lockReason: string | null;
+  cost: { items: Array<{ itemId: string; quantity: number }>; gold: number };
+};
+
+export type ServerLoadout = {
+  slot: string;
+  label: string;
+  savedAt: number | null;
+  active: boolean;
+  equipment: Array<{ slot: string; itemId: string | null; item: ServerItemSummary | null }>;
+};
+
+export type ApiCraftingResponse =
+  | {
+      ok: true;
+      playerState: ServerPlayerState;
+      currentCityId: string;
+      currentCityName: string;
+      recipes: ServerCraftingRecipe[];
+      salvageOptions: ServerSalvageOption[];
+      repairOptions: ServerRepairOption[];
+      loadouts: ServerLoadout[];
+      message?: string | null;
+    }
+  | ApiFailure;
+
+export type ApiLoadoutsResponse =
+  | {
+      ok: true;
+      playerState: ServerPlayerState;
+      loadouts: ServerLoadout[];
       message?: string | null;
     }
   | ApiFailure;
@@ -516,7 +601,7 @@ export type ServerCombatLogEntry = {
   target: string;
   skillId: string | null;
   skillName: string;
-  outcome: "hit" | "crit" | "miss";
+  outcome: "hit" | "crit" | "miss" | "item";
   damage: number;
   heal?: number;
   message: string;
@@ -925,6 +1010,58 @@ export function useServerItem(sessionToken: string, itemId: string, quantity = 1
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
+export function getServerCrafting(sessionToken: string): Promise<ApiCraftingResponse> {
+  return requestJson<Omit<ApiCraftingResponse & { ok: true }, "ok">>("/api/items/crafting", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function craftServerRecipe(sessionToken: string, recipeId: string): Promise<ApiCraftingResponse> {
+  return requestJson<Omit<ApiCraftingResponse & { ok: true }, "ok">>(`/api/items/crafting/${encodeURIComponent(recipeId)}/craft`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function salvageServerItem(sessionToken: string, itemId: string, quantity = 1): Promise<ApiCraftingResponse> {
+  return requestJson<Omit<ApiCraftingResponse & { ok: true }, "ok">>("/api/items/salvage", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ itemId, quantity }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function repairServerEquipment(sessionToken: string, slot: string): Promise<ApiCraftingResponse> {
+  return requestJson<Omit<ApiCraftingResponse & { ok: true }, "ok">>("/api/items/repair", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ slot }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerLoadouts(sessionToken: string): Promise<ApiLoadoutsResponse> {
+  return requestJson<Omit<ApiLoadoutsResponse & { ok: true }, "ok">>("/api/items/loadouts", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function saveServerLoadout(sessionToken: string, slot: string, label?: string | null): Promise<ApiLoadoutsResponse> {
+  return requestJson<Omit<ApiLoadoutsResponse & { ok: true }, "ok">>(`/api/items/loadouts/${encodeURIComponent(slot)}/save`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ label }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function equipServerLoadout(sessionToken: string, slot: string): Promise<ApiLoadoutsResponse> {
+  return requestJson<Omit<ApiLoadoutsResponse & { ok: true }, "ok">>(`/api/items/loadouts/${encodeURIComponent(slot)}/equip`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
 export function startServerTravel(
   sessionToken: string,
   destinationCityId: string,
@@ -975,10 +1112,11 @@ export function getServerArenaCombat(sessionToken: string): Promise<ApiArenaComb
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
-export function sparServerArenaOpponent(sessionToken: string, opponentId: string): Promise<ApiArenaCombatResponse> {
+export function sparServerArenaOpponent(sessionToken: string, opponentId: string, combatItemId?: string | null): Promise<ApiArenaCombatResponse> {
   return requestJson<{ playerState: ServerPlayerState; arena: ServerArenaCombatPayload; result: ServerCombatResult; message?: string }>(`/api/arena/combat/spar/${encodeURIComponent(opponentId)}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ combatItemId: combatItemId ?? null }),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

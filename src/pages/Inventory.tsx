@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
+import { ItemIcon } from "../components/items/ItemIcon";
 import { ITEM_CATALOGUE } from "../data/itemsData";
 import {
   equipServerItem,
+  equipServerLoadout,
   getServerItemInventory,
+  getServerLoadouts,
+  saveServerLoadout,
   unequipServerItem,
   useServerItem,
   type ServerEquipmentSlot,
   type ServerInventoryEntry,
   type ServerItemSummary,
+  type ServerLoadout,
 } from "../lib/authApi";
 import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
@@ -57,6 +62,7 @@ function fallbackSummary(itemId: string): ServerItemSummary {
     sourceTags: [],
     academyTags: [],
     iconKey: `${itemId}_icon`,
+    iconUrl: "/item-icons/item.svg",
     iconBrief: "Pending server icon metadata.",
     iconPalette: ["#8fa0ad", "#202a33", "#d7cfb0"],
     iconSilhouette: "ledger-object",
@@ -80,7 +86,7 @@ function ItemMeta({ item }: { item: ServerItemSummary }) {
         </div>
       ) : null}
       <div style={{ color: "#748494", fontSize: 11 }}>
-        Icon: {item.iconKey} | {item.iconSilhouette} | {item.iconRarityFrame}
+        {item.sourceCity !== "neutral" ? `Source: ${item.sourceCity}` : "General stock"} | {item.iconRarityFrame}
       </div>
     </div>
   );
@@ -95,7 +101,7 @@ function EquipmentSlotCard({ slot, busy, onUnequip }: { slot: ServerEquipmentSlo
       </div>
       {slot.item ? (
         <>
-          <div>{slot.item.displayName}</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}><ItemIcon item={slot.item} /><span>{slot.item.displayName}</span></div>
           <ItemMeta item={slot.item} />
           <button type="button" disabled={busy} onClick={() => onUnequip(slot.slot)}>
             {busy ? "Updating..." : "Unequip"}
@@ -124,9 +130,12 @@ function InventoryRow({
   const usable = item.useEffects.length > 0;
   return (
     <div className="inv-table__row" style={{ alignItems: "start" }}>
-      <span className="inv-table__item">
-        <span className="inv-table__item-name">{item.displayName}</span>
-        <span style={{ color: "#748494", fontSize: 11 }}>{item.rarity} | {item.subtype}</span>
+      <span className="inv-table__item" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <ItemIcon item={item} />
+        <span style={{ display: "grid", gap: 2 }}>
+          <span className="inv-table__item-name">{item.displayName}</span>
+          <span style={{ color: "#748494", fontSize: 11 }}>{item.rarity} | {item.subtype}</span>
+        </span>
       </span>
       <span className="inv-table__category" style={{ color: getCategoryColour(item.category) }}>{item.category}</span>
       <span className="inv-table__description"><ItemMeta item={item} /></span>
@@ -145,6 +154,8 @@ export default function InventoryPage() {
   const [serverEntries, setServerEntries] = useState<ServerInventoryEntry[] | null>(null);
   const [equipment, setEquipment] = useState<ServerEquipmentSlot[]>([]);
   const [equipmentTotals, setEquipmentTotals] = useState<Record<string, Record<string, number>>>({});
+  const [loadouts, setLoadouts] = useState<ServerLoadout[]>([]);
+  const [loadoutLabels, setLoadoutLabels] = useState<Record<string, string>>({});
   const [catalogueCount, setCatalogueCount] = useState<number | null>(null);
   const [activeCategory, setActiveCategory] = useState("All");
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -157,11 +168,12 @@ export default function InventoryPage() {
       if (authSource !== "server" || !serverSessionToken) {
         setServerEntries(null);
         setEquipment([]);
+        setLoadouts([]);
         setCatalogueCount(null);
         return;
       }
       setError(null);
-      const result = await getServerItemInventory(serverSessionToken);
+      const [result, loadoutResult] = await Promise.all([getServerItemInventory(serverSessionToken), getServerLoadouts(serverSessionToken)]);
       if (cancelled) return;
       if (!result.ok) {
         setError(result.error);
@@ -172,6 +184,10 @@ export default function InventoryPage() {
       setEquipment(result.equipment);
       setEquipmentTotals(result.equipmentTotals);
       setCatalogueCount(result.catalogueCount);
+      if (loadoutResult.ok) {
+        setLoadouts(loadoutResult.loadouts);
+        setLoadoutLabels(Object.fromEntries(loadoutResult.loadouts.map((loadout) => [loadout.slot, loadout.label])));
+      }
     }
     void loadInventory();
     return () => {
@@ -241,6 +257,36 @@ export default function InventoryPage() {
     });
   }
 
+  function saveLoadout(slot: string) {
+    if (!serverSessionToken) return;
+    void runInventoryAction(`save-loadout:${slot}`, async () => {
+      const result = await saveServerLoadout(serverSessionToken, slot, loadoutLabels[slot] ?? null);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setLoadouts(result.loadouts);
+      setLoadoutLabels(Object.fromEntries(result.loadouts.map((loadout) => [loadout.slot, loadout.label])));
+      setMessage(result.message ?? "Loadout saved.");
+      await refreshServerState();
+    });
+  }
+
+  function equipLoadout(slot: string) {
+    if (!serverSessionToken) return;
+    void runInventoryAction(`equip-loadout:${slot}`, async () => {
+      const result = await equipServerLoadout(serverSessionToken, slot);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setLoadouts(result.loadouts);
+      const inventoryResult = await getServerItemInventory(serverSessionToken);
+      await refreshFromResult(inventoryResult);
+      setMessage(result.message ?? "Loadout equipped.");
+    });
+  }
+
   return (
     <AppShell title="Inventory" hint="Server-backed items, equipment, consumables, market goods, loot, and academy rewards.">
       {error ? <ContentPanel title="Inventory Notice"><strong>{error}</strong></ContentPanel> : null}
@@ -281,9 +327,35 @@ export default function InventoryPage() {
         </div>
 
         <div className="nexis-column">
-          <ContentPanel title="Loadout">
+          <ContentPanel title="Equipped Gear">
             <div style={{ display: "grid", gap: 10 }}>
               {equipment.length ? equipment.map((slot) => <EquipmentSlotCard key={slot.slot} slot={slot} busy={busyAction === `unequip:${slot.slot}`} onUnequip={unequipSlot} />) : <div className="inv-cat-row inv-cat-row--empty">Server loadout will appear here after login.</div>}
+            </div>
+          </ContentPanel>
+
+          <ContentPanel title="Loadout Presets">
+            <div style={{ display: "grid", gap: 10 }}>
+              {loadouts.length ? loadouts.map((loadout) => (
+                <div key={loadout.slot} style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(8,13,18,0.58)", padding: 10, display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <strong>Slot {loadout.slot}</strong>
+                    <span style={{ color: loadout.active ? "#8ec8a7" : "#748494", fontSize: 12 }}>{loadout.active ? "Active" : loadout.savedAt ? "Saved" : "Empty"}</span>
+                  </div>
+                  <input
+                    value={loadoutLabels[loadout.slot] ?? loadout.label}
+                    onChange={(event) => setLoadoutLabels((current) => ({ ...current, [loadout.slot]: event.target.value }))}
+                    aria-label={`Loadout ${loadout.slot} label`}
+                    style={{ border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.25)", color: "#f2f2f2", padding: "7px 8px" }}
+                  />
+                  <div style={{ color: "#9fb0bf", fontSize: 12 }}>
+                    {loadout.equipment.filter((entry) => entry.item).slice(0, 4).map((entry) => `${entry.slot}: ${entry.item?.displayName}`).join(" | ") || "No gear saved yet."}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button type="button" disabled={Boolean(busyAction)} onClick={() => saveLoadout(loadout.slot)}>{busyAction === `save-loadout:${loadout.slot}` ? "Saving..." : "Save Current"}</button>
+                    <button type="button" disabled={Boolean(busyAction) || !loadout.savedAt} onClick={() => equipLoadout(loadout.slot)}>{busyAction === `equip-loadout:${loadout.slot}` ? "Equipping..." : "Equip Preset"}</button>
+                  </div>
+                </div>
+              )) : <div className="inv-cat-row inv-cat-row--empty">Loadout presets require a live server session.</div>}
             </div>
           </ContentPanel>
 

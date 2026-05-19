@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="frame rare item icon">
+  <rect width="48" height="48" rx="6" fill="#111923"/>
+  <path d="M5 5h38v38H5z M24 8l16 16-16 16L8 24z" fill="none" stroke="#6fa9e6" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#6fa9e6" opacity="0.8"/>
+</svg>

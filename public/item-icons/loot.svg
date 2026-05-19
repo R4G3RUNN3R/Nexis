@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="loot item icon">
+  <rect width="48" height="48" rx="6" fill="#311b1a"/>
+  <path d="M13 17h22v20H13z M18 17c0-7 12-7 12 0 M24 17v20" fill="none" stroke="#d98672" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#d98672" opacity="0.8"/>
+</svg>

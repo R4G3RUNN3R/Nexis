@@ -21,6 +21,7 @@ const core: Array<[string, string]> = [
   ["Home", "/home"],
   ["Profile", "/profile"],
   ["Inventory", "/inventory"],
+  ["Crafting", "/crafting"],
   ["Education", "/education"],
   ["Skills", "/skills"],
   ["Adventure", "/adventure"],
@@ -34,6 +35,7 @@ const world: Array<[string, string]> = [
   ["World Map", "/world-map"],
   ["Arena", "/arena"],
   ["City Board", "/city-board"],
+  ["Salvage Yard", "/salvage-yard"],
   ["Hospital", "/hospital"],
 ];
 
@@ -42,9 +44,9 @@ const factions: Array<[string, string]> = [
   ["Consortiums", "/consortiums"],
 ];
 
-const HOSPITAL_HIDDEN = new Set(["/education", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
-const JAIL_HIDDEN = new Set(["/education", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
-const TRAVEL_HIDDEN = new Set(["/education", "/adventure", "/arena", "/city", "/civic-jobs", "/guilds", "/consortiums", "/housing"]);
+const HOSPITAL_HIDDEN = new Set(["/education", "/crafting", "/salvage-yard", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
+const JAIL_HIDDEN = new Set(["/education", "/crafting", "/salvage-yard", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
+const TRAVEL_HIDDEN = new Set(["/education", "/crafting", "/salvage-yard", "/adventure", "/arena", "/city", "/civic-jobs", "/guilds", "/consortiums", "/housing"]);
 
 function SidebarSection({ title, links }: { title: string; links: Array<[string, string]> }) {
   if (!links.length) return null;
@@ -86,6 +88,8 @@ function buildCityLocalLinks(cityId: string | null | undefined): Array<[string, 
 
   links.push(
     ["City Special", "/city#special"],
+    ["Crafting", "/crafting"],
+    ["Salvage Yard", "/salvage-yard"],
     [hub.services.academy.status === "open" ? "Academy" : "Academy (Locked)", "/city#academy"],
     ["Travel", "/travel"],
     ["Consortium", "/consortiums"],

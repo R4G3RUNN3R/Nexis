@@ -1,70 +1,123 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
-import { usePlayer } from "../state/PlayerContext";
+import { ItemIcon } from "../components/items/ItemIcon";
+import {
+  getServerCrafting,
+  repairServerEquipment,
+  salvageServerItem,
+  type ServerRepairOption,
+  type ServerSalvageOption,
+} from "../lib/authApi";
+import { useAuth } from "../state/AuthContext";
 
-const SALVAGE_TABLE = [
-  { itemId: "scrap_metal", itemName: "Scrap Metal", qty: 2, weight: 28 },
-  { itemId: "rough_wood", itemName: "Rough Wood", qty: 2, weight: 24 },
-  { itemId: "wild_herb", itemName: "Wild Herb", qty: 2, weight: 20 },
-  { itemId: "empty_vials", itemName: "Empty Vials", qty: 2, weight: 16 },
-  { itemId: "iron_parts", itemName: "Iron Parts", qty: 1, weight: 7 },
-  { itemId: "medicinal_herb", itemName: "Medicinal Herb", qty: 1, weight: 3 },
-  { itemId: "lore_fragment", itemName: "Lore Fragment", qty: 1, weight: 1 },
-] as const;
-
-function rollSalvage() {
-  const totalWeight = SALVAGE_TABLE.reduce((sum, entry) => sum + entry.weight, 0);
-  let roll = Math.random() * totalWeight;
-  for (const entry of SALVAGE_TABLE) {
-    roll -= entry.weight;
-    if (roll <= 0) return entry;
-  }
-  return SALVAGE_TABLE[0];
+function YieldText({ option }: { option: ServerSalvageOption }) {
+  return (
+    <span>{option.yieldItems.map((entry) => `${entry.item?.displayName ?? entry.itemId} x${entry.quantity}`).join(" | ")}</span>
+  );
 }
 
 export default function SalvageYardPage() {
-  const { player, spendEnergy, addItem } = usePlayer();
-  const [result, setResult] = useState<string>("Nothing searched yet.");
+  const { authSource, serverSessionToken, refreshServerState } = useAuth();
+  const [salvageOptions, setSalvageOptions] = useState<ServerSalvageOption[]>([]);
+  const [repairOptions, setRepairOptions] = useState<ServerRepairOption[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  function handleSearch() {
-    if (player.stats.energy < 5) return;
-    const found = rollSalvage();
-    spendEnergy(5);
-    addItem(found.itemId, found.qty);
-    setResult(`You spent 5 energy and found ${found.itemName} x${found.qty}.`);
+  async function load() {
+    if (authSource !== "server" || !serverSessionToken) {
+      setSalvageOptions([]);
+      setRepairOptions([]);
+      setError("Salvage and repair require a live server session.");
+      return;
+    }
+    setError(null);
+    const result = await getServerCrafting(serverSessionToken);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setSalvageOptions(result.salvageOptions);
+    setRepairOptions(result.repairOptions);
+    setMessage(result.message ?? null);
+  }
+
+  useEffect(() => {
+    void load();
+  }, [authSource, serverSessionToken]);
+
+  async function salvage(itemId: string) {
+    if (!serverSessionToken) return;
+    setBusy(`salvage:${itemId}`);
+    setError(null);
+    setMessage(null);
+    const result = await salvageServerItem(serverSessionToken, itemId, 1);
+    setBusy(null);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setSalvageOptions(result.salvageOptions);
+    setRepairOptions(result.repairOptions);
+    setMessage(result.message ?? "Item salvaged.");
+    await refreshServerState();
+  }
+
+  async function repair(slot: string) {
+    if (!serverSessionToken) return;
+    setBusy(`repair:${slot}`);
+    setError(null);
+    setMessage(null);
+    const result = await repairServerEquipment(serverSessionToken, slot);
+    setBusy(null);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setSalvageOptions(result.salvageOptions);
+    setRepairOptions(result.repairOptions);
+    setMessage(result.message ?? "Equipment maintained.");
+    await refreshServerState();
   }
 
   return (
-    <AppShell
-      title="Salvage Yard"
-      hint="Spend 5 energy digging through the city's discarded junk for minor items and the occasional lucky pull."
-    >
+    <AppShell title="Salvage Yard" hint="Break surplus goods into useful materials and keep equipped gear maintained for combat.">
+      {error ? <ContentPanel title="Yard Notice"><strong>{error}</strong></ContentPanel> : null}
+      {message ? <ContentPanel title="Yard Notice"><strong>{message}</strong></ContentPanel> : null}
       <div className="nexis-grid">
         <div className="nexis-column nexis-column--wide">
-          <ContentPanel title="Scavenge">
-            <div style={{ display: "grid", gap: 12 }}>
-              <div style={{ color: "#9fb0bf", fontSize: 13 }}>
-                Most finds are junk. Occasionally the junk is someone else's problem in a useful shape.
-              </div>
-              <div className="info-row">
-                <span className="info-row__label">Energy Cost</span>
-                <span className="info-row__value">5 per search</span>
-              </div>
-              <div className="info-row">
-                <span className="info-row__label">Current Energy</span>
-                <span className="info-row__value">{Math.floor(player.stats.energy)} / {player.stats.maxEnergy}</span>
-              </div>
-              <button type="button" onClick={handleSearch} disabled={player.stats.energy < 5}>
-                {player.stats.energy < 5 ? "Need More Energy" : "Search the Yard"}
-              </button>
+          <ContentPanel title="Disassembly Bench">
+            <div style={{ display: "grid", gap: 10 }}>
+              {salvageOptions.length ? salvageOptions.map((option) => (
+                <div key={option.itemId} style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(8,13,18,0.58)", padding: 10, display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                    <span style={{ display: "flex", gap: 8, alignItems: "center" }}><ItemIcon item={option.item} /><strong>{option.item?.displayName ?? option.itemId}</strong></span>
+                    <span style={{ color: "#9fb0bf", fontSize: 12 }}>Owned x{option.ownedQuantity}</span>
+                  </div>
+                  <div style={{ color: "#d8c278", fontSize: 13 }}>Yield: <YieldText option={option} /></div>
+                  <button type="button" disabled={Boolean(busy) || !option.canSalvage} onClick={() => salvage(option.itemId)}>
+                    {busy === `salvage:${option.itemId}` ? "Salvaging..." : "Salvage One"}
+                  </button>
+                </div>
+              )) : <div style={{ color: "#9fb0bf" }}>No useful salvage stock in inventory. Contracts, markets, and combat drops will feed this bench.</div>}
             </div>
           </ContentPanel>
         </div>
-
         <div className="nexis-column">
-          <ContentPanel title="Latest Result">
-            <div style={{ color: "#d7dee6" }}>{result}</div>
+          <ContentPanel title="Equipment Maintenance">
+            <div style={{ display: "grid", gap: 10 }}>
+              {repairOptions.length ? repairOptions.map((option) => (
+                <div key={option.slot} style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(8,13,18,0.58)", padding: 10, display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}><ItemIcon item={option.item} /><strong style={{ textTransform: "capitalize" }}>{option.slot.replace(/[0-9]/g, " $&")}</strong></div>
+                  <div style={{ color: "#b7c3cf", fontSize: 13 }}>{option.item?.displayName ?? "Empty"}</div>
+                  <div style={{ color: option.canRepair ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{option.canRepair ? "Ready for maintenance" : option.lockReason}</div>
+                  <button type="button" disabled={Boolean(busy) || !option.canRepair} onClick={() => repair(option.slot)}>
+                    {busy === `repair:${option.slot}` ? "Maintaining..." : "Maintain Gear"}
+                  </button>
+                </div>
+              )) : <div style={{ color: "#9fb0bf" }}>Equip gear first, then bring repair kits or rivets here.</div>}
+            </div>
           </ContentPanel>
         </div>
       </div>

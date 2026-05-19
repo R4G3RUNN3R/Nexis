@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="material item icon">
+  <rect width="48" height="48" rx="6" fill="#202a24"/>
+  <path d="M13 31l7-18 17 8-5 18z M9 40h30" fill="none" stroke="#8d9a72" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#8d9a72" opacity="0.8"/>
+</svg>

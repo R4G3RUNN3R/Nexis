@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
+import { ItemIcon } from "../components/items/ItemIcon";
 import { getCityHubContent } from "../data/cityHubData";
 import { ITEM_OPTIONS } from "../data/itemsData";
 import {
@@ -45,14 +46,13 @@ function StockCard({
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", padding: 12, background: "rgba(10,14,19,0.62)", display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <strong>{getItemName(entry.itemId, item)}</strong>
+        <span style={{ display: "flex", gap: 8, alignItems: "center" }}><ItemIcon item={item} /><strong>{getItemName(entry.itemId, item)}</strong></span>
         <span>{entry.price.toLocaleString("en-GB")} gold</span>
       </div>
       <div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.description || item?.shortDescription || localItem?.description || "Local vendor stock."}</div>
       {item?.flavorText ? <div style={{ color: "#8293a3", fontSize: 12 }}>{item.flavorText}</div> : null}
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Source: {entry.source} | Tier: {entry.tier} | Rarity: {item?.rarity ?? "common"}</div>
       {item?.effectSummary?.length ? <div style={{ color: "#d8c278", fontSize: 12 }}>{item.effectSummary.slice(0, 3).join(" | ")}</div> : null}
-      {item?.iconKey ? <div style={{ color: "#748494", fontSize: 11 }}>Icon: {item.iconKey} | {item.iconSilhouette}</div> : null}
       {entry.minimumStanding > 0 || entry.requiredCourses.length ? (
         <div style={{ color: "#9fb0bf", fontSize: 12 }}>
           Unlocks: {entry.minimumStanding > 0 ? `${entry.minimumStanding} standing` : "open"}{entry.requiredCourses.length ? ` | ${entry.requiredCourses.join(" | ")}` : ""}
@@ -89,7 +89,7 @@ function SellCard({
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", padding: 12, background: "rgba(10,14,19,0.62)", display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <strong>{getItemName(offer.itemId, offer.item)}</strong>
+        <span style={{ display: "flex", gap: 8, alignItems: "center" }}><ItemIcon item={offer.item} /><strong>{getItemName(offer.itemId, offer.item)}</strong></span>
         <span>{offer.unitPrice.toLocaleString("en-GB")} gold each</span>
       </div>
       <div style={{ color: "#b7c3cf", fontSize: 13 }}>{offer.note ?? offer.item?.shortDescription ?? "Local buyer quote."}</div>
@@ -117,7 +117,7 @@ function OpportunityCard({ opportunity }: { opportunity: ServerTradeOpportunity 
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", padding: 10, background: "rgba(7,13,20,0.48)", display: "grid", gap: 5 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <strong>{getItemName(opportunity.itemId, opportunity.item)}</strong>
+        <span style={{ display: "flex", gap: 8, alignItems: "center" }}><ItemIcon item={opportunity.item} /><strong>{getItemName(opportunity.itemId, opportunity.item)}</strong></span>
         <span style={{ color: opportunity.expectedMargin > 0 ? "#8ec8a7" : "#d0ad74" }}>+{opportunity.expectedMargin.toLocaleString("en-GB")} gold</span>
       </div>
       <div style={{ color: "#b7c3cf", fontSize: 13 }}>Buy here for {opportunity.buyPrice} gold, sell in {opportunity.bestSellCityName} for {opportunity.bestSellPrice} gold.</div>

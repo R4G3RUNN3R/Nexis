@@ -11,7 +11,7 @@ export async function getArenaCombat(req, res, next) {
 
 export async function sparArenaOpponent(req, res, next) {
   try {
-    const result = await sparArenaOpponentForUser(req.auth.user, req.params.opponentId);
+    const result = await sparArenaOpponentForUser(req.auth.user, req.params.opponentId, req.body?.combatItemId ?? null);
     res.status(200).json(result);
   } catch (error) {
     next(error);

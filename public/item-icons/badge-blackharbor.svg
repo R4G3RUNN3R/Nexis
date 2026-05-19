@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="badge blackharbor item icon">
+  <rect width="48" height="48" rx="6" fill="#0c1a24"/>
+  <path d="M8 31c8-5 24-5 32 0v7H8z M24 8v22 M14 18h20" fill="none" stroke="#d18d49" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#d18d49" opacity="0.8"/>
+</svg>

@@ -47,13 +47,13 @@ export async function getArenaCombatForUser(user) {
   });
 }
 
-export async function sparArenaOpponentForUser(user, opponentId) {
+export async function sparArenaOpponentForUser(user, opponentId, combatItemId = null) {
   return withTransaction(async (client) => {
     const { runtimeState } = await loadRuntimeState(client, user);
     const opponent = getNpcOpponent(opponentId);
     if (!opponent) throw new HttpError(404, "Arena opponent unavailable.", "ARENA_OPPONENT_NOT_FOUND");
     const now = Date.now();
-    const result = resolveNpcCombatWithRewards(runtimeState, opponent.id, { context: "arena", now, playerName: `${user.firstName}`.trim() || "You" });
+    const result = resolveNpcCombatWithRewards(runtimeState, opponent.id, { context: "arena", now, playerName: `${user.firstName}`.trim() || "You", combatItemId });
     const player = asRecord(runtimeState.player);
     const arena = asRecord(player.arenaCombat);
     const summary = {

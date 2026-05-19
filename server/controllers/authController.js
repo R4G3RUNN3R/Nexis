@@ -1,4 +1,4 @@
-import { loginUser, registerUser, requestPasswordReset, resetPassword } from "../services/authService.js";
+import { loginUser, mapPublicApiUser, registerUser, requestPasswordReset, resetPassword } from "../services/authService.js";
 
 export async function postRegister(req, res, next) {
   try {
@@ -20,7 +20,7 @@ export async function postLogin(req, res, next) {
 
 export async function getMe(req, res) {
   res.status(200).json({
-    user: req.auth.user,
+    user: mapPublicApiUser(req.auth.user),
     playerState: req.auth.playerState,
   });
 }

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="academy item icon">
+  <rect width="48" height="48" rx="6" fill="#2a2737"/>
+  <path d="M8 20l16-10 16 10-16 10zm6 6v10c5 4 15 4 20 0V26l-10 6z" fill="none" stroke="#d7cfb0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="38" cy="10" r="3" fill="#d7cfb0" opacity="0.8"/>
+</svg>

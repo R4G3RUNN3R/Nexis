@@ -3,11 +3,13 @@ import {
   challengeServerDuel,
   getServerArenaCombat,
   getServerDuels,
+  getServerItemInventory,
   sparServerArenaOpponent,
   respondServerDuel,
   type ServerArenaCombatPayload,
   type ServerCombatResult,
   type ServerDuelsPayload,
+  type ServerInventoryEntry,
 } from "../../lib/authApi";
 import { useAuth } from "../../state/AuthContext";
 
@@ -52,6 +54,8 @@ export default function ServerCombatBoard() {
   const { authSource, serverSessionToken, refreshServerState } = useAuth();
   const [arena, setArena] = useState<ServerArenaCombatPayload | null>(null);
   const [duels, setDuels] = useState<ServerDuelsPayload | null>(null);
+  const [combatItems, setCombatItems] = useState<ServerInventoryEntry[]>([]);
+  const [selectedCombatItemId, setSelectedCombatItemId] = useState<string>("");
   const [targetPublicId, setTargetPublicId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,15 +65,21 @@ export default function ServerCombatBoard() {
     if (authSource !== "server" || !serverSessionToken) {
       setArena(null);
       setDuels(null);
+      setCombatItems([]);
       setError("Server combat requires a live server session.");
       return;
     }
     setError(null);
-    const [arenaResult, duelResult] = await Promise.all([getServerArenaCombat(serverSessionToken), getServerDuels(serverSessionToken)]);
+    const [arenaResult, duelResult, inventoryResult] = await Promise.all([getServerArenaCombat(serverSessionToken), getServerDuels(serverSessionToken), getServerItemInventory(serverSessionToken)]);
     if (arenaResult.ok) setArena(arenaResult.arena);
     else setError(arenaResult.error);
     if (duelResult.ok) setDuels(duelResult.duels);
     else setError(duelResult.error);
+    if (inventoryResult.ok) {
+      const usableCombatItems = inventoryResult.inventory.filter((entry) => entry.item?.useEffects?.some((effect) => ["restore_health", "combat_buff"].includes(String(effect.type))));
+      setCombatItems(usableCombatItems);
+      if (selectedCombatItemId && !usableCombatItems.some((entry) => entry.itemId === selectedCombatItemId)) setSelectedCombatItemId("");
+    }
   }
 
   useEffect(() => {
@@ -81,7 +91,7 @@ export default function ServerCombatBoard() {
     setBusy(`spar:${opponentId}`);
     setMessage(null);
     setError(null);
-    const result = await sparServerArenaOpponent(serverSessionToken, opponentId);
+    const result = await sparServerArenaOpponent(serverSessionToken, opponentId, selectedCombatItemId || null);
     setBusy(null);
     if (!result.ok) {
       setError(result.error);
@@ -136,6 +146,20 @@ export default function ServerCombatBoard() {
       <div className="panel__body" style={{ display: "grid", gap: 14 }}>
         {error ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{error}</div> : null}
         {message ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{message}</div> : null}
+        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.48)", display: "grid", gap: 6 }}>
+          <strong>Combat Item</strong>
+          <select
+            value={selectedCombatItemId}
+            onChange={(event) => setSelectedCombatItemId(event.target.value)}
+            style={{ border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.25)", color: "#f2f2f2", padding: "8px 10px" }}
+          >
+            <option value="">No item</option>
+            {combatItems.map((entry) => (
+              <option key={entry.itemId} value={entry.itemId}>{entry.item?.displayName ?? entry.itemId} x{entry.quantity}</option>
+            ))}
+          </select>
+          <div style={{ color: "#9fb0bf", fontSize: 12 }}>One selected healing, ward, or combat trick item may be consumed during the next arena spar.</div>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
           {(arena?.opponents ?? []).map((opponent) => (
             <div key={opponent.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.48)", display: "grid", gap: 8 }}>

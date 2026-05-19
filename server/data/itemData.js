@@ -263,6 +263,14 @@ function academyItem(id, academyId) {
 const ACADEMY_ITEMS = Object.entries(ACADEMY_PAIRS).flatMap(([academyId, itemIds]) => itemIds.map((itemId) => academyItem(itemId, academyId)));
 
 const EXTRA_ITEMS = [
+  defineItem({ id: "scrap_metal", displayName: "Scrap Metal", category: "Material", subtype: "Salvage", rarity: "common", valueBuy: 16, valueSell: 7, cityBias: "ironhall", legalMarketAvailability: ["ironhall"], shortDescription: "Recovered metal used for repair kits and basic smithing.", flavorText: "Formerly something important. Now helpfully honest about being scrap.", sourceTags: ["salvage", "smithing"] }),
+  defineItem({ id: "rough_wood", displayName: "Rough Wood", category: "Material", subtype: "Salvage", rarity: "common", valueBuy: 14, valueSell: 6, cityBias: "nexis", legalMarketAvailability: ["nexis", "blackharbor"], shortDescription: "Rough salvage timber for field gear and utility recipes.", flavorText: "Splintery, stubborn, and exactly as refined as the price suggests.", sourceTags: ["salvage", "utility"] }),
+  defineItem({ id: "empty_vials", displayName: "Empty Vials", category: "Material", subtype: "Alchemy Vessel", rarity: "common", valueBuy: 18, valueSell: 8, cityBias: "silverbough", legalMarketAvailability: ["silverbough", "blackharbor"], shortDescription: "Clean vials used for tonics, oils, and ward salts.", flavorText: "Empty for now. Optimistic, really.", sourceTags: ["alchemy", "vial"] }),
+  defineItem({ id: "field_repair_kit", displayName: "Field Repair Kit", category: "Tool", subtype: "Maintenance Kit", rarity: "common", valueBuy: 78, valueSell: 35, cityBias: "ironhall", legalMarketAvailability: ["ironhall"], shortDescription: "A compact kit used to maintain equipped gear for several hours.", flavorText: "Rivets, straps, oil, and the quiet threat of doing maintenance properly.", sourceTags: ["repair", "smithing", "tool"] }),
+  defineItem({ id: "travel_rig", displayName: "Travel Rig", category: "Tool", subtype: "Travel Kit", rarity: "uncommon", valueBuy: 135, valueSell: 62, cityBias: "nexis", legalMarketAvailability: ["nexis"], passiveEffects: { travelClarity: 2 }, shortDescription: "A bundled satchel, rope, and light kit for route-heavy play.", flavorText: "For travelers who enjoy arriving with both plans and ankles intact.", sourceTags: ["travel", "utility", "crafted"] }),
+  defineItem({ id: "ward_charm", displayName: "Ward Charm", category: "Equipment", subtype: "Ward Trinket", allowedSlots: ["accessory1", "accessory2", "trinket"], rarity: "uncommon", valueBuy: 190, valueSell: 86, cityBias: "silverbough", legalMarketAvailability: ["silverbough"], statModifiers: { workingStats: { intelligence: 1 }, battleStats: { defense: 1 } }, combatModifiers: { mitigationBonus: 0.02 }, shortDescription: "A crafted ward charm that slightly improves combat mitigation.", flavorText: "It hums when danger is nearby, which is useful and extremely annoying.", sourceTags: ["ward", "crafted", "arcane"] }),
+  defineItem({ id: "legal_seal_kit", displayName: "Legal Seal Kit", category: "Tool", subtype: "Legal Kit", rarity: "common", valueBuy: 82, valueSell: 38, cityBias: "highcourt", legalMarketAvailability: ["highcourt"], passiveEffects: { civicPaperwork: 1 }, shortDescription: "A court-ready kit for filings, petitions, and civic contracts.", flavorText: "Everything needed to make paper look terrifyingly official.", sourceTags: ["legal", "crafted", "tool"] }),
+  defineItem({ id: "writ_case", displayName: "Writ Case", category: "Equipment", subtype: "Prestige Case", allowedSlots: ["accessory1", "accessory2", "trinket"], rarity: "uncommon", valueBuy: 210, valueSell: 98, cityBias: "highcourt", legalMarketAvailability: ["highcourt"], statModifiers: { workingStats: { intelligence: 2, endurance: 1 } }, passiveEffects: { sellBonusPercent: 1 }, shortDescription: "A formal case that supports legal, civic, and trade presentation.", flavorText: "Carries documents with the confidence of a person who charges consultation fees.", sourceTags: ["legal", "prestige", "crafted"] }),
   defineItem({ id: "contraband_satchel", displayName: "Contraband Satchel", category: "Black Market", subtype: "Smuggler Tool", rarity: "uncommon", valueBuy: 145, valueSell: 66, cityBias: "blackharbor", blackMarketAvailability: ["blackharbor"], requirements: { courses: ["street-survival"] }, lockReasonText: "Requires Street Survival and under-market access.", shortDescription: "A smuggler bag for discreet cargo and risky routes.", flavorText: "Looks ordinary, which is the whole expensive point.", sourceTags: ["black-market", "smuggling", "tool"] }),
   defineItem({ id: "watch_baton", displayName: "Watch Baton", category: "Equipment", subtype: "Civic Weapon", equipSlot: "weapon", rarity: "common", valueBuy: 82, valueSell: 38, cityBias: "nexis", legalMarketAvailability: ["nexis"], statModifiers: { battleStats: { defense: 1, strength: 1 } }, combatModifiers: { mitigationBonus: 0.01 }, shortDescription: "A starter civic weapon for controlled defensive fighting.", flavorText: "Not glamorous. Very persuasive in cramped streets.", sourceTags: ["watch", "starter", "melee"] }),
 ];
@@ -362,6 +370,7 @@ export function getItemSummary(itemId) {
     sourceTags: item.sourceTags,
     academyTags: item.academyTags,
     iconKey: item.iconKey,
+    iconUrl: `/item-icons/${String(item.category).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item"}.svg`,
     iconBrief: item.iconBrief,
     iconPalette: item.iconPalette,
     iconSilhouette: item.iconSilhouette,
@@ -374,6 +383,7 @@ export function getIconManifest() {
   return getItemDefinitions().map((item) => ({
     itemId: item.id,
     iconKey: item.iconKey,
+    iconUrl: `/item-icons/${String(item.category).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item"}.svg`,
     iconBrief: item.iconBrief,
     iconPalette: item.iconPalette,
     iconSilhouette: item.iconSilhouette,

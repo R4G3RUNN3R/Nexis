@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
+import { ItemIcon } from "../components/items/ItemIcon";
 import { getCityHubContent } from "../data/cityHubData";
 import { ITEM_OPTIONS } from "../data/itemsData";
 import {
@@ -41,14 +42,13 @@ function UnderMarketStockCard({
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <strong>{getItemName(entry.itemId, entry.item)}</strong>
+        <span style={{ display: "flex", gap: 8, alignItems: "center" }}><ItemIcon item={entry.item} /><strong>{getItemName(entry.itemId, entry.item)}</strong></span>
         <span>{entry.price.toLocaleString("en-GB")} gold</span>
       </div>
       <div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.description || entry.item?.shortDescription}</div>
       {entry.item?.flavorText ? <div style={{ color: "#8293a3", fontSize: 12 }}>{entry.item.flavorText}</div> : null}
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Source: {entry.source} | Tier: {entry.tier} | Rarity: {entry.item?.rarity ?? "common"}</div>
       {entry.item?.effectSummary?.length ? <div style={{ color: "#d8c278", fontSize: 12 }}>{entry.item.effectSummary.slice(0, 3).join(" | ")}</div> : null}
-      {entry.item?.iconKey ? <div style={{ color: "#748494", fontSize: 11 }}>Icon: {entry.item.iconKey} | {entry.item.iconSilhouette}</div> : null}
       {entry.lockReason ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{entry.lockReason}</div> : null}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#b7c3cf", fontSize: 13 }}>
@@ -80,7 +80,7 @@ function UnderMarketSellCard({
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <strong>{getItemName(offer.itemId, offer.item)}</strong>
+        <span style={{ display: "flex", gap: 8, alignItems: "center" }}><ItemIcon item={offer.item} /><strong>{getItemName(offer.itemId, offer.item)}</strong></span>
         <span>{offer.unitPrice.toLocaleString("en-GB")} gold each</span>
       </div>
       <div style={{ color: "#b7c3cf", fontSize: 13 }}>{offer.note ?? offer.item?.shortDescription ?? "Fence quote."}</div>

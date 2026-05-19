@@ -1,7 +1,9 @@
 import { getNpcOpponent } from "../data/combatData.js";
 import { getSkillDefinition, getSkillDefinitions } from "../data/skillData.js";
 import { rollLoot } from "../data/lootData.js";
+import { getItemDefinition, getItemDisplayName } from "../data/itemData.js";
 import { getEquipmentStatTotalsForRuntimeState } from "./itemService.js";
+import { getMaintenanceCombatBonus } from "./itemAdvancedService.js";
 import { getSlottedSkillIds, grantSkillXp, syncUnlockedSkills, unlockSkill } from "./skillService.js";
 
 function asRecord(value) {
@@ -90,6 +92,7 @@ function buildPlayerCombatant(runtimeState, name = "You") {
   const effects = { ...asRecord(passive.effects) };
   addEffectTotals(effects, equipment.combatModifiers);
   addEffectTotals(effects, equipment.passiveEffects);
+  addEffectTotals(effects, getMaintenanceCombatBonus(runtimeState));
   const pendingCombat = asRecord(asRecord(player.itemBuffs).pendingCombat);
   if (pendingCombat.effect) {
     effects[pendingCombat.effect] = asNumber(effects[pendingCombat.effect], 0) + asNumber(pendingCombat.amount, 0);
@@ -196,6 +199,82 @@ function npcSkill(opponent) {
   };
 }
 
+function tryUseCombatItem({ runtimeState, itemId, combatant, turn }) {
+  if (typeof itemId !== "string" || !itemId.trim()) return null;
+  const player = asRecord(runtimeState.player);
+  const inventory = { ...asRecord(player.inventory) };
+  const normalizedItemId = itemId.trim();
+  const item = getItemDefinition(normalizedItemId);
+  const itemName = getItemDisplayName(normalizedItemId);
+  const quantity = Math.max(0, Math.floor(asNumber(inventory[normalizedItemId], 0)));
+  if (!item || quantity < 1) {
+    return {
+      turn,
+      actor: combatant.name,
+      target: combatant.name,
+      skillId: null,
+      skillName: itemName,
+      outcome: "item",
+      damage: 0,
+      heal: 0,
+      message: `${combatant.name} reached for ${itemName}, but none was available in inventory.`,
+    };
+  }
+
+  const effects = asArray(item.useEffects);
+  const supportedEffects = effects.filter((effect) => ["restore_health", "combat_buff"].includes(effect?.type));
+  if (!supportedEffects.length) {
+    return {
+      turn,
+      actor: combatant.name,
+      target: combatant.name,
+      skillId: null,
+      skillName: item.displayName,
+      outcome: "item",
+      damage: 0,
+      heal: 0,
+      message: `${item.displayName} is not usable during combat.`,
+    };
+  }
+
+  inventory[normalizedItemId] = quantity - 1;
+  if (inventory[normalizedItemId] <= 0) delete inventory[normalizedItemId];
+  player.inventory = inventory;
+  runtimeState.player = player;
+
+  const messages = [];
+  let heal = 0;
+  for (const effect of supportedEffects) {
+    if (effect.type === "restore_health") {
+      const recovered = Math.max(0, Math.min(combatant.maxHealth - combatant.health, Math.round(asNumber(effect.amount, 0))));
+      combatant.health += recovered;
+      heal += recovered;
+      messages.push(`recovered ${recovered} health`);
+    } else if (effect.type === "combat_buff" && effect.effect) {
+      combatant.passive.effects[effect.effect] = asNumber(combatant.passive.effects[effect.effect], 0) + asNumber(effect.amount, 0);
+      messages.push(`gained ${effect.effect} +${effect.amount} for this fight`);
+    }
+  }
+
+  player.itemUseHistory = [
+    { itemId: normalizedItemId, itemName: item.displayName, context: "combat", usedAt: Date.now() },
+    ...asArray(player.itemUseHistory),
+  ].slice(0, 25);
+  runtimeState.player = player;
+
+  return {
+    turn,
+    actor: combatant.name,
+    target: combatant.name,
+    skillId: null,
+    skillName: item.displayName,
+    outcome: "item",
+    damage: 0,
+    heal,
+    message: `${combatant.name} used ${item.displayName} during combat and ${messages.join("; ")}.`,
+  };
+}
+
 export function resolveCombat(runtimeState, opponentInput, options = {}) {
   const now = options.now ?? Date.now();
   const randomFn = options.randomFn ?? Math.random;
@@ -211,11 +290,22 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
   const playerFirst = player.battleStats.speed + player.battleStats.dexterity + asNumber(player.passive.effects.initiativeBonus, 0) >= opponent.battleStats.speed + opponent.battleStats.dexterity;
 
   let turn = 1;
+  let combatItemAttempted = false;
+  const combatItemId = typeof options.combatItemId === "string" ? options.combatItemId : null;
   const order = playerFirst ? ["player", "opponent"] : ["opponent", "player"];
   for (let round = 0; round < rounds && player.health > 0 && opponent.health > 0; round += 1) {
     for (const side of order) {
       if (player.health <= 0 || opponent.health <= 0) break;
       if (side === "player") {
+        if (combatItemId && !combatItemAttempted) {
+          const itemEntry = tryUseCombatItem({ runtimeState, itemId: combatItemId, combatant: player, turn });
+          if (itemEntry) {
+            combatItemAttempted = true;
+            log.push(itemEntry);
+            turn += 1;
+            continue;
+          }
+        }
         const skill = activeSkills[round % activeSkills.length] ?? getSkillDefinition("quick_strike");
         const entry = tryAttack({ attacker: player, defender: opponent, skill, randomFn, turn });
         log.push(entry);

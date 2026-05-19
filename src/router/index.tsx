@@ -34,6 +34,7 @@ import HospitalPage from "../pages/Hospital";
 import TavernPage from "../pages/Tavern";
 import CityPage from "../pages/City";
 import InventoryPage from "../pages/Inventory";
+import CraftingPage from "../pages/Crafting";
 import ArenaPage from "../pages/Arena";
 import CivicJobsV2Page from "../pages/CivicJobsV2";
 import SalvageYardPage from "../pages/SalvageYard";
@@ -141,6 +142,7 @@ export default function AppRouter() {
       <Route path="/" element={<RootEntry />} />
       <Route path="/home" element={<HomePage />} />
       <Route path="/inventory" element={<InventoryPage />} />
+      <Route path="/crafting" element={<RouteGuard><CraftingPage /></RouteGuard>} />
       <Route path="/profile" element={<OwnProfileRedirect />} />
       <Route path="/profile/:publicId" element={<ProfilePage />} />
       <Route path="/profiles/:publicId" element={<ProfilePage />} />

@@ -80,6 +80,26 @@ function mapApiUser(user) {
   };
 }
 
+function makeClientPlayerId(publicId) {
+  return `plr_${String(publicId).padStart(6, "0")}`;
+}
+
+export function mapPublicApiUser(user) {
+  const mapped = mapApiUser(user);
+  return {
+    email: mapped.email,
+    username: mapped.username,
+    firstName: mapped.firstName,
+    lastName: mapped.lastName,
+    publicId: mapped.publicId,
+    publicPlayerId: mapped.publicPlayerId,
+    internalPlayerId: makeClientPlayerId(mapped.publicId),
+    entityType: mapped.entityType,
+    privilegeRole: mapped.privilegeRole,
+    createdAt: mapped.createdAt,
+  };
+}
+
 async function loadPlayerState(client, internalId) {
   return findPlayerStateByUserInternalId(client, internalId);
 }
@@ -191,7 +211,7 @@ export async function registerUser({ firstName, lastName, email, password, exist
     });
 
     return {
-      user: mapApiUser(user),
+      user: mapPublicApiUser(user),
       playerState,
       sessionToken: sessionToken.plain,
       sessionExpiresAt: expiresAt.toISOString(),
@@ -224,7 +244,7 @@ export async function loginUser({ email, password }) {
     const playerState = await resolvePlayerStateForResponse(client, authUser, await loadPlayerState(client, authUser.internalId));
 
     return {
-      user: mapApiUser(authUser),
+      user: mapPublicApiUser(authUser),
       playerState,
       sessionToken: sessionToken.plain,
       sessionExpiresAt: expiresAt.toISOString(),
