@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
-import { worldCities, worldRoutes, type WorldCity, type WorldCityId, worldMapTitle } from "../data/worldMapData";
+import { worldCities, worldRoutes, type WorldCity, type WorldCityId } from "../data/worldMapData";
 import { getCityHubContent } from "../data/cityHubData";
 import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
@@ -218,11 +218,11 @@ export default function TravelPage() {
   return (
     <AppShell
       title="Travel"
-      hint="Plan routes, compare destinations, and track active travel without losing progress when you leave the page."
+      hint="The movement hub: choose destinations, review risk, depart, and track active travel."
     >
       <div className="travel-layout">
         <section className="travel-panel travel-panel--map">
-          <div className="travel-panel__header">{worldMapTitle}</div>
+          <div className="travel-panel__header">Route Selection</div>
           <div className="travel-map-frame">
             <img src={mapImage} alt="The world map of Nexis" className="travel-map-image" />
             <div
@@ -252,9 +252,9 @@ export default function TravelPage() {
           </div>
 
           <div className="travel-destination-registry">
-            <div className="travel-subsection__title">Destination Registry (Authoritative Selector)</div>
+            <div className="travel-subsection__title">Destination Selector</div>
             <div className="travel-destination-registry__hint">
-              Use this list for precise destination selection. Map pins remain quick-select only.
+              Choose where to go here. World Map is an atlas; Travel owns departure.
             </div>
             <div className="travel-destination-list">
               {worldCities.map((city) => {

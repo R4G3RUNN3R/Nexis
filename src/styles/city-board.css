@@ -161,3 +161,26 @@
     font-size: 24px;
   }
 }
+
+
+.city-paper__classifieds {
+  border: 1px solid #24303a;
+  background: linear-gradient(180deg, #10171d 0%, #0a1015 100%);
+}
+
+.city-paper__classified-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .city-paper__classified-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .city-paper__classified-grid {
+    grid-template-columns: 1fr;
+  }
+}

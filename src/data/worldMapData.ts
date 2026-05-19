@@ -18,7 +18,7 @@ export type WorldCity = {
   anchorRole: "capital_core" | "northern_academy" | "eastern_academy" | "western_shadow_port" | "southern_sacred_academy";
 };
 
-export type WorldRegionStatus = "preserved_core" | "fully_wired" | "scaffolded" | "deferred";
+export type WorldRegionStatus = "preserved_core" | "fully_wired" | "charted_locked" | "rumored";
 
 export type WorldRegion = {
   id: string;
@@ -54,7 +54,7 @@ export type WorldRoute = {
   status: "fully_wired";
 };
 
-export type WorldScaffoldLink = {
+export type WorldRumorLink = {
   id: string;
   fromNodeId: string;
   toNodeId: string;
@@ -117,7 +117,7 @@ export const worldMapTitle = "The Lands of Nexis - Expanded World";
 export const worldMapCanonicalSources = [
   "Original Nexis core world map (continuity anchors)",
   "Expanded world map image (macro geography and seas)",
-  "Nexis Game Master Plan PDF (expansion priorities and progression order)",
+  "Nexis regional atlas notes",
 ] as const;
 
 export const worldCoreAnchors = [
@@ -133,7 +133,7 @@ export const macroRegions: MacroRegion[] = [
   {
     id: hellenicRegionalPack.id,
     name: hellenicRegionalPack.name,
-    status: "scaffolded",
+    status: "charted_locked",
     role: hellenicRegionalPack.macroRegionRole,
     identity: hellenicRegionalPack.blocIdentity,
     subregionIds: hellenicSubregions.map((subregion) => subregion.id),
@@ -207,7 +207,7 @@ export const worldCities: WorldCity[] = [
     notes: [
       "Main city and starting hub.",
       "Keeps existing academy and progression anchors intact.",
-      "Serves as the integration point for future caravan and ship expansion.",
+      "Serves as the integration point for caravan and ship lanes.",
     ],
     continuity: "preserved_core",
     anchorRole: "capital_core",
@@ -227,7 +227,7 @@ export const worldCities: WorldCity[] = [
     notes: [
       "Preserved academy destination.",
       "Primary anchor for northern elf territory.",
-      "Feeds future highland magic, barbarian-border, and relic systems.",
+      "Feeds rumored highland magic, barbarian-border, and relic systems.",
     ],
     continuity: "preserved_core",
     anchorRole: "northern_academy",
@@ -246,7 +246,7 @@ export const worldCities: WorldCity[] = [
       "Ironhall anchors the eastern forge road with materials, labor contracts, and industrial academy routes.",
     notes: [
       "Preserved academy destination.",
-      "Supports future eastern warbands and escort contracts.",
+      "Supports rumored eastern warbands and escort contracts.",
       "Maintains separation from core heartland through maritime geometry.",
     ],
     continuity: "preserved_core",
@@ -266,8 +266,8 @@ export const worldCities: WorldCity[] = [
       "Blackharbor remains the western shadow-port anchor and is now explicitly the maritime hinge toward pirate waters and southern danger lanes.",
     notes: [
       "Preserved western academy destination.",
-      "Major pivot for pirate-isle and ruined-lands sea scaffolding.",
-      "Supports future smuggling, escorts, and naval contract loops.",
+      "Major pivot for pirate-isle and ruined-lands sea charted-rumor planning.",
+      "Supports rumored smuggling, escorts, and naval contract loops.",
     ],
     continuity: "preserved_core",
     anchorRole: "western_shadow_port",
@@ -322,7 +322,7 @@ export const worldRegions: WorldRegion[] = [
     summary: "Western maritime sphere centered on Blackharbor.",
     notes: [
       "Core continuity zone.",
-      "Now explicitly adjacent to pirate-route scaffolding.",
+      "Now explicitly adjacent to pirate-route charted-rumor planning.",
     ],
   },
   {
@@ -337,7 +337,7 @@ export const worldRegions: WorldRegion[] = [
     summary: "Northern highland and arcane mountain belt tied to Silverbough.",
     notes: [
       "Preserves northern elven territory placement.",
-      "Supports future magical corridor encounters.",
+      "Supports rumored magical corridor encounters.",
     ],
   },
   {
@@ -351,7 +351,7 @@ export const worldRegions: WorldRegion[] = [
     factionIdentity: ["forge_orders", "labor_contractors"],
     summary: "Eastern forge roads and material convoy routes around Ironhall.",
     notes: [
-      "Anchors escort and warband route scaffolding.",
+      "Anchors escort and warband route charted-rumor planning.",
     ],
   },
   {
@@ -381,51 +381,51 @@ export const worldRegions: WorldRegion[] = [
     summary: "Existing desert/wastes belt south-west of the core.",
     notes: [
       "Preserves prior desert logic from the original map.",
-      "Links into dune and oasis expansion scaffolding.",
+      "Links into dune and oasis rumors.",
     ],
   },
   {
     id: "barbarian_frontier_northeast",
     name: "Barbarian Frontier",
     kind: "tundra",
-    status: "scaffolded",
+    status: "charted_locked",
     xPercent: 72.4,
     yPercent: 15.4,
     travelModes: ["caravan", "ship"],
     factionIdentity: ["barbarian_tribes", "frontier_warlords"],
     summary: "North-eastern tribal frontier beyond the core northern belts.",
     notes: [
-      "Region scaffold only in this pass.",
-      "Future tribal systems and campaign arcs deferred.",
+      "Region charted rumor only in this pass.",
+      "Rumored tribal systems and campaign arcs not yet charted.",
     ],
   },
   {
     id: "myrine_archipelago",
     name: "Myrine Archipelago",
     kind: "archipelago",
-    status: "scaffolded",
+    status: "charted_locked",
     xPercent: 74.8,
     yPercent: 78.0,
     travelModes: ["ship"],
     factionIdentity: ["island_leagues", "maritime_city_states"],
-    summary: "South-eastern island league zone for long-form maritime expansion.",
+    summary: "South-eastern island league zone for distant maritime politics.",
     notes: [
       "Uses canonical name Myrine Archipelago.",
-      "Port/city-state mechanics intentionally deferred.",
+      "Port/city-state mechanics intentionally not yet charted.",
     ],
   },
   {
     id: "hellenic_sphere",
     name: "Hellenic Sphere",
     kind: "archipelago",
-    status: "scaffolded",
+    status: "charted_locked",
     xPercent: 67.2,
     yPercent: 68.8,
     travelModes: ["ship", "caravan"],
     factionIdentity: ["scholarly_poleis", "martial_states", "maritime_houses", "oracle_orders"],
     summary: hellenicRegionalPack.blocIdentity,
     notes: [
-      "Regional bloc scaffold for city-state politics, academy concepts, trade identity, and discovery-gated ruins.",
+      "Regional bloc charted rumor for city-state politics, academy concepts, trade identity, and discovery-gated ruins.",
       "Linked to Applied Knowledge, Warfare, Commerce, and route-surveying education gates.",
     ],
   },
@@ -433,14 +433,14 @@ export const worldRegions: WorldRegion[] = [
     id: "ruined_lands_south",
     name: "Ruined Lands",
     kind: "ruins",
-    status: "scaffolded",
+    status: "charted_locked",
     xPercent: 47.8,
     yPercent: 90.5,
     travelModes: ["caravan", "ship"],
     factionIdentity: ["ruin_scavengers", "ancient_threats"],
     summary: "Southern ruin belt beneath the core world.",
     notes: [
-      "Hazards and deep ruin logic deferred.",
+      "Hazards and deep ruin logic not yet charted.",
       "Positioned to connect both pirate and Myrine sea networks.",
     ],
   },
@@ -448,7 +448,7 @@ export const worldRegions: WorldRegion[] = [
     id: "pirate_isles_southwest",
     name: "Pirate Isles",
     kind: "archipelago",
-    status: "scaffolded",
+    status: "charted_locked",
     xPercent: 9.0,
     yPercent: 84.0,
     travelModes: ["ship"],
@@ -456,34 +456,34 @@ export const worldRegions: WorldRegion[] = [
     summary: "South-western pirate archipelago tied to Blackharbor's maritime sphere.",
     notes: [
       "Placed below and adjacent to the western maritime zone.",
-      "Pirate system loops intentionally deferred.",
+      "Pirate system loops intentionally not yet charted.",
     ],
   },
   {
     id: "dune_kingdom_belt",
     name: "Dune Kingdom Belt",
     kind: "desert",
-    status: "scaffolded",
+    status: "charted_locked",
     xPercent: 33.0,
     yPercent: 73.2,
     travelModes: ["caravan"],
     factionIdentity: ["dune_kingdoms", "nomad_clans"],
     summary: "Expanded desert civilization belt beyond the existing wastes.",
     notes: [
-      "Caravan civ scaffold only.",
-      "Political/economic systems deferred.",
+      "Caravan civ charted rumor only.",
+      "Political/economic systems not yet charted.",
     ],
   },
   {
     id: "oasis_city_chain",
     name: "Oasis City Chain",
     kind: "plains",
-    status: "scaffolded",
+    status: "charted_locked",
     xPercent: 37.4,
     yPercent: 79.2,
     travelModes: ["caravan"],
     factionIdentity: ["oasis_cities", "trade_caravans"],
-    summary: "String of oasis city hubs for future desert trade progression.",
+    summary: "String of oasis city hubs for rumored desert trade progression.",
     notes: [
       "Encodes oasis-city identity without full implementation.",
     ],
@@ -492,7 +492,7 @@ export const worldRegions: WorldRegion[] = [
     id: "wild_creature_corridors",
     name: "Wild Creature Corridors",
     kind: "forest",
-    status: "scaffolded",
+    status: "charted_locked",
     xPercent: 51.4,
     yPercent: 54.4,
     travelModes: ["caravan", "ship"],
@@ -500,7 +500,7 @@ export const worldRegions: WorldRegion[] = [
     summary: "Inter-regional wilderness pressure where magical and strange creatures move between civilized belts.",
     notes: [
       "Deliberately spread between regions instead of isolated to one corner.",
-      "Encounter table implementation deferred.",
+      "Encounter table implementation not yet charted.",
     ],
   },
 ];
@@ -531,7 +531,7 @@ export const worldRoutes: WorldRoute[] = [
     type: "sea",
     status: "fully_wired",
     travelLabel: "Blackharbor sea crossing",
-    rule: "Requires ship travel once route rules are live.",
+    rule: "Sea crossing with harbor checks, weather risk, and cargo pressure.",
   },
   {
     id: "route_nexis_south",
@@ -553,40 +553,40 @@ export const worldRoutes: WorldRoute[] = [
   },
 ];
 
-export const worldScaffoldLinks: WorldScaffoldLink[] = [
+export const worldRumorLinks: WorldRumorLink[] = [
   {
-    id: "scaffold_west_pirate",
+    id: "rumor_west_pirate",
     fromNodeId: "west",
     toNodeId: "pirate_isles_southwest",
     type: "sea",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Corsair lanes",
-    summary: "Future pirate contract and interception waters tied to Blackharbor.",
+    summary: "Rumored pirate contract and interception waters tied to Blackharbor.",
   },
   {
-    id: "scaffold_west_ruined",
+    id: "rumor_west_ruined",
     fromNodeId: "west",
     toNodeId: "ruined_lands_south",
     type: "sea",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Ashwater passage",
     summary: "Dangerous western-southern route skirting ruin belts.",
   },
   {
-    id: "scaffold_south_myrine",
+    id: "rumor_south_myrine",
     fromNodeId: "south",
     toNodeId: "myrine_archipelago",
     type: "sea",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Sacred-to-Myrine sea lane",
-    summary: "Future island league exchange and mission corridor.",
+    summary: "Rumored island league exchange and mission corridor.",
   },
   {
-    id: "scaffold_core_hellenic",
+    id: "rumor_core_hellenic",
     fromNodeId: "nexis",
     toNodeId: "hellenic_sphere",
     type: "sea",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Hellenic embassy sea lane",
     summary: "Discovery-gated regional route toward scholarly poleis, martial states, sanctuaries, and pirate straits.",
     requirements: [
@@ -599,13 +599,13 @@ export const worldScaffoldLinks: WorldScaffoldLink[] = [
     },
   },
   {
-    id: "scaffold_myrine_hellenic",
+    id: "rumor_myrine_hellenic",
     fromNodeId: "myrine_archipelago",
     toNodeId: "hellenic_sphere",
     type: "sea",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Island league exchange",
-    summary: "Future maritime trade and academy-cultural exchange between Myrine and the Hellenic sphere.",
+    summary: "Rumored maritime trade and academy-cultural exchange between Myrine and the Hellenic sphere.",
     requirements: [
       { kind: "education", key: "institutional-logistics", label: "Institutional Logistics" },
     ],
@@ -615,66 +615,66 @@ export const worldScaffoldLinks: WorldScaffoldLink[] = [
     },
   },
   {
-    id: "scaffold_east_myrine",
+    id: "rumor_east_myrine",
     fromNodeId: "east",
     toNodeId: "myrine_archipelago",
     type: "sea",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Eastern convoy circuit",
     summary: "Martial escort routes toward Myrine waters.",
   },
   {
-    id: "scaffold_north_barbarian",
+    id: "rumor_north_barbarian",
     fromNodeId: "north",
     toNodeId: "barbarian_frontier_northeast",
     type: "road",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Highland frontier march",
     summary: "Northern pressure line into barbarian tribal territory.",
   },
   {
-    id: "scaffold_nexis_dune",
+    id: "rumor_nexis_dune",
     fromNodeId: "nexis",
     toNodeId: "dune_kingdom_belt",
     type: "road",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Southern caravan trunk",
     summary: "Main caravan spine from core heartland toward desert civilization belts.",
   },
   {
-    id: "scaffold_dune_oasis",
+    id: "rumor_dune_oasis",
     fromNodeId: "dune_kingdom_belt",
     toNodeId: "oasis_city_chain",
     type: "road",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Oasis trade chain",
     summary: "Desert merchant and nomad interaction corridor.",
   },
   {
-    id: "scaffold_ruined_myrine",
+    id: "rumor_ruined_myrine",
     fromNodeId: "ruined_lands_south",
     toNodeId: "myrine_archipelago",
     type: "sea",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Broken gulf crossing",
-    summary: "Future high-risk sea route between ruins and island leagues.",
+    summary: "Rumored high-risk sea route between ruins and island leagues.",
   },
   {
-    id: "scaffold_pirate_ruined",
+    id: "rumor_pirate_ruined",
     fromNodeId: "pirate_isles_southwest",
     toNodeId: "ruined_lands_south",
     type: "sea",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Raid corridor",
     summary: "Pirate pressure route toward southern ruin coastlines.",
   },
   {
-    id: "scaffold_core_wilds",
+    id: "rumor_core_wilds",
     fromNodeId: "nexis_heartland_core",
     toNodeId: "wild_creature_corridors",
     type: "mixed",
-    status: "scaffolded",
+    status: "charted_locked",
     label: "Wild pressure ring",
-    summary: "Future roaming magical-creature pressure around civilized regions.",
+    summary: "Rumored roaming magical-creature pressure around civilized regions.",
   },
 ];

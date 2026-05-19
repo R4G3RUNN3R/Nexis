@@ -23,7 +23,7 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
   {
     id: "academic",
     name: "Academic District",
-    summary: "Learning, archives, and the kind of silence that judges you.",
+    summary: "Learning, archives, and formal study services.",
     image: "/images/districts/academic-district.png",
     destinations: [
       {
@@ -52,7 +52,7 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
   {
     id: "commercial",
     name: "Commercial District",
-    summary: "Money, goods, and people pretending prices are morally neutral.",
+    summary: "Markets, goods, trade desks, and commercial services.",
     image: "/images/districts/commercial-district.png",
     destinations: [
       {
@@ -85,7 +85,7 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
   {
     id: "civic",
     name: "Civic District",
-    summary: "Administration, law, healing, and institutional disappointment.",
+    summary: "Administration, law, recovery services, and public offices.",
     image: "/images/districts/civic-district.png",
     destinations: [
       {
@@ -121,7 +121,7 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
   {
     id: "adventure",
     name: "Adventure District",
-    summary: "Risk, violence, contracts, and generally poor survival planning.",
+    summary: "Risk work, contracts, training, and field assignments.",
     image: "/images/districts/adventure-district.png",
     destinations: [
       {
@@ -152,7 +152,7 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
   {
     id: "faction",
     name: "Faction District",
-    summary: "Power blocs, group identity, and cooperation until the loot appears.",
+    summary: "Guilds, consortiums, and group progression services.",
     image: "/images/districts/faction-district.png",
     destinations: [
       {
@@ -196,7 +196,7 @@ const NEXIS_CITY_DISTRICTS: CityDistrict[] = [
         name: "Travel Gate",
         route: "/travel",
         icon: "TG",
-        description: "Depart the city, reach new regions, or get lost like a champion.",
+        description: "Depart the city, reach new regions, and review active routes.",
       },
     ],
   },

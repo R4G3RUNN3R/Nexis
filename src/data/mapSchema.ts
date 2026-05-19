@@ -3,7 +3,7 @@ import {
   worldCities,
   worldRegions,
   worldRoutes,
-  worldScaffoldLinks,
+  worldRumorLinks,
   type WorldCityId,
   type WorldRegionStatus,
 } from "./worldMapData";
@@ -48,14 +48,14 @@ export type MapViewDefinition = {
 };
 
 function mapVisibilityFromRegionStatus(status: WorldRegionStatus): MapNodeVisibility {
-  if (status === "deferred") return "hidden";
-  if (status === "scaffolded") return "locked";
+  if (status === "rumored") return "hidden";
+  if (status === "charted_locked") return "locked";
   return "visible";
 }
 
 function publicRegionStatusLabel(status: WorldRegionStatus) {
-  if (status === "deferred") return "rumored";
-  if (status === "scaffolded") return "charted, locked";
+  if (status === "rumored") return "rumored";
+  if (status === "charted_locked") return "charted, locked";
   if (status === "fully_wired") return "open";
   if (status === "preserved_core") return "core route";
   return "known";
@@ -104,13 +104,13 @@ function buildCityMap(cityId: WorldCityId): MapViewDefinition {
       id: `${city.id}:hidden:watch`,
       kind: "hidden_site",
       label: "Unmarked Site",
-      summary: "Reserved for future ruins, sealed archives, or witness sites.",
+      summary: "Unmarked ruins, sealed archives, or witness sites not yet charted.",
       visibility: "hidden",
       parentId: city.id,
       metadata: {
         ownerGuildId: null,
         influence: 0,
-        siteType: "future_hidden_node",
+        siteType: "rumored_hidden_node",
       },
     },
   ];
@@ -194,7 +194,7 @@ export const mapViews: MapViewDefinition[] = [
         metadata: {
           ownerGuildId: null,
           influence: 0,
-          siteType: "future_stronghold",
+          siteType: "rumored_stronghold",
         },
       },
     ],
@@ -204,7 +204,7 @@ export const mapViews: MapViewDefinition[] = [
         to: route.to,
         label: route.travelLabel,
       })),
-      ...worldScaffoldLinks.map((link) => ({
+      ...worldRumorLinks.map((link) => ({
         from: link.fromNodeId,
         to: link.toNodeId,
         label: `${link.label} (${publicRegionStatusLabel(link.status)})`,

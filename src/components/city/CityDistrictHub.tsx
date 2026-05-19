@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ContentPanel } from "../layout/ContentPanel";
 import { getCityDistricts } from "../../data/cityDistricts";
 import { getCityHubContent, type CityService } from "../../data/cityHubData";
 import { getCityAcademyDetail, getCityLocalContracts } from "../../data/cityLoopData";
@@ -63,6 +62,16 @@ function ServiceLink({ service }: { service: CityService }) {
   return <div style={style}>{body}</div>;
 }
 
+function isLikelyInternalPresence(person: ServerCityOccupant) {
+  if (person.isSelf) return false;
+  const label = `${person.displayName} ${person.title}`.toLowerCase();
+  return /(canary|fixture|debug|automation|seed|admin test|qa test|test account|load test)/.test(label);
+}
+
+function pluralSuffix(count: number) {
+  return count === 1 ? "" : "s";
+}
+
 function PeopleList({
   people,
   population,
@@ -74,47 +83,46 @@ function PeopleList({
   loading: boolean;
   error: string | null;
 }) {
+  const [showAll, setShowAll] = useState(false);
+
   if (loading) return <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking local presence...</div>;
   if (error) return <div style={{ color: "#d98f8f", fontSize: 13 }}>{error}</div>;
 
-  const visibleCount = population?.visibleCount ?? people.length;
+  const filteredPeople = people.filter((person) => !isLikelyInternalPresence(person));
+  const visiblePeople = showAll ? filteredPeople : filteredPeople.slice(0, 6);
+  const suppressedCount = people.length - filteredPeople.length;
+  const visibleCount = population?.visibleCount ?? filteredPeople.length;
   const peopleLabel = population?.peopleLabel ?? "citizens";
 
   return (
-    <div style={{ display: "grid", gap: 8 }}>
+    <div style={{ display: "grid", gap: 10 }}>
       <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.45)", display: "grid", gap: 4 }}>
         <div className="info-row"><span className="info-row__label">Visible population</span><span className="info-row__value">{visibleCount} {peopleLabel}</span></div>
         <div className="info-row"><span className="info-row__label">Guildmates present</span><span className="info-row__value">{population?.guildmatesVisible ?? 0}</span></div>
         <div className="info-row"><span className="info-row__label">Consortium peers present</span><span className="info-row__value">{population?.consortiumMembersVisible ?? 0}</span></div>
+        {suppressedCount > 0 ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>{suppressedCount} non-public presence record{pluralSuffix(suppressedCount)} hidden from the normal city list.</div> : null}
       </div>
-      {!people.length ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>No visible citizens are listed in this city right now.</div> : null}
-      {people.map((person) => (
-        <Link
-          key={person.publicId}
-          to={getProfileRoute(person.publicId)}
-          className="inline-route-link"
-          style={{
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 8,
-            padding: 10,
-            display: "grid",
-            gap: 4,
-            color: "inherit",
-            textDecoration: "none",
-            background: person.isSelf ? "rgba(216,194,120,0.08)" : "rgba(7, 13, 20, 0.48)",
-          }}
-        >
+      {!filteredPeople.length ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>No visible citizens are listed in this city right now.</div> : null}
+      {visiblePeople.map((person) => (
+        <div key={person.publicId} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, display: "grid", gap: 6, color: "inherit", background: person.isSelf ? "rgba(216,194,120,0.08)" : "rgba(7, 13, 20, 0.48)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <strong>{person.displayName}</strong>
             <span style={{ color: "#d8c278", fontSize: 12 }}>{person.isSelf ? "You" : `P${person.publicId}`}</span>
           </div>
           <div style={{ color: "#9fb0bf", fontSize: 12 }}>{person.title} | Level {person.level}</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 11, color: "#d0ad74" }}>
-            {person.sharesGuild ? <span>Guildmate</span> : null}
-            {person.sharesConsortium ? <span>Consortium peer</span> : null}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
+            {person.sharesGuild ? <span style={{ color: "#d0ad74" }}>Guildmate</span> : null}
+            {person.sharesConsortium ? <span style={{ color: "#d0ad74" }}>Consortium peer</span> : null}
+            <Link className="inline-route-link" to={getProfileRoute(person.publicId)}>View Profile</Link>
+            {!person.isSelf ? <Link className="inline-route-link" to="/arena">Duel</Link> : null}
           </div>
-        </Link>
+        </div>
       ))}
+      {filteredPeople.length > 6 ? (
+        <button type="button" onClick={() => setShowAll((current) => !current)} style={actionButtonStyle(false)}>
+          {showAll ? "Show fewer people" : `Show all ${filteredPeople.length} visible people`}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -257,12 +265,46 @@ function SpecialActionCard({
   );
 }
 
+type CityHubSectionId = "overview" | "services" | "people" | "contracts" | "academy" | "districts";
+
+function HubSection({
+  id,
+  title,
+  summary,
+  openSection,
+  onToggle,
+  children,
+}: {
+  id: CityHubSectionId;
+  title: string;
+  summary: string;
+  openSection: CityHubSectionId;
+  onToggle: (id: CityHubSectionId) => void;
+  children: ReactNode;
+}) {
+  const open = openSection === id;
+  return (
+    <section id={id} style={{ border: "1px solid rgba(255,255,255,0.09)", borderRadius: 8, background: "rgba(7, 13, 20, 0.55)", overflow: "hidden" }}>
+      <button type="button" onClick={() => onToggle(id)} aria-expanded={open} style={{ width: "100%", border: 0, borderBottom: open ? "1px solid rgba(255,255,255,0.08)" : 0, background: "linear-gradient(180deg, rgba(35,42,50,0.9) 0%, rgba(20,26,32,0.92) 100%)", color: "#f7fbff", padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "grid", gap: 4 }}>
+        <span style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+          <strong>{title}</strong>
+          <span style={{ color: "#d8c278", fontSize: 12 }}>{open ? "Collapse" : "Expand"}</span>
+        </span>
+        <span style={{ color: "#9fb0bf", fontSize: 12, lineHeight: 1.45 }}>{summary}</span>
+      </button>
+      {open ? <div style={{ padding: 14, display: "grid", gap: 12 }}>{children}</div> : null}
+    </section>
+  );
+}
+
 function AcademyPanel({
   academy,
   fallbackName,
   fallbackFocus,
   now,
   busy,
+  expanded,
+  onToggle,
   onAction,
 }: {
   academy: ServerCityAcademy | null;
@@ -270,11 +312,13 @@ function AcademyPanel({
   fallbackFocus: string;
   now: number;
   busy: boolean;
+  expanded: boolean;
+  onToggle: () => void;
   onAction: (academyId: string, action: "start" | "complete") => void;
 }) {
   if (!academy) {
     return (
-      <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, display: "grid", gap: 8, background: "rgba(7, 13, 20, 0.45)" }}>
         <strong>{fallbackName}</strong>
         <p style={{ margin: 0, color: "#b7c3cf" }}>{fallbackFocus}</p>
         <div style={{ color: "#d0ad74", fontSize: 12 }}>Sign in through the live server session to use academy study.</div>
@@ -287,48 +331,48 @@ function AcademyPanel({
   const remainingMs = active ? Math.max(0, active.endsAt - now) : 0;
   const nextAction = academy.canComplete ? "complete" : academy.canStart ? "start" : null;
   const disabled = busy || !nextAction;
+  const availableStage = academy.stages.find((stage) => stage.status === "active" || stage.status === "available");
 
   return (
-    <div style={{ display: "grid", gap: 10 }}>
-      <strong>{academy.name}</strong>
-      <p style={{ margin: 0, color: "#b7c3cf" }}>{academy.theme}</p>
-      <div className="info-row"><span className="info-row__label">Local standing</span><span className="info-row__value">{academy.standing.value} | {academy.standing.tier}</span></div>
-      <div className="info-row"><span className="info-row__label">Supports</span><span className="info-row__value">{academy.progressionSupports.join(" | ")}</span></div>
-      {active ? (
-        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, display: "grid", gap: 6, background: "rgba(7, 13, 20, 0.45)" }}>
-          <div className="info-row"><span className="info-row__label">Active stage</span><span className="info-row__value">{academy.stages.find((stage) => stage.id === active.stageId)?.title ?? active.stageId}</span></div>
-          <div className="info-row"><span className="info-row__label">Study progress</span><span className="info-row__value">{progress}%</span></div>
-          <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-            <div style={{ width: `${progress}%`, height: "100%", background: "#d8c278" }} />
+    <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, background: "rgba(7, 13, 20, 0.45)", overflow: "hidden" }}>
+      <button type="button" onClick={onToggle} aria-expanded={expanded} style={{ width: "100%", border: 0, background: "rgba(12,18,24,0.92)", color: "inherit", padding: 10, textAlign: "left", cursor: "pointer", display: "grid", gap: 5 }}>
+        <span style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <strong>{academy.name}</strong>
+          <span style={{ color: academy.isCompleted ? "#8ec8a7" : academy.lockReason ? "#d0ad74" : "#d8c278", fontSize: 12 }}>{academy.isCompleted ? "Complete" : academy.activeStudy ? "Studying" : academy.lockReason ? "Locked" : "Available"}</span>
+        </span>
+        <span style={{ color: "#b7c3cf", fontSize: 13 }}>{academy.theme}</span>
+        <span style={{ color: "#9fb0bf", fontSize: 12 }}>Standing {academy.standing.value} | Next: {availableStage?.title ?? "academy chain complete"}</span>
+      </button>
+      {expanded ? (
+        <div style={{ padding: 10, display: "grid", gap: 10 }}>
+          <div className="info-row"><span className="info-row__label">Local standing</span><span className="info-row__value">{academy.standing.value} | {academy.standing.tier}</span></div>
+          <div className="info-row"><span className="info-row__label">Supports</span><span className="info-row__value">{academy.progressionSupports.join(" | ")}</span></div>
+          {academy.entryRequirements.length ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Entry: {academy.entryRequirements.join(" | ")}</div> : null}
+          {active ? (
+            <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, display: "grid", gap: 6, background: "rgba(7, 13, 20, 0.45)" }}>
+              <div className="info-row"><span className="info-row__label">Active stage</span><span className="info-row__value">{academy.stages.find((stage) => stage.id === active.stageId)?.title ?? active.stageId}</span></div>
+              <div className="info-row"><span className="info-row__label">Study progress</span><span className="info-row__value">{progress}%</span></div>
+              <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}><div style={{ width: `${progress}%`, height: "100%", background: "#d8c278" }} /></div>
+              <div style={{ color: "#9fb0bf", fontSize: 12 }}>{active.readyToComplete || remainingMs <= 0 ? "Ready to complete if you are in the academy city." : `Ready in ${formatDuration(remainingMs)}.`}</div>
+            </div>
+          ) : null}
+          <div style={{ display: "grid", gap: 8 }}>
+            {academy.stages.map((stage, index) => (
+              <div key={stage.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: stage.status === "active" ? "rgba(216,194,120,0.08)" : "rgba(7, 13, 20, 0.45)", display: "grid", gap: 5 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}><strong>{index + 1}. {stage.title}</strong><span style={{ color: stage.status === "completed" ? "#8ec8a7" : stage.status === "locked" ? "#d0ad74" : "#d8c278", fontSize: 12 }}>{stage.status}</span></div>
+                <div style={{ color: "#b7c3cf", fontSize: 13 }}>{stage.summary}</div>
+                <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing required: {stage.requiredStanding} | Reward standing: +{stage.standingReward}</div>
+                {stage.requiredCourses.length ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Courses: {stage.requiredCourses.join(" | ")}</div> : null}
+                {stage.missingCourses.length ? <div style={{ color: "#d0ad74", fontSize: 12 }}>Missing: {stage.missingCourses.join(" | ")}</div> : null}
+                {stage.lockReason && stage.status !== "available" ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{stage.lockReason}</div> : null}
+              </div>
+            ))}
           </div>
-          <div style={{ color: "#9fb0bf", fontSize: 12 }}>{active.readyToComplete || remainingMs <= 0 ? "Ready to complete if you are in the academy city." : `Ready in ${formatDuration(remainingMs)}.`}</div>
+          {academy.isCompleted ? <div style={{ color: "#8ec8a7", fontSize: 12 }}>Academy chain complete.</div> : null}
+          {academy.lockReason && !nextAction && !academy.isCompleted ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academy.lockReason}</div> : null}
+          <button type="button" disabled={disabled} onClick={() => nextAction ? onAction(academy.id, nextAction) : undefined} style={actionButtonStyle(disabled)}>{busy ? "Working..." : nextAction === "complete" ? "Complete stage" : "Start next stage"}</button>
         </div>
       ) : null}
-      <div style={{ display: "grid", gap: 8 }}>
-        {academy.stages.map((stage, index) => (
-          <div key={stage.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: stage.status === "active" ? "rgba(216,194,120,0.08)" : "rgba(7, 13, 20, 0.45)", display: "grid", gap: 5 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <strong>{index + 1}. {stage.title}</strong>
-              <span style={{ color: stage.status === "completed" ? "#8ec8a7" : stage.status === "locked" ? "#d0ad74" : "#d8c278", fontSize: 12 }}>{stage.status}</span>
-            </div>
-            <div style={{ color: "#b7c3cf", fontSize: 13 }}>{stage.summary}</div>
-            <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing required: {stage.requiredStanding} | Reward standing: +{stage.standingReward}</div>
-            {stage.requiredCourses.length ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Courses: {stage.requiredCourses.join(" | ")}</div> : null}
-            {stage.missingCourses.length ? <div style={{ color: "#d0ad74", fontSize: 12 }}>Missing: {stage.missingCourses.join(" | ")}</div> : null}
-            {stage.lockReason && stage.status !== "available" ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{stage.lockReason}</div> : null}
-          </div>
-        ))}
-      </div>
-      {academy.isCompleted ? <div style={{ color: "#8ec8a7", fontSize: 12 }}>Academy chain complete.</div> : null}
-      {academy.lockReason && !nextAction && !academy.isCompleted ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academy.lockReason}</div> : null}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => nextAction ? onAction(academy.id, nextAction) : undefined}
-        style={actionButtonStyle(disabled)}
-      >
-        {busy ? "Working..." : nextAction === "complete" ? "Complete stage" : "Start next stage"}
-      </button>
     </div>
   );
 }
@@ -360,6 +404,9 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const [specialsLoading, setSpecialsLoading] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [openSection, setOpenSection] = useState<CityHubSectionId>("overview");
+  const [showAllContracts, setShowAllContracts] = useState(false);
+  const [openAcademyId, setOpenAcademyId] = useState<string | null>(null);
 
   useEffect(() => {
     const handle = window.setInterval(() => setNow(Date.now()), 1000);
@@ -525,201 +572,136 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     await refreshServerState();
   }
 
-  const openServiceCards = [hub.services.market, hub.services.travel, hub.services.consortium, hub.services.guild];
-  const localServiceCards = [hub.services.blackMarket, hub.services.citySpecial, hub.services.academy];
+  const serviceCards = [
+    hub.services.market,
+    hub.services.travel,
+    hub.services.guild,
+    hub.services.consortium,
+    hub.services.academy,
+    hub.services.blackMarket,
+    hub.services.citySpecial,
+  ];
+  const academyEntries = academies.length ? academies : academy ? [academy] : [];
+  const visibleContracts = showAllContracts ? contracts : contracts.slice(0, 3);
+  const fallbackContracts = showAllContracts ? localContracts : localContracts.slice(0, 3);
+  const contractSummary = contracts.length
+    ? `${contracts.length} local contracts | ${contracts.filter((contract) => contract.status === "active").length} active`
+    : `${localContracts.length} local postings previewed`;
+  const districtCount = districts.reduce((total, district) => total + district.destinations.length, 0);
 
   return (
-    <div style={{ display: "grid", gap: 14 }}>
-      <div
-        style={{
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 10,
-          padding: 14,
-          background: "rgba(7, 13, 20, 0.58)",
-          display: "grid",
-          gap: 6,
-        }}
-      >
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 14, background: "rgba(7, 13, 20, 0.58)", display: "grid", gap: 6 }}>
         <strong>{hub.displayName}</strong>
         <div style={{ color: "#d8c278", fontSize: 13 }}>{hub.identity}</div>
         <div style={{ color: "#9fb0bf", fontSize: 13 }}>{hub.overview}</div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-        <ContentPanel title="City Overview">
-          <div style={{ display: "grid", gap: 10 }}>
-            <p style={{ margin: 0 }}>{hub.localIdentity}</p>
-            <div className="info-row">
-              <span className="info-row__label">Property Flavor</span>
-              <span className="info-row__value">{hub.propertyFlavor}</span>
+      <HubSection id="overview" title="City Overview" summary={`${standing ? `${standing.tier} standing` : "Local status"} | ${hub.market.imports.slice(0, 2).join(", ") || "city imports"} in, ${hub.market.exports.slice(0, 2).join(", ") || "city exports"} out`} openSection={openSection} onToggle={setOpenSection}>
+        <div style={{ display: "grid", gap: 10 }}>
+          <p style={{ margin: 0 }}>{hub.localIdentity}</p>
+          {standing ? (
+            <>
+              <div className="info-row"><span className="info-row__label">Local standing</span><span className="info-row__value">{standing.value} | {standing.tier}</span></div>
+              <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing improves local contracts, services, and academy access.</div>
+            </>
+          ) : null}
+          <div className="info-row"><span className="info-row__label">Property flavor</span><span className="info-row__value">{hub.propertyFlavor}</span></div>
+          <div className="info-row"><span className="info-row__label">Imports</span><span className="info-row__value">{hub.market.imports.join(", ")}</span></div>
+          <div className="info-row"><span className="info-row__label">Exports</span><span className="info-row__value">{hub.market.exports.join(", ")}</span></div>
+          {hub.lockedContent.length ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              {hub.lockedContent.map((entry) => (
+                <div key={entry.label} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.45)", display: "grid", gap: 4 }}>
+                  <strong>{entry.label}</strong>
+                  <div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.reason}</div>
+                  <div style={{ color: "#d0ad74", fontSize: 12 }}>Unlock path: {entry.unlockPath}</div>
+                </div>
+              ))}
             </div>
-            {standing ? (
-              <>
-                <div className="info-row"><span className="info-row__label">Local standing</span><span className="info-row__value">{standing.value} | {standing.tier}</span></div>
-                <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing unlocks stronger local contracts and later academy stages.</div>
-              </>
-            ) : null}
-          </div>
-        </ContentPanel>
+          ) : null}
+        </div>
+      </HubSection>
 
-        <ContentPanel title={hub.market.name}>
-          <div style={{ display: "grid", gap: 10 }}>
-            <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.market.summary}</p>
-            <div className="info-row">
-              <span className="info-row__label">Imports</span>
-              <span className="info-row__value">{hub.market.imports.join(", ")}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-row__label">Exports</span>
-              <span className="info-row__value">{hub.market.exports.join(", ")}</span>
-            </div>
-            <ServiceLink service={hub.services.market} />
-          </div>
-        </ContentPanel>
+      <HubSection id="services" title="Local Services" summary={`Market, Travel, Guild, Consortium, Academy${hub.services.blackMarket.status === "open" ? ", Black Market" : ""}, and ${hub.special.name}`} openSection={openSection} onToggle={setOpenSection}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          {serviceCards.map((service) => <ServiceLink key={service.label} service={service} />)}
+        </div>
+        <div id="special" style={{ display: "grid", gap: 10 }}>
+          <strong>{hub.special.name}</strong>
+          <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.special.summary}</p>
+          {specialsLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking local services...</div> : null}
+          {specialsError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{specialsError}</div> : null}
+          {specialsMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{specialsMessage}</div> : null}
+          {specials.length ? specials.map((action) => <SpecialActionCard key={action.id} action={action} busy={busyAction === `special:${action.id}`} onUse={runSpecialAction} />) : <div style={{ color: "#9fb0bf", fontSize: 13 }}>No city-special action is available from this city right now.</div>}
+        </div>
+      </HubSection>
 
-        <ContentPanel title="People">
-          <div id="people" style={{ display: "grid", gap: 10 }}>
-            <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.peopleIntro}</p>
-            <PeopleList people={people} population={population} loading={peopleLoading} error={peopleError} />
-          </div>
-        </ContentPanel>
+      <HubSection id="people" title="People" summary={`${population?.visibleCount ?? people.length} visible | ${population?.guildmatesVisible ?? 0} guildmates | ${population?.consortiumMembersVisible ?? 0} consortium peers`} openSection={openSection} onToggle={setOpenSection}>
+        <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.peopleIntro}</p>
+        <PeopleList people={people} population={population} loading={peopleLoading} error={peopleError} />
+      </HubSection>
 
-        <ContentPanel title="Academy">
-          <div id="academy" style={{ display: "grid", gap: 10 }}>
-            {academyLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking academy access...</div> : null}
-            {academyError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{academyError}</div> : null}
-            {academyMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{academyMessage}</div> : null}
-            {(academies.length ? academies : academy ? [academy] : []).map((academyEntry) => (
-              <AcademyPanel
-                key={academyEntry.id}
-                academy={academyEntry}
-                fallbackName={hub.academy.name}
-                fallbackFocus={hub.academy.focus}
-                now={now}
-                busy={Boolean(busyAction?.startsWith("academy:"))}
-                onAction={runAcademyAction}
-              />
-            ))}
-            {!academies.length && !academy ? (
-              <AcademyPanel
-                academy={null}
-                fallbackName={hub.academy.name}
-                fallbackFocus={hub.academy.focus}
-                now={now}
-                busy={Boolean(busyAction?.startsWith("academy:"))}
-                onAction={runAcademyAction}
-              />
-            ) : null}
-            <ServiceLink service={hub.services.academy} />
-            {!academy && academyDetail.lockReason ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academyDetail.lockReason}</div> : null}
-            {hub.academy.unlockCourse ? <div style={{ fontSize: 12, color: "#d0ad74" }}>Unlock path: {hub.academy.unlockCourse}</div> : null}
-          </div>
-        </ContentPanel>
+      <HubSection id="contracts" title="Local Contracts" summary={contractSummary} openSection={openSection} onToggle={setOpenSection}>
+        <div style={{ display: "grid", gap: 10 }}>
+          {contractsLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Loading local contracts...</div> : null}
+          {contractsError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{contractsError}</div> : null}
+          {contractsMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{contractsMessage}</div> : null}
+          <CombatMiniPanel combat={lastContractCombat} />
+          {contracts.length ? (
+            <>
+              {visibleContracts.map((contract) => <ContractCard key={contract.id} contract={contract} busy={Boolean(busyAction?.startsWith(`contract:${contract.id}:`))} onAction={runContractAction} />)}
+              {contracts.length > 3 ? <button type="button" onClick={() => setShowAllContracts((current) => !current)} style={actionButtonStyle(false)}>{showAllContracts ? "Show fewer contracts" : `Show all ${contracts.length} contracts`}</button> : null}
+            </>
+          ) : authSource === "server" ? null : (
+            <>
+              <div style={{ color: "#d0ad74", fontSize: 12 }}>Local contracts are server-backed. Sign in to accept, complete, and claim them.</div>
+              {fallbackContracts.map((contract) => (
+                <div key={contract.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}><strong>{contract.title}</strong><span style={{ color: "#d8c278", fontSize: 12 }}>{contract.risk} risk</span></div>
+                  <div style={{ color: "#d8c278", fontSize: 12 }}>{contract.type}</div>
+                  <div style={{ color: "#b7c3cf", fontSize: 13 }}>{contract.summary}</div>
+                  <div style={{ color: "#9fb0bf", fontSize: 12 }}>Reward: {contract.reward}</div>
+                  <div style={{ color: "#9fb0bf", fontSize: 12 }}>Requires: {contract.requirement}</div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </HubSection>
 
-        <ContentPanel title="Local Contracts">
-          <div style={{ display: "grid", gap: 10 }}>
-            {contractsLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Loading local contracts...</div> : null}
-            {contractsError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{contractsError}</div> : null}
-            {contractsMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{contractsMessage}</div> : null}
-            <CombatMiniPanel combat={lastContractCombat} />
-            {contracts.length ? (
-              contracts.map((contract) => (
-                <ContractCard
-                  key={contract.id}
-                  contract={contract}
-                  busy={Boolean(busyAction?.startsWith(`contract:${contract.id}:`))}
-                  onAction={runContractAction}
-                />
-              ))
-            ) : authSource === "server" ? null : (
-              <>
-                <div style={{ color: "#d0ad74", fontSize: 12 }}>Local contracts are server-backed. Sign in to accept, complete, and claim them.</div>
-                {localContracts.map((contract) => (
-                  <div key={contract.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 6 }}>
-                    <strong>{contract.title}</strong>
-                    <div style={{ color: "#d8c278", fontSize: 12 }}>{contract.type}</div>
-                    <div style={{ color: "#b7c3cf", fontSize: 13 }}>{contract.summary}</div>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </ContentPanel>
+      <HubSection id="academy" title="Academy" summary={`${academyEntries.length || 1} local academ${(academyEntries.length || 1) === 1 ? "y" : "ies"} | compact until expanded`} openSection={openSection} onToggle={setOpenSection}>
+        <div style={{ display: "grid", gap: 10 }}>
+          {academyLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking academy access...</div> : null}
+          {academyError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{academyError}</div> : null}
+          {academyMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{academyMessage}</div> : null}
+          {academyEntries.length ? academyEntries.map((academyEntry) => (
+            <AcademyPanel key={academyEntry.id} academy={academyEntry} fallbackName={hub.academy.name} fallbackFocus={hub.academy.focus} now={now} busy={Boolean(busyAction?.startsWith("academy:"))} expanded={openAcademyId === academyEntry.id} onToggle={() => setOpenAcademyId((current) => current === academyEntry.id ? null : academyEntry.id)} onAction={runAcademyAction} />
+          )) : (
+            <AcademyPanel academy={null} fallbackName={hub.academy.name} fallbackFocus={hub.academy.focus} now={now} busy={Boolean(busyAction?.startsWith("academy:"))} expanded onToggle={() => undefined} onAction={runAcademyAction} />
+          )}
+          <ServiceLink service={hub.services.academy} />
+          {!academy && academyDetail.lockReason ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academyDetail.lockReason}</div> : null}
+          {hub.academy.unlockCourse ? <div style={{ fontSize: 12, color: "#d0ad74" }}>Unlock path: {hub.academy.unlockCourse}</div> : null}
+        </div>
+      </HubSection>
 
-        <ContentPanel title="City Special">
-          <div id="special" style={{ display: "grid", gap: 10 }}>
-            <strong>{hub.special.name}</strong>
-            <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.special.summary}</p>
-            {specialsLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking local services...</div> : null}
-            {specialsError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{specialsError}</div> : null}
-            {specialsMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{specialsMessage}</div> : null}
-            {specials.length ? specials.map((action) => (
-              <SpecialActionCard
-                key={action.id}
-                action={action}
-                busy={busyAction === `special:${action.id}`}
-                onUse={runSpecialAction}
-              />
-            )) : null}
-            <ServiceLink service={hub.services.citySpecial} />
-          </div>
-        </ContentPanel>
-
-        <ContentPanel title="Local Services">
-          <div style={{ display: "grid", gap: 10 }}>
-            {[...openServiceCards, ...localServiceCards].map((service) => (
-              <ServiceLink key={service.label} service={service} />
-            ))}
-          </div>
-        </ContentPanel>
-      </div>
-
-      {hub.lockedContent.length ? (
-        <ContentPanel title="Locked Content">
-          <div style={{ display: "grid", gap: 10 }}>
-            {hub.lockedContent.map((entry) => (
-              <div
-                key={entry.label}
-                style={{
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 8,
-                  padding: 12,
-                  background: "rgba(7, 13, 20, 0.55)",
-                  display: "grid",
-                  gap: 6,
-                }}
-              >
-                <strong>{entry.label}</strong>
-                <div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.reason}</div>
-                <div style={{ color: "#d0ad74", fontSize: 12 }}>Unlock path: {entry.unlockPath}</div>
-              </div>
-            ))}
-          </div>
-        </ContentPanel>
-      ) : null}
-
-      {city.id === "nexis" ? (
-        <ContentPanel title="Nexis District Directory">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-            {districts.map((district) => (
-              <div key={district.id} style={{ display: "grid", gap: 10 }}>
-                <strong>{district.name}</strong>
-                <div style={{ fontSize: 13, color: "#9fb0bf" }}>{district.summary}</div>
+      <HubSection id="districts" title="District Directory" summary={`${districts.length} districts | ${districtCount} linked services, collapsed by default`} openSection={openSection} onToggle={setOpenSection}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+          {districts.map((district) => (
+            <div key={district.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.45)", display: "grid", gap: 8 }}>
+              <strong>{district.name}</strong>
+              <div style={{ fontSize: 13, color: "#9fb0bf" }}>{district.summary}</div>
+              <div style={{ display: "grid", gap: 6 }}>
                 {district.destinations.map((destination) => {
-                  const service: CityService = {
-                    label: destination.name,
-                    route: destination.route,
-                    status: destination.locked ? "locked" : "open",
-                    summary: destination.description,
-                    lockReason: destination.lockReason,
-                  };
+                  const service: CityService = { label: destination.name, route: destination.route, status: destination.locked ? "locked" : "open", summary: destination.description, lockReason: destination.lockReason };
                   return <ServiceLink key={destination.id} service={service} />;
                 })}
               </div>
-            ))}
-          </div>
-        </ContentPanel>
-      ) : null}
+            </div>
+          ))}
+        </div>
+      </HubSection>
     </div>
   );
 }

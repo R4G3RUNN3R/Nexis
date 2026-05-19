@@ -5,7 +5,7 @@ export default function CityBoardPage() {
   return (
     <AppShell
       title="City Board"
-      hint="Public postings, civic work, notices, bounties, and property leads from the city board."
+      hint="A local paper-style board for civic appointments, opportunities, bounties, notices, and classifieds."
     >
       <CityBoardSections />
     </AppShell>

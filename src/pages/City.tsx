@@ -12,7 +12,7 @@ export default function CityPage() {
   return (
     <AppShell
       title={currentCity.name}
-      hint={`District services, local routes, and civic access for your current city: ${currentCity.name}.`}
+      hint={`Local actions, people, contracts, academy access, and services for your current city: ${currentCity.name}.`}
     >
       <CityDistrictHub city={currentCity} />
     </AppShell>

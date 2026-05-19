@@ -1,53 +1,67 @@
 import { Link, useParams } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
-import { getCityMap, getMapView, mapViews, type MapNode } from "../data/mapSchema";
+import { getMapView, mapViews, type MapNode } from "../data/mapSchema";
 import "../styles/world-map-ui.css";
 
-function formatMapLabel(value: string) {
+function formatAtlasLabel(value: string) {
   return value
     .replace(/_/g, " ")
     .replace(/-/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function mapRouteForViewId(viewId: string) {
+function atlasRouteForViewId(viewId: string) {
   return viewId === "world" ? "/world-map" : `/maps/${viewId}`;
 }
 
-function getNodeRoute(node: MapNode) {
-  if (node.route) return node.route;
-  const directMap = getMapView(node.id);
-  if (directMap) return mapRouteForViewId(directMap.id);
-  const cityMap = getCityMap(node.id as never);
-  return cityMap ? mapRouteForViewId(cityMap.id) : null;
+function publicAtlasText(value: string) {
+  return value;
+}
+
+function statusLabel(node: MapNode) {
+  if (node.visibility === "visible") return "Discovered";
+  if (node.visibility === "locked") return "Locked rumor";
+  return "Hidden rumor";
+}
+
+function NodeEntry({ node }: { node: MapNode }) {
+  const lockReason = typeof node.metadata?.lockReason === "string" ? node.metadata.lockReason : null;
+  return (
+    <article style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.52)", display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <strong>{node.label}</strong>
+        <span style={{ color: node.visibility === "visible" ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{statusLabel(node)}</span>
+      </div>
+      <div style={{ color: "#d8c278", fontSize: 12 }}>{formatAtlasLabel(node.kind)}</div>
+      <p style={{ margin: 0, color: "#b7c3cf", fontSize: 13 }}>{publicAtlasText(node.summary)}</p>
+      {lockReason ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{lockReason}</div> : null}
+    </article>
+  );
 }
 
 export default function WorldMapPage() {
   const params = useParams();
   const activeMap = getMapView(params.mapId ?? "world") ?? mapViews[0];
   const visibleNodes = activeMap.nodes.filter((node) => node.visibility === "visible");
-  const hiddenCount = activeMap.nodes.filter((node) => node.visibility !== "visible").length;
+  const lockedNodes = activeMap.nodes.filter((node) => node.visibility !== "visible");
+  const discoveryEdges = activeMap.edges.filter((edge) => edge.requirements?.length || edge.discovery || edge.label);
 
   return (
     <AppShell
       title={activeMap.label}
-      hint="Move from world region to regional map, destination node, travel panel, and local screen as routes open."
+      hint="Atlas, lore, discovery status, and rumored geography. Use Travel for departure and route movement."
     >
       <div className="nexis-grid">
         <div className="nexis-column">
           <section className="panel">
-            <div className="panel__header">
-              <h2>Map Registry</h2>
-            </div>
+            <div className="panel__header"><h2>Atlas Volumes</h2></div>
             <div className="panel__body">
               <div className="info-list">
                 {mapViews.map((view) => (
                   <div key={view.id} className="info-row">
                     <span className="info-row__label">{view.label}</span>
                     <span className="info-row__value info-row__value--accent">
-                      <Link className="inline-route-link" to={mapRouteForViewId(view.id)}>
-                        Open
-                      </Link>
+                      <Link className="inline-route-link" to={atlasRouteForViewId(view.id)}>Read</Link>
                     </span>
                   </div>
                 ))}
@@ -56,60 +70,34 @@ export default function WorldMapPage() {
           </section>
 
           <section className="panel">
-            <div className="panel__header">
-              <h2>Visible Nodes</h2>
-            </div>
+            <div className="panel__header"><h2>Discovered Entries</h2></div>
             <div className="panel__body">
-              <div className="info-list">
-                {visibleNodes.map((node) => {
-                  const nodeRoute = getNodeRoute(node);
-                  return (
-                    <div key={node.id} className="info-row">
-                      <span className="info-row__label">{node.label}</span>
-                      <span className="info-row__value">
-                        {nodeRoute ? (
-                          <Link className="inline-route-link" to={nodeRoute}>Open {formatMapLabel(node.kind)}</Link>
-                        ) : (
-                          `${formatMapLabel(node.kind)} - informational`
-                        )}
-                      </span>
-                    </div>
-                  );
-                })}
+              <div style={{ display: "grid", gap: 10 }}>
+                {visibleNodes.map((node) => <NodeEntry key={node.id} node={node} />)}
               </div>
-              {visibleNodes.some((node) => !getNodeRoute(node)) ? (
-                <p style={{ color: "#9fb0bf", fontSize: 13, margin: "10px 0 0" }}>
-                  Informational nodes are visible world markers; nodes with an Open link have an available map, route, or local screen.
-                </p>
-              ) : null}
             </div>
           </section>
         </div>
 
         <div className="nexis-column">
           <section className="panel">
-            <div className="panel__header">
-              <h2>Map Summary</h2>
-            </div>
+            <div className="panel__header"><h2>Atlas Summary</h2></div>
             <div className="panel__body">
-              <p style={{ marginTop: 0 }}>{activeMap.summary}</p>
+              <p style={{ marginTop: 0 }}>{publicAtlasText(activeMap.summary)}</p>
               <div className="stat-table">
-                <div className="stat-row">
-                  <span className="stat-row__label">Map Kind</span>
-                  <strong className="stat-row__value">{formatMapLabel(activeMap.kind)}</strong>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-row__label">Visible Nodes</span>
-                  <strong className="stat-row__value">{visibleNodes.length}</strong>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-row__label">Hidden / Locked</span>
-                  <strong className="stat-row__value">{hiddenCount}</strong>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-row__label">Connections</span>
-                  <strong className="stat-row__value">{activeMap.edges.length}</strong>
-                </div>
+                <div className="stat-row"><span className="stat-row__label">Atlas Kind</span><strong className="stat-row__value">{formatAtlasLabel(activeMap.kind)}</strong></div>
+                <div className="stat-row"><span className="stat-row__label">Discovered</span><strong className="stat-row__value">{visibleNodes.length}</strong></div>
+                <div className="stat-row"><span className="stat-row__label">Rumored / Locked</span><strong className="stat-row__value">{lockedNodes.length}</strong></div>
+                <div className="stat-row"><span className="stat-row__label">Known Corridors</span><strong className="stat-row__value">{activeMap.edges.length}</strong></div>
+              </div>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel__header"><h2>Rumored and Locked Regions</h2></div>
+            <div className="panel__body">
+              <div style={{ display: "grid", gap: 10 }}>
+                {lockedNodes.length ? lockedNodes.slice(0, 8).map((node) => <NodeEntry key={node.id} node={node} />) : <div style={{ color: "#9fb0bf", fontSize: 13 }}>No locked atlas entries in this volume.</div>}
               </div>
             </div>
           </section>
@@ -117,45 +105,23 @@ export default function WorldMapPage() {
 
         <div className="nexis-column">
           <section className="panel">
-            <div className="panel__header">
-              <h2>Expansion Hooks</h2>
-            </div>
+            <div className="panel__header"><h2>Discovery Notes</h2></div>
             <div className="panel__body">
-              <div className="info-list">
-                <div className="info-row">
-                  <span className="info-row__label">Guild Influence</span>
-                  <span className="info-row__value">Ready</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-row__label">Consortium Presence</span>
-                  <span className="info-row__value">Ready</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-row__label">Hidden Nodes</span>
-                  <span className="info-row__value">Discovery-gated</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-row__label">Keeps / Strongholds</span>
-                  <span className="info-row__value">Planned</span>
-                </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {discoveryEdges.slice(0, 8).map((edge) => (
+                  <div key={`${edge.from}-${edge.to}-${edge.label}`} className="info-row">
+                    <span className="info-row__label">{edge.label ? publicAtlasText(edge.label) : `${edge.from} to ${edge.to}`}</span>
+                    <span className="info-row__value">
+                      {edge.requirements?.length
+                        ? edge.requirements.map((requirement) => requirement.label).join(", ")
+                        : edge.discovery?.unlockHint ?? "Known connection"}
+                    </span>
+                  </div>
+                ))}
               </div>
-              {activeMap.edges.some((edge) => edge.requirements?.length || edge.discovery) ? (
-                <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-                  {activeMap.edges
-                    .filter((edge) => edge.requirements?.length || edge.discovery)
-                    .slice(0, 6)
-                    .map((edge) => (
-                      <div key={`${edge.from}-${edge.to}-${edge.label}`} className="info-row">
-                        <span className="info-row__label">{edge.label ?? `${edge.from} to ${edge.to}`}</span>
-                        <span className="info-row__value">
-                          {edge.requirements?.length
-                            ? edge.requirements.map((requirement) => requirement.label).join(", ")
-                            : edge.discovery?.unlockHint ?? "Discovery required"}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              ) : null}
+              <p style={{ color: "#9fb0bf", fontSize: 13, margin: "12px 0 0" }}>
+                The atlas records geography and discovery state only. Departure, route risk, and travel timing live on the Travel page.
+              </p>
             </div>
           </section>
         </div>
