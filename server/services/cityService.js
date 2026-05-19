@@ -10,7 +10,6 @@ import { getCityDefinition, getCityOccupancyCandidates, isValidCityId, normalize
 import { getAcademyById, getCityAcademies, getCityAcademy, getCityContract, getCityContracts } from "../data/cityLoopData.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
 import { resolveNpcCombatWithRewards } from "./combatService.js";
-import { unlockSkill } from "./skillService.js";
 
 const CITY_STANDING_TIERS = [
   { value: 0, label: "New Arrival" },
@@ -103,6 +102,7 @@ function ensureAcademyState(runtimeState) {
     activeStudy: activeStudy.academyId ? { ...activeStudy } : null,
     completed: { ...completed },
     unlocks: asArray(existing.unlocks).filter((entry) => typeof entry === "string"),
+    skillAccess: asArray(existing.skillAccess).filter((entry) => typeof entry === "string"),
   };
   runtimeState.player = player;
   return player.cityAcademy;
@@ -235,8 +235,10 @@ function applyReward(runtimeState, reward, now) {
     academyState.unlocks = Array.from(new Set([...academyState.unlocks, flag]));
   }
 
-  for (const skillId of asArray(reward.skills).filter((entry) => typeof entry === "string")) {
-    unlockSkill(runtimeState, skillId, "academy", now);
+  const skillAccess = asArray(reward.skills).filter((entry) => typeof entry === "string");
+  if (skillAccess.length) {
+    academyState.skillAccess = Array.from(new Set([...asArray(academyState.skillAccess), ...skillAccess]));
+    academyState.unlocks = Array.from(new Set([...academyState.unlocks, ...skillAccess.map((skillId) => `skill_access_${skillId}`)]));
   }
 
   player.counters = { ...asRecord(player.counters), lastCityGameplayRewardAt: now };

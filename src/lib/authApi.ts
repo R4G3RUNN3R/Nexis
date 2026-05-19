@@ -560,6 +560,13 @@ export type ApiLegacyAchievementsResponse =
   | ApiFailure;
 
 
+export type ServerSkillEvolutionStep = {
+  id: string;
+  name: string;
+  unlockTier: number;
+  unlocked: boolean;
+};
+
 export type ServerSkill = {
   id: string;
   name: string;
@@ -567,18 +574,36 @@ export type ServerSkill = {
   slotType: "active" | "passive";
   kind: "active" | "passive";
   tier: number;
+  definitionTier: number;
   summary: string;
   unlocked: boolean;
+  learned: boolean;
+  learning: boolean;
+  learningStartedAt: number | null;
+  learningCompletesAt: number | null;
+  canLearn: boolean;
+  canCompleteLearning: boolean;
+  learningCostGold: number;
+  learningDurationMs: number;
   lockReason: string | null;
   requiredCourses: string[];
   requiredFlags: string[];
   requiredSkills: string[];
   xp: number;
   xpToEvolve: number | null;
+  totalUses: number;
+  masteryTier: number;
+  nextTierThreshold: number | null;
+  usesToNextTier: number;
   progressPercent: number;
   evolvesTo: string | null;
   evolvedTo: string | null;
+  currentEvolutionId: string;
+  currentEvolutionName: string;
+  evolutionPath: ServerSkillEvolutionStep[];
+  nextTierImprovement: string;
   combat: Record<string, unknown>;
+  baseCombat: Record<string, unknown>;
 };
 
 export type ServerSkillsPayload = {
@@ -587,6 +612,8 @@ export type ServerSkillsPayload = {
   activeSlots: Array<string | null>;
   passiveSlots: Array<string | null>;
   unlockedCount: number;
+  learningCount: number;
+  masteryThresholds: number[];
   skills: ServerSkill[];
   unlockHistory: Array<Record<string, unknown>>;
 };
@@ -614,7 +641,7 @@ export type ServerCombatResult = {
   outcome: "victory" | "defeat" | "draw";
   player: { health: number; maxHealth: number };
   opponentState: { health: number; maxHealth: number };
-  activeSkills: Array<{ id: string; name: string }>;
+  activeSkills: Array<{ id: string; name: string; masteryTier?: number; totalUses?: number }>;
   passiveSkills: string[];
   log: ServerCombatLogEntry[];
   skillEvents: Array<Record<string, unknown>>;
@@ -1089,6 +1116,30 @@ export function getServerSkills(sessionToken: string): Promise<ApiSkillsResponse
   return requestJson<{ playerState: ServerPlayerState; skills: ServerSkillsPayload }>("/api/skills", {
     method: "GET",
     headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function learnServerSkill(sessionToken: string, skillId: string): Promise<ApiSkillsResponse> {
+  return requestJson<{ playerState: ServerPlayerState; skills: ServerSkillsPayload; message?: string }>("/api/skills/learn", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ skillId }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function completeServerSkillLearning(sessionToken: string, skillId?: string | null): Promise<ApiSkillsResponse> {
+  return requestJson<{ playerState: ServerPlayerState; skills: ServerSkillsPayload; message?: string }>("/api/skills/complete-learning", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ skillId: skillId ?? null }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function adminSetServerSkillMastery(sessionToken: string, skillId: string, uses: number): Promise<ApiSkillsResponse> {
+  return requestJson<{ playerState: ServerPlayerState; skills: ServerSkillsPayload; message?: string }>("/api/skills/admin/mastery", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ skillId, uses }),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

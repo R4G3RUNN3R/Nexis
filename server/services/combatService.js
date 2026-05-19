@@ -4,7 +4,7 @@ import { rollLoot } from "../data/lootData.js";
 import { getItemDefinition, getItemDisplayName } from "../data/itemData.js";
 import { getEquipmentStatTotalsForRuntimeState } from "./itemService.js";
 import { getMaintenanceCombatBonus } from "./itemAdvancedService.js";
-import { getSlottedSkillIds, grantSkillXp, syncUnlockedSkills, unlockSkill } from "./skillService.js";
+import { getScaledSkillCombat, getScaledSkillForUse, getSlottedSkillIds, grantSkillXp, syncUnlockedSkills } from "./skillService.js";
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -48,7 +48,7 @@ function applyPassiveEffects(runtimeState) {
   for (const skillId of passiveIds) {
     const skill = getSkillDefinition(skillId);
     if (!skill) continue;
-    const combat = asRecord(skill.combat);
+    const combat = asRecord(getScaledSkillCombat(runtimeState, skill));
     effects.damageMultiplier += asNumber(combat.damageMultiplier, 0);
     effects.accuracyBonus += asNumber(combat.accuracyBonus, 0);
     effects.critBonus += asNumber(combat.critBonus, 0);
@@ -70,12 +70,17 @@ function getUnlockedActiveSkillIds(runtimeState) {
 }
 
 function getCombatSkills(runtimeState) {
-  unlockSkill(runtimeState, "quick_strike", "combat-default");
   const slotted = getSlottedSkillIds(runtimeState, "active");
   const unlocked = getUnlockedActiveSkillIds(runtimeState);
-  const activeIds = slotted.length ? slotted : unlocked.slice(0, 4);
-  return activeIds.length ? activeIds : ["quick_strike"];
+  return slotted.length ? slotted : unlocked.slice(0, 4);
 }
+
+const BASIC_STRIKE = {
+  id: "basic_strike",
+  name: "Basic Strike",
+  combat: { damageMultiplier: 0.92, accuracyBonus: 0, critBonus: 0, heal: 0 },
+  useXp: 0,
+};
 
 function addEffectTotals(target, source) {
   for (const [key, value] of Object.entries(asRecord(source))) {
@@ -283,7 +288,7 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
   const player = buildPlayerCombatant(runtimeState, playerName);
   const opponent = buildNpcCombatant(opponentSource);
   const activeSkillIds = getCombatSkills(runtimeState);
-  const activeSkills = activeSkillIds.map((skillId) => getSkillDefinition(skillId)).filter(Boolean);
+  const activeSkills = activeSkillIds.map((skillId) => getScaledSkillForUse(runtimeState, skillId)).filter(Boolean);
   const log = [];
   const skillEvents = [];
   const rounds = Math.max(1, Math.min(12, Math.floor(asNumber(options.rounds, 8))));
@@ -306,10 +311,10 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
             continue;
           }
         }
-        const skill = activeSkills[round % activeSkills.length] ?? getSkillDefinition("quick_strike");
+        const skill = activeSkills.length ? activeSkills[round % activeSkills.length] : BASIC_STRIKE;
         const entry = tryAttack({ attacker: player, defender: opponent, skill, randomFn, turn });
         log.push(entry);
-        if (entry.outcome !== "miss" && skill?.id) {
+        if (skill?.id && getSkillDefinition(skill.id)) {
           const xpEvent = grantSkillXp(runtimeState, skill.id, asNumber(skill.useXp, 10) + asNumber(options.bonusSkillXp, 0), options.context ?? "combat", now);
           if (xpEvent) skillEvents.push(xpEvent);
         }
@@ -355,7 +360,7 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
     outcome: winner === "player" ? "victory" : winner === "opponent" ? "defeat" : "draw",
     player: { health: Math.round(player.health), maxHealth: player.maxHealth },
     opponentState: { health: Math.round(opponent.health), maxHealth: opponent.maxHealth },
-    activeSkills: activeSkills.map((skill) => ({ id: skill.id, name: skill.name })),
+    activeSkills: (activeSkills.length ? activeSkills : [BASIC_STRIKE]).map((skill) => ({ id: skill.id, name: skill.name, masteryTier: skill.masteryTier ?? 0, totalUses: skill.totalUses ?? 0 })),
     passiveSkills: player.passive.ids,
     log,
     skillEvents,
