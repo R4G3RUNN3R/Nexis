@@ -1,49 +1,4 @@
-export type EducationStatRewards = Partial<{
-  strength: number;
-  dexterity: number;
-  defense: number;
-  speed: number;
-}>;
-
-export type EducationWorkingStatRewards = Partial<{
-  manualLabor: number;
-  intelligence: number;
-  endurance: number;
-}>;
-
-export type EducationRewardKind =
-  | "utility"
-  | "combat"
-  | "economy"
-  | "travel"
-  | "shadow"
-  | "governance";
-
-export type EducationCourse = {
-  id: string;
-  categoryId: string;
-  code: string;
-  name: string;
-  durationDays: number;
-  costGold: number;
-  description: string;
-  rewardKind: EducationRewardKind;
-  prerequisites?: string[];
-  statRewards?: EducationStatRewards;
-  workingStatRewards?: EducationWorkingStatRewards;
-  systemEffects?: string[];
-  unlocksSystems?: string[];
-  summaryLines: string[];
-};
-
-export type EducationCategory = {
-  id: string;
-  name: string;
-  description: string;
-  courses: EducationCourse[];
-};
-
-function makeCourse(categoryId: string, index: number, data: Omit<EducationCourse, "categoryId" | "code">): EducationCourse {
+function makeCourse(categoryId, index, data) {
   return {
     ...data,
     categoryId,
@@ -51,7 +6,7 @@ function makeCourse(categoryId: string, index: number, data: Omit<EducationCours
   };
 }
 
-export const educationCategories: EducationCategory[] = [
+export const educationCategories = [
   {
     id: "general",
     name: "General Studies",
@@ -646,20 +601,8 @@ export const educationCategories: EducationCategory[] = [
   }
 ];
 
-export const educationCourseMap: Record<string, EducationCourse> = Object.fromEntries(
+export const educationCourseMap = Object.fromEntries(
   educationCategories.flatMap((category) => category.courses.map((course) => [course.id, course])),
 );
-
-export function getCourseState(
-  course: EducationCourse,
-  education: {
-    activeCourse: { courseId: string } | null;
-    isCourseCompleted: (courseId: string) => boolean;
-    isCourseLocked: (course: EducationCourse) => boolean;
-  },
-): "completed" | "current" | "locked" | "available" {
-  if (education.isCourseCompleted(course.id)) return "completed";
-  if (education.activeCourse?.courseId === course.id) return "current";
-  if (education.isCourseLocked(course)) return "locked";
-  return "available";
-}
+export function getEducationCourse(courseId) { return educationCourseMap[courseId] ?? null; }
+export function getCourseLabel(courseId) { return educationCourseMap[courseId]?.name ?? String(courseId ?? "").replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }

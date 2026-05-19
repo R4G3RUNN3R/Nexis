@@ -272,6 +272,18 @@ export function resolveTravelEncounterForRoute(runtimeState, route, now = Date.n
   };
 }
 
+
+function recordTravelDiscovery(runtimeState, encounter, now) {
+  const discovery = encounter?.reward?.discovery;
+  if (!discovery || !encounter?.hasWorldGeography) return;
+  const education = asRecord(runtimeState.education);
+  const discoveries = asArray(education.discoveries);
+  const id = `travel_${String(discovery).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48)}`;
+  if (discoveries.some((entry) => asRecord(entry).id === id)) { runtimeState.education = education; return; }
+  education.discoveries = [{ id, kind: "travel", title: "Route discovery", summary: discovery, status: "discovered", discoveredAt: now, source: encounter.title ?? "Travel encounter" }, ...discoveries].slice(0, 80);
+  runtimeState.education = education;
+}
+
 function applyTravelEncounterResult(runtimeState, encounter, now) {
   if (!encounter) return encounter;
   const player = runtimeState.player;
@@ -308,6 +320,7 @@ function applyTravelEncounterResult(runtimeState, encounter, now) {
     }
   }
   player.counters.lastTravelEncounterRewardAt = now;
+  recordTravelDiscovery(runtimeState, encounter, now);
   return encounter;
 }
 

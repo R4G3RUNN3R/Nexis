@@ -5,6 +5,7 @@ import { getCityHubContent, type CityService } from "../../data/cityHubData";
 import { getCityAcademyDetail, getCityLocalContracts } from "../../data/cityLoopData";
 import { type WorldCity } from "../../data/worldMapData";
 import { getProfileRoute } from "../../lib/publicIds";
+import { PlayerAvatar } from "../common/PlayerAvatar";
 import {
   acceptServerCityContract,
   claimServerCityContract,
@@ -62,51 +63,52 @@ function ServiceLink({ service }: { service: CityService }) {
   return <div style={style}>{body}</div>;
 }
 
-function isLikelyInternalPresence(person: ServerCityOccupant) {
-  if (person.isSelf) return false;
-  const label = `${person.displayName} ${person.title}`.toLowerCase();
-  return /(canary|fixture|debug|automation|seed|admin test|qa test|test account|load test)/.test(label);
-}
-
-function pluralSuffix(count: number) {
-  return count === 1 ? "" : "s";
-}
-
 function PeopleList({
   people,
   population,
   loading,
   error,
+  filter,
+  page,
+  onFilterChange,
+  onPageChange,
 }: {
   people: ServerCityOccupant[];
   population: ServerCityPopulation | null;
   loading: boolean;
   error: string | null;
+  filter: string;
+  page: number;
+  onFilterChange: (filter: string) => void;
+  onPageChange: (page: number) => void;
 }) {
-  const [showAll, setShowAll] = useState(false);
-
   if (loading) return <div style={{ color: "#9fb0bf", fontSize: 13 }}>Checking local presence...</div>;
   if (error) return <div style={{ color: "#d98f8f", fontSize: 13 }}>{error}</div>;
-
-  const filteredPeople = people.filter((person) => !isLikelyInternalPresence(person));
-  const visiblePeople = showAll ? filteredPeople : filteredPeople.slice(0, 6);
-  const suppressedCount = people.length - filteredPeople.length;
-  const visibleCount = population?.visibleCount ?? filteredPeople.length;
+  const visibleCount = population?.visibleCount ?? people.length;
   const peopleLabel = population?.peopleLabel ?? "citizens";
-
+  const totalPages = population?.totalPages ?? 1;
+  const totalFiltered = population?.totalFiltered ?? people.length;
+  const filters = [
+    ["all", "All"],
+    ["guildmates", `Guildmates (${population?.guildmatesVisible ?? 0})`],
+    ["consortium", `Consortium (${population?.consortiumMembersVisible ?? 0})`],
+    ["duel", `Duel-ready (${population?.duelEligibleVisible ?? 0})`],
+  ];
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.45)", display: "grid", gap: 4 }}>
         <div className="info-row"><span className="info-row__label">Visible population</span><span className="info-row__value">{visibleCount} {peopleLabel}</span></div>
-        <div className="info-row"><span className="info-row__label">Guildmates present</span><span className="info-row__value">{population?.guildmatesVisible ?? 0}</span></div>
-        <div className="info-row"><span className="info-row__label">Consortium peers present</span><span className="info-row__value">{population?.consortiumMembersVisible ?? 0}</span></div>
-        {suppressedCount > 0 ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>{suppressedCount} non-public presence record{pluralSuffix(suppressedCount)} hidden from the normal city list.</div> : null}
+        <div className="info-row"><span className="info-row__label">Filtered list</span><span className="info-row__value">{totalFiltered} shown by filter</span></div>
+        <div className="info-row"><span className="info-row__label">Guildmates / Consortium</span><span className="info-row__value">{population?.guildmatesVisible ?? 0} / {population?.consortiumMembersVisible ?? 0}</span></div>
       </div>
-      {!filteredPeople.length ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>No visible citizens are listed in this city right now.</div> : null}
-      {visiblePeople.map((person) => (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {filters.map(([id, label]) => <button key={id} type="button" onClick={() => onFilterChange(id)} style={actionButtonStyle(filter === id ? false : false)}>{label}</button>)}
+      </div>
+      {!people.length ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>No visible citizens match this filter right now.</div> : null}
+      {people.map((person) => (
         <div key={person.publicId} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, display: "grid", gap: 6, color: "inherit", background: person.isSelf ? "rgba(216,194,120,0.08)" : "rgba(7, 13, 20, 0.48)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <strong>{person.displayName}</strong>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}><PlayerAvatar name={person.displayName} src={person.portraitImageUrl ?? null} size={34} /><strong>{person.displayName}</strong></div>
             <span style={{ color: "#d8c278", fontSize: 12 }}>{person.isSelf ? "You" : `P${person.publicId}`}</span>
           </div>
           <div style={{ color: "#9fb0bf", fontSize: 12 }}>{person.title} | Level {person.level}</div>
@@ -114,15 +116,15 @@ function PeopleList({
             {person.sharesGuild ? <span style={{ color: "#d0ad74" }}>Guildmate</span> : null}
             {person.sharesConsortium ? <span style={{ color: "#d0ad74" }}>Consortium peer</span> : null}
             <Link className="inline-route-link" to={getProfileRoute(person.publicId)}>View Profile</Link>
-            {!person.isSelf ? <Link className="inline-route-link" to="/arena">Duel</Link> : null}
+            {person.duelEligible && !person.isSelf ? <Link className="inline-route-link" to="/arena">Duel</Link> : null}
           </div>
         </div>
       ))}
-      {filteredPeople.length > 6 ? (
-        <button type="button" onClick={() => setShowAll((current) => !current)} style={actionButtonStyle(false)}>
-          {showAll ? "Show fewer people" : `Show all ${filteredPeople.length} visible people`}
-        </button>
-      ) : null}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <button type="button" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))} style={actionButtonStyle(page <= 1)}>Previous</button>
+        <span style={{ color: "#9fb0bf", fontSize: 12 }}>Page {page} / {totalPages}</span>
+        <button type="button" disabled={page >= totalPages} onClick={() => onPageChange(Math.min(totalPages, page + 1))} style={actionButtonStyle(page >= totalPages)}>Next</button>
+      </div>
     </div>
   );
 }
@@ -387,6 +389,8 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const [population, setPopulation] = useState<ServerCityPopulation | null>(null);
   const [peopleError, setPeopleError] = useState<string | null>(null);
   const [peopleLoading, setPeopleLoading] = useState(false);
+  const [peopleFilter, setPeopleFilter] = useState("all");
+  const [peoplePage, setPeoplePage] = useState(1);
   const [contracts, setContracts] = useState<ServerCityContract[]>([]);
   const [standing, setStanding] = useState<ServerCityStanding | null>(null);
   const [contractsError, setContractsError] = useState<string | null>(null);
@@ -426,7 +430,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
 
       setPeopleLoading(true);
       setPeopleError(null);
-      const result = await getServerCityPeople(serverSessionToken, city.id);
+      const result = await getServerCityPeople(serverSessionToken, city.id, { filter: peopleFilter, page: peoplePage, pageSize: 6 });
       if (cancelled) return;
       setPeopleLoading(false);
       if (!result.ok) {
@@ -443,7 +447,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     return () => {
       cancelled = true;
     };
-  }, [authSource, city.id, serverSessionToken]);
+  }, [authSource, city.id, peopleFilter, peoplePage, serverSessionToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -639,7 +643,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
 
       <HubSection id="people" title="People" summary={`${population?.visibleCount ?? people.length} visible | ${population?.guildmatesVisible ?? 0} guildmates | ${population?.consortiumMembersVisible ?? 0} consortium peers`} openSection={openSection} onToggle={setOpenSection}>
         <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.peopleIntro}</p>
-        <PeopleList people={people} population={population} loading={peopleLoading} error={peopleError} />
+        <PeopleList people={people} population={population} loading={peopleLoading} error={peopleError} filter={peopleFilter} page={peoplePage} onFilterChange={(nextFilter) => { setPeopleFilter(nextFilter); setPeoplePage(1); }} onPageChange={setPeoplePage} />
       </HubSection>
 
       <HubSection id="contracts" title="Local Contracts" summary={contractSummary} openSection={openSection} onToggle={setOpenSection}>

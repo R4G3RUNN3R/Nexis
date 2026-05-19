@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { usePlayer } from "../../state/PlayerContext";
 import { useAuth } from "../../state/AuthContext";
 import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicIds";
+import { PlayerAvatar } from "../common/PlayerAvatar";
 
 import { isStaffOrAdmin } from "../../lib/adminAccess";
 
@@ -124,7 +125,7 @@ export function TopBar() {
     privilegeRole: activeAccount?.privilegeRole ?? "player",
   });
 
-  const initial = player.name ? player.name.charAt(0).toUpperCase() : "?";
+  const portrait = (player as unknown as { portrait?: { imageUrl?: string | null; imageKey?: string | null } | null }).portrait;
 
   function handleLogout() {
     setPlayerOpen(false);
@@ -229,7 +230,7 @@ export function TopBar() {
             className="player-menu__trigger"
             onClick={() => setPlayerOpen((value) => !value)}
           >
-            <span className="player-menu__avatar">{initial}</span>
+            <PlayerAvatar name={player.name} lastName={player.lastName} portrait={portrait} size={30} className="player-menu__avatar" />
             <span className="player-menu__name">{displayNameWithPublicId}</span>
             <span className="player-menu__caret">{playerOpen ? "^" : "v"}</span>
           </button>

@@ -1,402 +1,75 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type PropsWithChildren,
-} from "react";
-import {
-  educationCategories,
-  educationCourseMap,
-  type EducationCategory,
-  type EducationCourse,
-} from "../data/educationData";
-import { getActiveCivicJobPassives, normalizeCivicEmploymentState } from "../lib/civicJobsState";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import { educationCategories, educationCourseMap, type EducationCategory, type EducationCourse } from "../data/educationData";
+import { cancelServerEducationCourse, completeServerEducationCourse, getServerEducation, startServerEducationCourse, type ServerEducationPayload } from "../lib/authApi";
+import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
 import { useAuth } from "./AuthContext";
-import { usePlayer } from "./PlayerContext";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type PassiveBonuses = Partial<Record<string, number>>;
-
-/**
- * Represents the currently-active (in-progress) course.
- * Matches the task spec: courseId, categoryId, startedAt, durationMs.
- */
-type ActiveCourse = {
-  courseId: string;
-  categoryId: string;
-  startedAt: number;
-  durationMs: number;
-  /** Pre-computed completion timestamp for fast comparisons */
-  completesAt: number;
-};
-
-type EducationState = {
-  /** IDs of all fully completed courses */
-  completedCourses: string[];
-  /** Currently active (studying) course, or null */
-  activeCourse: ActiveCourse | null;
-  passiveBonuses: PassiveBonuses;
-  activeUnlocks: string[];
-  systemUnlocks: string[];
-};
-
-// ─── Context Value ────────────────────────────────────────────────────────────
-
+type ActiveCourse = { courseId: string; categoryId: string; startedAt: number; durationMs: number; completesAt: number };
+type EducationState = { completedCourses: string[]; activeCourse: ActiveCourse | null; passiveBonuses: PassiveBonuses; activeUnlocks: string[]; systemUnlocks: string[]; history?: Array<Record<string, unknown>>; discoveries?: Array<Record<string, unknown>>; serverCategories?: ServerEducationPayload["categories"] | null };
+type ActionResult = { ok: boolean; message: string };
 type EducationContextValue = {
-  /** @deprecated prefer completedCourses — kept for back-compat */
   completedCourseIds: string[];
   completedCourses: string[];
   activeCourse: ActiveCourse | null;
   passiveBonuses: PassiveBonuses;
   activeUnlocks: string[];
   systemUnlocks: string[];
-  /**
-   * Start studying a course.
-   * @param categoryId — category the course belongs to
-   * @param courseId   — course to start
-   */
-  startCourse: (categoryId: string, courseId: string) => { ok: boolean; message: string };
-  /** Cancel the active course (no refund, just stops). */
+  history: Array<Record<string, unknown>>;
+  discoveries: Array<Record<string, unknown>>;
+  startCourse: (categoryId: string, courseId: string) => ActionResult;
   cancelCourse: () => void;
-  /** @deprecated use cancelCourse — kept for Education.tsx back-compat */
   leaveCourse: () => void;
+  completeCourse: (courseId?: string | null) => void;
+  refreshEducation: () => Promise<void>;
   isCourseCompleted: (courseId: string) => boolean;
   isCourseLocked: (course: EducationCourse) => boolean;
-  /** Returns remaining ms until the active course finishes, or 0. */
   getRemainingMs: () => number;
 };
-
-// ─── Storage ──────────────────────────────────────────────────────────────────
-
 const STORAGE_KEY = "nexis.education";
-
-const defaultState: EducationState = {
-  completedCourses: [],
-  activeCourse: null,
-  passiveBonuses: {},
-  activeUnlocks: [],
-  systemUnlocks: [],
-};
-
-function readStoredState(): EducationState {
-  if (typeof window === "undefined") return defaultState;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState;
-    const parsed = JSON.parse(raw) as Partial<EducationState> & {
-      // handle legacy key name
-      completedCourseIds?: string[];
-    };
-
-    // Normalise: legacy key was `completedCourseIds`
-    const completedCourses =
-      parsed.completedCourses ??
-      parsed.completedCourseIds ??
-      defaultState.completedCourses;
-
-    return {
-      ...defaultState,
-      ...parsed,
-      completedCourses,
-    };
-  } catch {
-    return defaultState;
-  }
-}
-
-function writeStoredState(state: EducationState) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function courseHasCompletedAllPrerequisites(
-  course: EducationCourse,
-  completed: string[],
-) {
-  return (course.prerequisites ?? []).every((req) => completed.includes(req));
-}
-
-function finalizeRewards(
-  course: EducationCourse,
-  current: EducationState,
-): Pick<EducationState, "passiveBonuses" | "activeUnlocks" | "systemUnlocks"> {
-  const passiveBonuses = { ...current.passiveBonuses };
-  const activeUnlocks = [...current.activeUnlocks];
-  const systemUnlocks = [...current.systemUnlocks];
-
-  for (const effect of course.systemEffects ?? []) {
-    const lowered = effect.toLowerCase();
-
-    if (lowered.includes("education speed +5%")) {
-      passiveBonuses.educationSpeed = (passiveBonuses.educationSpeed ?? 0) + 5;
-    }
-    if (lowered.includes("health regeneration +10%")) {
-      passiveBonuses.healthRegen = (passiveBonuses.healthRegen ?? 0) + 10;
-    }
-    if (lowered.includes("mission success +5%")) {
-      passiveBonuses.missionSuccess = (passiveBonuses.missionSuccess ?? 0) + 5;
-    }
-    if (lowered.includes("market efficiency +5%")) {
-      passiveBonuses.marketEfficiency =
-        (passiveBonuses.marketEfficiency ?? 0) + 5;
-    }
-    if (lowered.includes("all battle stats +5%")) {
-      passiveBonuses.battleStats = (passiveBonuses.battleStats ?? 0) + 5;
-    }
-    if (lowered.includes("all working stats +5%")) {
-      passiveBonuses.workingStats = (passiveBonuses.workingStats ?? 0) + 5;
-    }
-
-    if (!activeUnlocks.includes(effect)) {
-      activeUnlocks.push(effect);
-    }
-  }
-
-  for (const unlock of course.unlocksSystems ?? []) {
-    if (!systemUnlocks.includes(unlock)) {
-      systemUnlocks.push(unlock);
-    }
-  }
-
-  return { passiveBonuses, activeUnlocks, systemUnlocks };
-}
-
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
+const defaultState: EducationState = { completedCourses: [], activeCourse: null, passiveBonuses: {}, activeUnlocks: [], systemUnlocks: [], history: [], discoveries: [], serverCategories: null };
+function readStoredState(): EducationState { if (typeof window === "undefined") return defaultState; try { const raw = window.localStorage.getItem(STORAGE_KEY); if (!raw) return defaultState; const parsed = JSON.parse(raw) as Partial<EducationState> & { completedCourseIds?: string[] }; return { ...defaultState, ...parsed, completedCourses: parsed.completedCourses ?? parsed.completedCourseIds ?? [] }; } catch { return defaultState; } }
+function writeStoredState(state: EducationState) { if (typeof window === "undefined") return; window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function courseHasCompletedAllPrerequisites(course: EducationCourse, completed: string[]) { return (course.prerequisites ?? []).every((req) => completed.includes(req)); }
+function stateFromPayload(payload: ServerEducationPayload): EducationState { return { completedCourses: payload.completedCourses ?? [], activeCourse: payload.activeCourse ?? null, passiveBonuses: payload.passiveBonuses ?? {}, activeUnlocks: payload.activeUnlocks ?? [], systemUnlocks: payload.systemUnlocks ?? [], history: payload.history ?? [], discoveries: payload.discoveries ?? [], serverCategories: payload.categories ?? null }; }
 const EducationContext = createContext<EducationContextValue | null>(null);
-
 export function EducationProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<EducationState>(readStoredState);
-  const { serverHydrationVersion } = useAuth();
-  const { player, addBattleStat, addWorkingStat, addExperience } = usePlayer();
-
-  // Persist to localStorage whenever state changes
-  useEffect(() => {
-    writeStoredState(state);
-  }, [state]);
-
-  useEffect(() => {
-    setState(readStoredState());
-  }, [serverHydrationVersion]);
-
-  // ── checkCompletion ────────────────────────────────────────────────────────
-  // Called every 1000ms. If the active course has passed its completesAt
-  // timestamp, finalize it: add to completedCourses, apply rewards, clear activeCourse.
-  const checkCompletion = useCallback(() => {
-    setState((current) => {
-      if (!current.activeCourse) return current;
-
-      const now = Date.now();
-      if (now < current.activeCourse.completesAt) return current;
-
-      const { courseId } = current.activeCourse;
-      if (current.completedCourses.includes(courseId)) {
-        // Already marked — just clear activeCourse
-        return { ...current, activeCourse: null };
-      }
-
-      const course = educationCourseMap[courseId];
-      if (!course) return { ...current, activeCourse: null };
-
-      const rewards = finalizeRewards(course, current);
-
-      if (course.statRewards) {
-        for (const [stat, value] of Object.entries(course.statRewards)) {
-          if (!value) continue;
-          addBattleStat(stat as "strength" | "defense" | "speed" | "dexterity", value);
-        }
-      }
-
-      if (course.workingStatRewards) {
-        for (const [stat, value] of Object.entries(course.workingStatRewards)) {
-          if (!value) continue;
-          addWorkingStat(stat as "manualLabor" | "intelligence" | "endurance", value);
-        }
-      }
-
-      addExperience(Math.max(10, Math.round(course.durationDays * 2)));
-
-      return {
-        ...current,
-        ...rewards,
-        completedCourses: [...current.completedCourses, courseId],
-        activeCourse: null,
-      };
-    });
-  }, [addBattleStat, addExperience, addWorkingStat]);
-
-  // 1-second polling interval for completion check
-  useEffect(() => {
-    const id = window.setInterval(checkCompletion, 1000);
-    return () => window.clearInterval(id);
-  }, [checkCompletion]);
-
-  // ── startCourse ────────────────────────────────────────────────────────────
-  const educationSpeedBonus = state.passiveBonuses.educationSpeed ?? 0;
-
-  const isCourseCompleted = useCallback(
-    (courseId: string) => state.completedCourses.includes(courseId),
-    [state.completedCourses],
-  );
-
-  const isCourseLocked = useCallback(
-    (course: EducationCourse) =>
-      !courseHasCompletedAllPrerequisites(course, state.completedCourses),
-    [state.completedCourses],
-  );
-
-  const startCourse = useCallback(
-    (categoryId: string, courseId: string): { ok: boolean; message: string } => {
-      const course = educationCourseMap[courseId];
-      if (!course) return { ok: false, message: "Course not found." };
-      if (state.activeCourse) {
-        return { ok: false, message: "You are already studying a course." };
-      }
-      if (state.completedCourses.includes(courseId)) {
-        return {
-          ok: false,
-          message: "You have already completed this course.",
-        };
-      }
-      if (isCourseLocked(course)) {
-        return { ok: false, message: "Prerequisites are not complete." };
-      }
-
-      const civicEducationBonus = getActiveCivicJobPassives(normalizeCivicEmploymentState(player.current.civicEmployment)).education_speed ?? 0;
-      const multiplier = Math.max(0.1, 1 - (educationSpeedBonus + civicEducationBonus) / 100);
-      const durationMs = Math.round(
-        course.durationDays * 24 * 60 * 60 * 1000 * multiplier,
-      );
-      const startedAt = Date.now();
-      const completesAt = startedAt + durationMs;
-
-      setState((current) => ({
-        ...current,
-        activeCourse: {
-          courseId,
-          categoryId,
-          startedAt,
-          durationMs,
-          completesAt,
-        },
-      }));
-
-      return { ok: true, message: `${course.name} has started.` };
-    },
-    [
-      educationSpeedBonus,
-      isCourseLocked,
-      player.internalId,
-      state.activeCourse,
-      state.completedCourses,
-    ],
-  );
-
-  // ── cancelCourse ───────────────────────────────────────────────────────────
-  const cancelCourse = useCallback(() => {
-    setState((current) => ({ ...current, activeCourse: null }));
-  }, []);
-
-  // ── getRemainingMs ─────────────────────────────────────────────────────────
-  const getRemainingMs = useCallback(() => {
-    if (!state.activeCourse) return 0;
-    return Math.max(0, state.activeCourse.completesAt - Date.now());
-  }, [state.activeCourse]);
-
-  // ── Context value ──────────────────────────────────────────────────────────
-  const value = useMemo<EducationContextValue>(
-    () => ({
-      completedCourseIds: state.completedCourses, // back-compat alias
-      completedCourses: state.completedCourses,
-      activeCourse: state.activeCourse,
-      passiveBonuses: state.passiveBonuses,
-      activeUnlocks: state.activeUnlocks,
-      systemUnlocks: state.systemUnlocks,
-      startCourse,
-      cancelCourse,
-      leaveCourse: cancelCourse, // back-compat alias
-      isCourseCompleted,
-      isCourseLocked,
-      getRemainingMs,
-    }),
-    [
-      state,
-      startCourse,
-      cancelCourse,
-      isCourseCompleted,
-      isCourseLocked,
-      getRemainingMs,
-    ],
-  );
-
-  return (
-    <EducationContext.Provider value={value}>
-      {children}
-    </EducationContext.Provider>
-  );
+  const { activeAccount, authSource, serverHydrationVersion, serverSessionToken, refreshServerState } = useAuth();
+  const completingRef = useRef(false);
+  const hydrateFromServer = useCallback(async () => {
+    if (authSource !== "server" || !serverSessionToken) { setState(readStoredState()); return; }
+    const result = await getServerEducation(serverSessionToken);
+    if (!result.ok) return;
+    if (activeAccount && result.playerState) mergeServerStateIntoCache({ email: activeAccount.email, user: activeAccount, playerState: result.playerState });
+    const next = stateFromPayload(result.education);
+    setState(next); writeStoredState(next); window.dispatchEvent(new Event("nexis:player-refresh"));
+  }, [activeAccount, authSource, serverSessionToken]);
+  useEffect(() => { void hydrateFromServer(); }, [hydrateFromServer, serverHydrationVersion]);
+  useEffect(() => { writeStoredState(state); }, [state]);
+  const isCourseCompleted = useCallback((courseId: string) => state.completedCourses.includes(courseId), [state.completedCourses]);
+  const isCourseLocked = useCallback((course: EducationCourse) => !courseHasCompletedAllPrerequisites(course, state.completedCourses), [state.completedCourses]);
+  const getRemainingMs = useCallback(() => state.activeCourse ? Math.max(0, state.activeCourse.completesAt - Date.now()) : 0, [state.activeCourse]);
+  const completeCourse = useCallback((courseId?: string | null) => { void (async () => { if (!serverSessionToken || completingRef.current) return; completingRef.current = true; const result = await completeServerEducationCourse(serverSessionToken, courseId ?? null); completingRef.current = false; if (!result.ok) return; if (activeAccount && result.playerState) mergeServerStateIntoCache({ email: activeAccount.email, user: activeAccount, playerState: result.playerState }); const next = stateFromPayload(result.education); setState(next); writeStoredState(next); window.dispatchEvent(new Event("nexis:player-refresh")); await refreshServerState(); })(); }, [activeAccount, refreshServerState, serverSessionToken]);
+  useEffect(() => { const id = window.setInterval(() => { if (state.activeCourse && Date.now() >= state.activeCourse.completesAt) completeCourse(state.activeCourse.courseId); }, 1000); return () => window.clearInterval(id); }, [completeCourse, state.activeCourse]);
+  const startCourse = useCallback((categoryId: string, courseId: string): ActionResult => {
+    const course = educationCourseMap[courseId];
+    if (!course) return { ok: false, message: "Course not found." };
+    if (state.activeCourse) return { ok: false, message: "You are already studying a course." };
+    if (state.completedCourses.includes(courseId)) return { ok: false, message: "You have already completed this course." };
+    if (isCourseLocked(course)) return { ok: false, message: "Prerequisites are not complete." };
+    if (authSource === "server" && serverSessionToken) {
+      void (async () => { const result = await startServerEducationCourse(serverSessionToken, courseId); if (!result.ok) return; if (activeAccount && result.playerState) mergeServerStateIntoCache({ email: activeAccount.email, user: activeAccount, playerState: result.playerState }); const next = stateFromPayload(result.education); setState(next); writeStoredState(next); window.dispatchEvent(new Event("nexis:player-refresh")); await refreshServerState(); })();
+      return { ok: true, message: `${course.name} is starting.` };
+    }
+    const startedAt = Date.now(); const durationMs = Math.round(course.durationDays * 24 * 60 * 60 * 1000); setState((current) => ({ ...current, activeCourse: { courseId, categoryId, startedAt, durationMs, completesAt: startedAt + durationMs } })); return { ok: true, message: `${course.name} has started.` };
+  }, [activeAccount, authSource, isCourseLocked, refreshServerState, serverSessionToken, state.activeCourse, state.completedCourses]);
+  const cancelCourse = useCallback(() => { if (authSource === "server" && serverSessionToken) { void (async () => { const result = await cancelServerEducationCourse(serverSessionToken); if (!result.ok) return; if (activeAccount && result.playerState) mergeServerStateIntoCache({ email: activeAccount.email, user: activeAccount, playerState: result.playerState }); const next = stateFromPayload(result.education); setState(next); writeStoredState(next); window.dispatchEvent(new Event("nexis:player-refresh")); await refreshServerState(); })(); return; } setState((current) => ({ ...current, activeCourse: null })); }, [activeAccount, authSource, refreshServerState, serverSessionToken]);
+  const value = useMemo<EducationContextValue>(() => ({ completedCourseIds: state.completedCourses, completedCourses: state.completedCourses, activeCourse: state.activeCourse, passiveBonuses: state.passiveBonuses, activeUnlocks: state.activeUnlocks, systemUnlocks: state.systemUnlocks, history: state.history ?? [], discoveries: state.discoveries ?? [], startCourse, cancelCourse, leaveCourse: cancelCourse, completeCourse, refreshEducation: hydrateFromServer, isCourseCompleted, isCourseLocked, getRemainingMs }), [cancelCourse, completeCourse, getRemainingMs, hydrateFromServer, isCourseCompleted, isCourseLocked, startCourse, state]);
+  return <EducationContext.Provider value={value}>{children}</EducationContext.Provider>;
 }
-
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-
-export function useEducation() {
-  const context = useContext(EducationContext);
-  if (!context) {
-    throw new Error("useEducation must be used within an EducationProvider");
-  }
-  return context;
-}
-
-// ─── Utilities (exported for Education.tsx) ───────────────────────────────────
-
-/** Format remaining ms as "X days, H hours, M minutes, and S seconds" */
-export function formatRemaining(ms: number): string {
-  if (ms <= 0) return "completed";
-
-  const totalSeconds = Math.floor(ms / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const parts: string[] = [];
-
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}hrs`);
-  if (minutes > 0) parts.push(`${minutes}min`);
-  if (!parts.length) parts.push("under 1min");
-
-  return parts.join(" ");
-}
-
-/** Format remaining ms as a short human countdown */
-export function formatCountdown(ms: number): string {
-  if (ms <= 0) return "done";
-  const totalSeconds = Math.floor(ms / 1000);
-  const d = Math.floor(totalSeconds / 86400);
-  const h = Math.floor((totalSeconds % 86400) / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}hrs`;
-  if (h > 0) return `${h}hrs ${m}min`;
-  return `${m}min`;
-}
-
-export function getCategoryProgress(
-  categoryId: string,
-  completedCourseIds: string[],
-) {
-  const category = educationCategories.find((item) => item.id === categoryId);
-  if (!category) return { completed: 0, total: 0 };
-
-  const completed = category.courses.filter((course) =>
-    completedCourseIds.includes(course.id),
-  ).length;
-  return { completed, total: category.courses.length };
-}
-
-export function firstCourseIdForCategory(category: EducationCategory) {
-  return category.courses[0]?.id ?? "";
-}
+export function useEducation() { const context = useContext(EducationContext); if (!context) throw new Error("useEducation must be used within an EducationProvider"); return context; }
+export function formatRemaining(ms: number): string { if (ms <= 0) return "completed"; const totalSeconds = Math.floor(ms / 1000); const days = Math.floor(totalSeconds / 86400); const hours = Math.floor((totalSeconds % 86400) / 3600); const minutes = Math.floor((totalSeconds % 3600) / 60); const parts: string[] = []; if (days > 0) parts.push(`${days}d`); if (hours > 0) parts.push(`${hours}hrs`); if (minutes > 0) parts.push(`${minutes}min`); if (!parts.length) parts.push("under 1min"); return parts.join(" "); }
+export function formatCountdown(ms: number): string { if (ms <= 0) return "done"; const totalSeconds = Math.floor(ms / 1000); const d = Math.floor(totalSeconds / 86400); const h = Math.floor((totalSeconds % 86400) / 3600); const m = Math.floor((totalSeconds % 3600) / 60); if (d > 0) return `${d}d ${h}hrs`; if (h > 0) return `${h}hrs ${m}min`; return `${m}min`; }
+export function getCategoryProgress(categoryId: string, completedCourseIds: string[]) { const category = educationCategories.find((item) => item.id === categoryId); if (!category) return { completed: 0, total: 0 }; const completed = category.courses.filter((course) => completedCourseIds.includes(course.id)).length; return { completed, total: category.courses.length }; }
+export function firstCourseIdForCategory(category: EducationCategory) { return category.courses[0]?.id ?? ""; }

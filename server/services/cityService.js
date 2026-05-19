@@ -31,6 +31,10 @@ function asNumber(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function resolveProfileImageUrl(imageKey) {
+  return typeof imageKey === "string" && imageKey ? `/api/profile-images/${encodeURIComponent(imageKey)}` : null;
+}
+
 function formatDisplayName(row) {
   const first = typeof row.first_name === "string" ? row.first_name.trim() : "";
   const last = typeof row.last_name === "string" ? row.last_name.trim() : "";
@@ -50,6 +54,8 @@ function mapOccupantRow(row, requestingUser) {
     isSelf: requestingUser?.publicId === publicId,
     sharesGuild: Boolean(row.shares_guild),
     sharesConsortium: Boolean(row.shares_consortium),
+    duelEligible: !requestingUser || requestingUser.publicId !== publicId,
+    portraitImageUrl: resolveProfileImageUrl(asRecord(snapshot.portrait).imageKey),
   };
 }
 
@@ -479,12 +485,15 @@ function serializeAcademy(academy, runtimeState, now = Date.now()) {
   };
 }
 
-export async function getCityPeopleForUser(user, cityId) {
+export async function getCityPeopleForUser(user, cityId, options = {}) {
   const normalizedCityId = normalizeCityId(cityId, "");
   if (!normalizedCityId || !isValidCityId(normalizedCityId)) throw new HttpError(400, "City unavailable.", "CITY_INVALID");
 
   const city = getCityDefinition(normalizedCityId);
   const candidates = getCityOccupancyCandidates(normalizedCityId);
+  const pageSize = Math.max(5, Math.min(20, Math.floor(asNumber(options.pageSize, 6))));
+  const page = Math.max(1, Math.floor(asNumber(options.page, 1)));
+  const filter = ["all", "guildmates", "consortium", "duel"].includes(options.filter) ? options.filter : "all";
   const result = await query(
     `
       WITH viewer_orgs AS (
@@ -494,58 +503,53 @@ export async function getCityPeopleForUser(user, cityId) {
         WHERE om.user_internal_id = $2
       ),
       city_people AS (
-        SELECT
-          u.internal_id,
-          u.public_id,
-          u.first_name,
-          u.last_name,
-          u.created_at,
-          ps.level,
-          ps.player_snapshot,
-          COALESCE(
-            NULLIF(ps.travel_state->>'currentCityId', ''),
-            NULLIF(ps.player_snapshot->'current'->>'currentCityId', ''),
-            'nexis'
-          ) AS current_city_id
+        SELECT u.internal_id, u.public_id, u.first_name, u.last_name, u.created_at, u.privilege_role, ps.level, ps.player_snapshot,
+          COALESCE(NULLIF(ps.travel_state->>'currentCityId', ''), NULLIF(ps.player_snapshot->'current'->>'currentCityId', ''), 'nexis') AS current_city_id
         FROM users u
         INNER JOIN player_state ps ON ps.user_internal_id = u.internal_id
-        WHERE COALESCE(
-            NULLIF(ps.travel_state->>'currentCityId', ''),
-            NULLIF(ps.player_snapshot->'current'->>'currentCityId', ''),
-            'nexis'
-          ) = ANY($1::text[])
+        WHERE COALESCE(NULLIF(ps.travel_state->>'currentCityId', ''), NULLIF(ps.player_snapshot->'current'->>'currentCityId', ''), 'nexis') = ANY($1::text[])
           AND COALESCE(ps.travel_state->>'status', 'idle') <> 'in_transit'
       )
-      SELECT
-        cp.*,
-        EXISTS (
-          SELECT 1
-          FROM organization_members om
-          INNER JOIN viewer_orgs vo ON vo.organization_internal_id = om.organization_internal_id
-          WHERE om.user_internal_id = cp.internal_id AND vo.organization_type = 'guild'
-        ) AS shares_guild,
-        EXISTS (
-          SELECT 1
-          FROM organization_members om
-          INNER JOIN viewer_orgs vo ON vo.organization_internal_id = om.organization_internal_id
-          WHERE om.user_internal_id = cp.internal_id AND vo.organization_type = 'consortium'
-        ) AS shares_consortium
+      SELECT cp.*,
+        EXISTS (SELECT 1 FROM organization_members om INNER JOIN viewer_orgs vo ON vo.organization_internal_id = om.organization_internal_id WHERE om.user_internal_id = cp.internal_id AND vo.organization_type = 'guild') AS shares_guild,
+        EXISTS (SELECT 1 FROM organization_members om INNER JOIN viewer_orgs vo ON vo.organization_internal_id = om.organization_internal_id WHERE om.user_internal_id = cp.internal_id AND vo.organization_type = 'consortium') AS shares_consortium
       FROM city_people cp
       ORDER BY COALESCE(cp.level, 1) DESC, cp.created_at DESC
-      LIMIT 30
+      LIMIT 200
     `,
     [candidates, user.internalId],
   );
 
-  const people = result.rows.map((row) => mapOccupantRow(row, user));
+  const roleByPublicId = new Map(result.rows.map((row) => [Number(row.public_id), String(row.privilege_role ?? "player")]));
+  const allPeople = result.rows.map((row) => mapOccupantRow(row, user)).filter((person) => {
+    if (person.isSelf) return true;
+    const role = roleByPublicId.get(person.publicId) ?? "player";
+    const label = `${person.displayName} ${person.title}`.toLowerCase();
+    return role === "player" && !/(canary|fixture|debug|automation|seed|admin test|qa test|test account|load test)/.test(label);
+  });
+  const filtered = allPeople.filter((person) => {
+    if (filter === "guildmates") return person.sharesGuild || person.isSelf;
+    if (filter === "consortium") return person.sharesConsortium || person.isSelf;
+    if (filter === "duel") return person.duelEligible && !person.isSelf;
+    return true;
+  });
+  const start = (page - 1) * pageSize;
+  const people = filtered.slice(start, start + pageSize);
   return {
     city: { id: city.id, name: city.name, role: city.role, peopleLabel: city.peopleLabel },
     population: {
-      visibleCount: people.length,
-      listLimit: 30,
+      visibleCount: allPeople.length,
+      totalFiltered: filtered.length,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+      hasMore: start + pageSize < filtered.length,
+      filter,
+      listLimit: pageSize,
       peopleLabel: city.peopleLabel,
-      guildmatesVisible: people.filter((person) => person.sharesGuild).length,
-      consortiumMembersVisible: people.filter((person) => person.sharesConsortium).length,
+      guildmatesVisible: allPeople.filter((person) => person.sharesGuild).length,
+      consortiumMembersVisible: allPeople.filter((person) => person.sharesConsortium).length,
+      duelEligibleVisible: allPeople.filter((person) => person.duelEligible && !person.isSelf).length,
     },
     people,
   };

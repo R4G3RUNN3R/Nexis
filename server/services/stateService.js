@@ -103,6 +103,7 @@ function mergeRuntimeState(existingRuntime, payload) {
     travel: existingRuntime.travel ?? {},
     civicEmployment: existingRuntime.civicEmployment ?? {},
     legacy: existingRuntime.legacy ?? {},
+    education: existingRuntime.education ?? {},
   };
 }
 

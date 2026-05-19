@@ -14,6 +14,9 @@ import skillRoutes from "./routes/skillRoutes.js";
 import arenaCombatRoutes from "./routes/arenaCombatRoutes.js";
 import duelRoutes from "./routes/duelRoutes.js";
 import itemRoutes from "./routes/itemRoutes.js";
+import educationRoutes from "./routes/educationRoutes.js";
+import cityBoardRoutes from "./routes/cityBoardRoutes.js";
+import worldMapRoutes from "./routes/worldMapRoutes.js";
 import { DatabaseUnavailableError, HttpError } from "./lib/errors.js";
 
 const ROUTE_MODULES = [
@@ -30,6 +33,9 @@ const ROUTE_MODULES = [
   arenaCombatRoutes,
   duelRoutes,
   itemRoutes,
+  educationRoutes,
+  cityBoardRoutes,
+  worldMapRoutes,
   adminRoutes,
   adminOrganizationRoutes,
 ];

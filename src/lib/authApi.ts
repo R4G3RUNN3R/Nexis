@@ -98,6 +98,8 @@ export type ServerCityOccupant = {
   isSelf: boolean;
   sharesGuild?: boolean;
   sharesConsortium?: boolean;
+  duelEligible?: boolean;
+  portraitImageUrl?: string | null;
 };
 
 export type ServerCityPopulation = {
@@ -106,6 +108,13 @@ export type ServerCityPopulation = {
   peopleLabel?: string;
   guildmatesVisible: number;
   consortiumMembersVisible: number;
+  duelEligibleVisible?: number;
+  totalFiltered?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
+  hasMore?: boolean;
+  filter?: string;
 };
 
 export type ApiCityPeopleResponse =
@@ -116,6 +125,54 @@ export type ApiCityPeopleResponse =
       people: ServerCityOccupant[];
     }
   | ApiFailure;
+
+
+export type ServerEducationCourse = {
+  id: string;
+  categoryId: string;
+  code: string;
+  name: string;
+  durationDays: number;
+  costGold: number;
+  description: string;
+  rewardKind: string;
+  prerequisites?: string[];
+  statRewards?: Record<string, number>;
+  workingStatRewards?: Record<string, number>;
+  systemEffects?: string[];
+  unlocksSystems?: string[];
+  summaryLines: string[];
+  completed: boolean;
+  active: boolean;
+  locked: boolean;
+  status: "completed" | "current" | "locked" | "available";
+  missingPrerequisites: string[];
+  lockReason: string | null;
+  durationMs: number;
+  remainingMs: number;
+  readyToComplete: boolean;
+};
+export type ServerEducationCategory = { id: string; name: string; description: string; courses: ServerEducationCourse[]; progress: { completed: number; total: number; locked: number } };
+export type ServerEducationPayload = {
+  categories: ServerEducationCategory[];
+  completedCourses: string[];
+  activeCourse: { courseId: string; categoryId: string; startedAt: number; durationMs: number; completesAt: number } | null;
+  passiveBonuses: Record<string, number>;
+  activeUnlocks: string[];
+  systemUnlocks: string[];
+  history: Array<Record<string, unknown>>;
+  discoveries: Array<Record<string, unknown>>;
+  adminMode: boolean;
+  now: number;
+};
+export type ApiEducationResponse = { ok: true; playerState: ServerPlayerState; education: ServerEducationPayload; message?: string } | ApiFailure;
+
+export type ServerCityBoardEntry = { id: string; section: string; title: string; summary: string; route: string | null; actionLabel: string; source: string; locked: boolean; lockReason: string | null; rewardLabel: string | null; requirementLabel: string | null };
+export type ServerCityBoard = { city: { id: string; name: string; role: string }; masthead: { title: string; edition: string; editorial: string }; frontPage: ServerCityBoardEntry; sections: { civicAppointments: ServerCityBoardEntry[]; opportunities: ServerCityBoardEntry[]; bounties: ServerCityBoardEntry[]; publicNotices: ServerCityBoardEntry[]; classifieds: ServerCityBoardEntry[] }; generatedAt: number };
+export type ApiCityBoardResponse = { ok: true; playerState: ServerPlayerState; board: ServerCityBoard } | ApiFailure;
+
+export type ServerWorldAtlas = { currentCityId: string; education: Record<string, unknown>; regions: Array<Record<string, unknown>>; cities: Array<Record<string, unknown>>; hiddenSites: Array<Record<string, unknown>>; discoveries: Array<Record<string, unknown>>; generatedAt: number };
+export type ApiWorldAtlasResponse = { ok: true; playerState: ServerPlayerState; atlas: ServerWorldAtlas } | ApiFailure;
 
 export type ServerCityStanding = {
   cityId: string;
@@ -827,16 +884,43 @@ export function getServerTravelState(sessionToken: string): Promise<ApiTravelRes
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
-export function getServerCityPeople(sessionToken: string, cityId: string): Promise<ApiCityPeopleResponse> {
+export function getServerCityPeople(
+  sessionToken: string,
+  cityId: string,
+  options: { filter?: string; page?: number; pageSize?: number } = {},
+): Promise<ApiCityPeopleResponse> {
+  const params = new URLSearchParams();
+  if (options.filter) params.set("filter", options.filter);
+  if (options.page) params.set("page", String(options.page));
+  if (options.pageSize) params.set("pageSize", String(options.pageSize));
+  const query = params.toString();
   return requestJson<{ city: { id: string; name: string; role: string; peopleLabel?: string }; population: ServerCityPopulation; people: ServerCityOccupant[] }>(
-    `/api/cities/${encodeURIComponent(cityId)}/people`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${sessionToken}`,
-      },
-    },
+    `/api/cities/${encodeURIComponent(cityId)}/people${query ? `?${query}` : ""}`,
+    { method: "GET", headers: { Authorization: `Bearer ${sessionToken}` } },
   ).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerEducation(sessionToken: string): Promise<ApiEducationResponse> {
+  return requestJson<Omit<ApiEducationResponse & { ok: true }, "ok">>("/api/education", { method: "GET", headers: { Authorization: `Bearer ${sessionToken}` } }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+export function startServerEducationCourse(sessionToken: string, courseId: string): Promise<ApiEducationResponse> {
+  return requestJson<Omit<ApiEducationResponse & { ok: true }, "ok">>(`/api/education/${encodeURIComponent(courseId)}/start`, { method: "POST", headers: { Authorization: `Bearer ${sessionToken}` } }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+export function completeServerEducationCourse(sessionToken: string, courseId?: string | null): Promise<ApiEducationResponse> {
+  return requestJson<Omit<ApiEducationResponse & { ok: true }, "ok">>("/api/education/complete", { method: "POST", headers: { Authorization: `Bearer ${sessionToken}` }, body: JSON.stringify({ courseId: courseId ?? null }) }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+export function cancelServerEducationCourse(sessionToken: string): Promise<ApiEducationResponse> {
+  return requestJson<Omit<ApiEducationResponse & { ok: true }, "ok">>("/api/education/cancel", { method: "POST", headers: { Authorization: `Bearer ${sessionToken}` } }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+export function adminCompleteServerEducationCourse(sessionToken: string, courseId: string): Promise<ApiEducationResponse> {
+  return requestJson<Omit<ApiEducationResponse & { ok: true }, "ok">>("/api/education/admin/complete", { method: "POST", headers: { Authorization: `Bearer ${sessionToken}` }, body: JSON.stringify({ courseId }) }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+export function getServerCityBoard(sessionToken: string, cityId?: string | null): Promise<ApiCityBoardResponse> {
+  const path = cityId ? `/api/city-board/${encodeURIComponent(cityId)}` : "/api/city-board";
+  return requestJson<Omit<ApiCityBoardResponse & { ok: true }, "ok">>(path, { method: "GET", headers: { Authorization: `Bearer ${sessionToken}` } }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+export function getServerWorldAtlas(sessionToken: string): Promise<ApiWorldAtlasResponse> {
+  return requestJson<Omit<ApiWorldAtlasResponse & { ok: true }, "ok">>("/api/world-map/atlas", { method: "GET", headers: { Authorization: `Bearer ${sessionToken}` } }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
 export function getServerCityContracts(sessionToken: string, cityId: string): Promise<ApiCityContractsResponse> {

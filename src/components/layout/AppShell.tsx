@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useMemo } from "react";
 import { TopBar } from "./TopBar";
+import { PlayerAvatar } from "../common/PlayerAvatar";
 import { usePlayer } from "../../state/PlayerContext";
 import { useAuth } from "../../state/AuthContext";
 import { StatBars } from "./StatBars";
@@ -134,7 +135,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const displayNameWithPublicId = formatPlayerNameWithPublicId(displayName, displayPublicId);
   const profileRoute = getProfileRoute(displayPublicId);
   const displayTitle = resolveDisplayTitle(player.title, displayPublicId);
-  const initials = `${player.name?.charAt(0) ?? "N"}${player.lastName?.charAt(0) ?? ""}`.toUpperCase();
+  const portrait = (player as unknown as { portrait?: { imageUrl?: string | null; imageKey?: string | null } | null }).portrait;
   const hiddenRoutes = useMemo(() => {
     if (isHospitalized) return HOSPITAL_HIDDEN;
     if (isJailed) return JAIL_HIDDEN;
@@ -167,7 +168,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
           </div>
 
           <div className="player-card">
-            <div className="player-card__crest">{initials}</div>
+            <PlayerAvatar name={player.name} lastName={player.lastName} portrait={portrait} size={46} className="player-card__crest" />
 
             <div className="player-card__identity">
               <div className="player-card__name">
