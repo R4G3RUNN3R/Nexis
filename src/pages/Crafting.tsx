@@ -57,7 +57,7 @@ export default function CraftingPage() {
   const { authSource, serverSessionToken, refreshServerState } = useAuth();
   const [recipes, setRecipes] = useState<ServerCraftingRecipe[]>([]);
   const [currentCityName, setCurrentCityName] = useState("Unknown city");
-  const [family, setFamily] = useState("All");
+  const [family, setFamily] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -83,8 +83,8 @@ export default function CraftingPage() {
     void load();
   }, [authSource, serverSessionToken]);
 
-  const families = useMemo(() => ["All", ...Array.from(new Set(recipes.map((recipe) => recipe.family))).sort()], [recipes]);
-  const visibleRecipes = family === "All" ? recipes : recipes.filter((recipe) => recipe.family === family);
+  const families = useMemo(() => Array.from(new Set(recipes.map((recipe) => recipe.family))).sort(), [recipes]);
+  const visibleRecipes = family ? recipes.filter((recipe) => recipe.family === family) : [];
   const currentCityRecipes = visibleRecipes.filter((recipe) => recipe.city.name === currentCityName);
   const otherRecipes = visibleRecipes.filter((recipe) => recipe.city.name !== currentCityName);
 
@@ -113,15 +113,22 @@ export default function CraftingPage() {
         <div className="nexis-column nexis-column--wide">
           <ContentPanel title={`Local Bench: ${currentCityName}`}>
             <div style={{ display: "grid", gap: 12 }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {families.map((entry) => (
-                  <button key={entry} type="button" onClick={() => setFamily(entry)} style={{ borderColor: entry === family ? "rgba(216,194,120,0.65)" : undefined }}>
-                    {entry}
-                  </button>
-                ))}
+              <div style={{ display: "grid", gap: 8 }}>
+                {families.map((entry) => {
+                  const cityCount = recipes.filter((recipe) => recipe.family === entry && recipe.city.name === currentCityName).length;
+                  const totalCount = recipes.filter((recipe) => recipe.family === entry).length;
+                  const open = entry === family;
+                  return (
+                    <button key={entry} type="button" onClick={() => setFamily(open ? null : entry)} style={{ textAlign: "left", borderColor: open ? "rgba(216,194,120,0.65)" : undefined }}>
+                      {open ? "Collapse" : "Expand"} {entry} | {cityCount} local / {totalCount} total recipes
+                    </button>
+                  );
+                })}
               </div>
               <div style={{ display: "grid", gap: 10 }}>
-                {currentCityRecipes.length ? currentCityRecipes.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} busy={busy === recipe.id} onCraft={craft} />) : <div style={{ color: "#9fb0bf" }}>No recipes in this filter are available from your current city bench.</div>}
+                {!family ? <div style={{ color: "#9fb0bf" }}>Choose a recipe family above to open only that bench. Less scrolling, fewer regrets.</div> : null}
+                {family && currentCityRecipes.length ? currentCityRecipes.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} busy={busy === recipe.id} onCraft={craft} />) : null}
+                {family && !currentCityRecipes.length ? <div style={{ color: "#9fb0bf" }}>No {family} recipes are available from your current city bench.</div> : null}
               </div>
             </div>
           </ContentPanel>
@@ -129,13 +136,14 @@ export default function CraftingPage() {
         <div className="nexis-column">
           <ContentPanel title="Other City Recipes">
             <div style={{ display: "grid", gap: 8 }}>
-              {otherRecipes.slice(0, 12).map((recipe) => (
+              {family ? otherRecipes.slice(0, 12).map((recipe) => (
                 <div key={recipe.id} style={{ border: "1px solid rgba(255,255,255,0.08)", padding: 8, display: "grid", gap: 4 }}>
                   <strong>{recipe.title}</strong>
                   <span style={{ color: "#9fb0bf", fontSize: 12 }}>{recipe.city.name} | {recipe.lockReason ?? "Travel there to use its bench."}</span>
                 </div>
-              ))}
-              {!otherRecipes.length ? <div style={{ color: "#9fb0bf" }}>No off-city recipes in this filter.</div> : null}
+              )) : null}
+              {!family ? <div style={{ color: "#9fb0bf" }}>Open a recipe family to compare off-city benches.</div> : null}
+              {family && !otherRecipes.length ? <div style={{ color: "#9fb0bf" }}>No off-city recipes in this family.</div> : null}
             </div>
           </ContentPanel>
         </div>

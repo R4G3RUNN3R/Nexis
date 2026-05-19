@@ -1,4 +1,5 @@
 import { getNpcOpponent } from "../data/combatData.js";
+import { HttpError } from "../lib/errors.js";
 import { getSkillDefinition, getSkillDefinitions } from "../data/skillData.js";
 import { rollLoot } from "../data/lootData.js";
 import { getItemDefinition, getItemDisplayName } from "../data/itemData.js";
@@ -21,6 +22,80 @@ function asNumber(value, fallback = 0) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+export const REAL_FIGHT_ENERGY_COST = 25;
+
+function getPlayerStats(runtimeState) {
+  const player = asRecord(runtimeState.player);
+  player.stats = { ...asRecord(player.stats) };
+  runtimeState.player = player;
+  return player.stats;
+}
+
+export function getCombatEnergyStatus(runtimeState) {
+  const stats = getPlayerStats(runtimeState);
+  return {
+    energy: Math.max(0, Math.floor(asNumber(stats.energy, 0))),
+    maxEnergy: Math.max(0, Math.floor(asNumber(stats.maxEnergy, 100))),
+    requiredEnergy: REAL_FIGHT_ENERGY_COST,
+  };
+}
+
+export function assertCanStartRealFight(runtimeState, context = "combat") {
+  const status = getCombatEnergyStatus(runtimeState);
+  if (status.energy < REAL_FIGHT_ENERGY_COST) {
+    throw new HttpError(409, `You need ${REAL_FIGHT_ENERGY_COST} energy to start this ${String(context).replaceAll("_", " ")} fight. Current energy: ${status.energy}.`, "COMBAT_ENERGY_REQUIRED");
+  }
+  return status;
+}
+
+export function spendCombatEnergy(runtimeState, context = "combat", now = Date.now()) {
+  const status = assertCanStartRealFight(runtimeState, context);
+  const stats = getPlayerStats(runtimeState);
+  stats.energy = Math.max(0, Math.floor(status.energy - REAL_FIGHT_ENERGY_COST));
+  const player = asRecord(runtimeState.player);
+  player.counters = {
+    ...asRecord(player.counters),
+    realFightsStarted: Math.max(0, Math.floor(asNumber(player.counters?.realFightsStarted, 0))) + 1,
+    combatEnergySpent: Math.max(0, Math.floor(asNumber(player.counters?.combatEnergySpent, 0))) + REAL_FIGHT_ENERGY_COST,
+    lastCombatEnergySpentAt: now,
+  };
+  runtimeState.player = player;
+  return { energySpent: REAL_FIGHT_ENERGY_COST, energyBefore: status.energy, energyAfter: stats.energy, requiredEnergy: REAL_FIGHT_ENERGY_COST };
+}
+
+export function getCombatXpAward(context = "combat", winner = "draw", opponent = {}) {
+  const contextKey = String(context || "combat").replaceAll("-", "_");
+  const baseByContext = {
+    arena: 16,
+    travel: 14,
+    travel_encounter: 14,
+    city_contract: 18,
+    contract: 18,
+    mission: 18,
+    duel: 12,
+    combat: 12,
+  };
+  const base = baseByContext[contextKey] ?? baseByContext.combat;
+  const levelBonus = Math.max(0, Math.floor(asNumber(opponent.level, 1) * 2));
+  const outcomeBonus = winner === "player" ? 6 : winner === "draw" ? 3 : 1;
+  return Math.max(1, Math.floor(base + levelBonus + outcomeBonus));
+}
+
+export function grantCombatXp(runtimeState, amount, context = "combat", now = Date.now()) {
+  const gained = Math.max(0, Math.floor(asNumber(amount, 0)));
+  if (!gained) return 0;
+  const player = asRecord(runtimeState.player);
+  player.combatXp = Math.max(0, Math.floor(asNumber(player.combatXp, 0))) + gained;
+  player.counters = {
+    ...asRecord(player.counters),
+    combatXpGained: Math.max(0, Math.floor(asNumber(player.counters?.combatXpGained, 0))) + gained,
+    lastCombatXpAt: now,
+    lastCombatXpContext: context,
+  };
+  runtimeState.player = player;
+  return gained;
 }
 
 function addLegacyEntry(runtimeState, entry) {
@@ -283,7 +358,13 @@ function tryUseCombatItem({ runtimeState, itemId, combatant, turn }) {
 export function resolveCombat(runtimeState, opponentInput, options = {}) {
   const now = options.now ?? Date.now();
   const randomFn = options.randomFn ?? Math.random;
+  const context = options.context ?? "combat";
   const opponentSource = typeof opponentInput === "string" ? getNpcOpponent(opponentInput) : opponentInput;
+  const energyResult = options.spendEnergy === false
+    ? { energySpent: 0, energyBefore: getCombatEnergyStatus(runtimeState).energy, energyAfter: getCombatEnergyStatus(runtimeState).energy, requiredEnergy: REAL_FIGHT_ENERGY_COST }
+    : asRecord(options.energyAlreadySpent).energySpent
+      ? asRecord(options.energyAlreadySpent)
+      : spendCombatEnergy(runtimeState, context, now);
   const playerName = typeof options.playerName === "string" ? options.playerName : "You";
   const player = buildPlayerCombatant(runtimeState, playerName);
   const opponent = buildNpcCombatant(opponentSource);
@@ -315,7 +396,7 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
         const entry = tryAttack({ attacker: player, defender: opponent, skill, randomFn, turn });
         log.push(entry);
         if (skill?.id && getSkillDefinition(skill.id)) {
-          const xpEvent = grantSkillXp(runtimeState, skill.id, asNumber(skill.useXp, 10) + asNumber(options.bonusSkillXp, 0), options.context ?? "combat", now);
+          const xpEvent = grantSkillXp(runtimeState, skill.id, asNumber(skill.useXp, 10) + asNumber(options.bonusSkillXp, 0), context, now);
           if (xpEvent) skillEvents.push(xpEvent);
         }
       } else {
@@ -341,7 +422,7 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
   if (player.pendingCombatItem) {
     const itemBuffs = { ...asRecord(playerRecord.itemBuffs) };
     delete itemBuffs.pendingCombat;
-    itemBuffs.lastConsumedCombatBuff = { ...player.pendingCombatItem, consumedAt: now, context: options.context ?? "combat" };
+    itemBuffs.lastConsumedCombatBuff = { ...player.pendingCombatItem, consumedAt: now, context: context };
     playerRecord.itemBuffs = itemBuffs;
   }
   playerRecord.counters = {
@@ -352,9 +433,17 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
     firstCombatAt: playerRecord.counters?.firstCombatAt ?? now,
   };
   runtimeState.player = playerRecord;
+  const combatXpGained = grantCombatXp(runtimeState, getCombatXpAward(context, winner, opponent), context, now);
+  const skillXpGained = skillEvents.reduce((total, event) => total + asNumber(event.xpGained, 0), 0);
 
   return {
-    context: options.context ?? "combat",
+    context,
+    energySpent: asNumber(energyResult.energySpent, 0),
+    energyBefore: asNumber(energyResult.energyBefore, null),
+    energyAfter: asNumber(energyResult.energyAfter, null),
+    requiredEnergy: REAL_FIGHT_ENERGY_COST,
+    combatXpGained,
+    skillXpGained,
     opponent: { id: opponent.id, name: opponent.name, level: opponent.level, summary: opponentSource.summary ?? null },
     winner,
     outcome: winner === "player" ? "victory" : winner === "opponent" ? "defeat" : "draw",

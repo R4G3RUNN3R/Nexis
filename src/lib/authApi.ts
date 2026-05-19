@@ -636,6 +636,13 @@ export type ServerCombatLogEntry = {
 
 export type ServerCombatResult = {
   context: string;
+  energySpent?: number;
+  energyBefore?: number | null;
+  energyAfter?: number | null;
+  requiredEnergy?: number;
+  combatXpGained?: number;
+  skillXpGained?: number;
+  participants?: Record<string, { publicId?: number; energySpent?: number; combatXpGained?: number }>;
   opponent: { id: string; name: string; level: number; summary?: string | null };
   winner: "player" | "opponent" | "draw";
   outcome: "victory" | "defeat" | "draw";
@@ -1140,6 +1147,14 @@ export function adminSetServerSkillMastery(sessionToken: string, skillId: string
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
     body: JSON.stringify({ skillId, uses }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+
+export function adminUnlockAllServerSkills(sessionToken: string): Promise<ApiSkillsResponse> {
+  return requestJson<{ playerState: ServerPlayerState; skills: ServerSkillsPayload; message?: string }>("/api/skills/admin/unlock-all", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

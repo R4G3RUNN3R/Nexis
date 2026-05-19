@@ -7,7 +7,7 @@ import {
   upsertPlayerRuntimeState,
 } from "../repositories/playerStateRepository.js";
 import { findUserByPublicId } from "../repositories/usersRepository.js";
-import { resolveCombat } from "./combatService.js";
+import { assertCanStartRealFight, getCombatXpAward, grantCombatXp, resolveCombat, spendCombatEnergy } from "./combatService.js";
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -134,6 +134,12 @@ export async function respondToDuelForUser(user, duelId, payload) {
     const challengerDuels = ensureDuelState(challengerRuntime);
     const now = Date.now();
 
+    if (action !== "decline") {
+      if (currentCityId(challengerRuntime) !== currentCityId(targetRuntime)) throw new HttpError(409, "Both players must still be in the same city to duel.", "DUEL_CITY_MISMATCH");
+      assertCanStartRealFight(challengerRuntime, "duel");
+      assertCanStartRealFight(targetRuntime, "duel");
+    }
+
     delete targetDuels.incoming[duelId];
     delete challengerDuels.outgoing[duelId];
 
@@ -147,14 +153,23 @@ export async function respondToDuelForUser(user, duelId, payload) {
       return { playerState, duels: serializeDuelState(targetRuntime), message: "Duel challenge declined." };
     }
 
-    if (currentCityId(challengerRuntime) !== currentCityId(targetRuntime)) throw new HttpError(409, "Both players must still be in the same city to duel.", "DUEL_CITY_MISMATCH");
     const challengerHealth = asNumber(challengerRuntime.player?.stats?.health, 100);
     const targetHealth = asNumber(targetRuntime.player?.stats?.health, 100);
     const opponent = buildPlayerOpponent(user, targetRuntime);
-    const result = resolveCombat(challengerRuntime, opponent, { context: "duel", now, playerName: displayName(challengerUser) });
+    const challengerEnergy = spendCombatEnergy(challengerRuntime, "duel", now);
+    const targetEnergy = spendCombatEnergy(targetRuntime, "duel", now);
+    const baseResult = resolveCombat(challengerRuntime, opponent, { context: "duel", now, playerName: displayName(challengerUser), energyAlreadySpent: challengerEnergy });
     challengerRuntime.player.stats = { ...asRecord(challengerRuntime.player.stats), health: challengerHealth };
     targetRuntime.player.stats = { ...asRecord(targetRuntime.player.stats), health: targetHealth };
-    const challengerWon = result.winner === "player";
+    const challengerWon = baseResult.winner === "player";
+    const targetCombatXpGained = grantCombatXp(targetRuntime, getCombatXpAward("duel", challengerWon ? "opponent" : "player", opponent), "duel", now);
+    const result = {
+      ...baseResult,
+      participants: {
+        challenger: { publicId: challengerUser.publicId, energySpent: challengerEnergy.energySpent, combatXpGained: baseResult.combatXpGained },
+        target: { publicId: user.publicId, energySpent: targetEnergy.energySpent, combatXpGained: targetCombatXpGained },
+      },
+    };
     const winner = challengerWon ? challenge.challenger : challenge.target;
     const loser = challengerWon ? challenge.target : challenge.challenger;
     const history = {

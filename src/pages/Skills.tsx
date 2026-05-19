@@ -3,6 +3,7 @@ import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import {
   adminSetServerSkillMastery,
+  adminUnlockAllServerSkills,
   completeServerSkillLearning,
   getServerSkills,
   learnServerSkill,
@@ -51,7 +52,8 @@ function combatSummary(skill: ServerSkill) {
 
 function skillStateLabel(skill: ServerSkill) {
   if (skill.learned) return `Learned | Mastery T${skill.masteryTier}`;
-  if (skill.learning) return "Learning";
+  if (skill.learning) return "Learning over time";
+  if (skill.canLearn) return "Ready to learn";
   return "Locked";
 }
 
@@ -96,7 +98,7 @@ function SkillCard({
       <div style={{ display: "grid", gap: 4 }}>
         <strong style={{ fontSize: 12, color: "#d8c278" }}>Evolution Path</strong>
         <div style={{ color: "#b7c3cf", fontSize: 12 }}>
-          {skill.evolutionPath.map((step) => `${step.name}${step.unlockTier ? ` at T${step.unlockTier}` : ""}${step.unlocked ? " ?" : ""}`).join(" -> ")}
+          {skill.evolutionPath.map((step) => `${step.name}${step.unlockTier ? ` at T${step.unlockTier}` : ""}${step.unlocked ? " learned" : ""}`).join(" -> ")}
         </div>
       </div>
 
@@ -215,9 +217,21 @@ export default function SkillsPage() {
     });
   }
 
+  function adminUnlockAll() {
+    if (!serverSessionToken) return;
+    void runSkillAction(async () => {
+      const result = await adminUnlockAllServerSkills(serverSessionToken);
+      if (applyResult(result)) await refreshServerState();
+    });
+  }
+
   return (
     <AppShell title="Skills" hint="Learn skills deliberately, then master them through valid use in combat, travel encounters, arena, duels, and missions.">
       <div style={{ display: "grid", gap: 14 }}>
+        <ContentPanel title="Skill Path">
+          <div style={{ color: "#b7c3cf", fontSize: 13, marginBottom: 10 }}>Purchase or unlock access, learn the skill over real time, slot it, then raise mastery through valid combat, arena, duel, travel, contract, and mission activations. Evolutions unlock at mastery tiers and do not reset use count.</div>
+        </ContentPanel>
+
         <ContentPanel title="Skill Loadout">
           {error ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{error}</div> : null}
           {message ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{message}</div> : null}
@@ -225,6 +239,7 @@ export default function SkillsPage() {
             <div style={{ display: "grid", gap: 12 }}>
               <div className="info-row"><span className="info-row__label">Learned skills</span><span className="info-row__value">{payload.unlockedCount}</span></div>
               <div className="info-row"><span className="info-row__label">Learning now</span><span className="info-row__value">{payload.learningCount}</span></div>
+              {isAdmin ? <button type="button" disabled={busy} onClick={adminUnlockAll} style={actionStyle(busy)}>Admin: Unlock all skills instantly</button> : null}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
                 <div style={{ display: "grid", gap: 8 }}>
                   <strong>Active slots</strong>

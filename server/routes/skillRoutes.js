@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireSession } from "../middleware/requireSession.js";
-import { adminSetSkillMastery, completeSkillLearning, getSkills, learnSkill, slotSkill } from "../controllers/skillController.js";
+import { adminSetSkillMastery, adminUnlockAllSkills, completeSkillLearning, getSkills, learnSkill, slotSkill } from "../controllers/skillController.js";
 
 const router = Router();
 
@@ -9,5 +9,6 @@ router.post("/skills/learn", requireSession, learnSkill);
 router.post("/skills/complete-learning", requireSession, completeSkillLearning);
 router.post("/skills/slot", requireSession, slotSkill);
 router.post("/skills/admin/mastery", requireSession, adminSetSkillMastery);
+router.post("/skills/admin/unlock-all", requireSession, adminUnlockAllSkills);
 
 export default router;

@@ -24,6 +24,7 @@ import {
   type ServerCityOccupant,
   type ServerCityPopulation,
   type ServerCityStanding,
+  type ServerCombatResult,
 } from "../../lib/authApi";
 import { useAuth } from "../../state/AuthContext";
 
@@ -148,6 +149,17 @@ function actionButtonStyle(disabled: boolean) {
   } as const;
 }
 
+function CombatMiniPanel({ combat }: { combat: ServerCombatResult | null }) {
+  if (!combat) return null;
+  return (
+    <div style={{ border: "1px solid rgba(216,194,120,0.18)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.55)", display: "grid", gap: 5 }}>
+      <strong>Contract fight resolved: {combat.outcome}</strong>
+      <div style={{ color: "#d8c278", fontSize: 12 }}>Energy spent: {combat.energySpent ?? 0} | Combat XP: +{combat.combatXpGained ?? 0} | Skill XP: +{combat.skillXpGained ?? 0}</div>
+      {combat.log.slice(0, 3).map((entry, index) => <div key={`${entry.turn}-${index}`} style={{ color: "#b7c3cf", fontSize: 12 }}>{entry.message}</div>)}
+    </div>
+  );
+}
+
 function ContractCard({
   contract,
   busy,
@@ -174,7 +186,7 @@ function ContractCard({
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Reward: {formatReward(contract)}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing: +{contract.standingReward} | Required: {contract.minimumStanding}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Requirement: {contract.requirementLabel}</div>
-      {contract.combat ? <div style={{ color: "#d0ad74", fontSize: 12 }}>Combat check: {contract.combat.label} - {contract.combat.summary}</div> : null}
+      {contract.combat ? <div style={{ color: "#d0ad74", fontSize: 12 }}>Combat check: {contract.combat.label} - {contract.combat.summary} Costs 25 energy when the fight begins.</div> : null}
       {contract.runs > 0 ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Completed runs: {contract.runs}</div> : null}
       {refreshText ? <div style={{ color: contract.canRefresh ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{refreshText}</div> : null}
       {contract.completion.note ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Completion: {contract.completion.note}</div> : null}
@@ -335,6 +347,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const [standing, setStanding] = useState<ServerCityStanding | null>(null);
   const [contractsError, setContractsError] = useState<string | null>(null);
   const [contractsMessage, setContractsMessage] = useState<string | null>(null);
+  const [lastContractCombat, setLastContractCombat] = useState<ServerCombatResult | null>(null);
   const [contractsLoading, setContractsLoading] = useState(false);
   const [academy, setAcademy] = useState<ServerCityAcademy | null>(null);
   const [academies, setAcademies] = useState<ServerCityAcademy[]>([]);
@@ -390,6 +403,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
 
     async function loadCityGameplay() {
       setContractsMessage(null);
+      setLastContractCombat(null);
       setAcademyMessage(null);
       setSpecialsMessage(null);
       if (authSource !== "server" || !serverSessionToken) {
@@ -472,6 +486,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     }
     setContracts(result.contracts);
     setStanding(result.standing);
+    setLastContractCombat(result.combat ?? null);
     setContractsMessage(result.message ?? "Contract updated.");
     await refreshServerState();
   }
@@ -606,6 +621,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
             {contractsLoading ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>Loading local contracts...</div> : null}
             {contractsError ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{contractsError}</div> : null}
             {contractsMessage ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>{contractsMessage}</div> : null}
+            <CombatMiniPanel combat={lastContractCombat} />
             {contracts.length ? (
               contracts.map((contract) => (
                 <ContractCard

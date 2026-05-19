@@ -1,5 +1,6 @@
 import {
   adminSetSkillMasteryForUser,
+  adminUnlockAllSkillsForUser,
   completeSkillLearningForUser,
   getSkillsForUser,
   learnSkillForUser,
@@ -45,6 +46,15 @@ export async function slotSkill(req, res, next) {
 export async function adminSetSkillMastery(req, res, next) {
   try {
     const result = await adminSetSkillMasteryForUser(req.auth.user, req.body);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function adminUnlockAllSkills(req, res, next) {
+  try {
+    const result = await adminUnlockAllSkillsForUser(req.auth.user);
     res.status(200).json(result);
   } catch (error) {
     next(error);

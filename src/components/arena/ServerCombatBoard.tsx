@@ -40,8 +40,11 @@ function CombatResultPanel({ result }: { result: ServerCombatResult | null }) {
         <span style={{ color: result.winner === "player" ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{result.outcome}</span>
       </div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>You: {result.player.health}/{result.player.maxHealth} | Opponent: {result.opponentState.health}/{result.opponentState.maxHealth}</div>
+      <div style={{ color: "#d8c278", fontSize: 12 }}>Energy spent: {result.energySpent ?? 0}{typeof result.energyAfter === "number" ? ` | Energy after: ${result.energyAfter}` : ""}</div>
+      <div style={{ color: "#8ec8a7", fontSize: 12 }}>Combat XP: +{result.combatXpGained ?? 0}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Skills: {result.activeSkills.map((skill) => skill.name).join(" | ") || "Basic pressure"}</div>
       {result.skillEvents.length ? <div style={{ color: "#8ec8a7", fontSize: 12 }}>Skill XP: {result.skillEvents.map((event) => `${String(event.name ?? event.skillId)} +${String(event.xpGained ?? 0)}`).join(" | ")}</div> : null}
+      {result.participants?.target ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Duel opponent also spent {result.participants.target.energySpent ?? 0} energy and gained {result.participants.target.combatXpGained ?? 0} combat XP.</div> : null}
       {rewardBits.length ? <div style={{ color: "#d8c278", fontSize: 12 }}>Rewards: {rewardBits.join(" | ")}</div> : null}
       <div style={{ display: "grid", gap: 5 }}>
         {result.log.slice(0, 8).map((entry, index) => <div key={`${entry.turn}-${index}`} style={{ color: "#b7c3cf", fontSize: 12 }}>{entry.message}</div>)}
@@ -165,7 +168,7 @@ export default function ServerCombatBoard() {
             <div key={opponent.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.48)", display: "grid", gap: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}><strong>{opponent.name}</strong><span style={{ color: "#d8c278", fontSize: 12 }}>Tier {opponent.tier}</span></div>
               <div style={{ color: "#b7c3cf", fontSize: 13 }}>{opponent.summary}</div>
-              <button type="button" disabled={Boolean(busy)} onClick={() => spar(opponent.id)} style={actionStyle(Boolean(busy))}>{busy === `spar:${opponent.id}` ? "Resolving..." : "Spar"}</button>
+              <button type="button" disabled={Boolean(busy)} onClick={() => spar(opponent.id)} style={actionStyle(Boolean(busy))}>{busy === `spar:${opponent.id}` ? "Resolving..." : "Spar (25 energy)"}</button>
             </div>
           ))}
         </div>
@@ -183,7 +186,7 @@ export default function ServerCombatBoard() {
             <div key={duel.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap", color: "#b7c3cf", fontSize: 13 }}>
               <span>{duel.challenger.name} challenges you in {duel.cityId}</span>
               <span style={{ display: "flex", gap: 8 }}>
-                <button type="button" disabled={Boolean(busy)} onClick={() => respond(duel.id, "accept")} style={actionStyle(Boolean(busy))}>Accept</button>
+                <button type="button" disabled={Boolean(busy)} onClick={() => respond(duel.id, "accept")} style={actionStyle(Boolean(busy))}>Accept (25 energy)</button>
                 <button type="button" disabled={Boolean(busy)} onClick={() => respond(duel.id, "decline")} style={actionStyle(Boolean(busy))}>Decline</button>
               </span>
             </div>

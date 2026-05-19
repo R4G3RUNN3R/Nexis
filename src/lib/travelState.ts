@@ -18,6 +18,12 @@ export type TravelEncounterNotice = {
     throttled?: boolean;
   } | null;
   penalties?: Record<string, number> | null;
+  combat?: {
+    energySpent?: number;
+    combatXpGained?: number;
+    skillXpGained?: number;
+    log?: Array<{ message?: string }>;
+  } | null;
   resolvedAt?: number;
 };
 
@@ -91,6 +97,7 @@ function readEncounterNotice(value: unknown): TravelEncounterNotice | null {
     delayMs: typeof record.delayMs === "number" ? record.delayMs : undefined,
     reward: Object.keys(asRecord(record.reward)).length ? (asRecord(record.reward) as TravelEncounterNotice["reward"]) : null,
     penalties: Object.keys(asRecord(record.penalties)).length ? asRecord(record.penalties) as Record<string, number> : null,
+    combat: Object.keys(asRecord(record.combat)).length ? (asRecord(record.combat) as TravelEncounterNotice["combat"]) : null,
     resolvedAt: typeof record.resolvedAt === "number" ? record.resolvedAt : undefined,
   };
 }

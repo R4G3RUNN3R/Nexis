@@ -312,6 +312,9 @@ export default function TravelPage() {
                   {travelState.encounterNotice.hasWorldGeography ? " World Geography applied" : " World Geography missing"}
                 </div>
                 {travelState.encounterNotice.delayMs ? <div>Travel delay: {formatTravelDuration(travelState.encounterNotice.delayMs)}.</div> : null}
+                {travelState.encounterNotice.combat ? (
+                  <div>Combat: {travelState.encounterNotice.combat.energySpent ?? 0} energy spent | +{travelState.encounterNotice.combat.combatXpGained ?? 0} combat XP | +{travelState.encounterNotice.combat.skillXpGained ?? 0} skill XP.</div>
+                ) : null}
                 {getEncounterRewardText(travelState.encounterNotice) ? <div>{getEncounterRewardText(travelState.encounterNotice)}</div> : null}
               </div>
             ) : null}

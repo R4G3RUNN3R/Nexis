@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { usePlayer } from "../state/PlayerContext";
+import { useEducation, formatRemaining } from "../state/EducationContext";
+import { educationCourseMap } from "../data/educationData";
 import { useAuth } from "../state/AuthContext";
 import { formatEntityPublicId, formatPlayerNameWithPublicId, getProfileRoute } from "../lib/publicIds";
 import {
@@ -72,9 +74,17 @@ function SummaryTile({
   );
 }
 
+function formatLabel(value: string | null | undefined) {
+  if (!value) return "Unknown";
+  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+type AcademyStudySnapshot = { academyId?: string; stageId?: string; cityId?: string; startedAt?: number; endsAt?: number };
+
 export default function HomePage() {
   const { player, isHospitalized, hospitalRemainingLabel, isJailed, jailRemainingLabel } = usePlayer();
   const { activeAccount, authSource, serverSessionToken } = useAuth();
+  const education = useEducation();
   const currentEducation = player.current.education;
   const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
   const displayPublicId = activeAccount?.publicId ?? player.publicId;
@@ -84,6 +94,13 @@ export default function HomePage() {
   const travelState = readTravelStateFromPlayer(player);
   const travelProgress = getTravelProgress(travelState, Date.now());
   const residenceName = getPropertyById(player.property.current)?.name ?? "No residence";
+  const activeEducationName = education.activeCourse
+    ? educationCourseMap[education.activeCourse.courseId]?.name ?? formatLabel(education.activeCourse.courseId)
+    : currentEducation?.name ?? "No active course";
+  const activeEducationHint = education.activeCourse ? formatRemaining(education.getRemainingMs()) : "Broad account study";
+  const academyStudy = (((player as unknown as { cityAcademy?: { activeStudy?: AcademyStudySnapshot | null } }).cityAcademy)?.activeStudy ?? null);
+  const academyStudyName = academyStudy ? `${formatLabel(academyStudy.academyId)}: ${formatLabel(academyStudy.stageId)}` : "No active academy study";
+  const academyStudyHint = academyStudy?.endsAt ? `${getCityName(academyStudy.cityId as never)} | ${formatRemaining(Math.max(0, academyStudy.endsAt - Date.now()))}` : "City-bound elite study";
   const isTraveling = travelProgress.active;
   const [orgSummary, setOrgSummary] = useState({
     guild: "Unaffiliated",
@@ -198,7 +215,8 @@ export default function HomePage() {
         <section className="home-summary-strip">
           <SummaryTile label="Life" value={`${player.stats.health} / ${player.stats.maxHealth}`} hint={isHospitalized ? hospitalRemainingLabel : "Stable"} />
           <SummaryTile label="Energy" value={`${player.stats.energy} / ${player.stats.maxEnergy}`} hint="Daily operations" />
-          <SummaryTile label="Education" value={currentEducation ? currentEducation.name : "No active course"} hint="Progression ledger" />
+          <SummaryTile label="Education" value={activeEducationName} hint={activeEducationHint} />
+          <SummaryTile label="Academy" value={academyStudyName} hint={academyStudyHint} />
           <SummaryTile label="Guild" value={guildSummary} hint="Operational bloc" />
           <SummaryTile label="Consortium" value={consortiumSummary} hint="Economic footing" />
           <SummaryTile label="Residence" value={residenceName} hint="Current household" />
@@ -209,7 +227,8 @@ export default function HomePage() {
             <ContentPanel title="Current Status and Next Steps" className="panel--heroic">
               <div className="info-list">
                 <Row label="Travel" value={travelProgress.active ? `${travelStatus} | ${formatTravelDuration(travelProgress.remainingMs)}` : travelStatus} />
-                <Row label="Education" value={currentEducation ? currentEducation.name : "No active course"} />
+                <Row label="Current Education" value={activeEducationName} />
+                <Row label="Current Academy Study" value={academyStudyName} />
                 <Row label="Adventure" value={player.current.job ?? "No active contract"} />
                 <Row label="Guild" value={guildSummary} />
                 <Row label="Consortium" value={consortiumSummary} />

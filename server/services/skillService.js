@@ -636,3 +636,27 @@ export async function adminSetSkillMasteryForUser(user, payload) {
     return { playerState, skills: serializeSkills(nextRuntimeState, user), message: `${getSkillDefinition(rootId)?.name ?? skill.name} mastery set to ${uses.toLocaleString("en-US")} uses.` };
   });
 }
+
+export async function adminUnlockAllSkillsForUser(user) {
+  if (!isAdminUser(user)) throw new HttpError(403, "Admin privileges required.", "ADMIN_REQUIRED");
+  return withTransaction(async (client) => {
+    const { runtimeState } = await loadRuntimeState(client, user);
+    const now = Date.now();
+    for (const skill of getSkillDefinitions()) {
+      unlockSkill(runtimeState, skill.id, "admin-unlock-all", now);
+    }
+    const state = ensureSkillState(runtimeState);
+    state.learning = {};
+    state.lastUpdatedAt = now;
+    syncEvolutionUnlocks(runtimeState, now);
+    const player = asRecord(runtimeState.player);
+    player.counters = {
+      ...asRecord(player.counters),
+      adminSkillUnlockAllAt: now,
+    };
+    runtimeState.player = player;
+    const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+    const nextRuntimeState = buildMutableRuntimeState(user, playerState);
+    return { playerState, skills: serializeSkills(nextRuntimeState, user), message: "All skills unlocked for admin testing." };
+  });
+}
