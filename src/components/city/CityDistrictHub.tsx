@@ -28,6 +28,7 @@ import {
   type ServerCombatResult,
 } from "../../lib/authApi";
 import { useAuth } from "../../state/AuthContext";
+import { usePlayer } from "../../state/PlayerContext";
 
 function shortText(value: string, max = 110) {
   const trimmed = String(value || "").trim();
@@ -121,6 +122,7 @@ function PeopleList({
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
             {person.sharesGuild ? <span style={{ color: "#d0ad74" }}>Guildmate</span> : null}
             {person.sharesConsortium ? <span style={{ color: "#d0ad74" }}>Consortium peer</span> : null}
+            {person.distinctions?.slice(0, 2).map((distinction) => <span key={distinction} style={{ color: "#8ec8a7" }}>{distinction}</span>)}
             <Link className="inline-route-link" to={getProfileRoute(person.publicId)}>View Profile</Link>
             {person.duelEligible && !person.isSelf ? <Link className="inline-route-link" to="/arena">Duel</Link> : null}
           </div>
@@ -387,6 +389,8 @@ function AcademyPanel({
 
 export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const { authSource, serverSessionToken, refreshServerState } = useAuth();
+  const { player } = usePlayer();
+  const cityRhythm = (player as unknown as { worldLoops?: { cityRhythm?: { rhythm?: { title?: string; summary?: string }; update?: { title?: string; summary?: string }; threat?: { title?: string; severity?: number | string; summary?: string }; boss?: { title?: string; name?: string; status?: string; reward?: string } } } }).worldLoops?.cityRhythm;
   const location = useLocation();
   const hub = useMemo(() => getCityHubContent(city.id), [city.id]);
   const academyDetail = useMemo(() => getCityAcademyDetail(city.id), [city.id]);
@@ -626,6 +630,9 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
               <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing improves local contracts, services, and academy access.</div>
             </>
           ) : null}
+          {(cityRhythm?.rhythm ?? cityRhythm?.update) ? <div className="info-row"><span className="info-row__label">Today</span><span className="info-row__value">{(cityRhythm.rhythm ?? cityRhythm.update)?.title}: {(cityRhythm.rhythm ?? cityRhythm.update)?.summary}</span></div> : null}
+          {cityRhythm?.threat ? <div className="info-row"><span className="info-row__label">Threat</span><span className="info-row__value">{cityRhythm.threat.title} | severity {cityRhythm.threat.severity ?? "reported"}</span></div> : null}
+          {cityRhythm?.boss ? <div className="info-row"><span className="info-row__label">World Event</span><span className="info-row__value">{cityRhythm.boss.name ?? cityRhythm.boss.title} | {cityRhythm.boss.status}</span></div> : null}
           <div className="info-row"><span className="info-row__label">Property</span><span className="info-row__value">{shortText(hub.propertyFlavor, 72)}</span></div>
           <div className="info-row"><span className="info-row__label">Imports</span><span className="info-row__value">{hub.market.imports.join(", ")}</span></div>
           <div className="info-row"><span className="info-row__label">Exports</span><span className="info-row__value">{hub.market.exports.join(", ")}</span></div>

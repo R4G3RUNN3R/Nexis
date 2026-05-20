@@ -200,8 +200,9 @@ export default function BlackMarketPage() {
             <p className="page-intro__lead">{blackMarket.summary}</p>
             <div className="info-row"><span className="info-row__label">Standing required</span><span className="info-row__value">{blackMarket.minimumStanding}</span></div>
             <div className="info-row"><span className="info-row__label">Required courses</span><span className="info-row__value">{blackMarket.requiredCourses.length ? blackMarket.requiredCourses.join(", ") : "None"}</span></div>
+            {blackMarket.shadow ? <div className="info-row"><span className="info-row__label">Shadow</span><span className="info-row__value">{blackMarket.shadow.current} / {blackMarket.shadow.max} | buy {blackMarket.shadow.buyCost ?? 1}, fence {blackMarket.shadow.sellCost ?? 1}</span></div> : null}
             {!blackMarket.canOpen ? <div style={{ color: "#d0ad74", fontSize: 13 }}>{blackMarket.lockReason}</div> : null}
-            {blackMarket.canOpen ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>Access open. Buying and fencing remain city-local and server verified.</div> : null}
+            {blackMarket.canOpen ? <div style={{ color: "#8ec8a7", fontSize: 13 }}>Access open. Buying and fencing spend Shadow as a separate covert resource.</div> : null}
           </div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>

@@ -6,7 +6,7 @@ import { usePlayer } from "../state/PlayerContext";
 import { getPropertyById } from "../data/propertyData";
 import { formatPlayerPublicId, getProfileRoute, parsePlayerPublicId } from "../lib/publicIds";
 import { resolveDisplayTitle } from "../lib/titleAccess";
-import { getProfileView, type ProfileResponse, uploadOwnProfileImage } from "../lib/profileApi";
+import { getProfileView, setOwnProfileTitle, type ProfileResponse, uploadOwnProfileImage } from "../lib/profileApi";
 import { readCachedRuntimeState, writeCachedRuntimeState } from "../lib/runtimeStateCache";
 import { getCityName, readTravelStateFromPlayer } from "../lib/travelState";
 import "../styles/character-profile.css";
@@ -83,13 +83,15 @@ function formatEntityLabel(entityType: ProfileResponse["publicProfile"]["entityT
 export default function ProfilePage() {
   const { publicId: publicIdParam } = useParams();
   const { player } = usePlayer();
-  const { activeAccount, serverSessionToken } = useAuth();
+  const { activeAccount, serverSessionToken, refreshServerState } = useAuth();
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadingPortrait, setUploadingPortrait] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [prestigeMessage, setPrestigeMessage] = useState<string | null>(null);
+  const [prestigeError, setPrestigeError] = useState<string | null>(null);
   const portraitInputRef = useRef<HTMLInputElement | null>(null);
 
   const targetPublicId = useMemo(() => {
@@ -170,7 +172,8 @@ export default function ProfilePage() {
     return {
       name: displayName,
       publicId: player.publicId,
-      title: player.title,
+      title: profile?.publicProfile.prestige?.currentTitle?.label ?? player.title,
+      prestige: profile?.publicProfile.prestige ?? (player as unknown as { prestige?: ProfileResponse["publicProfile"]["prestige"] }).prestige,
       entityType: "player" as const,
       level: player.level,
       rank: meaningfulRank,
@@ -242,6 +245,7 @@ export default function ProfilePage() {
     player.stats.health,
     player.stats.maxHealth,
     player.title,
+    profile?.publicProfile.prestige,
     profile?.publicProfile.portrait,
     profile?.publicProfile.bio,
     profile?.publicProfile.consortium,
@@ -336,6 +340,20 @@ export default function ProfilePage() {
     setUploadSuccess("Portrait updated.");
   }
 
+
+  async function handleTitleChoice(titleId: string) {
+    setPrestigeMessage(null);
+    setPrestigeError(null);
+    const result = await setOwnProfileTitle(titleId, serverSessionToken);
+    if (!result.ok) {
+      setPrestigeError(result.error);
+      return;
+    }
+    setProfile((current) => current ? { ...current, publicProfile: { ...current.publicProfile, title: result.prestige.currentTitle?.label ?? current.publicProfile.title, prestige: result.prestige } } : current);
+    setPrestigeMessage(result.message ?? "Title updated.");
+    await refreshServerState();
+  }
+
   if (loading) {
     return (
       <AppShell title="Character Profile" hint={flavor}>
@@ -380,7 +398,8 @@ export default function ProfilePage() {
   }
 
   const propertyName = getPropertyById(publicProfile.property.propertyId)?.name ?? "Unknown residence";
-  const displayTitle = resolveDisplayTitle(publicProfile.title, publicProfile.publicId);
+  const displayTitle = resolveDisplayTitle(publicProfile.prestige?.currentTitle?.label ?? publicProfile.title, publicProfile.publicId);
+  const prestige = publicProfile.prestige;
   const displayNameWithPublicId = `${publicProfile.name} [${formatPlayerPublicId(publicProfile.publicId)}]`;
   const guildLabel = publicProfile.guild
     ? `${publicProfile.guild.name} [G${String(publicProfile.guild.publicId).padStart(7, "0")}]`
@@ -536,6 +555,26 @@ export default function ProfilePage() {
                   <div className="profile-affiliation-grid__value">{publicProfile.job ?? "None"}</div>
                 </div>
               </div>
+            </PanelSection>
+
+
+            <PanelSection title="Prestige and Distinctions">
+              <div className="stat-table">
+                <StatRow label="Current Title" value={prestige?.currentTitle?.label ?? displayTitle ?? "Untitled"} />
+                <StatRow label="Distinctions" value={prestige?.distinctions?.length ? prestige.distinctions.join(" | ") : "None recorded"} />
+                <StatRow label="Badges" value={prestige?.badges?.length ? prestige.badges.slice(0, 4).map((badge) => badge.label).join(" | ") : "No badges yet"} />
+              </div>
+              {viewer.isSelf && prestige?.titles?.length ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                  {prestige.titles.map((title) => (
+                    <button key={title.id} type="button" disabled={prestige.currentTitle?.id === title.id} onClick={() => handleTitleChoice(title.id)}>
+                      {prestige.currentTitle?.id === title.id ? "Equipped" : title.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {prestigeMessage ? <div className="profile-empty-note">{prestigeMessage}</div> : null}
+              {prestigeError ? <div className="profile-empty-note">{prestigeError}</div> : null}
             </PanelSection>
 
             <PanelSection title="Legacy Record">

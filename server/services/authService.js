@@ -35,6 +35,7 @@ import { buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
 import { ensureChronicleEntitlement } from "./chronicleService.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
 import { upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
+import { resolveLiveWorldForRuntimeState } from "./liveWorldService.js";
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -115,13 +116,14 @@ async function resolvePlayerStateForResponse(client, user, playerState) {
   const runtimeState = buildMutableRuntimeState(user, playerState);
   const travelResolution = resolveTravelForRuntimeState(runtimeState);
   const chronicleResolution = ensureChronicleEntitlement(runtimeState);
+  const liveWorldResolution = resolveLiveWorldForRuntimeState(runtimeState, user);
   const currentRuntimePlayer = playerState?.runtimeState?.player ?? {};
   const accountAgeChanged =
     currentRuntimePlayer.createdAt !== runtimeState.player.createdAt ||
     currentRuntimePlayer.daysPlayed !== runtimeState.player.daysPlayed ||
     currentRuntimePlayer.ageLabel !== runtimeState.player.ageLabel;
 
-  if (travelResolution.changed || chronicleResolution.changed || accountAgeChanged) {
+  if (travelResolution.changed || chronicleResolution.changed || liveWorldResolution.changed || accountAgeChanged) {
     return upsertPlayerRuntimeState(client, user.internalId, runtimeState);
   }
 

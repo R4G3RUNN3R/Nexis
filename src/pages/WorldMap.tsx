@@ -44,7 +44,7 @@ function entryFromRecord(record: AtlasRecordData): CompactEntry {
   const kind = readString(record.kind, record.regionId ? "hidden site" : "atlas entry");
   const status = readString(record.status, "unknown");
   const isCity = ["nexis", "west", "north", "east", "south"].includes(id);
-  const codexEntryId = isCity ? getCodexEntryIdForCity(id) : record.regionId ? `discovery-site-${id}` : getCodexEntryIdForRegion(id);
+  const codexEntryId = readString(record.codexEntryId, "") || (isCity ? getCodexEntryIdForCity(id) : record.regionId ? `discovery-site-${id}` : getCodexEntryIdForRegion(id));
   return { id, title: readString(record.name, readString(record.title, id)), type: formatAtlasLabel(kind), status: formatAtlasLabel(status), tagline: shortLine(record.summary, "Codex entry available."), lockReason: record.lockReason ? String(record.lockReason) : null, current: Boolean(record.current), codexEntryId };
 }
 function CompactAtlasCard({ entry }: { entry: CompactEntry }) {
@@ -89,6 +89,7 @@ export default function WorldMapPage() {
   const discoveredEntries = atlas ? cities.filter((entry) => entry.status === "discovered").map(entryFromRecord) : visibleNodes.map(entryFromNode);
   const rumorEntries = atlas ? [...regions, ...cities].filter((entry) => entry.status !== "discovered").slice(0, 10).map(entryFromRecord) : lockedNodes.slice(0, 8).map(entryFromNode);
   const siteEntries = sites.map(entryFromRecord);
+  const hiddenCounts = atlas?.hiddenCounts ?? {};
 
   return (
     <AppShell title={activeMap.label} hint="Atlas overview only. Travel handles departures; Codex holds full entries.">
@@ -121,6 +122,8 @@ export default function WorldMapPage() {
                 <div className="stat-row"><span className="stat-row__label">Regions</span><strong className="stat-row__value">{atlas ? regions.length : visibleNodes.length}</strong></div>
                 <div className="stat-row"><span className="stat-row__label">Cities</span><strong className="stat-row__value">{atlas ? cities.length : activeMap.nodes.length}</strong></div>
                 <div className="stat-row"><span className="stat-row__label">Known Corridors</span><strong className="stat-row__value">{activeMap.edges.length}</strong></div>
+                <div className="stat-row"><span className="stat-row__label">Hidden Sites</span><strong className="stat-row__value">{hiddenCounts.discovered ?? 0} discovered / {hiddenCounts.rumored ?? 0} rumored</strong></div>
+                <div className="stat-row"><span className="stat-row__label">Unknown Sites</span><strong className="stat-row__value">{hiddenCounts.unknown ?? 0}</strong></div>
               </div>
               <div className="world-atlas-note">{shortLine(activeMap.summary)} <Link className="inline-route-link" to={getCodexEntryRoute("atlas-region-hellenic_sphere")}>Read full archive</Link></div>
             </div>

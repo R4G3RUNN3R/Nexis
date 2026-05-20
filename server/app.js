@@ -17,6 +17,7 @@ import itemRoutes from "./routes/itemRoutes.js";
 import educationRoutes from "./routes/educationRoutes.js";
 import cityBoardRoutes from "./routes/cityBoardRoutes.js";
 import worldMapRoutes from "./routes/worldMapRoutes.js";
+import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import { DatabaseUnavailableError, HttpError } from "./lib/errors.js";
 
 const ROUTE_MODULES = [
@@ -36,6 +37,7 @@ const ROUTE_MODULES = [
   educationRoutes,
   cityBoardRoutes,
   worldMapRoutes,
+  marketplaceRoutes,
   adminRoutes,
   adminOrganizationRoutes,
 ];

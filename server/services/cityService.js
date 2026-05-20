@@ -43,7 +43,9 @@ function formatDisplayName(row) {
 
 function mapOccupantRow(row, requestingUser) {
   const snapshot = asRecord(row.player_snapshot);
-  const title = typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "Citizen";
+  const prestige = asRecord(snapshot.prestige);
+  const currentTitle = asRecord(prestige.currentTitle);
+  const title = typeof currentTitle.label === "string" && currentTitle.label.trim() ? currentTitle.label.trim() : typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "Citizen";
   const publicId = Number(row.public_id);
   return {
     publicId,
@@ -56,6 +58,7 @@ function mapOccupantRow(row, requestingUser) {
     sharesConsortium: Boolean(row.shares_consortium),
     duelEligible: !requestingUser || requestingUser.publicId !== publicId,
     portraitImageUrl: resolveProfileImageUrl(asRecord(snapshot.portrait).imageKey),
+    distinctions: asArray(prestige.distinctions).filter((entry) => typeof entry === "string").slice(0, 3),
   };
 }
 

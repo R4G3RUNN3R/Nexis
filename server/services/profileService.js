@@ -8,6 +8,7 @@ import { findUserByPublicId, findUserByInternalId } from "../repositories/usersR
 import { findOrganizationForUserByType } from "../repositories/organizationRepository.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
 import { upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
+import { resolvePrestigeState, setPrestigeTitle } from "./liveWorldService.js";
 
 const PROFILE_IMAGE_DIR = path.join(process.cwd(), ".data", "profile-images");
 const PROFILE_IMAGE_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -124,6 +125,7 @@ function buildLegacyEntries(runtimeState) {
 function buildProfileResponse(viewerUser, targetUser, playerState, organizationSummary) {
   const runtimeState = buildMutableRuntimeState(targetUser, playerState);
   resolveTravelForRuntimeState(runtimeState);
+  const prestige = resolvePrestigeState(runtimeState);
   const bio = asRecord(runtimeState.player.bio);
   const entityType = targetUser.entityType ?? "player";
   const privilegeRole = targetUser.privilegeRole ?? "player";
@@ -139,7 +141,8 @@ function buildProfileResponse(viewerUser, targetUser, playerState, organizationS
     publicProfile: {
       name: `${targetUser.firstName}${targetUser.lastName ? ` ${targetUser.lastName}` : ""}`.trim(),
       publicId: targetUser.publicId,
-      title: runtimeState.player.title ?? "",
+      title: prestige.currentTitle?.label ?? runtimeState.player.title ?? "",
+      prestige,
       entityType,
       level: playerState.level ?? 1,
       rank: typeof runtimeState.player.rank === "string" && runtimeState.player.rank ? runtimeState.player.rank : null,
@@ -283,4 +286,26 @@ export async function resolveProfileImagePath(imageKey) {
   });
 
   return imagePath;
+}
+
+
+export async function updateOwnPrestigeTitle(viewerUser, titleId) {
+  if (!viewerUser?.internalId) {
+    throw new HttpError(401, "Authentication required.", "AUTH_REQUIRED");
+  }
+
+  return withTransaction(async (client) => {
+    const user = await findUserByInternalId(client, viewerUser.internalId);
+    if (!user) throw new HttpError(404, "Citizen record unavailable.", "PROFILE_NOT_FOUND");
+    await createDefaultPlayerState(client, user.internalId);
+    const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+    if (!playerState) throw new HttpError(404, "Citizen record unavailable.", "PROFILE_STATE_NOT_FOUND");
+
+    const runtimeState = buildMutableRuntimeState(user, playerState);
+    const result = setPrestigeTitle(runtimeState, titleId);
+    if (!result.ok) throw new HttpError(409, result.message, "PROFILE_TITLE_LOCKED");
+    runtimeState.player.title = result.prestige.currentTitle?.label ?? runtimeState.player.title;
+    const nextPlayerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+    return { playerState: nextPlayerState, prestige: result.prestige, message: result.message };
+  });
 }

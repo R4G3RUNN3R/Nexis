@@ -100,6 +100,7 @@ export type ServerCityOccupant = {
   sharesConsortium?: boolean;
   duelEligible?: boolean;
   portraitImageUrl?: string | null;
+  distinctions?: string[];
 };
 
 export type ServerCityPopulation = {
@@ -171,7 +172,7 @@ export type ServerCityBoardEntry = { id: string; section: string; title: string;
 export type ServerCityBoard = { city: { id: string; name: string; role: string }; masthead: { title: string; edition: string; editorial: string }; frontPage: ServerCityBoardEntry; sections: { civicAppointments: ServerCityBoardEntry[]; opportunities: ServerCityBoardEntry[]; bounties: ServerCityBoardEntry[]; publicNotices: ServerCityBoardEntry[]; classifieds: ServerCityBoardEntry[] }; generatedAt: number };
 export type ApiCityBoardResponse = { ok: true; playerState: ServerPlayerState; board: ServerCityBoard } | ApiFailure;
 
-export type ServerWorldAtlas = { currentCityId: string; education: Record<string, unknown>; regions: Array<Record<string, unknown>>; cities: Array<Record<string, unknown>>; hiddenSites: Array<Record<string, unknown>>; discoveries: Array<Record<string, unknown>>; generatedAt: number };
+export type ServerWorldAtlas = { currentCityId: string; education: Record<string, unknown>; regions: Array<Record<string, unknown>>; cities: Array<Record<string, unknown>>; hiddenSites: Array<Record<string, unknown>>; hiddenCounts?: Record<string, number>; discoveries: Array<Record<string, unknown>>; generatedAt: number };
 export type ApiWorldAtlasResponse = { ok: true; playerState: ServerPlayerState; atlas: ServerWorldAtlas } | ApiFailure;
 
 export type ServerCityStanding = {
@@ -511,6 +512,7 @@ export type ServerCityMarket = {
   summary: string;
   imports: string[];
   exports: string[];
+  demand?: { tags?: string[]; headline?: string; shortages?: string[]; highDemand?: string[]; surplus?: string[]; contraband?: string[]; note?: string };
   discountPercent: number;
   sellBonusPercent: number;
   stock: ServerCityEconomyStock[];
@@ -543,6 +545,7 @@ export type ServerCityBlackMarket = {
   cityId: string;
   name: string;
   summary: string;
+  shadow?: { current: number; max: number; label: string; regenPerHour: number; buyCost?: number; sellCost?: number };
   minimumStanding: number;
   requiredCourses: string[];
   missingCourses: string[];
@@ -572,6 +575,33 @@ export type ApiCitySpecialsResponse =
 
 export type ApiCityBlackMarketResponse =
   | (CityEconomyBaseResponse & { ok: true; blackMarket: ServerCityBlackMarket })
+  | ApiFailure;
+
+export type ServerMarketplaceListing = {
+  id: string;
+  itemId: string;
+  item: ServerItemSummary | null;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  status: "active" | "sold" | "cancelled" | "expired";
+  cityId: string;
+  cityName: string;
+  seller: { publicId: number; name: string };
+  createdAt: number;
+  expiresAt: number | null;
+  isOwnListing: boolean;
+};
+
+export type ServerMarketplacePayload = {
+  listings: ServerMarketplaceListing[];
+  inventory: ServerInventoryEntry[];
+  filters: Record<string, string>;
+  cityDemand?: ServerCityMarket["demand"];
+};
+
+export type ApiMarketplaceResponse =
+  | { ok: true; playerState: ServerPlayerState; marketplace: ServerMarketplacePayload; listing?: ServerMarketplaceListing; message?: string }
   | ApiFailure;
 
 export type ApiChronicleStatusResponse =
@@ -1095,6 +1125,48 @@ export function sellServerBlackMarketItem(
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
     body: JSON.stringify({ quantity }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+
+export function getServerMarketplace(
+  sessionToken: string,
+  options: { category?: string; cityId?: string; rarity?: string; seller?: string } = {},
+): Promise<ApiMarketplaceResponse> {
+  const params = new URLSearchParams();
+  if (options.category) params.set("category", options.category);
+  if (options.cityId) params.set("cityId", options.cityId);
+  if (options.rarity) params.set("rarity", options.rarity);
+  if (options.seller) params.set("seller", options.seller);
+  const query = params.toString();
+  return requestJson<Omit<ApiMarketplaceResponse & { ok: true }, "ok">>(`/api/marketplace${query ? `?${query}` : ""}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function createServerMarketplaceListing(
+  sessionToken: string,
+  payload: { itemId: string; quantity: number; unitPrice: number; cityId?: string | null },
+): Promise<ApiMarketplaceResponse> {
+  return requestJson<Omit<ApiMarketplaceResponse & { ok: true }, "ok">>("/api/marketplace/listings", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify(payload),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function buyServerMarketplaceListing(sessionToken: string, listingId: string): Promise<ApiMarketplaceResponse> {
+  return requestJson<Omit<ApiMarketplaceResponse & { ok: true }, "ok">>(`/api/marketplace/listings/${encodeURIComponent(listingId)}/buy`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function cancelServerMarketplaceListing(sessionToken: string, listingId: string): Promise<ApiMarketplaceResponse> {
+  return requestJson<Omit<ApiMarketplaceResponse & { ok: true }, "ok">>(`/api/marketplace/listings/${encodeURIComponent(listingId)}/cancel`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

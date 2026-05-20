@@ -94,6 +94,12 @@ function mergeRuntimeState(existingRuntime, payload) {
       skills: existingPlayer.skills ?? payloadPlayer.skills ?? {},
       arenaCombat: existingPlayer.arenaCombat ?? payloadPlayer.arenaCombat ?? {},
       duels: existingPlayer.duels ?? payloadPlayer.duels ?? {},
+      worldLoops: existingPlayer.worldLoops ?? payloadPlayer.worldLoops ?? {},
+      notifications: existingPlayer.notifications ?? payloadPlayer.notifications ?? {},
+      worldDiscovery: existingPlayer.worldDiscovery ?? payloadPlayer.worldDiscovery ?? {},
+      worldEvents: existingPlayer.worldEvents ?? payloadPlayer.worldEvents ?? {},
+      prestige: existingPlayer.prestige ?? payloadPlayer.prestige ?? {},
+      shadow: existingPlayer.shadow ?? payloadPlayer.shadow ?? {},
       portrait: existingPlayer.portrait ?? {},
     },
     // These are server-authoritative now. The browser can report state around

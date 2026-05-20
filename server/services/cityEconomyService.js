@@ -18,6 +18,7 @@ import {
 } from "../data/cityEconomyData.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
 import { getItemDisplayName, getItemSummary } from "../data/itemData.js";
+import { ensureShadowState, getCityDemandProfile, spendShadow } from "./liveWorldService.js";
 
 const MAX_PURCHASE_QUANTITY = 99;
 const CITY_STANDING_TIERS = [
@@ -411,6 +412,7 @@ function serializeMarketProfile(profile, runtimeState, quantity = 1) {
       summary: profile.summary,
       imports: profile.imports,
       exports: profile.exports,
+      demand: getCityDemandProfile(profile.cityId),
       discountPercent,
       sellBonusPercent: getLegalSellBonusPercent(runtimeState),
       stock: profile.stock.map((entry) => serializeStockItem({ ...entry, price: applyDiscount(entry.price, discountPercent) }, runtimeState, context, quantity)),
@@ -423,6 +425,8 @@ function serializeMarketProfile(profile, runtimeState, quantity = 1) {
 
 function serializeBlackMarket(blackMarket, runtimeState, quantity = 1) {
   const context = getEconomyContext(runtimeState, blackMarket.cityId);
+  const shadow = ensureShadowState(runtimeState);
+  const shadowCosts = { buy: blackMarket.cityId === "west" ? 1 : 2, sell: blackMarket.cityId === "west" ? 1 : 2 };
   const missingCourses = getMissingCourses(runtimeState, blackMarket.requiredCourses ?? []);
   const standingMissing = Math.max(0, Math.floor(asNumber(blackMarket.minimumStanding, 0)) - context.standing.value);
   const canOpen = missingCourses.length === 0 && standingMissing <= 0;
@@ -436,6 +440,7 @@ function serializeBlackMarket(blackMarket, runtimeState, quantity = 1) {
       cityId: blackMarket.cityId,
       name: blackMarket.name,
       summary: blackMarket.summary,
+      shadow: { current: shadow.current, max: shadow.max, label: shadow.label, regenPerHour: Math.max(1, Math.round(3600000 / shadow.regenMs)), buyCost: shadowCosts.buy, sellCost: shadowCosts.sell },
       minimumStanding: Math.max(0, Math.floor(asNumber(blackMarket.minimumStanding, 0))),
       requiredCourses: blackMarket.requiredCourses ?? [],
       missingCourses,
@@ -590,7 +595,6 @@ export async function sellCityMarketItemForUser(user, cityId, itemId, quantityIn
     if (!offer.canSell) throw new HttpError(409, offer.lockReason ?? "This item cannot be sold here right now.", "CITY_MARKET_SELL_BLOCKED");
     removeItems(runtimeState.player, itemId, quantity);
     applyGold(runtimeState, asNumber(runtimeState.player.gold, 0) + offer.totalPrice);
-    const now = Date.now();
     runtimeState.player.counters = {
       ...asRecord(runtimeState.player.counters),
       cityMarketSales: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.cityMarketSales, 0) + quantity)),
@@ -671,9 +675,15 @@ export async function sellBlackMarketItemForUser(user, cityId, itemId, quantityI
     if (!fenceItem) throw new HttpError(404, "This under-market is not buying that item.", "CITY_BLACK_MARKET_SELL_ITEM_NOT_FOUND");
     const offer = serializeBlackMarketSellOffer(fenceItem, blackMarket, runtimeState, context, quantity, marketState.blackMarket.canOpen);
     if (!offer.canSell) throw new HttpError(409, offer.lockReason ?? "This item cannot be fenced here right now.", "CITY_BLACK_MARKET_SELL_BLOCKED");
+    const now = Date.now();
+    try {
+      spendShadow(runtimeState, blackMarket.cityId === "west" ? 1 : 2, "fencing under-market goods", now);
+    } catch (error) {
+      if (error?.code === "SHADOW_INSUFFICIENT") throw new HttpError(409, error.message, "SHADOW_INSUFFICIENT");
+      throw error;
+    }
     removeItems(runtimeState.player, itemId, quantity);
     applyGold(runtimeState, asNumber(runtimeState.player.gold, 0) + offer.totalPrice);
-    const now = Date.now();
     runtimeState.player.counters = {
       ...asRecord(runtimeState.player.counters),
       blackMarketSales: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.blackMarketSales, 0) + quantity)),
@@ -706,6 +716,12 @@ export async function buyBlackMarketItemForUser(user, cityId, itemId, quantityIn
     const context = getEconomyContext(runtimeState, blackMarket.cityId);
     const marketState = serializeBlackMarket(blackMarket, runtimeState, quantity);
     const purchase = buyStock(runtimeState, stockItem, context, quantity, marketState.blackMarket.canOpen);
+    try {
+      spendShadow(runtimeState, blackMarket.cityId === "west" ? 1 : 2, "buying under-market goods");
+    } catch (error) {
+      if (error?.code === "SHADOW_INSUFFICIENT") throw new HttpError(409, error.message, "SHADOW_INSUFFICIENT");
+      throw error;
+    }
     runtimeState.player.counters = {
       ...asRecord(runtimeState.player.counters),
       blackMarketPurchases: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.blackMarketPurchases, 0) + quantity)),

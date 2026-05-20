@@ -137,6 +137,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const profileRoute = getProfileRoute(displayPublicId);
   const displayTitle = resolveDisplayTitle(player.title, displayPublicId);
   const portrait = (player as unknown as { portrait?: { imageUrl?: string | null; imageKey?: string | null } | null }).portrait;
+  const shadow = (player as unknown as { shadow?: { current?: number; max?: number; label?: string } }).shadow;
   const hiddenRoutes = useMemo(() => {
     if (isHospitalized) return HOSPITAL_HIDDEN;
     if (isJailed) return JAIL_HIDDEN;
@@ -195,6 +196,12 @@ export function AppShell({ title, hint, children }: AppShellProps) {
                 <span className="player-card__key">Gold</span>
                 <span className="player-card__val player-card__val--gold">{formatGold(player.gold)}</span>
               </div>
+              {shadow ? (
+                <div className="player-card__row">
+                  <span className="player-card__key">Shadow</span>
+                  <span className="player-card__val">{shadow.current ?? 0}/{shadow.max ?? 0}</span>
+                </div>
+              ) : null}
               <div className="player-card__row">
                 <span className="player-card__key">Location</span>
                 <span className="player-card__val">

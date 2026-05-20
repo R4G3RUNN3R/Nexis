@@ -9,6 +9,7 @@ import {
 import { getTravelOpponentForRoute } from "../data/combatData.js";
 import { rollLoot } from "../data/lootData.js";
 import { resolveCombat } from "./combatService.js";
+import { recordTravelDiscoveryFromEncounter } from "./liveWorldService.js";
 import {
   DEFAULT_CITY_ID,
   getCityName,
@@ -273,7 +274,7 @@ export function resolveTravelEncounterForRoute(runtimeState, route, now = Date.n
 }
 
 
-function recordTravelDiscovery(runtimeState, encounter, now) {
+function recordTravelDiscovery(runtimeState, encounter, now, route = {}) {
   const discovery = encounter?.reward?.discovery;
   if (!discovery || !encounter?.hasWorldGeography) return;
   const education = asRecord(runtimeState.education);
@@ -282,9 +283,10 @@ function recordTravelDiscovery(runtimeState, encounter, now) {
   if (discoveries.some((entry) => asRecord(entry).id === id)) { runtimeState.education = education; return; }
   education.discoveries = [{ id, kind: "travel", title: "Route discovery", summary: discovery, status: "discovered", discoveredAt: now, source: encounter.title ?? "Travel encounter" }, ...discoveries].slice(0, 80);
   runtimeState.education = education;
+  recordTravelDiscoveryFromEncounter(runtimeState, encounter, route, now);
 }
 
-function applyTravelEncounterResult(runtimeState, encounter, now) {
+function applyTravelEncounterResult(runtimeState, encounter, now, route = {}) {
   if (!encounter) return encounter;
   const player = runtimeState.player;
   player.counters = { ...asRecord(player.counters) };
@@ -320,7 +322,7 @@ function applyTravelEncounterResult(runtimeState, encounter, now) {
     }
   }
   player.counters.lastTravelEncounterRewardAt = now;
-  recordTravelDiscovery(runtimeState, encounter, now);
+  recordTravelDiscovery(runtimeState, encounter, now, route);
   return encounter;
 }
 
@@ -412,6 +414,7 @@ export async function startTravelForUser(user, payload) {
       runtimeState,
       resolveTravelEncounterForRoute(runtimeState, route, now),
       now,
+      route,
     );
 
     if (encounter?.outcome === "turned_back") {

@@ -8,6 +8,12 @@ export type ProfileResponse = {
     name: string;
     publicId: number;
     title: string;
+    prestige?: {
+      currentTitle?: { id: string; label: string; source?: string };
+      titles?: Array<{ id: string; label: string; source?: string; owned?: boolean }>;
+      badges?: Array<{ id: string; label: string; kind?: string; summary?: string }>;
+      distinctions?: string[];
+    };
     entityType: "player" | "npc" | "system" | "event";
     level: number;
     rank: string | null;
@@ -106,6 +112,10 @@ type ProfileImageUploadResult =
   | { ok: true; imageUrl: string }
   | { ok: false; error: string };
 
+type ProfileTitleResult =
+  | { ok: true; playerState?: unknown; prestige: NonNullable<ProfileResponse["publicProfile"]["prestige"]>; message?: string }
+  | { ok: false; error: string };
+
 export async function getProfileView(
   publicId: string,
   sessionToken: string | null,
@@ -178,5 +188,28 @@ export async function uploadOwnProfileImage(
       ok: false,
       error: "Profile image upload failed.",
     };
+  }
+}
+
+
+export async function setOwnProfileTitle(
+  titleId: string,
+  sessionToken: string | null,
+): Promise<ProfileTitleResult> {
+  if (!sessionToken) return { ok: false, error: "Authentication required." };
+  try {
+    const response = await fetch("/api/me/title", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionToken}`,
+      },
+      body: JSON.stringify({ titleId }),
+    });
+    const payload = (await response.json().catch(() => null)) as { prestige?: NonNullable<ProfileResponse["publicProfile"]["prestige"]>; playerState?: unknown; message?: string; error?: string } | null;
+    if (!response.ok || !payload?.prestige) return { ok: false, error: payload?.error ?? "Title update failed." };
+    return { ok: true, prestige: payload.prestige, playerState: payload.playerState, message: payload.message };
+  } catch {
+    return { ok: false, error: "Title update failed." };
   }
 }

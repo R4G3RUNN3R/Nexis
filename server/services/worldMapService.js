@@ -4,6 +4,7 @@ import { buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
 import { createDefaultPlayerState, findPlayerStateByUserInternalId } from "../repositories/playerStateRepository.js";
 import { getCityDefinition, normalizeCityId } from "../data/cityData.js";
 import { getCompletedCourseIds } from "./educationService.js";
+import { getHiddenSiteAtlas } from "./liveWorldService.js";
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asArray(value) { return Array.isArray(value) ? value : []; }
 const ATLAS_CITIES = [
@@ -37,12 +38,8 @@ function buildAtlas(runtimeState) {
     return { ...region, status, lockReason: status === "locked" ? lockReason(region.requiredCourse) : null };
   });
   const cities = ATLAS_CITIES.map((city) => { const def = getCityDefinition(city.id); const region = regions.find((entry) => entry.id === city.regionId); const discovered = city.id === "nexis" || city.id === currentCityId || region?.status === "discovered" || hasWorldGeography; return { ...city, name: def.name, role: def.role, status: discovered ? "discovered" : region?.status === "rumored" ? "rumored" : "locked", lockReason: discovered ? null : "Complete World Geography or discover this city through travel to reveal full atlas notes.", current: city.id === currentCityId }; });
-  const hiddenSites = [
-    { id: "west_tide_cache", title: "Marked Tide Cache", regionId: "western_coast", status: hasWorldGeography ? "rumored" : "unknown", lockReason: hasWorldGeography ? null : "World Geography reveals route caches." },
-    { id: "north_ward_ruin", title: "Warded Root-Ruin", regionId: "northern_bough", status: hasHistoricalAwareness ? "rumored" : "locked", lockReason: hasHistoricalAwareness ? null : "Historical Awareness reveals relic-heavy sites." },
-    { id: "east_convoy_pullout", title: "Forge-Road Pullout", regionId: "eastern_forges", status: hasWorldGeography ? "rumored" : "unknown", lockReason: hasWorldGeography ? null : "World Geography reveals practical route notes." },
-    { id: "south_permit_detour", title: "Permit Clerk Detour", regionId: "southern_court", status: hasWorldGeography ? "rumored" : "unknown", lockReason: hasWorldGeography ? null : "World Geography reveals court-road detours." },
-  ];
-  return { currentCityId, education: { hasWorldGeography, hasHistoricalAwareness, worldGeographyMessage: hasWorldGeography ? "World Geography is expanding safe route and discovery readings." : "World Geography is incomplete: travel discoveries remain limited and many atlas entries stay locked or vague.", historicalAwarenessMessage: hasHistoricalAwareness ? "Historical Awareness is improving ruin, relic, and lore interpretation." : "Historical Awareness is incomplete: ruin and relic entries remain mostly rumor." }, regions, cities, hiddenSites, discoveries: discoveries.slice(0, 24), generatedAt: Date.now() };
+  const hiddenSites = getHiddenSiteAtlas(runtimeState);
+  const hiddenCounts = hiddenSites.reduce((counts, site) => ({ ...counts, [site.status]: (counts[site.status] ?? 0) + 1 }), {});
+  return { currentCityId, education: { hasWorldGeography, hasHistoricalAwareness, worldGeographyMessage: hasWorldGeography ? "World Geography is expanding safe route and discovery readings." : "World Geography is incomplete: travel discoveries remain limited and many atlas entries stay locked or vague.", historicalAwarenessMessage: hasHistoricalAwareness ? "Historical Awareness is improving ruin, relic, and lore interpretation." : "Historical Awareness is incomplete: ruin and relic entries remain mostly rumor.", appliedKnowledgeMessage: completed.has("applied-knowledge") ? "Applied Knowledge is improving practical interpretation of finds." : "Applied Knowledge would sharpen practical field interpretation.", streetSurvivalMessage: completed.has("street-survival") ? "Street Survival is revealing smuggler traces and covert routes." : "Street Survival would reveal safer shady travel cues." }, regions, cities, hiddenSites, hiddenCounts, discoveries: discoveries.slice(0, 24), generatedAt: Date.now() };
 }
 export async function getWorldAtlasForUser(user) { return withTransaction(async (client) => { await createDefaultPlayerState(client, user.internalId); const playerState = await findPlayerStateByUserInternalId(client, user.internalId); if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND"); return { playerState, atlas: buildAtlas(buildMutableRuntimeState(user, playerState)) }; }); }

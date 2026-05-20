@@ -273,3 +273,29 @@ CREATE TABLE IF NOT EXISTS organization_base_payments (
 
 CREATE INDEX IF NOT EXISTS idx_organization_base_payments_base_created
   ON organization_base_payments (base_id, created_at DESC);
+
+
+CREATE TABLE IF NOT EXISTS marketplace_listings (
+  id BIGSERIAL PRIMARY KEY,
+  seller_internal_id TEXT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
+  seller_public_id BIGINT NOT NULL,
+  seller_name TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  unit_price INTEGER NOT NULL CHECK (unit_price > 0),
+  city_id TEXT NOT NULL DEFAULT 'nexis',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'sold', 'cancelled', 'expired')),
+  buyer_internal_id TEXT NULL REFERENCES users(internal_id) ON DELETE SET NULL,
+  buyer_public_id BIGINT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '7 days',
+  sold_at TIMESTAMPTZ NULL,
+  cancelled_at TIMESTAMPTZ NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_listings_active
+  ON marketplace_listings (status, expires_at, city_id, unit_price);
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_listings_seller
+  ON marketplace_listings (seller_internal_id, status, created_at DESC);
