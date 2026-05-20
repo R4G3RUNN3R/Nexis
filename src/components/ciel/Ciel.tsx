@@ -27,7 +27,7 @@ export default function Ciel() {
         position={position}
         onMove={setPosition}
         onClick={open ? closeCiel : openCiel}
-        title="CIEL"
+        title="CIEL - Cognitive inference and evaluation layer"
       />
 
       <CielDialogue

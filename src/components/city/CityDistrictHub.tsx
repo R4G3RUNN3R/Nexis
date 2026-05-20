@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { getCityDistricts } from "../../data/cityDistricts";
 import { getCityHubContent, type CityService } from "../../data/cityHubData";
 import { getCityAcademyDetail, getCityLocalContracts } from "../../data/cityLoopData";
@@ -387,6 +387,7 @@ function AcademyPanel({
 
 export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const { authSource, serverSessionToken, refreshServerState } = useAuth();
+  const location = useLocation();
   const hub = useMemo(() => getCityHubContent(city.id), [city.id]);
   const academyDetail = useMemo(() => getCityAcademyDetail(city.id), [city.id]);
   const localContracts = useMemo(() => getCityLocalContracts(city.id), [city.id]);
@@ -417,6 +418,14 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const [openSection, setOpenSection] = useState<CityHubSectionId>("overview");
   const [showAllContracts, setShowAllContracts] = useState(false);
   const [openAcademyId, setOpenAcademyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hashId = location.hash.replace("#", "") as CityHubSectionId;
+    const validSections: CityHubSectionId[] = ["overview", "services", "people", "contracts", "academy", "districts"];
+    if (!validSections.includes(hashId)) return;
+    setOpenSection(hashId);
+    window.setTimeout(() => document.getElementById(hashId)?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+  }, [location.hash]);
 
   useEffect(() => {
     const handle = window.setInterval(() => setNow(Date.now()), 1000);

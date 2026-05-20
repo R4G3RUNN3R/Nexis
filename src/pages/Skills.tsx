@@ -120,13 +120,13 @@ function SkillCard({
 }
 
 export default function SkillsPage() {
-  const { activeAccount, authSource, serverSessionToken, refreshServerState } = useAuth();
+  const { authSource, serverSessionToken, refreshServerState } = useAuth();
   const [payload, setPayload] = useState<ServerSkillsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openFamily, setOpenFamily] = useState<string | null>(null);
-  const isAdmin = activeAccount?.privilegeRole === "admin";
+  const isAdmin = Boolean(payload?.adminControlsEnabled);
 
   async function loadSkills() {
     if (authSource !== "server" || !serverSessionToken) {
@@ -249,7 +249,7 @@ export default function SkillsPage() {
                     const skill = skillId ? byId.get(skillId) : null;
                     return (
                       <div key={`active-${index}`} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.48)", display: "flex", justifyContent: "space-between", gap: 10 }}>
-                        <span>{index + 1}. {skill?.name ?? "Empty active slot"}</span>
+                        <span title={skill ? `${skill.summary} | ${combatSummary(skill)}` : "Active skills are used during real combat turns."}>{index + 1}. {skill?.name ?? "Empty active slot"}{skill ? <small style={{ display: "block", color: "#9fb0bf", fontSize: 11 }}>{combatSummary(skill)}</small> : <small style={{ display: "block", color: "#9fb0bf", fontSize: 11 }}>Used during combat, arena, duels, and mission fights.</small>}</span>
                         {skill ? <button type="button" disabled={busy} onClick={() => clearSlot("active", index)} style={actionStyle(busy)}>Clear</button> : null}
                       </div>
                     );
@@ -261,7 +261,7 @@ export default function SkillsPage() {
                     const skill = skillId ? byId.get(skillId) : null;
                     return (
                       <div key={`passive-${index}`} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7, 13, 20, 0.48)", display: "flex", justifyContent: "space-between", gap: 10 }}>
-                        <span>{index + 1}. {skill?.name ?? "Empty passive slot"}</span>
+                        <span title={skill ? `${skill.summary} | ${combatSummary(skill)}` : "Passive/support skills modify combat or utility from the background."}>{index + 1}. {skill?.name ?? "Empty passive slot"}{skill ? <small style={{ display: "block", color: "#9fb0bf", fontSize: 11 }}>{combatSummary(skill)}</small> : <small style={{ display: "block", color: "#9fb0bf", fontSize: 11 }}>Support effects apply when slotted and eligible.</small>}</span>
                         {skill ? <button type="button" disabled={busy} onClick={() => clearSlot("passive", index)} style={actionStyle(busy)}>Clear</button> : null}
                       </div>
                     );

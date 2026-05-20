@@ -302,12 +302,17 @@ export default function Education() {
             const progress = getCategoryProgress(category.id, education.completedCourses);
             const percentage = progress.total ? Math.round((progress.completed / progress.total) * 100) : 0;
             const isSelected = category.id === selectedCategory.id;
+            const states = category.courses.map((course) => getCourseState(course, education));
+            const lockedCount = states.filter((state) => state === "locked").length;
+            const availableCount = states.filter((state) => state === "available").length;
+            const currentCount = states.filter((state) => state === "current").length;
+            const cardState = currentCount ? "current" : percentage >= 100 ? "completed" : availableCount ? "available" : lockedCount === category.courses.length ? "locked" : "mixed";
 
             return (
               <button
                 key={category.id}
                 type="button"
-                className={`edu-category-card${isSelected ? " edu-category-card--active" : ""}`}
+                className={`edu-category-card edu-category-card--${cardState}${isSelected ? " edu-category-card--active" : ""}`}
                 onClick={() => {
                   setSelectedCategoryId(category.id);
                   setSelectedCourseId(category.courses[0].id);
@@ -315,6 +320,7 @@ export default function Education() {
               >
                 <div className="edu-category-card__title">{category.name}</div>
                 <div className="edu-category-card__image" />
+                <div className="edu-category-card__state-row"><span>{currentCount ? "In progress" : availableCount ? `${availableCount} available` : percentage >= 100 ? "Complete" : "Locked"}</span><span>{lockedCount} locked</span></div>
                 <div className="edu-category-card__footer">
                   <div className="edu-category-card__progress">
                     <div className="edu-category-card__progress-fill" style={{ width: `${percentage}%` }} />

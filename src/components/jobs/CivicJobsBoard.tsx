@@ -307,6 +307,14 @@ export default function CivicJobsBoard() {
         </ContentPanel>
       ) : null}
 
+      {civicPolicy.consortiumBlocked ? (
+        <ContentPanel title="Civic Jobs Blocked">
+          <div style={{ border: "1px solid rgba(217, 143, 143, 0.55)", background: "rgba(75, 28, 28, 0.25)", color: "#f0b8b8", padding: 10, borderRadius: 8, fontSize: 13 }}>
+            <strong>Consortium conflict:</strong> {civicPolicy.blockedReason ?? "Your consortium role blocks civic employment actions right now."}
+          </div>
+        </ContentPanel>
+      ) : null}
+
       <ContentPanel title="Civic Employment Status">
         <div style={{ display: "grid", gap: 8 }}>
           {!activeTrack ? (

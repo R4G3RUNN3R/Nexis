@@ -27,6 +27,7 @@ function actionStyle(disabled: boolean) {
 
 function CombatResultPanel({ result }: { result: ServerCombatResult | null }) {
   if (!result) return <div style={{ color: "#9fb0bf", fontSize: 13 }}>No server combat resolved yet.</div>;
+  const resolvedLabel = result.resolvedAt ? new Date(result.resolvedAt).toLocaleString("en-GB") : "recent fight";
   const reward = (result.reward ?? {}) as { gold?: number; experience?: number; items?: Array<{ itemId: string; label?: string; quantity?: number }> };
   const rewardBits = [
     reward.gold ? `${reward.gold} gold` : null,
@@ -39,8 +40,9 @@ function CombatResultPanel({ result }: { result: ServerCombatResult | null }) {
         <strong>{result.opponent.name}</strong>
         <span style={{ color: result.winner === "player" ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{result.outcome}</span>
       </div>
+      <div style={{ color: "#9fb0bf", fontSize: 12 }}>Snapshot: {resolvedLabel}. Sidebar bars show current live stats; this card records that fight only.</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>You: {result.player.health}/{result.player.maxHealth} | Opponent: {result.opponentState.health}/{result.opponentState.maxHealth}</div>
-      <div style={{ color: "#d8c278", fontSize: 12 }}>Energy spent: {result.energySpent ?? 0}{typeof result.energyAfter === "number" ? ` | Energy after: ${result.energyAfter}` : ""}</div>
+      <div style={{ color: "#d8c278", fontSize: 12 }}>Energy spent in this fight: {result.energySpent ?? 0}{typeof result.energyAfter === "number" ? ` | After this fight: ${result.energyAfter}` : ""}</div>
       <div style={{ color: "#8ec8a7", fontSize: 12 }}>Combat XP: +{result.combatXpGained ?? 0}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Skills: {result.activeSkills.map((skill) => skill.name).join(" | ") || "Basic pressure"}</div>
       {result.skillEvents.length ? <div style={{ color: "#8ec8a7", fontSize: 12 }}>Skill XP: {result.skillEvents.map((event) => `${String(event.name ?? event.skillId)} +${String(event.xpGained ?? 0)}`).join(" | ")}</div> : null}
@@ -54,7 +56,7 @@ function CombatResultPanel({ result }: { result: ServerCombatResult | null }) {
 }
 
 export default function ServerCombatBoard() {
-  const { authSource, serverSessionToken, refreshServerState } = useAuth();
+  const { activeAccount, authSource, serverSessionToken, refreshServerState } = useAuth();
   const [arena, setArena] = useState<ServerArenaCombatPayload | null>(null);
   const [duels, setDuels] = useState<ServerDuelsPayload | null>(null);
   const [combatItems, setCombatItems] = useState<ServerInventoryEntry[]>([]);
@@ -106,23 +108,45 @@ export default function ServerCombatBoard() {
     void load();
   }
 
+  function parseDuelTarget(): { targetPublicId: number | null; error: string | null } {
+    const raw = targetPublicId.trim();
+    if (!raw) return { targetPublicId: null, error: "Enter a target public ID before challenging." };
+    const normalized = raw.toUpperCase().replace(/[^0-9]/g, "");
+    if (normalized.length !== 7) return { targetPublicId: null, error: "Use a valid public ID, for example P1000001." };
+    const parsed = Number(normalized);
+    if (!Number.isInteger(parsed) || parsed <= 0) return { targetPublicId: null, error: "That public ID is not valid." };
+    if (activeAccount?.publicId === parsed) return { targetPublicId: null, error: "You cannot challenge yourself. Admirable confidence, wrong form." };
+    return { targetPublicId: parsed, error: null };
+  }
+
+  function friendlyDuelFailure(errorText: string, code?: string | null) {
+    if (code === "DUEL_TARGET_NOT_FOUND") return "Player not found for that public ID.";
+    if (code === "DUEL_SELF_TARGET") return "You cannot challenge yourself.";
+    if (code === "DUEL_CITY_MISMATCH") return "That player is not eligible: duels are same-city only.";
+    if (code === "COMBAT_ENERGY_LOW") return "Not enough energy to start a real duel. You need 25 energy.";
+    return errorText || "Duel challenge failed.";
+  }
+
   async function challenge() {
     if (!serverSessionToken) return;
-    const parsed = Number(targetPublicId.replace(/[^0-9]/g, ""));
-    if (!parsed) {
-      setError("Enter a target public ID.");
+    const parsed = parseDuelTarget();
+    if (parsed.error || !parsed.targetPublicId) {
+      setMessage(null);
+      setError(parsed.error ?? "That public ID is not valid.");
       return;
     }
     setBusy("duel:challenge");
     setError(null);
-    setMessage(null);
-    const result = await challengeServerDuel(serverSessionToken, parsed);
+    setMessage("Sending duel challenge...");
+    const result = await challengeServerDuel(serverSessionToken, parsed.targetPublicId);
     setBusy(null);
     if (!result.ok) {
-      setError(result.error);
+      setMessage(null);
+      setError(friendlyDuelFailure(result.error, result.code));
       return;
     }
     setDuels(result.duels);
+    setTargetPublicId("");
     setMessage(result.message ?? "Duel challenge sent.");
   }
 

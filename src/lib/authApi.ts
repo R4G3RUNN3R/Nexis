@@ -673,6 +673,7 @@ export type ServerSkillsPayload = {
   masteryThresholds: number[];
   skills: ServerSkill[];
   unlockHistory: Array<Record<string, unknown>>;
+  adminControlsEnabled?: boolean;
 };
 
 export type ApiSkillsResponse =

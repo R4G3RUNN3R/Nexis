@@ -129,6 +129,26 @@ function getDailyGeneration(board: ConsortiumBoard) {
   return typeof directValue === "number" ? directValue : readBoardNumberMetadata(board, "baseIncomePerShift");
 }
 
+function getHazardPressure(board: ConsortiumBoard) {
+  return Math.max(0, Math.min(100, 100 - Math.round(getDailyGeneration(board) / 5)));
+}
+
+function getHazardSeverity(pressure: number) {
+  if (pressure >= 90) return "Critical";
+  if (pressure >= 75) return "High";
+  if (pressure >= 50) return "Elevated";
+  if (pressure >= 25) return "Guarded";
+  return "Stable";
+}
+
+function getHazardExplanation(pressure: number) {
+  if (pressure >= 90) return "near max route volatility; expect poor outcomes without escort coverage";
+  if (pressure >= 75) return "dangerous routes; escorts and logistics matter";
+  if (pressure >= 50) return "meaningful volatility on exposed routes";
+  if (pressure >= 25) return "manageable pressure with basic coverage";
+  return "routes are currently controlled";
+}
+
 function readNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -502,11 +522,13 @@ export default function ConsortiumsPage() {
                           <strong>{getDailyGeneration(board).toLocaleString("en-GB")}</strong>
                           <p>Gold generation</p>
                         </article>
-                        <article className="org-stat-card">
-                          <span>Hazard Pressure</span>
-                          <strong>{Math.max(0, 100 - Math.round(getDailyGeneration(board) / 5))}</strong>
-                          <p>Route volatility indicator</p>
-                        </article>
+                        {(() => { const hazardPressure = getHazardPressure(board); return (
+                          <article className="org-stat-card">
+                            <span>Hazard Pressure</span>
+                            <strong title={getHazardExplanation(hazardPressure)}>{hazardPressure}</strong>
+                            <p>{getHazardSeverity(hazardPressure)} - {getHazardExplanation(hazardPressure)}</p>
+                          </article>
+                        ); })()}
                         <article className="org-stat-card">
                           <span>Escort State</span>
                           <strong>{board.memberRoleKey ? "Linked" : "Public"}</strong>

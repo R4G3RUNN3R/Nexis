@@ -46,6 +46,9 @@
   cursor: pointer;
   padding: 0;
   z-index: 3;
+  min-width: 14px;
+  min-height: 14px;
+  overflow: visible;
 }
 
 .travel-map-spotlight {
@@ -70,14 +73,19 @@
 }
 
 .travel-pin__label {
+  position: absolute;
+  left: 50%;
+  top: 20px;
+  transform: translate(var(--pin-label-x, -50%), var(--pin-label-y, 0%));
   display: inline-block;
-  margin-top: 6px;
+  margin-top: 0;
   padding: 3px 7px;
   border: 1px solid #26303a;
   background: rgba(9, 13, 17, 0.92);
   color: #f7fbff;
   font-size: 11px;
   white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
 }
 
 .travel-pin--selected .travel-pin__dot {

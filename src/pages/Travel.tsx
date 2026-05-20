@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { worldCities, worldRoutes, type WorldCity, type WorldCityId } from "../data/worldMapData";
@@ -27,6 +27,21 @@ const CITY_IMAGES: Record<string, string> = {
 
 function getFocusedCityId(state: PersistedTravelState): WorldCityId {
   return state.status === "in_transit" && state.destinationCityId ? state.destinationCityId : state.currentCityId;
+}
+
+const PIN_LABEL_OFFSETS: Partial<Record<WorldCityId, { x: string; y: string }>> = {
+  nexis: { x: "-112%", y: "8%" },
+  south: { x: "12%", y: "-132%" },
+};
+
+function getPinStyle(city: WorldCity): CSSProperties {
+  const offset = PIN_LABEL_OFFSETS[city.id];
+  return {
+    left: `${city.xPercent}%`,
+    top: `${city.yPercent}%`,
+    "--pin-label-x": offset?.x ?? "-50%",
+    "--pin-label-y": offset?.y ?? "0%",
+  } as CSSProperties;
 }
 
 function getPinClass(region: WorldCity["region"]) {
@@ -239,7 +254,7 @@ export default function TravelPage() {
                   key={city.id}
                   type="button"
                   className={`${getPinClass(city.region)}${isSelected ? " travel-pin--selected" : ""}${isCurrent ? " travel-pin--current" : ""}${isTransitTarget ? " travel-pin--target" : ""}`}
-                  style={{ left: `${city.xPercent}%`, top: `${city.yPercent}%` }}
+                  style={getPinStyle(city)}
                   onClick={() => setSelectedCityId(city.id)}
                   aria-label={city.name}
                   title={`${city.name} (Map quick-select)`}

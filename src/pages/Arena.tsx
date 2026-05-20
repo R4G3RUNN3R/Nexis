@@ -398,7 +398,11 @@ export default function ArenaPage() {
                     <div className="arena-tier-card__meta">Unlock threshold: {arena.unlockEnergySpent.toLocaleString()} energy spent</div>
                     <div className="arena-tier-card__meta">Membership: {arena.unlockCost.toLocaleString()} gold</div>
                     {unlocked ? (
-                      <button type="button" className="arena-panel__spec-chip" onClick={() => selectArena(arena.id)}>Activate</button>
+                      selected ? (
+                        <button type="button" className="arena-panel__spec-chip arena-panel__spec-chip--active" disabled title="This arena is already active.">Active</button>
+                      ) : (
+                        <button type="button" className="arena-panel__spec-chip" onClick={() => selectArena(arena.id)}>Activate</button>
+                      )
                     ) : canBuy ? (
                       <button type="button" className="arena-panel__spec-chip" onClick={() => unlockArena(arena)}>Buy Membership</button>
                     ) : (

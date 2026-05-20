@@ -606,7 +606,7 @@ export default function ProfilePage() {
               </PanelSection>
             ) : null}
 
-            {moderation ? (
+            {moderation && viewer.canModerate ? (
               <PanelSection title="Staff Oversight">
                 <div className="stat-table">
                   <StatRow label="Email" value={moderation.email} />

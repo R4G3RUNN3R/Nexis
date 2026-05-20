@@ -41,6 +41,7 @@ import SalvageYardPage from "../pages/SalvageYard";
 import WorldMapPage from "../pages/WorldMap";
 import PropertyOfficePage from "../pages/PropertyOffice";
 import CodexPage from "../pages/Codex";
+import NotFoundPage from "../pages/NotFound";
 
 function readStoredSessionProfilePublicId() {
   if (typeof window === "undefined") return null;
@@ -181,6 +182,7 @@ export default function AppRouter() {
       <Route path="/bank" element={<RouteGuard><BankPage /></RouteGuard>} />
       <Route path="/academies" element={<RouteGuard><AcademiesPage /></RouteGuard>} />
       <Route path="/life-paths" element={<RouteGuard><LifePathsPage /></RouteGuard>} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

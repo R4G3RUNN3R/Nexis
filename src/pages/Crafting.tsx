@@ -145,8 +145,8 @@ export default function CraftingPage() {
                   <span style={{ color: "#9fb0bf", fontSize: 12 }}>{recipe.city.name} | {recipe.lockReason ?? "Travel there to use its bench."}</span>
                 </div>
               )) : null}
-              {!family ? <div style={{ color: "#9fb0bf" }}>Open a recipe family to compare off-city benches.</div> : null}
-              {family && !otherRecipes.length ? <div style={{ color: "#9fb0bf" }}>No off-city recipes in this family.</div> : null}
+              {!family ? <div style={{ color: "#9fb0bf" }}>Open a recipe family to compare other city benches and travel-locked recipes.</div> : null}
+              {family && !otherRecipes.length ? <div style={{ color: "#9fb0bf" }}>This family has no off-city recipes yet; the current city bench owns it.</div> : null}
             </div>
           </ContentPanel>
         </div>

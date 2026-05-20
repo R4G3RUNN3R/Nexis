@@ -502,6 +502,7 @@ function serializeSkills(runtimeState, user = null) {
     masteryThresholds: MASTERY_THRESHOLDS.slice(1),
     skills: getSkillDefinitions().map((skill) => serializeSkill(runtimeState, skill, user)),
     unlockHistory: asArray(state.unlockHistory).slice(0, 20),
+    adminControlsEnabled: isAdminUser(user),
   };
 }
 

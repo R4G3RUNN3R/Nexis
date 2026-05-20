@@ -173,20 +173,37 @@ function serializeRecipe(runtimeState, recipe) {
   };
 }
 
+function removeSelfYield(itemId, yieldItems) {
+  return yieldItems.filter((entry) => entry.itemId !== itemId);
+}
+
 function getSalvageYield(itemId) {
   const item = getItemDefinition(itemId);
   if (!item) return [];
+  let yieldItems = [];
   if (item.category === "Equipment") {
-    if (item.cityBias === "ironhall") return [{ itemId: "scrap_metal", quantity: 2 }, { itemId: "iron_rivets", quantity: 1 }];
-    if (item.cityBias === "silverbough") return [{ itemId: "arcane_ink", quantity: 1 }, { itemId: "rough_wood", quantity: 1 }];
-    if (item.cityBias === "highcourt") return [{ itemId: "wax_seal", quantity: 1 }, { itemId: "scrap_metal", quantity: 1 }];
-    return [{ itemId: "scrap_metal", quantity: 1 }, { itemId: "rough_wood", quantity: 1 }];
+    if (item.cityBias === "ironhall") yieldItems = [{ itemId: "scrap_metal", quantity: 2 }, { itemId: "iron_rivets", quantity: 1 }];
+    else if (item.cityBias === "silverbough") yieldItems = [{ itemId: "arcane_ink", quantity: 1 }, { itemId: "rough_wood", quantity: 1 }];
+    else if (item.cityBias === "highcourt") yieldItems = [{ itemId: "vial_of_ink", quantity: 1 }, { itemId: "scrap_metal", quantity: 1 }];
+    else yieldItems = [{ itemId: "scrap_metal", quantity: 1 }, { itemId: "rough_wood", quantity: 1 }];
+  } else if (item.category === "Tool") {
+    yieldItems = [{ itemId: "rough_wood", quantity: 1 }, { itemId: "scrap_metal", quantity: 1 }];
+  } else if (item.category === "Trade Good") {
+    if (itemId === "wax_seal") yieldItems = [{ itemId: "vial_of_ink", quantity: 1 }];
+    else if (itemId === "vial_of_ink") yieldItems = [{ itemId: "empty_vials", quantity: 1 }];
+    else if (item.cityBias === "ironhall") yieldItems = [{ itemId: "scrap_metal", quantity: 1 }];
+    else if (item.cityBias === "silverbough") yieldItems = [{ itemId: "empty_vials", quantity: 1 }];
+    else if (item.cityBias === "highcourt") yieldItems = [{ itemId: "vial_of_ink", quantity: 1 }];
+    else yieldItems = [{ itemId: "rough_wood", quantity: 1 }];
+  } else if (item.category === "Loot") {
+    yieldItems = [{ itemId: item.cityBias === "silverbough" ? "ward_shard" : "scrap_metal", quantity: 1 }];
+  } else if (item.category === "Black Market") {
+    yieldItems = [{ itemId: "empty_vials", quantity: 1 }, { itemId: "rough_wood", quantity: 1 }];
   }
-  if (item.category === "Tool") return [{ itemId: "rough_wood", quantity: 1 }, { itemId: "scrap_metal", quantity: 1 }];
-  if (item.category === "Trade Good") return [{ itemId: item.cityBias === "highcourt" ? "wax_seal" : "rough_wood", quantity: 1 }];
-  if (item.category === "Loot") return [{ itemId: item.cityBias === "silverbough" ? "ward_shard" : "scrap_metal", quantity: 1 }];
-  if (item.category === "Black Market") return [{ itemId: "empty_vials", quantity: 1 }, { itemId: "rough_wood", quantity: 1 }];
-  return [];
+  const safeYield = removeSelfYield(itemId, yieldItems);
+  if (safeYield.length) return safeYield;
+  if (itemId !== "rough_wood") return [{ itemId: "rough_wood", quantity: 1 }];
+  return itemId !== "scrap_metal" ? [{ itemId: "scrap_metal", quantity: 1 }] : [];
 }
 
 function serializeSalvageOption(runtimeState, itemId, quantity) {

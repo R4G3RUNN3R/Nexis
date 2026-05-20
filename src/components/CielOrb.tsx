@@ -16,7 +16,7 @@ export default function CielOrb({
   position,
   onMove,
   onClick,
-  title = "CIEL",
+  title = "CIEL - Cognitive inference and evaluation layer",
 }: Props) {
   const [dragging, setDragging] = useState(false);
   const [movedDuringDrag, setMovedDuringDrag] = useState(false);

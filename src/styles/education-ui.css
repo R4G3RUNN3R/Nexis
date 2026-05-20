@@ -470,3 +470,18 @@
   margin-bottom: 10px;
   font-size: 12px;
 }
+
+.edu-category-card__state-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: #aeb9b1;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.edu-category-card--current { border-color: #5f93bd; }
+.edu-category-card--available { border-color: #7a734d; }
+.edu-category-card--locked { opacity: 0.72; }
+.edu-category-card--completed { border-color: #668a50; }
