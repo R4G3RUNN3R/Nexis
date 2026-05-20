@@ -18,6 +18,7 @@ import "./styles/achievements-legacy-ui.css";
 import "./styles/hosp-full.css";
 import "./styles/register.css";
 import "./styles/arena.css";
+import "./styles/codex.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

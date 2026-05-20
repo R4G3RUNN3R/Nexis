@@ -5,6 +5,7 @@ import { getCityHubContent, type CityService } from "../../data/cityHubData";
 import { getCityAcademyDetail, getCityLocalContracts } from "../../data/cityLoopData";
 import { type WorldCity } from "../../data/worldMapData";
 import { getProfileRoute } from "../../lib/publicIds";
+import { getCodexEntryIdForCity, getCodexEntryRoute } from "../../data/codexData";
 import { PlayerAvatar } from "../common/PlayerAvatar";
 import {
   acceptServerCityContract,
@@ -27,6 +28,11 @@ import {
   type ServerCombatResult,
 } from "../../lib/authApi";
 import { useAuth } from "../../state/AuthContext";
+
+function shortText(value: string, max = 110) {
+  const trimmed = String(value || "").trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max - 3).trim()}...` : trimmed;
+}
 
 function ServiceLink({ service }: { service: CityService }) {
   const statusLabel = service.status === "open" ? "Open" : service.status === "locked" ? "Locked" : "Unavailable";
@@ -586,6 +592,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     hub.services.citySpecial,
   ];
   const academyEntries = academies.length ? academies : academy ? [academy] : [];
+  const cityCodexRoute = getCodexEntryRoute(getCodexEntryIdForCity(city.id));
   const visibleContracts = showAllContracts ? contracts : contracts.slice(0, 3);
   const fallbackContracts = showAllContracts ? localContracts : localContracts.slice(0, 3);
   const contractSummary = contracts.length
@@ -598,19 +605,19 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
       <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 14, background: "rgba(7, 13, 20, 0.58)", display: "grid", gap: 6 }}>
         <strong>{hub.displayName}</strong>
         <div style={{ color: "#d8c278", fontSize: 13 }}>{hub.identity}</div>
-        <div style={{ color: "#9fb0bf", fontSize: 13 }}>{hub.overview}</div>
+        <div style={{ color: "#9fb0bf", fontSize: 13 }}>{shortText(hub.overview, 96)} <Link className="inline-route-link" to={cityCodexRoute}>Read city entry</Link></div>
       </div>
 
       <HubSection id="overview" title="City Overview" summary={`${standing ? `${standing.tier} standing` : "Local status"} | ${hub.market.imports.slice(0, 2).join(", ") || "city imports"} in, ${hub.market.exports.slice(0, 2).join(", ") || "city exports"} out`} openSection={openSection} onToggle={setOpenSection}>
         <div style={{ display: "grid", gap: 10 }}>
-          <p style={{ margin: 0 }}>{hub.localIdentity}</p>
+          <div style={{ color: "#b7c3cf", fontSize: 13 }}>Local action hub: services, people, contracts, academy study, and district links. <Link className="inline-route-link" to={cityCodexRoute}>Open Codex entry</Link></div>
           {standing ? (
             <>
               <div className="info-row"><span className="info-row__label">Local standing</span><span className="info-row__value">{standing.value} | {standing.tier}</span></div>
               <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing improves local contracts, services, and academy access.</div>
             </>
           ) : null}
-          <div className="info-row"><span className="info-row__label">Property flavor</span><span className="info-row__value">{hub.propertyFlavor}</span></div>
+          <div className="info-row"><span className="info-row__label">Property</span><span className="info-row__value">{shortText(hub.propertyFlavor, 72)}</span></div>
           <div className="info-row"><span className="info-row__label">Imports</span><span className="info-row__value">{hub.market.imports.join(", ")}</span></div>
           <div className="info-row"><span className="info-row__label">Exports</span><span className="info-row__value">{hub.market.exports.join(", ")}</span></div>
           {hub.lockedContent.length ? (
@@ -642,7 +649,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
       </HubSection>
 
       <HubSection id="people" title="People" summary={`${population?.visibleCount ?? people.length} visible | ${population?.guildmatesVisible ?? 0} guildmates | ${population?.consortiumMembersVisible ?? 0} consortium peers`} openSection={openSection} onToggle={setOpenSection}>
-        <p style={{ margin: 0, color: "#b7c3cf" }}>{hub.peopleIntro}</p>
+        <div style={{ margin: 0, color: "#b7c3cf", fontSize: 13 }}>Controlled public presence only. Private/admin data stays off this list.</div>
         <PeopleList people={people} population={population} loading={peopleLoading} error={peopleError} filter={peopleFilter} page={peoplePage} onFilterChange={(nextFilter) => { setPeopleFilter(nextFilter); setPeoplePage(1); }} onPageChange={setPeoplePage} />
       </HubSection>
 
@@ -695,10 +702,10 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
           {districts.map((district) => (
             <div key={district.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 12, background: "rgba(7, 13, 20, 0.45)", display: "grid", gap: 8 }}>
               <strong>{district.name}</strong>
-              <div style={{ fontSize: 13, color: "#9fb0bf" }}>{district.summary}</div>
+              <div style={{ fontSize: 13, color: "#9fb0bf" }}>{shortText(district.summary, 92)}</div>
               <div style={{ display: "grid", gap: 6 }}>
                 {district.destinations.map((destination) => {
-                  const service: CityService = { label: destination.name, route: destination.route, status: destination.locked ? "locked" : "open", summary: destination.description, lockReason: destination.lockReason };
+                  const service: CityService = { label: destination.name, route: destination.route, status: destination.locked ? "locked" : "open", summary: shortText(destination.description, 84), lockReason: destination.lockReason };
                   return <ServiceLink key={destination.id} service={service} />;
                 })}
               </div>

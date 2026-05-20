@@ -348,3 +348,25 @@
   object-position: center;
   display: block;
 }
+
+.world-atlas-overview .panel__body { padding: 10px; }
+.world-atlas-training { display: grid; gap: 8px; color: #aebdca; font-size: 12px; }
+.world-atlas-card-grid { display: grid; gap: 8px; }
+.world-atlas-card {
+  border: 1px solid rgba(205, 220, 233, 0.09);
+  background: rgba(6, 11, 16, 0.72);
+  padding: 10px;
+  display: grid;
+  gap: 5px;
+}
+.world-atlas-card__top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.world-atlas-card__status { color: #a8b4bf; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.world-atlas-card__status--discovered { color: #8ec8a7; }
+.world-atlas-card__status--rumored { color: #d0ad74; }
+.world-atlas-card__status--locked { color: #d98f8f; }
+.world-atlas-card__meta { color: #d8c278; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+.world-atlas-card p { margin: 0; color: #aebdca; font-size: 12px; line-height: 1.4; }
+.world-atlas-card__lock { color: #d0ad74; font-size: 12px; }
+.world-atlas-card__link { color: #f0d989; font-size: 12px; font-weight: 800; }
+.world-atlas-note,
+.world-atlas-empty { margin-top: 10px; color: #8fa0af; font-size: 12px; }

@@ -40,6 +40,7 @@ import CivicJobsV2Page from "../pages/CivicJobsV2";
 import SalvageYardPage from "../pages/SalvageYard";
 import WorldMapPage from "../pages/WorldMap";
 import PropertyOfficePage from "../pages/PropertyOffice";
+import CodexPage from "../pages/Codex";
 
 function readStoredSessionProfilePublicId() {
   if (typeof window === "undefined") return null;
@@ -170,6 +171,7 @@ export default function AppRouter() {
       <Route path="/arena" element={<RouteGuard><ArenaPage /></RouteGuard>} />
       <Route path="/travel" element={<RouteGuard><TravelPage /></RouteGuard>} />
       <Route path="/world-map" element={<RouteGuard><WorldMapPage /></RouteGuard>} />
+      <Route path="/codex" element={<RouteGuard><CodexPage /></RouteGuard>} />
       <Route path="/maps/:mapId" element={<RouteGuard><WorldMapPage /></RouteGuard>} />
       <Route path="/city" element={<RouteGuard><CityPage /></RouteGuard>} />
       <Route path="/city/property-office" element={<RouteGuard><PropertyOfficePage /></RouteGuard>} />

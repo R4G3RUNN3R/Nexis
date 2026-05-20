@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
+import { getCodexEntryRoute } from "../data/codexData";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import {
   adminSetServerSkillMastery,
@@ -229,7 +231,7 @@ export default function SkillsPage() {
     <AppShell title="Skills" hint="Learn skills deliberately, then master them through valid use in combat, travel encounters, arena, duels, and missions.">
       <div style={{ display: "grid", gap: 14 }}>
         <ContentPanel title="Skill Path">
-          <div style={{ color: "#b7c3cf", fontSize: 13, marginBottom: 10 }}>Purchase or unlock access, learn the skill over real time, slot it, then raise mastery through valid combat, arena, duel, travel, contract, and mission activations. Evolutions unlock at mastery tiers and do not reset use count.</div>
+          <div style={{ color: "#b7c3cf", fontSize: 13, marginBottom: 10 }}>Acquire, learn, slot, and master skills here. Long-form rules live in <Link className="inline-route-link" to={getCodexEntryRoute("manual-skills")}>Codex Manuals</Link>.</div>
         </ContentPanel>
 
         <ContentPanel title="Skill Loadout">

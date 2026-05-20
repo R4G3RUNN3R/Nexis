@@ -12,6 +12,7 @@ const navLinks: Array<[string, string]> = [
   ["Profile", "/profile"],
   ["City", "/city"],
   ["Travel", "/travel"],
+  ["Codex", "/codex"],
   ["Guilds", "/guilds"],
   ["Consortiums", "/consortiums"],
 ];
@@ -47,6 +48,7 @@ function buildSearchIndex() {
     { id: "route-guilds", label: "Guilds", hint: "Group management", to: "/guilds" },
     { id: "route-consortiums", label: "Consortiums", hint: "Player companies", to: "/consortiums" },
     { id: "route-city-board", label: "City Board", hint: "Public notices", to: "/city-board" },
+    { id: "route-codex", label: "Codex", hint: "Archive and reference", to: "/codex" },
   ];
 
   const accounts = readJson<Record<string, { firstName: string; lastName: string; publicId: number }>>("nexis_accounts");

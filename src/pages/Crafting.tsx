@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
+import { getCodexEntryRoute } from "../data/codexData";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { ItemIcon } from "../components/items/ItemIcon";
 import {
@@ -109,6 +111,7 @@ export default function CraftingPage() {
     <AppShell title="Crafting" hint="City-bound recipes, academy unlocks, salvage-fed materials, and visible requirements.">
       {error ? <ContentPanel title="Crafting Notice"><strong>{error}</strong></ContentPanel> : null}
       {message ? <ContentPanel title="Crafting Notice"><strong>{message}</strong></ContentPanel> : null}
+      <ContentPanel title="Crafting Desk"><span style={{ color: "#b7c3cf", fontSize: 13 }}>Recipes, locks, inputs, and outputs are handled here. Full crafting reference lives in <Link className="inline-route-link" to={getCodexEntryRoute("manual-crafting")}>Codex Manuals</Link>.</span></ContentPanel>
       <div className="nexis-grid">
         <div className="nexis-column nexis-column--wide">
           <ContentPanel title={`Local Bench: ${currentCityName}`}>

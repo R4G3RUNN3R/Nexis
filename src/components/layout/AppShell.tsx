@@ -34,6 +34,7 @@ const world: Array<[string, string]> = [
   ["Civic Jobs", "/civic-jobs"],
   ["Travel", "/travel"],
   ["World Map", "/world-map"],
+  ["Codex", "/codex"],
   ["Arena", "/arena"],
   ["City Board", "/city-board"],
   ["Salvage Yard", "/salvage-yard"],

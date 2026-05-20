@@ -461,3 +461,12 @@
     grid-column: 2;
   }
 }
+
+.edu-manual-strip {
+  border: 1px solid rgba(201, 177, 122, 0.14);
+  background: rgba(7, 12, 17, 0.72);
+  color: #b7c3cf;
+  padding: 9px 11px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}

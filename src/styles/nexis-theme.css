@@ -15,9 +15,9 @@
   --accent-strong: #c9b17a;
   --accent-deep: #6b7c44;
   --danger: #c86f62;
-  --shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
-  --radius: 14px;
-  --radius-tight: 10px;
+  --shadow: 0 10px 24px rgba(0, 0, 0, 0.42);
+  --radius: 8px;
+  --radius-tight: 6px;
   --content-width: 1480px;
   --heading-font: "Palatino Linotype", "Book Antiqua", Georgia, serif;
   --ui-font: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -53,21 +53,21 @@ select {
 
 .app-main {
   display: grid;
-  grid-template-columns: 242px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 226px minmax(0, 1fr);
+  gap: 10px;
   width: min(var(--content-width), calc(100vw - 24px));
   margin: 0 auto;
-  padding: 16px 0 20px;
+  padding: 10px 0 14px;
   min-height: calc(100vh - 62px);
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 12px 12px;
-  border: 1px solid var(--line-soft);
-  border-radius: 18px;
+  gap: 8px;
+  padding: 10px 9px;
+  border: 1px solid rgba(201, 177, 122, 0.16);
+  border-radius: 8px;
   background:
     linear-gradient(180deg, rgba(24, 33, 41, 0.96) 0%, rgba(12, 18, 22, 0.97) 100%);
   box-shadow: var(--shadow);
@@ -98,8 +98,8 @@ select {
 .player-card {
   display: grid;
   grid-template-columns: 54px 1fr;
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid rgba(201, 177, 122, 0.14);
   border-radius: var(--radius);
   background:
@@ -113,7 +113,7 @@ select {
   width: 54px;
   height: 54px;
   border: 1px solid rgba(201, 177, 122, 0.22);
-  border-radius: 16px;
+  border-radius: 8px;
   background: linear-gradient(180deg, rgba(64, 72, 51, 0.35) 0%, rgba(20, 24, 29, 0.92) 100%);
   color: #f0e2bb;
   font-family: var(--heading-font);
@@ -234,7 +234,7 @@ select {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--line-soft);
   color: var(--muted-strong);
   font-size: 13px;
@@ -314,10 +314,10 @@ select {
   justify-content: space-between;
   align-items: flex-end;
   gap: 18px;
-  margin-bottom: 16px;
-  padding: 18px 22px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
   border: 1px solid rgba(201, 177, 122, 0.16);
-  border-radius: 20px;
+  border-radius: 8px;
   background:
     linear-gradient(180deg, rgba(27, 35, 42, 0.96) 0%, rgba(13, 18, 23, 0.97) 100%);
   box-shadow: var(--shadow);
@@ -338,7 +338,7 @@ select {
 
 .page-banner__title {
   font-family: var(--heading-font);
-  font-size: 32px;
+  font-size: 24px;
   line-height: 1;
   color: var(--text-strong);
 }
@@ -411,7 +411,7 @@ select {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px;
+  padding: 9px 11px;
   border-bottom: 1px solid var(--line-soft);
   background: linear-gradient(180deg, rgba(27, 35, 42, 0.95) 0%, rgba(19, 25, 31, 0.96) 100%);
 }
@@ -444,7 +444,7 @@ select {
 }
 
 .panel__body {
-  padding: 14px 16px 16px;
+  padding: 10px 11px 11px;
 }
 
 .panel--collapsed .panel__header {
@@ -464,7 +464,7 @@ select {
   display: flex;
   justify-content: space-between;
   gap: 14px;
-  padding: 10px 0;
+  padding: 7px 0;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -883,4 +883,15 @@ select {
   .home-hero__copy h1 {
     font-size: 28px;
   }
+}
+
+.command-dense-note {
+  border: 1px solid rgba(201, 177, 122, 0.14);
+  background: rgba(7, 12, 17, 0.72);
+  color: #aebdca;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+button {
+  border-radius: 6px;
 }

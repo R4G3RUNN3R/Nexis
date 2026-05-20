@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { AcademyDefinition, academyDefinitions, academySystemRules } from "../data/academyData";
+import { getCodexEntryIdForLegacyAcademy, getCodexEntryRoute } from "../data/codexData";
 import "../styles/academies-ui.css";
 
 const ACADEMY_IMAGES: Record<string, string> = {
@@ -33,6 +35,7 @@ function groupAcademies() {
 export default function AcademiesPage() {
   const [selectedId, setSelectedId] = useState(academyDefinitions[0]?.id ?? "southern");
   const [openRegion, setOpenRegion] = useState<string | null>(null);
+  const [openRankIndex, setOpenRankIndex] = useState<number | null>(0);
   const grouped = useMemo(() => groupAcademies(), []);
   const selectedAcademy = useMemo<AcademyDefinition | undefined>(
     () => academyDefinitions.find((academy) => academy.id === selectedId),
@@ -98,7 +101,7 @@ export default function AcademiesPage() {
                 ) : null}
                 <div className="academy-header-block">
                   <div className="academy-header-block__theme">{selectedAcademy.theme}</div>
-                  <p className="academy-header-block__description">{selectedAcademy.description}</p>
+                  <p className="academy-header-block__description">{selectedAcademy.theme}. <Link className="inline-route-link" to={getCodexEntryRoute(getCodexEntryIdForLegacyAcademy(selectedAcademy.id))}>Open archive record</Link></p>
                 </div>
                 <div className="academy-meta-grid">
                   <MetaRow label="Short Name" value={selectedAcademy.shortName} />
@@ -122,29 +125,29 @@ export default function AcademiesPage() {
 
               <ContentPanel title="Rank Ladder">
                 <div className="academy-rank-list">
-                  {selectedAcademy.ranks.map((rank, index) => (
-                    <article key={`${selectedAcademy.id}-${rank.title}-${index}`} className="academy-rank-card">
-                      <div className="academy-rank-card__top">
-                        <span className="academy-rank-card__rank">Rank {rank.rank}{rank.branch ? ` | ${rank.branch}` : ""}</span>
-                        <span className={`academy-rank-card__mode academy-rank-card__mode--${rank.rewardMode}`}>{rank.rewardMode}</span>
-                      </div>
-                      <h3>{rank.title}</h3>
-                      <p>{rank.description}</p>
-                      <div className="academy-rank-card__foot"><span>{rank.durationDays} days</span></div>
-                      {rank.dependencies?.length ? (
-                        <div className="academy-rank-card__block">
-                          <div className="academy-rank-card__label">Dependencies</div>
-                          <ul>{rank.dependencies.map((item) => <li key={item}>{item}</li>)}</ul>
-                        </div>
-                      ) : null}
-                      {rank.notes?.length ? (
-                        <div className="academy-rank-card__block">
-                          <div className="academy-rank-card__label">Notes</div>
-                          <ul>{rank.notes.map((item) => <li key={item}>{item}</li>)}</ul>
-                        </div>
-                      ) : null}
-                    </article>
-                  ))}
+                  {selectedAcademy.ranks.map((rank, index) => {
+                    const open = openRankIndex === index;
+                    return (
+                      <article key={`${selectedAcademy.id}-${rank.title}-${index}`} className="academy-rank-card">
+                        <button type="button" className="academy-rank-card__toggle" onClick={() => setOpenRankIndex(open ? null : index)}>
+                          <span>Rank {rank.rank}{rank.branch ? ` | ${rank.branch}` : ""} - {rank.title}</span>
+                          <span className={`academy-rank-card__mode academy-rank-card__mode--${rank.rewardMode}`}>{rank.rewardMode}</span>
+                        </button>
+                        {open ? (
+                          <div className="academy-rank-card__body">
+                            <p>{rank.description}</p>
+                            <div className="academy-rank-card__foot"><span>{rank.durationDays} days</span></div>
+                            {rank.dependencies?.length ? (
+                              <div className="academy-rank-card__block"><div className="academy-rank-card__label">Dependencies</div><ul>{rank.dependencies.map((item) => <li key={item}>{item}</li>)}</ul></div>
+                            ) : null}
+                            {rank.notes?.length ? (
+                              <div className="academy-rank-card__block"><div className="academy-rank-card__label">Notes</div><ul>{rank.notes.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul></div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
                 </div>
               </ContentPanel>
             </>

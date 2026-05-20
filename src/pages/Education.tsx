@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
+import { getCodexEntryRoute } from "../data/codexData";
 import {
   educationCategories,
   educationCourseMap,
@@ -292,6 +294,8 @@ export default function Education() {
             </button>
           </div>
         </div>
+
+        <div className="edu-manual-strip">Broad education reference lives in <Link className="inline-route-link" to={getCodexEntryRoute("manual-education")}>Codex Manuals</Link>. This page stays focused on course selection, locks, and current study.</div>
 
         <div className="edu-category-grid">
           {educationCategories.map((category) => {

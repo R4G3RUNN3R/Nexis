@@ -234,3 +234,19 @@
   object-position: center top;
   display: block;
 }
+
+.academy-rank-card__toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  border: 0;
+  background: rgba(8, 13, 18, 0.84);
+  color: #edf3f8;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.academy-rank-card__toggle:hover { background: rgba(255, 255, 255, 0.04); }
+.academy-rank-card__body { padding: 10px 12px; display: grid; gap: 8px; }
