@@ -89,3 +89,17 @@
 @media (max-width: 1180px) {
   .codex-shell { grid-template-columns: 1fr; }
 }
+
+
+.codex-list-entry--record {
+  cursor: default;
+}
+
+.codex-record-link {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 6px;
+  color: #d8c278;
+  font-size: 12px;
+  font-weight: 800;
+}

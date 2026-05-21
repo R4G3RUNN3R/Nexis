@@ -13,6 +13,7 @@ import {
   SHADOW_RESOURCE,
   WORLD_BOSS_EVENTS,
 } from "../data/liveWorldData.js";
+import { addPlayerRecord } from "./playerRecordsService.js";
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asArray(value) { return Array.isArray(value) ? value : []; }
@@ -109,7 +110,7 @@ export function recordTravelDiscoveryFromEncounter(runtimeState, encounter, rout
   const completed = completedSet(runtimeState); const siteId = event.siteIds[dayNumber(now) % event.siteIds.length]; const site = HIDDEN_SITE_DEFINITIONS.find((entry) => entry.id === siteId); const unlockCourseSatisfied = !event.requiredCourses.length || event.requiredCourses.some((courseId) => completed.has(courseId)); const nextStatus = unlockCourseSatisfied && (completed.has("historical-awareness") || completed.has("street-survival") || completed.has("applied-knowledge") || event.rarity === "common") ? "discovered" : "rumored";
   if (site) setHiddenSiteStatus(runtimeState, site.id, nextStatus, now, event.family); for (const item of asArray(event.rewards)) addInventory(runtimeState, item.itemId, item.quantity);
   const record = { id: `discovery_${event.id}_${siteId}`, kind: event.family, title: site?.name ?? event.family, summary: baseDiscovery ? `${baseDiscovery}. ${event.summary}` : event.summary, status: nextStatus, regionId: site?.regionId ?? null, siteId: site?.id ?? null, source: encounter?.title ?? "Travel discovery", foundAt: now, codexEntryId: site?.codexEntryId ?? null, rewards: event.rewards };
-  addDiscoveryRecord(runtimeState, record); addWorldAlert(runtimeState, { id: `discovery_alert_${record.id}`, kind: "discovery", label: `${record.title}: ${nextStatus}`, summary: record.summary, route: "/world-map", createdAt: now }); if (site) addLegacyEntry(runtimeState, { id: `discovery_${site.id}`, title: `Discovery: ${site.name}`, summary: site.summary, kind: "discovery", awardedAt: now }); return record;
+  addDiscoveryRecord(runtimeState, record); addPlayerRecord(runtimeState, { id: `record_${record.id}`, category: "discovery", summary: `${record.title}: ${nextStatus}.`, detail: record, source: "travel-discovery", route: "/world-map", timestamp: now }); addWorldAlert(runtimeState, { id: `discovery_alert_${record.id}`, kind: "discovery", label: `${record.title}: ${nextStatus}`, summary: record.summary, route: "/world-map", createdAt: now }); if (site) addLegacyEntry(runtimeState, { id: `discovery_${site.id}`, title: `Discovery: ${site.name}`, summary: site.summary, kind: "discovery", awardedAt: now }); return record;
 }
 export function getHiddenSiteAtlas(runtimeState, now = Date.now()) {
   const completed = completedSet(runtimeState); const records = asRecord(asRecord(ensurePlayer(runtimeState).worldDiscovery).hiddenSites);

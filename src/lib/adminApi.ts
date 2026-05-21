@@ -27,6 +27,7 @@ export type AdminPlayerTarget = {
     entityType: "player" | "npc" | "system" | "event";
     privilegeRole: "player" | "staff" | "admin";
   };
+  dossier?: Record<string, unknown>;
   player: {
     level: number;
     experience: number;

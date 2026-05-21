@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { codexEntries, codexSections, getCodexEntry, getCodexEntryRoute, type CodexSectionId } from "../data/codexData";
+import { usePlayer } from "../state/PlayerContext";
 import "../styles/codex.css";
 
 function statusText(value?: string) {
@@ -9,6 +10,7 @@ function statusText(value?: string) {
 }
 
 export default function CodexPage() {
+  const { player } = usePlayer();
   const [params, setParams] = useSearchParams();
   const selected = getCodexEntry(params.get("entry"));
   const [section, setSection] = useState<CodexSectionId>(selected.section);
@@ -17,6 +19,8 @@ export default function CodexPage() {
     const text = query.trim().toLowerCase();
     return codexEntries.filter((entry) => entry.section === section && (!text || `${entry.title} ${entry.kicker} ${entry.summary} ${entry.tags.join(" ")}`.toLowerCase().includes(text)));
   }, [query, section]);
+  const records = ((player as unknown as { records?: { entries?: Array<{ id?: string; timestamp?: number; category?: string; summary?: string; route?: string | null }> } }).records?.entries ?? [])
+    .filter((record) => !query.trim() || `${record.category ?? ""} ${record.summary ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()));
 
   function selectEntry(entryId: string) {
     setParams({ entry: entryId });
@@ -48,16 +52,23 @@ export default function CodexPage() {
         <section className="codex-list-panel">
           <div className="codex-panel-head">
             <h2>{codexSections.find((item) => item.id === section)?.label}</h2>
-            <span>{filtered.length} entries</span>
+            <span>{section === "records" ? records.length : filtered.length} entries</span>
           </div>
           <div className="codex-entry-list">
-            {filtered.map((entry) => (
+            {section === "records" ? records.map((record) => (
+              <div key={record.id ?? record.summary} className="codex-list-entry codex-list-entry--record">
+                <span className="codex-list-entry__top"><strong>{record.summary ?? "Account record"}</strong><em>{statusText(record.category)}</em></span>
+                <span>{record.timestamp ? new Date(record.timestamp).toLocaleString() : "Recorded"}</span>
+                {record.route ? <Link className="codex-record-link" to={record.route}>Open related page</Link> : null}
+              </div>
+            )) : filtered.map((entry) => (
               <button key={entry.id} type="button" className={`codex-list-entry${entry.id === selected.id ? " codex-list-entry--active" : ""}`} onClick={() => selectEntry(entry.id)}>
                 <span className="codex-list-entry__top"><strong>{entry.title}</strong><em>{statusText(entry.status)}</em></span>
                 <span>{entry.summary}</span>
               </button>
             ))}
-            {!filtered.length ? <div className="codex-empty">No archive entries match that filter.</div> : null}
+            {section === "records" && !records.length ? <div className="codex-empty">No account records match that filter yet.</div> : null}
+            {section !== "records" && !filtered.length ? <div className="codex-empty">No archive entries match that filter.</div> : null}
           </div>
         </section>
 

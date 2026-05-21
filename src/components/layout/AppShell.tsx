@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { ReactNode, useMemo } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { TopBar } from "./TopBar";
 import { PlayerAvatar } from "../common/PlayerAvatar";
 import { usePlayer } from "../../state/PlayerContext";
@@ -11,6 +11,7 @@ import { getCityName, getTravelProgress, readTravelStateFromPlayer } from "../..
 import { isStaffOrAdmin } from "../../lib/adminAccess";
 import { cielLoadingQuotes } from "../../data/cielPageCopy";
 import { getCityHubContent } from "../../data/cityHubData";
+import { acknowledgeProgressionEvent, type ServerProgressionEvent } from "../../lib/authApi";
 
 type AppShellProps = {
   title?: string;
@@ -101,9 +102,60 @@ function buildCityLocalLinks(cityId: string | null | undefined): Array<[string, 
   return links;
 }
 
+function toNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function ProgressionEventPanel({
+  event,
+  busy,
+  onAcknowledge,
+}: {
+  event: ServerProgressionEvent | null;
+  busy: boolean;
+  onAcknowledge: (eventId: string) => Promise<void>;
+}) {
+  if (!event) return null;
+
+  const detail = (event.detail && typeof event.detail === "object" ? event.detail : {}) as Record<string, unknown>;
+  const oldLevel = toNumber(detail.oldLevel);
+  const newLevel = toNumber(detail.newLevel);
+  const oldMaxLife = toNumber(detail.oldMaxLife);
+  const newMaxLife = toNumber(detail.newMaxLife);
+  const milestones = Array.isArray(detail.milestones) ? detail.milestones.filter((entry): entry is string => typeof entry === "string") : [];
+  const rareManualUnlocks = Array.isArray(detail.rareManualUnlocks)
+    ? detail.rareManualUnlocks.filter((entry): entry is string => typeof entry === "string")
+    : [];
+
+  return (
+    <section className="progression-event" aria-live="polite">
+      <div className="progression-event__copy">
+        <div className="progression-event__eyebrow">Progression record</div>
+        <h2>{event.summary || "Level advanced"}</h2>
+        <div className="progression-event__facts">
+          {oldLevel !== null && newLevel !== null ? <span>Level {oldLevel} to {newLevel}</span> : null}
+          {oldMaxLife !== null && newMaxLife !== null ? <span>Max Life {oldMaxLife} to {newMaxLife}</span> : null}
+          <span>Life fully restored</span>
+        </div>
+        {milestones.length || rareManualUnlocks.length ? (
+          <div className="progression-event__milestones">
+            {[...milestones, ...rareManualUnlocks].slice(0, 3).map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <button type="button" className="progression-event__ack" disabled={busy} onClick={() => onAcknowledge(event.id)}>
+        {busy ? "Recording" : "Acknowledge"}
+      </button>
+    </section>
+  );
+}
+
 export function AppShell({ title, hint, children }: AppShellProps) {
   const { player, now, isHospitalized, hospitalRemainingLabel, isJailed, jailRemainingLabel } = usePlayer();
-  const { activeAccount, logout } = useAuth();
+  const { activeAccount, logout, authSource, serverSessionToken, refreshServerState } = useAuth();
+  const [acknowledgingEventId, setAcknowledgingEventId] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const travelState = readTravelStateFromPlayer(player);
@@ -129,6 +181,21 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   } else if (isTraveling) {
     conditionLabel = `Traveling | ${getCityName(travelState.destinationCityId)}`;
     conditionClass = "player-condition";
+  }
+
+  const progressionEvents = ((player as unknown as { progressionEvents?: { pending?: ServerProgressionEvent[] } }).progressionEvents?.pending ?? [])
+    .filter((event) => event && typeof event.id === "string");
+  const activeProgressionEvent = progressionEvents[0] ?? null;
+
+  async function handleAcknowledgeProgression(eventId: string) {
+    if (authSource !== "server" || !serverSessionToken) return;
+    setAcknowledgingEventId(eventId);
+    try {
+      await acknowledgeProgressionEvent(serverSessionToken, eventId);
+      await refreshServerState();
+    } finally {
+      setAcknowledgingEventId(null);
+    }
   }
 
   const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
@@ -260,6 +327,11 @@ export function AppShell({ title, hint, children }: AppShellProps) {
               </div>
             </div>
           ) : null}
+          <ProgressionEventPanel
+            event={activeProgressionEvent}
+            busy={Boolean(acknowledgingEventId)}
+            onAcknowledge={handleAcknowledgeProgression}
+          />
           {children}
         </main>
       </div>

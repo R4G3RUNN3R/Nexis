@@ -544,6 +544,10 @@ export type OrganizationRecord = {
   armory?: GuildArmory;
   settingsView?: GuildSettings;
   viewerPermissions?: OrganizationPermission[];
+  companyOverview?: Record<string, unknown>;
+  guildOverview?: Record<string, unknown>;
+  assistanceOpportunities?: Array<Record<string, unknown>>;
+  layoutSections?: string[];
 };
 
 export type GuildBoard = OrganizationRecord & { type: "guild" };

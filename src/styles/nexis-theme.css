@@ -895,3 +895,76 @@ select {
 button {
   border-radius: 6px;
 }
+
+
+.progression-event {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(201, 177, 122, 0.28);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(42, 36, 20, 0.94), rgba(16, 18, 22, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--shadow);
+}
+
+.progression-event__copy {
+  min-width: 0;
+}
+
+.progression-event__eyebrow {
+  color: #c9b17a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.progression-event h2 {
+  margin: 2px 0 6px;
+  color: var(--text-strong);
+  font-family: var(--heading-font);
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.progression-event__facts,
+.progression-event__milestones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.progression-event__facts span,
+.progression-event__milestones span {
+  border: 1px solid rgba(201, 177, 122, 0.18);
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgba(7, 12, 17, 0.5);
+  color: #d8d0b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.progression-event__milestones {
+  margin-top: 6px;
+}
+
+.progression-event__ack {
+  min-height: 34px;
+  border: 1px solid rgba(154, 175, 103, 0.35);
+  border-radius: 6px;
+  background: rgba(154, 175, 103, 0.11);
+  color: #dce8c4;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 10px;
+}
+
+.progression-event__ack:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}

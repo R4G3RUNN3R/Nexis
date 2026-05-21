@@ -12,12 +12,65 @@ export type ServerAuthUser = {
   createdAt: number;
 };
 
+export type ServerRecordEntry = {
+  id: string;
+  timestamp: number;
+  category: string;
+  summary: string;
+  detail?: Record<string, unknown>;
+  source?: string;
+  route?: string | null;
+};
+
+export type ServerProgressionEvent = {
+  id: string;
+  type: string;
+  createdAt: number;
+  acknowledgedAt?: number | null;
+  summary: string;
+  detail?: Record<string, unknown>;
+  route?: string | null;
+};
+
+export type RareManualBand = {
+  tier: number;
+  label: string;
+  minimumLevel: number;
+  unlocked: boolean;
+  lockReason: string | null;
+};
+
+export type RareManualEntry = {
+  id: string;
+  name: string;
+  tier: number;
+  tierLabel: string;
+  requiredLevel: number;
+  family: string;
+  sourceCity: string;
+  acquisition: string[];
+  eligible: boolean;
+  lockReason: string | null;
+};
+
+export type RareManualEligibility = {
+  level: number;
+  highestEligibleTier: number;
+  eligibleBands: RareManualBand[];
+  nextBand: RareManualBand | null;
+  rule: string;
+  manuals: RareManualEntry[];
+};
+
 export type ServerPlayerState = {
   level: number;
   experience?: number;
   gold: number;
   currencies?: Record<string, number>;
   itemEnhancements?: Record<string, string[]>;
+  records?: { entries?: ServerRecordEntry[]; categories?: Record<string, number>; total?: number };
+  progressionEvents?: { pending?: ServerProgressionEvent[]; history?: ServerProgressionEvent[] };
+  rareManualEligibility?: RareManualEligibility;
   stats: Record<string, number>;
   workingStats: Record<string, number>;
   battleStats: Record<string, number>;
@@ -703,11 +756,24 @@ export type ServerSkillsPayload = {
   masteryThresholds: number[];
   skills: ServerSkill[];
   unlockHistory: Array<Record<string, unknown>>;
+  rareManualEligibility?: RareManualEligibility;
   adminControlsEnabled?: boolean;
 };
 
 export type ApiSkillsResponse =
   | { ok: true; playerState: ServerPlayerState; skills: ServerSkillsPayload; message?: string }
+  | ApiFailure;
+
+export type ApiRecordsResponse =
+  | {
+      ok: true;
+      records: { entries: ServerRecordEntry[]; categories: Record<string, number>; total: number };
+      progressionEvents: { pending: ServerProgressionEvent[]; history: ServerProgressionEvent[] };
+    }
+  | ApiFailure;
+
+export type ApiProgressionEventAckResponse =
+  | { ok: true; progressionEvents: { pending: ServerProgressionEvent[]; history: ServerProgressionEvent[] } }
   | ApiFailure;
 
 export type ServerCombatLogEntry = {
@@ -1279,6 +1345,24 @@ export function cancelServerTravel(sessionToken: string): Promise<ApiTravelRespo
 export function getServerSkills(sessionToken: string): Promise<ApiSkillsResponse> {
   return requestJson<{ playerState: ServerPlayerState; skills: ServerSkillsPayload }>("/api/skills", {
     method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerRecords(sessionToken: string, category?: string | null, limit?: number): Promise<ApiRecordsResponse> {
+  const params = new URLSearchParams();
+  if (category) params.set("category", category);
+  if (typeof limit === "number" && Number.isFinite(limit)) params.set("limit", String(Math.max(1, Math.floor(limit))));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return requestJson<Omit<ApiRecordsResponse & { ok: true }, "ok">>(`/api/records${suffix}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function acknowledgeProgressionEvent(sessionToken: string, eventId: string = "all"): Promise<ApiProgressionEventAckResponse> {
+  return requestJson<Omit<ApiProgressionEventAckResponse & { ok: true }, "ok">>(`/api/progression-events/${encodeURIComponent(eventId)}/ack`, {
+    method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }

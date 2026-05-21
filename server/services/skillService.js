@@ -7,6 +7,8 @@ import {
   upsertPlayerRuntimeState,
 } from "../repositories/playerStateRepository.js";
 import { getSkillDefinition, getSkillDefinitions, getSkillFamilies, SKILL_SLOT_CONFIG } from "../data/skillData.js";
+import { addPlayerRecord } from "./playerRecordsService.js";
+import { getRareManualEligibility } from "./rareManualService.js";
 
 export const MASTERY_THRESHOLDS = [0, 50, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
 const VALID_SKILL_USE_CONTEXTS = new Set(["combat", "travel", "travel_encounter", "duel", "arena", "contract", "mission"]);
@@ -216,6 +218,7 @@ function unlockSkill(runtimeState, skillId, source = "system", now = Date.now())
       kind: "skill",
       awardedAt: now,
     });
+    addPlayerRecord(runtimeState, { category: "skills", summary: `${skill.name} learned.`, detail: { skillId: skill.id, source }, source: "skills", route: "/skills", timestamp: now });
     return { skillId, name: skill.name, unlockedAt: now, source };
   }
   delete state.learning[skillId];
@@ -412,6 +415,7 @@ export function grantSkillXp(runtimeState, skillId, amount, reason = "use", now 
       kind: "skill",
       awardedAt: now,
     });
+    addPlayerRecord(runtimeState, { category: "skills", summary: `${getSkillDefinition(rootId)?.name ?? skill.name} reached Mastery Tier ${afterTier}.`, detail: { rootSkillId: rootId, totalUses: afterUses, masteryTier: afterTier }, source: "skill-mastery", route: "/skills", timestamp: now });
   }
 
   const evolutionEvents = syncEvolutionUnlocks(runtimeState, now);
@@ -502,6 +506,7 @@ function serializeSkills(runtimeState, user = null) {
     masteryThresholds: MASTERY_THRESHOLDS.slice(1),
     skills: getSkillDefinitions().map((skill) => serializeSkill(runtimeState, skill, user)),
     unlockHistory: asArray(state.unlockHistory).slice(0, 20),
+    rareManualEligibility: getRareManualEligibility(runtimeState),
     adminControlsEnabled: isAdminUser(user),
   };
 }

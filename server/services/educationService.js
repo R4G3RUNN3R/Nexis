@@ -3,6 +3,8 @@ import { HttpError } from "../lib/errors.js";
 import { buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
 import { createDefaultPlayerState, findPlayerStateByUserInternalId, upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
 import { educationCategories, educationCourseMap, getCourseLabel } from "../data/educationData.js";
+import { addPlayerExperience } from "./progressionService.js";
+import { addPlayerRecord } from "./playerRecordsService.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ADMIN_DURATION_MS = 1000;
@@ -107,7 +109,7 @@ function applyStatRewards(runtimeState, course) {
     player.workingStats = { ...asRecord(player.workingStats) };
     for (const stat of ["manualLabor", "intelligence", "endurance"]) player.workingStats[stat] = Math.max(0, Math.floor(asNumber(player.workingStats[stat], 0) * 1.05));
   }
-  player.experience = Math.max(0, Math.floor(asNumber(player.experience, 0) + Math.max(10, Math.round(asNumber(course.durationDays, 1) * 2))));
+  addPlayerExperience(runtimeState, Math.max(10, Math.round(asNumber(course.durationDays, 1) * 2)), "education", { now: Date.now() });
 }
 function completeCourse(runtimeState, course, now, admin = false) {
   const education = ensureEducationState(runtimeState);
@@ -124,6 +126,7 @@ function completeCourse(runtimeState, course, now, admin = false) {
   applyStatRewards(runtimeState, course);
   education.history = [{ id: `education_${course.id}_${now}`, courseId: course.id, title: course.name, completedAt: now, adminGranted: admin }, ...asArray(education.history)].slice(0, 80);
   addLegacyEntry(runtimeState, { id: `education_${course.id}`, title: `Completed ${course.name}`, summary: `${course.name} joined the permanent education record.`, kind: "education", awardedAt: now });
+  addPlayerRecord(runtimeState, { category: "education", summary: `Completed education: ${course.name}.`, detail: { courseId: course.id, categoryId: course.categoryId, adminGranted: admin }, source: admin ? "admin-education" : "education", route: "/education", timestamp: now });
   ensureEducationState(runtimeState);
   return true;
 }
@@ -205,6 +208,7 @@ export async function startEducationForUser(user, courseId) {
     const ms = durationMs(runtimeState, course, admin);
     const nextEducation = ensureEducationState(runtimeState);
     nextEducation.activeCourse = { courseId: course.id, categoryId: course.categoryId, startedAt: now, durationMs: ms, completesAt: now + ms, adminFastTrack: admin };
+    addPlayerRecord(runtimeState, { category: "education", summary: `Started education: ${course.name}.`, detail: { courseId: course.id, categoryId: course.categoryId, completesAt: now + ms }, source: "education", route: "/education", timestamp: now });
     ensureEducationState(runtimeState);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, education: serializeEducation(buildMutableRuntimeState(user, playerState), user), message: `${course.name} started.` };
@@ -216,7 +220,9 @@ export async function cancelEducationForUser(user) {
     const runtimeState = await loadRuntimeState(client, user);
     const education = ensureEducationState(runtimeState);
     if (!education.activeCourse) throw new HttpError(409, "No education course is active.", "EDUCATION_NOT_ACTIVE");
+    const cancelled = education.activeCourse;
     education.activeCourse = null;
+    addPlayerRecord(runtimeState, { category: "education", summary: `Cancelled education: ${cancelled?.courseId ? getCourseLabel(cancelled.courseId) : "course"}.`, detail: { courseId: cancelled?.courseId ?? null }, source: "education", route: "/education", timestamp: Date.now() });
     ensureEducationState(runtimeState);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, education: serializeEducation(buildMutableRuntimeState(user, playerState), user), message: "Education course cancelled." };

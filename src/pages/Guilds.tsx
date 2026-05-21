@@ -279,15 +279,22 @@ export default function GuildsPage() {
   const tabs: Array<{ key: GuildTab; label: string }> = [
     { key: "public", label: "Headquarters" },
     { key: "members", label: "Members" },
-    { key: "wars", label: "Wars" },
-    { key: "adventuring", label: "Adventuring" },
-    { key: "passives", label: "Passives" },
+    { key: "wars", label: "War / Rivalries" },
+    { key: "adventuring", label: "Operations" },
+    { key: "passives", label: "Gains" },
     { key: "armory", label: "Armory" },
     { key: "base", label: "Base" },
-    { key: "settings", label: "Settings" },
+    { key: "settings", label: "Settings / Charter" },
   ];
 
   const isGuildMember = Boolean(board?.viewerPermissions && board.viewerPermissions.length > 0);
+  const guildOverview = asRecord((board as (GuildView & { guildOverview?: unknown }) | null)?.guildOverview);
+  const guildFocus = asRecord(guildOverview.currentFocus);
+  const guildGains = Array.isArray(guildOverview.currentGains) ? guildOverview.currentGains : [];
+  const guildNextSteps = Array.isArray(guildOverview.nextSteps) ? guildOverview.nextSteps : [];
+  const assistanceOpportunities = Array.isArray((board as (GuildView & { assistanceOpportunities?: unknown }) | null)?.assistanceOpportunities)
+    ? ((board as GuildView & { assistanceOpportunities?: Array<Record<string, unknown>> }).assistanceOpportunities ?? [])
+    : [];
   const escortBoardEntries = useMemo(() => {
     if (!board?.logs?.length) return [] as Array<{
       key: string;
@@ -585,6 +592,20 @@ export default function GuildsPage() {
                 </div>
               </section>
 
+              <section className="panel org-panel">
+                <div className="org-panel__head"><div><p className="org-eyebrow">Headquarters First View</p><h3>{String(asRecord(guildOverview.identity).name ?? board.name)}</h3></div></div>
+                <div className="org-detail-list">
+                  <StatusRow label="Active Operation" value={String(guildFocus.activeOperation ?? "No operation planned")} />
+                  <StatusRow label="Rivalry State" value={String(guildFocus.rivalry ?? "No rivalry declared")} />
+                  <StatusRow label="Readiness" value={String(guildFocus.readinessState ?? "Needs assignments")} />
+                  <StatusRow label="Consortium Assistance" value={String(guildFocus.consortiumAssistance ?? "Available from operations board")} />
+                </div>
+                <div className="org-stack-list">
+                  <article><strong>Current gains</strong><p>{guildGains.length ? guildGains.slice(0, 4).map(String).join(" | ") : "No guild gains recorded yet."}</p></article>
+                  <article><strong>What to do next</strong><p>{guildNextSteps.length ? guildNextSteps.slice(0, 4).map(String).join(" | ") : "Plan an operation, fill the armory, or answer a city event."}</p></article>
+                </div>
+              </section>
+
               <section className="org-stat-strip">
                 <article className="org-stat-card">
                   <span>Reputation</span>
@@ -629,6 +650,13 @@ export default function GuildsPage() {
                 </div>
                 <div className="guild-inline-note">
                   Academy progress contributes to guild operations through the active operations ledger.
+                </div>
+              </section>
+
+              <section className="panel org-panel">
+                <div className="org-panel__head"><div><p className="org-eyebrow">Guild to Consortium Assistance</p><h3>Danger work board</h3></div></div>
+                <div className="org-stack-list">
+                  {assistanceOpportunities.length ? assistanceOpportunities.map((entry) => <article key={String(entry.key)}><strong>{String(entry.label)}</strong><p>{String(entry.summary)} Guild gain: {String(entry.guildReward ?? "reputation and pay")}. Consortium gain: {String(entry.consortiumReward ?? "hazard reduction")}.</p></article>) : <article><strong>No assistance offers</strong><p>Guild assistance offers appear as company routes and city events generate dangerous work.</p></article>}
                 </div>
               </section>
 

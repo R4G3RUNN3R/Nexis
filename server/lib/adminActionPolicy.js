@@ -72,6 +72,86 @@ export const ADMIN_ACTION_POLICIES = {
     minimumRole: "admin",
     label: "Set Account Privilege Role",
   },
+  grantExperience: {
+    category: "sensitive progression action",
+    minimumRole: "admin",
+    label: "Grant Experience",
+  },
+  setInventoryItemQuantity: {
+    category: "sensitive inventory action",
+    minimumRole: "admin",
+    label: "Set Inventory Quantity",
+  },
+  clearEquipmentSlot: {
+    category: "sensitive gear action",
+    minimumRole: "admin",
+    label: "Clear Equipment Slot",
+  },
+  unlockSkill: {
+    category: "sensitive skill action",
+    minimumRole: "admin",
+    label: "Unlock Skill",
+  },
+  revokeSkill: {
+    category: "sensitive skill action",
+    minimumRole: "admin",
+    label: "Revoke Skill",
+  },
+  instantLearnSkill: {
+    category: "sensitive skill action",
+    minimumRole: "admin",
+    label: "Instant Learn Skill",
+  },
+  setSkillUseCount: {
+    category: "sensitive skill action",
+    minimumRole: "admin",
+    label: "Set Skill Use Count",
+  },
+  slotSkill: {
+    category: "sensitive skill action",
+    minimumRole: "admin",
+    label: "Slot Skill",
+  },
+  grantEducationCompletion: {
+    category: "sensitive education action",
+    minimumRole: "admin",
+    label: "Grant Education Completion",
+  },
+  revokeEducationCompletion: {
+    category: "sensitive education action",
+    minimumRole: "admin",
+    label: "Revoke Education Completion",
+  },
+  cancelEducation: {
+    category: "sensitive education action",
+    minimumRole: "admin",
+    label: "Cancel Education",
+  },
+  completeAcademyStage: {
+    category: "sensitive academy action",
+    minimumRole: "admin",
+    label: "Complete Academy Stage",
+  },
+  resetAcademy: {
+    category: "sensitive academy action",
+    minimumRole: "admin",
+    label: "Reset Academy Line",
+  },
+  clearTravelState: {
+    category: "sensitive travel action",
+    minimumRole: "admin",
+    label: "Clear Travel State",
+  },
+  setCityStanding: {
+    category: "sensitive organization action",
+    minimumRole: "admin",
+    label: "Set City Standing",
+  },
+  clearContractState: {
+    category: "sensitive contract action",
+    minimumRole: "admin",
+    label: "Clear Contract State",
+  },
 };
 
 export function getAdminActionPolicy(actionType) {

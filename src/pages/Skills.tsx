@@ -59,6 +59,40 @@ function skillStateLabel(skill: ServerSkill) {
   return "Locked";
 }
 
+function RareManualPanel({ payload }: { payload: ServerSkillsPayload | null }) {
+  const eligibility = payload?.rareManualEligibility;
+  if (!eligibility) return null;
+  const visibleManuals = eligibility.manuals.slice(0, 8);
+  return (
+    <ContentPanel title="Rare Manuals">
+      <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ color: "#b7c3cf", fontSize: 13 }}>{eligibility.rule}</div>
+        <div className="info-row"><span className="info-row__label">Current eligibility</span><span className="info-row__value">Level {eligibility.level} | Tier {eligibility.highestEligibleTier || 0}</span></div>
+        {eligibility.nextBand ? <div className="info-row"><span className="info-row__label">Next band</span><span className="info-row__value">{eligibility.nextBand.label} at level {eligibility.nextBand.minimumLevel}</span></div> : null}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {eligibility.eligibleBands.map((band) => (
+            <span key={band.label} title={band.lockReason ?? "Eligible"} style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 999, padding: "4px 8px", color: band.unlocked ? "#8ec8a7" : "#9fb0bf", fontSize: 12 }}>
+              {band.label}: {band.unlocked ? "eligible" : `level ${band.minimumLevel}`}
+            </span>
+          ))}
+        </div>
+        <div style={{ color: "#9fb0bf", fontSize: 12 }}>Eligibility does not grant a rare skill. Manuals still have to be found through discoveries, hidden sites, boss drops, black markets, academy archives, rumors, expeditions, or the marketplace.</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>
+          {visibleManuals.map((manual) => (
+            <div key={manual.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: manual.eligible ? "rgba(7, 20, 14, 0.45)" : "rgba(22, 17, 17, 0.44)", display: "grid", gap: 5 }}>
+              <strong>{manual.name}</strong>
+              <span style={{ color: "#d8c278", fontSize: 12 }}>{manual.tierLabel} | {manual.family} | {manual.sourceCity}</span>
+              <span style={{ color: manual.eligible ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{manual.eligible ? "Eligible to learn if acquired" : manual.lockReason}</span>
+              <span style={{ color: "#9fb0bf", fontSize: 12 }}>Sources: {manual.acquisition.slice(0, 3).join(", ")}</span>
+            </div>
+          ))}
+        </div>
+        <Link className="inline-route-link" to={getCodexEntryRoute("manual-skills")}>Open Codex manual rules</Link>
+      </div>
+    </ContentPanel>
+  );
+}
+
 function SkillCard({
   skill,
   busy,
@@ -233,6 +267,8 @@ export default function SkillsPage() {
         <ContentPanel title="Skill Path">
           <div style={{ color: "#b7c3cf", fontSize: 13, marginBottom: 10 }}>Acquire, learn, slot, and master skills here. Long-form rules live in <Link className="inline-route-link" to={getCodexEntryRoute("manual-skills")}>Codex Manuals</Link>.</div>
         </ContentPanel>
+
+        <RareManualPanel payload={payload} />
 
         <ContentPanel title="Skill Loadout">
           {error ? <div style={{ color: "#d98f8f", fontSize: 13 }}>{error}</div> : null}

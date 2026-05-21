@@ -212,7 +212,7 @@ function applyReward(runtimeState, reward, now) {
   const gold = Math.max(0, Math.floor(asNumber(player.gold, 500) + asNumber(reward.gold, 0)));
   player.gold = gold;
   player.currencies = { ...asRecord(player.currencies), gold };
-  player.experience = Math.max(0, Math.floor(asNumber(player.experience, 0) + asNumber(reward.experience, 0)));
+  addPlayerExperience(runtimeState, asNumber(reward.experience, 0), "contract", { now });
 
   const items = asArray(reward.items);
   if (items.length) {

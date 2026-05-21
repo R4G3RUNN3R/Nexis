@@ -10,6 +10,7 @@ import {
   findOrganizationByInternalId,
   findOrganizationByPublicId,
   insertOrganizationLog,
+  updateOrganizationDetails,
 } from "../repositories/organizationRepository.js";
 import {
   readConsortiumLogisticsState,
@@ -473,6 +474,9 @@ async function resolveDueOperations(client, organization) {
       dangerTriggered: resolvedOperation.outcome.dangerTriggered,
       escortMode: resolvedOperation.escortContract.mode,
       escortCoverage: resolvedOperation.escortContract.coverageRating,
+      guildOrganizationInternalId: resolvedOperation.escortContract.guildOrganizationInternalId ?? null,
+      guildPublicId: resolvedOperation.escortContract.guildPublicId ?? null,
+      guildName: resolvedOperation.escortContract.guildName ?? null,
       summary: resolvedOperation.outcome.summary,
       baseEffectSummary: resolvedOperation.outcome.baseEffectSummary ?? null,
     });
@@ -491,6 +495,36 @@ async function resolveDueOperations(client, organization) {
       actionType: "consortium_logistics_resolved",
       summary: entry,
     });
+
+    if (entry.escortMode === "guild_contract" && entry.guildOrganizationInternalId) {
+      const guild = await findOrganizationByInternalId(client, entry.guildOrganizationInternalId);
+      if (guild && guild.type === "guild") {
+        const rewardGold = Math.max(120, Math.round(120 + (asInt(entry.escortCoverage, 0) * 8) + Math.max(0, asInt(entry.treasuryDeltaGold, 0) * 0.05)));
+        const reputationGain = Math.max(12, Math.round(12 + (asInt(entry.escortCoverage, 0) / 4) + (entry.result === "strong_success" ? 15 : entry.result === "success" ? 8 : 0)));
+        const guildTreasury = normalizeTreasury(guild.treasury);
+        guildTreasury.gold += rewardGold;
+        const metadata = asRecord(guild.metadata);
+        const assistance = asRecord(metadata.assistance);
+        const history = Array.isArray(assistance.history) ? assistance.history : [];
+        const nextAssistance = {
+          ...assistance,
+          reputation: asInt(assistance.reputation, 0) + reputationGain,
+          completed: asInt(assistance.completed, 0) + 1,
+          history: [{ consortiumPublicId: updated.publicId, operationInternalId: entry.operationInternalId, result: entry.result, reputationGain, rewardGold, completedAt: now }, ...history].slice(0, 40),
+        };
+        await updateOrganizationDetails(client, guild.internalId, {
+          treasury: guildTreasury,
+          metadata: { ...metadata, assistance: nextAssistance },
+          statusText: `Assisted ${updated.name} logistics`,
+        });
+        await insertOrganizationLog(client, guild.internalId, {
+          actorInternalId: null,
+          actorPublicId: null,
+          actionType: "guild_consortium_assistance_resolved",
+          summary: { consortiumPublicId: updated.publicId, operationInternalId: entry.operationInternalId, result: entry.result, reputationGain, rewardGold, hazardReduction: asInt(entry.escortCoverage, 0) },
+        });
+      }
+    }
   }
 
   return updated;

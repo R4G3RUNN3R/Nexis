@@ -325,9 +325,10 @@ function applyReward(runtimeState, reward, now) {
   const player = runtimeState.player;
   if (asArray(reward.items).length) applyItems(player, reward.items);
   if (reward.experience) {
-    player.experience = Math.max(0, Math.floor(asNumber(player.experience, 0) + asNumber(reward.experience, 0)));
+    addPlayerExperience(runtimeState, asNumber(reward.experience, 0), "city-special", { now });
   }
   player.counters = { ...asRecord(player.counters), lastCityEconomyRewardAt: now };
+  addPlayerRecord(runtimeState, { category: "marketplace", summary: "City economy action reward resolved.", detail: { reward }, source: "city-economy", route: "/market", timestamp: now });
 }
 
 async function loadRuntimeState(client, user) {

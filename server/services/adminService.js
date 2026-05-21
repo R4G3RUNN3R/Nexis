@@ -4,6 +4,8 @@ import { assertAdministrator, assertStaffOrAdmin, isAdministrator } from "../lib
 import { assertAdminActionAllowed } from "../lib/adminActionPolicy.js";
 import { assertPrivilegeRole } from "../lib/userIdentity.js";
 import { buildAdminPlayerPayload, buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
+import { addPlayerExperience } from "./progressionService.js";
+import { addPlayerRecord } from "./playerRecordsService.js";
 import { insertAdminAuditLog } from "../repositories/adminAuditRepository.js";
 import {
   createDefaultPlayerState,
@@ -324,6 +326,182 @@ function applyAdminAction(runtimeState, actionType, payload) {
       afterSummary = { itemId, enhancements: nextEnhancements };
       break;
     }
+    case "grantExperience": {
+      const amount = requireAdminWholeNumber(payload?.amount, { fieldName: "Experience grant", min: 1, max: 1_000_000, code: "ADMIN_XP_INVALID" });
+      beforeSummary = { level: player.level, experience: player.experience, health: player.stats.health, maxHealth: player.stats.maxHealth };
+      const result = addPlayerExperience({ ...runtimeState, player }, amount, "admin-grant", { now: Date.now() });
+      afterSummary = { level: player.level, experience: player.experience, health: player.stats.health, maxHealth: player.stats.maxHealth, xpGained: result.xpGained, levelUps: result.levelUps };
+      break;
+    }
+    case "setInventoryItemQuantity": {
+      const itemId = String(payload?.itemId ?? "").trim();
+      const quantity = requireAdminWholeNumber(payload?.quantity, { fieldName: "Inventory quantity", min: 0, max: ADMIN_ITEM_STACK_CAP, code: "ADMIN_INVENTORY_QUANTITY_INVALID" });
+      if (!itemId) throw new HttpError(400, "Item ID is required.", "INVALID_INVENTORY_UPDATE");
+      beforeSummary = { itemId, quantity: asWholeNumber(player.inventory[itemId], 0) };
+      const nextInventory = { ...player.inventory };
+      if (quantity > 0) nextInventory[itemId] = quantity;
+      else delete nextInventory[itemId];
+      player.inventory = nextInventory;
+      afterSummary = { itemId, quantity };
+      break;
+    }
+    case "clearEquipmentSlot": {
+      const slot = String(payload?.slot ?? "").trim();
+      if (!slot) throw new HttpError(400, "Equipment slot is required.", "ADMIN_SLOT_REQUIRED");
+      beforeSummary = { slot, itemId: player.equipment?.[slot] ?? null };
+      const nextEquipment = { ...asRecord(player.equipment) };
+      delete nextEquipment[slot];
+      player.equipment = nextEquipment;
+      afterSummary = { slot, itemId: null };
+      break;
+    }
+    case "unlockSkill":
+    case "instantLearnSkill": {
+      const skillId = String(payload?.skillId ?? "").trim();
+      if (!skillId) throw new HttpError(400, "Skill ID is required.", "ADMIN_SKILL_REQUIRED");
+      const skills = { ...asRecord(player.skills) };
+      const unlocked = normalizeStringArray(skills.unlocked);
+      const learning = { ...asRecord(skills.learning) };
+      beforeSummary = { skillId, unlocked: unlocked.includes(skillId), learning: learning[skillId] ?? null };
+      delete learning[skillId];
+      skills.unlocked = Array.from(new Set([...unlocked, skillId]));
+      skills.learning = learning;
+      skills.unlockHistory = [{ skillId, unlockedAt: Date.now(), source: actionType }, ...Array.isArray(skills.unlockHistory) ? skills.unlockHistory : []].slice(0, 80);
+      player.skills = skills;
+      afterSummary = { skillId, unlocked: true, learning: null };
+      break;
+    }
+    case "revokeSkill": {
+      const skillId = String(payload?.skillId ?? "").trim();
+      if (!skillId) throw new HttpError(400, "Skill ID is required.", "ADMIN_SKILL_REQUIRED");
+      const skills = { ...asRecord(player.skills) };
+      beforeSummary = { skillId, unlocked: normalizeStringArray(skills.unlocked).includes(skillId) };
+      skills.unlocked = normalizeStringArray(skills.unlocked).filter((entry) => entry !== skillId);
+      skills.activeSlots = Array.isArray(skills.activeSlots) ? skills.activeSlots.map((entry) => entry === skillId ? null : entry) : [];
+      skills.passiveSlots = Array.isArray(skills.passiveSlots) ? skills.passiveSlots.map((entry) => entry === skillId ? null : entry) : [];
+      player.skills = skills;
+      afterSummary = { skillId, unlocked: false };
+      break;
+    }
+    case "setSkillUseCount": {
+      const skillId = String(payload?.skillId ?? "").trim();
+      const uses = requireAdminWholeNumber(payload?.uses, { fieldName: "Skill use count", min: 0, max: 1_000_000, code: "ADMIN_SKILL_USES_INVALID" });
+      if (!skillId) throw new HttpError(400, "Skill ID is required.", "ADMIN_SKILL_REQUIRED");
+      const skills = { ...asRecord(player.skills), useCounts: { ...asRecord(player.skills?.useCounts) } };
+      beforeSummary = { skillId, uses: asWholeNumber(skills.useCounts[skillId], 0) };
+      skills.useCounts[skillId] = uses;
+      player.skills = skills;
+      afterSummary = { skillId, uses };
+      break;
+    }
+    case "slotSkill": {
+      const skillId = payload?.skillId == null ? null : String(payload.skillId).trim();
+      const slotType = payload?.slotType === "passive" ? "passive" : "active";
+      const slotIndex = requireAdminWholeNumber(payload?.slotIndex, { fieldName: "Slot index", min: 0, max: 7, code: "ADMIN_SLOT_INDEX_INVALID" });
+      const skills = { ...asRecord(player.skills) };
+      const key = slotType === "passive" ? "passiveSlots" : "activeSlots";
+      const slots = Array.isArray(skills[key]) ? [...skills[key]] : Array.from({ length: slotType === "passive" ? 2 : 4 }, () => null);
+      beforeSummary = { slotType, slotIndex, previous: slots[slotIndex] ?? null };
+      while (slots.length <= slotIndex) slots.push(null);
+      slots[slotIndex] = skillId || null;
+      skills[key] = slots;
+      player.skills = skills;
+      afterSummary = { slotType, slotIndex, skillId: slots[slotIndex] };
+      break;
+    }
+    case "grantEducationCompletion":
+    case "revokeEducationCompletion": {
+      const courseId = String(payload?.courseId ?? "").trim();
+      if (!courseId) throw new HttpError(400, "Course ID is required.", "ADMIN_COURSE_REQUIRED");
+      const education = { ...asRecord(runtimeState.education) };
+      const completedCourses = normalizeStringArray(education.completedCourses);
+      const completed = { ...asRecord(education.completed) };
+      beforeSummary = { courseId, completed: completedCourses.includes(courseId) };
+      if (actionType === "grantEducationCompletion") {
+        education.completedCourses = Array.from(new Set([...completedCourses, courseId]));
+        completed[courseId] = { completed: true, completedAt: Date.now(), adminGranted: true };
+      } else {
+        education.completedCourses = completedCourses.filter((entry) => entry !== courseId);
+        delete completed[courseId];
+      }
+      education.completed = completed;
+      runtimeState.education = education;
+      player.current = { ...player.current, education: education.activeCourse ?? null };
+      afterSummary = { courseId, completed: actionType === "grantEducationCompletion" };
+      break;
+    }
+    case "cancelEducation": {
+      beforeSummary = { activeCourse: asRecord(runtimeState.education).activeCourse ?? player.current.education ?? null };
+      runtimeState.education = { ...asRecord(runtimeState.education), activeCourse: null };
+      player.current = { ...player.current, education: null };
+      afterSummary = { activeCourse: null };
+      break;
+    }
+    case "completeAcademyStage": {
+      const academyId = String(payload?.academyId ?? "").trim();
+      const stageId = String(payload?.stageId ?? "").trim();
+      if (!academyId || !stageId) throw new HttpError(400, "Academy ID and stage ID are required.", "ADMIN_ACADEMY_REQUIRED");
+      const academy = { ...asRecord(player.cityAcademy) };
+      const completed = { ...asRecord(academy.completed) };
+      const stages = normalizeStringArray(completed[academyId]);
+      beforeSummary = { academyId, stageId, completed: stages.includes(stageId) };
+      completed[academyId] = Array.from(new Set([...stages, stageId]));
+      academy.completed = completed;
+      academy.history = [{ academyId, stageId, completedAt: Date.now(), adminGranted: true }, ...Array.isArray(academy.history) ? academy.history : []].slice(0, 80);
+      player.cityAcademy = academy;
+      afterSummary = { academyId, stageId, completed: true };
+      break;
+    }
+    case "resetAcademy": {
+      const academyId = String(payload?.academyId ?? "").trim();
+      const academy = { ...asRecord(player.cityAcademy) };
+      beforeSummary = { academyId: academyId || "all", activeStudy: academy.activeStudy ?? null, completed: academy.completed ?? {} };
+      if (academyId) {
+        const completed = { ...asRecord(academy.completed) };
+        delete completed[academyId];
+        academy.completed = completed;
+      } else {
+        academy.completed = {};
+      }
+      academy.activeStudy = null;
+      player.cityAcademy = academy;
+      afterSummary = { academyId: academyId || "all", activeStudy: null, completed: academy.completed };
+      break;
+    }
+    case "clearTravelState": {
+      const destination = String(payload?.currentCityId ?? player.current.currentCityId ?? runtimeState.travel?.currentCityId ?? "nexis").trim() || "nexis";
+      beforeSummary = { travel: runtimeState.travel, currentCityId: player.current.currentCityId };
+      runtimeState.travel = { status: "idle", currentCityId: destination, originCityId: destination, destinationCityId: null, arrivalNotice: null, encounterNotice: null };
+      player.current = { ...player.current, travel: runtimeState.travel, currentCityId: destination };
+      afterSummary = { travel: runtimeState.travel, currentCityId: destination };
+      break;
+    }
+    case "setCityStanding": {
+      const cityId = String(payload?.cityId ?? "").trim();
+      const value = requireAdminWholeNumber(payload?.value, { fieldName: "City standing", min: 0, max: 1000, code: "ADMIN_CITY_STANDING_INVALID" });
+      if (!cityId) throw new HttpError(400, "City ID is required.", "ADMIN_CITY_REQUIRED");
+      const standing = { ...asRecord(player.cityStanding) };
+      beforeSummary = { cityId, value: standing[cityId] ?? null };
+      standing[cityId] = { value, adjustedAt: Date.now(), adminSet: true };
+      player.cityStanding = standing;
+      afterSummary = { cityId, value: standing[cityId] };
+      break;
+    }
+    case "clearContractState": {
+      const contractId = String(payload?.contractId ?? "").trim();
+      const cityContracts = { ...asRecord(player.cityContracts) };
+      beforeSummary = { contractId: contractId || "all", cityContracts };
+      if (contractId && asRecord(cityContracts.records)[contractId]) {
+        cityContracts.records = { ...asRecord(cityContracts.records) };
+        delete cityContracts.records[contractId];
+      } else if (!contractId) {
+        cityContracts.records = {};
+      }
+      player.cityContracts = cityContracts;
+      if (!contractId) player.current = { ...player.current, job: null };
+      afterSummary = { contractId: contractId || "all", cityContracts: player.cityContracts };
+      break;
+    }
     default:
       throw new HttpError(400, `Unsupported admin action: ${actionType}`, "UNSUPPORTED_ADMIN_ACTION");
   }
@@ -401,6 +579,13 @@ export async function performAdminAction(actorUser, targetInternalId, actionType
 
     const runtimeState = buildMutableRuntimeState(target.user, target.playerState);
     const { runtimeState: updatedRuntimeState, beforeSummary, afterSummary } = applyAdminAction(runtimeState, actionType, payload);
+    addPlayerRecord(updatedRuntimeState, {
+      category: "admin",
+      summary: `Admin action ${actionType} applied by ${actor.firstName}${actor.lastName ? ` ${actor.lastName}` : ""}.`,
+      detail: { actionType, reason, actorPublicId: actor.publicId, beforeSummary, afterSummary },
+      source: "admin-dossier",
+      route: "/admin",
+    });
     const updatedPlayerState = await upsertPlayerRuntimeState(client, target.user.internalId, updatedRuntimeState);
 
     await insertAdminAuditLog(client, {

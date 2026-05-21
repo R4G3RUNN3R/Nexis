@@ -2,6 +2,8 @@ import { getNpcOpponent } from "../data/combatData.js";
 import { HttpError } from "../lib/errors.js";
 import { getSkillDefinition, getSkillDefinitions } from "../data/skillData.js";
 import { rollLoot } from "../data/lootData.js";
+import { addPlayerExperience } from "./progressionService.js";
+import { addPlayerRecord } from "./playerRecordsService.js";
 import { getItemDefinition, getItemDisplayName } from "../data/itemData.js";
 import { getEquipmentStatTotalsForRuntimeState } from "./itemService.js";
 import { getMaintenanceCombatBonus } from "./itemAdvancedService.js";
@@ -462,7 +464,7 @@ export function applyCombatReward(runtimeState, reward, context = "combat", now 
   const gold = Math.max(0, Math.floor(asNumber(player.gold, 500) + asNumber(reward.gold, 0)));
   player.gold = gold;
   player.currencies = { ...asRecord(player.currencies), gold };
-  player.experience = Math.max(0, Math.floor(asNumber(player.experience, 0) + asNumber(reward.experience, 0)));
+  addPlayerExperience(runtimeState, asNumber(reward.experience, 0), context, { now });
   const items = [];
   if (reward.item?.itemId) items.push({ itemId: reward.item.itemId, label: reward.item.label, quantity: 1 });
   for (const item of asArray(reward.items)) if (item?.itemId) items.push({ ...item, quantity: Math.max(1, Math.floor(asNumber(item.quantity, 1))) });
@@ -480,6 +482,7 @@ export function applyCombatReward(runtimeState, reward, context = "combat", now 
     lastCombatRewardAt: now,
   };
   runtimeState.player = player;
+  addPlayerRecord(runtimeState, { category: "combat", summary: `${context} reward claimed: ${asNumber(reward.gold, 0)} gold, ${asNumber(reward.experience, 0)} XP, ${items.length} item(s).`, detail: { context, reward, items }, source: context, route: context === "arena" ? "/arena" : "/adventure", timestamp: now });
   if (context === "arena") {
     addLegacyEntry(runtimeState, { id: `arena_spar_${now}`, title: "Arena Sparring Won", summary: "Won an arena sparring match using the live combat engine.", kind: "combat", awardedAt: now });
   }

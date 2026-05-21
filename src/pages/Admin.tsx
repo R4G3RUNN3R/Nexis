@@ -37,6 +37,22 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9fb0bf" }}>{children}</div>;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function DossierBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return <details style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 10, background: "rgba(7,13,20,0.35)" }}><summary style={{ cursor: "pointer", color: "#d8c278", fontWeight: 800 }}>{title}</summary><div style={{ marginTop: 10, display: "grid", gap: 8 }}>{children}</div></details>;
+}
+
+function DossierJson({ value }: { value: unknown }) {
+  return <pre style={{ margin: 0, whiteSpace: "pre-wrap", maxHeight: 260, overflow: "auto", fontSize: 12, color: "#b7c3cf" }}>{JSON.stringify(value ?? {}, null, 2)}</pre>;
+}
+
 export default function AdminPage() {
   const { player } = usePlayer();
   const { activeAccount, authSource, serverSessionToken } = useAuth();
@@ -54,6 +70,19 @@ export default function AdminPage() {
   const [enhancementItemId, setEnhancementItemId] = useState(ITEM_OPTIONS[0]?.itemId ?? "wild_herb");
   const [enhancementValue, setEnhancementValue] = useState(ITEM_ENHANCEMENT_OPTIONS[0] ?? "Tempered");
   const [privilegeRole, setPrivilegeRole] = useState<"player" | "staff" | "admin">("player");
+  const [xpGrant, setXpGrant] = useState(50);
+  const [absoluteInventoryQty, setAbsoluteInventoryQty] = useState(1);
+  const [equipmentSlot, setEquipmentSlot] = useState("weapon");
+  const [skillId, setSkillId] = useState("quick_strike");
+  const [skillUseCount, setSkillUseCount] = useState(50);
+  const [skillSlotType, setSkillSlotType] = useState<"active" | "passive">("active");
+  const [skillSlotIndex, setSkillSlotIndex] = useState(0);
+  const [courseId, setCourseId] = useState("basic-literacy");
+  const [academyId, setAcademyId] = useState("hall-of-letters");
+  const [academyStageId, setAcademyStageId] = useState("foundation");
+  const [cityId, setCityId] = useState("nexis");
+  const [cityStandingValue, setCityStandingValue] = useState(0);
+  const [contractId, setContractId] = useState("");
 
   const canAccessAdmin = authSource === "server"
     && Boolean(serverSessionToken)
@@ -92,6 +121,10 @@ export default function AdminPage() {
     setPrivilegeRole(selected.user.privilegeRole);
   }, [selected]);
 
+  const dossier = asRecord(selected?.dossier);
+  const dossierSummary = asRecord(dossier.summary);
+  const dossierInventory = asArray(dossier.inventory);
+  const dossierRecords = asArray(asRecord(dossier.records).entries ?? dossier.records).slice(0, 30);
   const inventoryRows = useMemo(
     () => Object.entries(selected?.player.inventory ?? {}).sort((left, right) => left[0].localeCompare(right[0])),
     [selected],
@@ -207,6 +240,26 @@ export default function AdminPage() {
               <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required reason for admin actions" style={{ width: "100%" }} />
             </ContentPanel>
 
+            <ContentPanel title="Staff Dossier">
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                  <div>Location: <strong>{String(dossierSummary.location ?? "unknown")}</strong></div>
+                  <div>Travel: <strong>{String(asRecord(dossierSummary.travel).status ?? "idle")}</strong></div>
+                  <div>Education: <strong>{asRecord(dossierSummary.activeEducation).courseId ? String(asRecord(dossierSummary.activeEducation).courseId) : "none"}</strong></div>
+                  <div>Academy: <strong>{asRecord(dossierSummary.activeAcademy).academyId ? String(asRecord(dossierSummary.activeAcademy).academyId) : "none"}</strong></div>
+                </div>
+                <DossierBlock title="Inventory"><div style={{ display: "grid", gap: 5 }}>{dossierInventory.length ? dossierInventory.slice(0, 24).map((entry, index) => { const record = asRecord(entry); const item = asRecord(record.item); return <div key={`${record.itemId ?? index}`}>{String(item.displayName ?? record.itemId)}: x{String(record.quantity ?? 0)}</div>; }) : <div>No inventory recorded.</div>}</div></DossierBlock>
+                <DossierBlock title="Equipped Items / Loadouts"><DossierJson value={{ equipment: dossier.equipment, loadouts: dossier.loadouts, maintenance: dossier.equipmentMaintenance }} /></DossierBlock>
+                <DossierBlock title="Skills"><DossierJson value={dossier.skills} /></DossierBlock>
+                <DossierBlock title="Education"><DossierJson value={dossier.education} /></DossierBlock>
+                <DossierBlock title="Academy"><DossierJson value={dossier.academy} /></DossierBlock>
+                <DossierBlock title="Contracts / Travel / Discovery"><DossierJson value={dossier.contractsTravelDiscovery} /></DossierBlock>
+                <DossierBlock title="Organizations"><DossierJson value={dossier.organizations} /></DossierBlock>
+                <DossierBlock title="Rare Manual Eligibility"><DossierJson value={dossier.rareManualEligibility} /></DossierBlock>
+                <DossierBlock title="Records / Audit Trail"><div style={{ display: "grid", gap: 6 }}>{dossierRecords.length ? dossierRecords.map((entry, index) => { const record = asRecord(entry); return <div key={`${record.id ?? index}`}>{String(record.category ?? "record")}: {String(record.summary ?? "Account record")}</div>; }) : <div>No player records yet.</div>}</div></DossierBlock>
+              </div>
+            </ContentPanel>
+
             <ContentPanel title="Account Role Control">
               <div style={{ display: "grid", gap: 12 }}>
                 <div style={{ color: "#9fb0bf", fontSize: 13 }}>
@@ -228,6 +281,21 @@ export default function AdminPage() {
 
             {canUseSensitiveMutations ? (
               <>
+                <ContentPanel title="Dossier Management Actions">
+                  <div style={{ display: "grid", gap: 14 }}>
+                    <SectionTitle>Progression</SectionTitle>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><input type="number" value={xpGrant} min={1} onChange={(event) => setXpGrant(Number(event.target.value))} /><button type="button" onClick={() => runAction("grantExperience", { amount: xpGrant })}>{ADMIN_ACTION_POLICIES.grantExperience.label}</button></div>
+                    <SectionTitle>Inventory / Equipment</SectionTitle>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><select value={inventoryItemId} onChange={(event) => setInventoryItemId(event.target.value)}>{ITEM_OPTIONS.map((item) => <option key={item.itemId} value={item.itemId}>{item.name}</option>)}</select><input type="number" value={absoluteInventoryQty} min={0} onChange={(event) => setAbsoluteInventoryQty(Number(event.target.value))} /><button type="button" onClick={() => runAction("setInventoryItemQuantity", { itemId: inventoryItemId, quantity: absoluteInventoryQty })}>{ADMIN_ACTION_POLICIES.setInventoryItemQuantity.label}</button><input value={equipmentSlot} onChange={(event) => setEquipmentSlot(event.target.value)} placeholder="equipment slot" /><button type="button" onClick={() => runAction("clearEquipmentSlot", { slot: equipmentSlot })}>{ADMIN_ACTION_POLICIES.clearEquipmentSlot.label}</button></div>
+                    <SectionTitle>Skills</SectionTitle>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><input value={skillId} onChange={(event) => setSkillId(event.target.value)} placeholder="skill id" /><button type="button" onClick={() => runAction("unlockSkill", { skillId })}>Unlock</button><button type="button" onClick={() => runAction("instantLearnSkill", { skillId })}>Instant Learn</button><button type="button" onClick={() => runAction("revokeSkill", { skillId })}>Revoke</button><input type="number" value={skillUseCount} min={0} onChange={(event) => setSkillUseCount(Number(event.target.value))} /><button type="button" onClick={() => runAction("setSkillUseCount", { skillId, uses: skillUseCount })}>Set Uses</button><select value={skillSlotType} onChange={(event) => setSkillSlotType(event.target.value as "active" | "passive")}><option value="active">active</option><option value="passive">passive</option></select><input type="number" value={skillSlotIndex} min={0} max={7} onChange={(event) => setSkillSlotIndex(Number(event.target.value))} /><button type="button" onClick={() => runAction("slotSkill", { skillId, slotType: skillSlotType, slotIndex: skillSlotIndex })}>Slot</button></div>
+                    <SectionTitle>Education / Academy</SectionTitle>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><input value={courseId} onChange={(event) => setCourseId(event.target.value)} placeholder="course id" /><button type="button" onClick={() => runAction("grantEducationCompletion", { courseId })}>Grant Course</button><button type="button" onClick={() => runAction("revokeEducationCompletion", { courseId })}>Revoke Course</button><button type="button" onClick={() => runAction("cancelEducation", {})}>Cancel Education</button><input value={academyId} onChange={(event) => setAcademyId(event.target.value)} placeholder="academy id" /><input value={academyStageId} onChange={(event) => setAcademyStageId(event.target.value)} placeholder="stage id" /><button type="button" onClick={() => runAction("completeAcademyStage", { academyId, stageId: academyStageId })}>Complete Stage</button><button type="button" onClick={() => runAction("resetAcademy", { academyId })}>Reset Academy</button></div>
+                    <SectionTitle>Travel / City / Contracts</SectionTitle>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><input value={cityId} onChange={(event) => setCityId(event.target.value)} placeholder="city id" /><button type="button" onClick={() => runAction("clearTravelState", { currentCityId: cityId })}>Clear Travel To City</button><input type="number" value={cityStandingValue} min={0} max={1000} onChange={(event) => setCityStandingValue(Number(event.target.value))} /><button type="button" onClick={() => runAction("setCityStanding", { cityId, value: cityStandingValue })}>Set Standing</button><input value={contractId} onChange={(event) => setContractId(event.target.value)} placeholder="contract id or blank" /><button type="button" onClick={() => runAction("clearContractState", { contractId: contractId || null })}>Clear Contract State</button></div>
+                  </div>
+                </ContentPanel>
+
                 <ContentPanel title="Stats and Currency Controls">
                   <div style={{ display: "grid", gap: 14 }}>
                     <SectionTitle>Battle Stats</SectionTitle>
@@ -316,8 +384,9 @@ export default function AdminPage() {
             )}
 
             <ContentPanel title="Organization Controls">
-              <div style={{ color: "#9fb0bf", fontSize: 13 }}>
-                Future section: guild and consortium administration will sit here once the shared organization core has more than founder/member scaffolding.
+              <div style={{ color: "#9fb0bf", fontSize: 13, display: "grid", gap: 6 }}>
+                <div>Guild and Consortium state is now inspectable in the dossier above.</div>
+                <div>Use city standing and stuck-state controls for bounded support; membership promotion/removal remains governed by the organization pages until deeper staff tooling is needed.</div>
               </div>
             </ContentPanel>
           </>

@@ -458,6 +458,100 @@ const buildGuildState = async (client, organization, viewerInternalId = null) =>
     viewerPermissions: viewerRole?.permissions ?? [],
   };
 };
+
+const ROMAN_NUMERALS = ["0", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+const romanRank = (value) => ROMAN_NUMERALS[Math.max(1, Math.min(10, asInt(value, 1)))] ?? "I";
+const getRankFromScore = (score) => Math.max(1, Math.min(10, Math.ceil(asInt(score, 1) / 10)));
+const formatGoldDelta = (value) => `${value >= 0 ? "+" : "-"}${Math.abs(asInt(value)).toLocaleString("en-GB")} gold`;
+
+function buildConsortiumHazardState(organization, derived) {
+  const performance = asRecord(derived.performance);
+  const health = asRecord(derived.healthMetrics);
+  const logistics = asRecord(asRecord(organization.metadata).logistics);
+  const score = asInt(performance.score, 0);
+  const weakMetrics = Object.values(health).filter((entry) => asInt(asRecord(entry).value, 0) < 50).map((entry) => asRecord(entry).label ?? "strained operation");
+  const routePressure = asInt(logistics.activeRouteCount, 0) > Math.max(1, asInt(derived.employeeCapacity, 1)) ? "overextended logistics" : null;
+  const causes = [routePressure, ...weakMetrics, score < 45 ? "thin company performance" : null].filter(Boolean);
+  const level = score < 35 ? "Critical" : score < 55 ? "High" : score < 75 ? "Guarded" : "Low";
+  const effects = {
+    Low: "Routes are controlled; normal contract and sourcing cadence is expected.",
+    Guarded: "Output is workable, but exposed lanes and weak staffing can shave margin.",
+    High: "Route outcomes, payroll rhythm, and contract quality are under pressure.",
+    Critical: "Expect bad logistics outcomes without escort coverage, better staffing, or route reduction.",
+  }[level];
+  const fixes = level === "Low"
+    ? ["Keep preferred roles staffed", "Advance company rank", "Convert surplus into safer route capacity"]
+    : ["Assign escorts or request guild assistance", "Fill preferred employee roles", "Reduce active route exposure", "Improve city standing and base support"];
+  return { level, causes: causes.length ? causes : ["routine operating pressure"], effects, fixes };
+}
+
+function buildConsortiumOverview(organization, derived) {
+  const score = asInt(derived.performance?.score, 0);
+  const rank = getRankFromScore(score);
+  const unlocked = getUnlockedPassives(derived.template.key, derived.stars);
+  const benefits = [
+    ...unlocked.slice(0, 4).map((entry) => entry.effectSummary),
+    `+${asInt(derived.academyContract?.businessStudies?.consortiumYieldPct, 0)}% company yield from Business Studies`,
+    `+${asInt(derived.academyContract?.businessStudies?.routePerformancePct, 0)}% route performance from education`,
+  ].filter((entry) => entry && !String(entry).startsWith("+0%"));
+  const nextRank = Math.min(10, rank + 1);
+  return {
+    companyType: { key: derived.template.key, name: derived.template.displayName, summary: derived.template.description, strengths: derived.template.rolesFlavor ?? [] },
+    rank: { value: rank, label: `Rank ${romanRank(rank)}`, nextLabel: rank >= 10 ? "Rank X cap" : `Rank ${romanRank(nextRank)}`, progressScore: score, nextRequires: rank >= 10 ? ["Maximum company rank reached"] : [`Reach performance score ${nextRank * 10}`, "Keep employee roles staffed", "Complete contracts or logistics routes"] },
+    treasury: normalizeTreasury(organization.treasury),
+    dailyProfitLoss: { label: formatGoldDelta((asInt(derived.totalDailyGeneration, 0) * 45) - Math.max(0, asInt(organization.members?.length, 0) * 12)), pointsGenerated: asInt(derived.totalDailyGeneration, 0), cadence: "daily company pulse" },
+    employees: { count: organization.members.length, capacity: derived.employeeCapacity, preferredSlotsFilled: asInt(derived.performance?.filledPreferredSlots, 0) },
+    activeContracts: asInt(asRecord(asRecord(organization.metadata).contracts).activeCount, 0),
+    activeRoutes: asInt(asRecord(asRecord(organization.metadata).logistics).activeRouteCount, 0),
+    hazard: buildConsortiumHazardState(organization, derived),
+    currentBenefits: benefits.length ? benefits : ["No unlocked passives yet; improve rank and staffing."],
+    nextSteps: score < 55 ? ["Assign employees to preferred roles", "Launch a safer logistics route", "Request a guild escort for dangerous work"] : ["Push advancement rank", "Redeem active company rewards", "Use logistics output to feed markets and crafting"],
+    sections: ["Overview", "Employees", "Contracts", "Logistics", "Assets", "Finance", "Advancement"],
+  };
+}
+
+function buildGuildAssistanceOpportunities(organization, derived) {
+  const reputation = asInt(derived.guildPassives?.reputation, 0);
+  return [
+    { key: "convoy_defense", label: "Convoy Defense", summary: "Escort consortium freight through dangerous lanes.", guildReward: "+reputation, treasury gold, operation history", consortiumReward: "hazard reduction and better route stability", recommendedReputation: 0, available: true },
+    { key: "ruin_escort", label: "Ruin Escort", summary: "Guard relic brokers, surveyors, or salvage crews in contested sites.", guildReward: "+prestige and expedition payout quality", consortiumReward: "safer retrieval and stronger contract completion", recommendedReputation: 150, available: reputation >= 150 },
+    { key: "ward_suppression", label: "Ward Suppression", summary: "Contain unstable arcane routes before cargo crews enter.", guildReward: "+city standing and operation record", consortiumReward: "reduced route losses", recommendedReputation: 300, available: reputation >= 300 },
+  ];
+}
+
+function buildConsortiumAssistanceOpportunities(organization, derived) {
+  const hazard = buildConsortiumHazardState(organization, derived);
+  return [
+    { key: "guild_convoy_defense", label: "Hire Guild: Convoy Defense", summary: "Use a guild escort to raise cover on exposed logistics operations.", guildReward: "reputation and payout", consortiumReward: "higher route success and lower losses", available: hazard.level !== "Low" },
+    { key: "dangerous_retrieval", label: "Guild Retrieval Work", summary: "Post dangerous recovery work that employees should not be handling alone.", guildReward: "operation history and money", consortiumReward: "contract completion and hazard reduction", available: true },
+    { key: "route_security", label: "Route Security Sweep", summary: "Ask a guild to clear bandit pressure or ward trouble before launch.", guildReward: "prestige and city standing", consortiumReward: "safer routes", available: true },
+  ];
+}
+
+function buildGuildOverview(organization, derived) {
+  const currentPlan = derived.guildQuestBoard?.currentPlan ?? null;
+  const activeWar = derived.warRoom?.activeWars?.[0] ?? null;
+  const gains = [
+    `+${asInt(derived.guildPassives?.dailyRenown, 0)} daily renown`,
+    `Readiness ${asInt(derived.warRoom?.readiness, 0)}%`,
+    `+${asInt(derived.academyContract?.adventuringSurvival?.guildReadinessPct, 0)}% readiness from survival education`,
+    "Armory and base effects apply to operations where eligible",
+  ].filter((entry) => !String(entry).startsWith("+0%"));
+  return {
+    identity: { name: organization.name, tag: organization.tag, publicId: organization.publicId, statusText: organization.statusText },
+    currentGains: gains,
+    currentFocus: {
+      activeOperation: currentPlan ? currentPlan.displayName : null,
+      activeAdventure: currentPlan ? currentPlan.summary : null,
+      rivalry: activeWar ? `${activeWar.target}: ${activeWar.status}` : "No declared rivalry",
+      consortiumAssistance: buildGuildAssistanceOpportunities(organization, derived).find((entry) => entry.available)?.label ?? null,
+      readinessState: asInt(derived.warRoom?.readiness, 0) >= 70 ? "Ready" : "Needs assignments",
+    },
+    nextSteps: currentPlan ? ["Fill all operation slots", "Check participant condition", "Initiate when ready"] : ["Plan an operation", "Stock the armory", "Offer assistance to a consortium route"],
+    sections: ["Headquarters", "Members", "Operations", "War / Rivalries", "Armory", "Base", "Settings / Charter"],
+  };
+}
+
 const refreshGuildView = async (client, user, organization) => {
   if (!organization || organization.type !== "guild") return { organization };
   const derived = await buildGuildState(client, organization, user.internalId);
@@ -478,6 +572,9 @@ const refreshGuildView = async (client, user, organization) => {
       armory: derived.armory,
       settingsView: derived.settingsView,
       viewerPermissions: derived.viewerPermissions,
+      guildOverview: buildGuildOverview(organization, derived),
+      assistanceOpportunities: buildGuildAssistanceOpportunities(organization, derived),
+      layoutSections: ["Headquarters", "Members", "Operations", "War / Rivalries", "Armory", "Base", "Settings / Charter"],
     },
   };
 };
@@ -594,7 +691,7 @@ const refreshConsortiumView = async (client, user, organization) => {
   const progressEntry = getProgressEntry((await getRuntimeForUser(client, user)).runtimeState, derived.template.key, organization.internalId);
   const consortiumPoints = { consortiumTypeKey: derived.template.key, organizationInternalId: organization.internalId, scope: "type", points: progressEntry.points, totalEarned: progressEntry.totalEarned, totalSpent: progressEntry.totalSpent, lastClaimedAt: progressEntry.lastClaimedAt, dailyGain: derived.viewerDetails?.dailyCpGain ?? derived.baseDailyGain };
   return {
-    organization: { ...organization, tag: null, treasury: normalizeTreasury(organization.treasury), metadata: derived.metadata, starRating: derived.stars, consortiumType: derived.template, rolesFlavor: derived.template.rolesFlavor, memberRoleKey: derived.viewerDetails?.roleKey ?? null, rewardLadder: derived.template.rewards, unlockedPassives: getUnlockedPassives(derived.template.key, derived.stars), redeemableActives: getActiveRewards(derived.template.key, derived.stars, consortiumPoints.points), consortiumPoints, healthMetrics: derived.healthMetrics, performance: derived.performance, academyContract: derived.academyContract, baseMechanicalEffects: derived.baseEffects, employeeCapacity: derived.employeeCapacity, companyDailyGeneration: derived.totalDailyGeneration, positions: listConsortiumPositions(derived.template.key), applications: derived.applications, memberDetails: derived.employeeDetails, yourDetails: derived.viewerDetails, companyAgeDays: getCompanyAgeDays(organization.createdAt) },
+    organization: { ...organization, tag: null, treasury: normalizeTreasury(organization.treasury), metadata: derived.metadata, starRating: derived.stars, consortiumType: derived.template, rolesFlavor: derived.template.rolesFlavor, memberRoleKey: derived.viewerDetails?.roleKey ?? null, rewardLadder: derived.template.rewards, unlockedPassives: getUnlockedPassives(derived.template.key, derived.stars), redeemableActives: getActiveRewards(derived.template.key, derived.stars, consortiumPoints.points), consortiumPoints, healthMetrics: derived.healthMetrics, performance: derived.performance, academyContract: derived.academyContract, baseMechanicalEffects: derived.baseEffects, employeeCapacity: derived.employeeCapacity, companyDailyGeneration: derived.totalDailyGeneration, positions: listConsortiumPositions(derived.template.key), applications: derived.applications, memberDetails: derived.employeeDetails, yourDetails: derived.viewerDetails, companyAgeDays: getCompanyAgeDays(organization.createdAt), companyOverview: buildConsortiumOverview(organization, derived), assistanceOpportunities: buildConsortiumAssistanceOpportunities(organization, derived), layoutSections: ["Overview", "Employees", "Contracts", "Logistics", "Assets", "Finance", "Advancement"] },
     consortiumProgress: consortiumPoints,
   };
 };

@@ -63,7 +63,7 @@ type ConsortiumChoice = {
   roleSummary: string;
 };
 
-type ConsortiumMemberTab = "overview" | "logistics" | "base";
+type ConsortiumMemberTab = "overview" | "employees" | "contracts" | "logistics" | "assets" | "finance" | "advancement" | "base";
 
 function StatusRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -136,9 +136,9 @@ function getHazardPressure(board: ConsortiumBoard) {
 function getHazardSeverity(pressure: number) {
   if (pressure >= 90) return "Critical";
   if (pressure >= 75) return "High";
-  if (pressure >= 50) return "Elevated";
+  if (pressure >= 50) return "High";
   if (pressure >= 25) return "Guarded";
-  return "Stable";
+  return "Low";
 }
 
 function getHazardExplanation(pressure: number) {
@@ -260,6 +260,16 @@ export default function ConsortiumsPage() {
   const businessWorkerEfficiencyPct = readNumber(businessContract.workerEfficiencyPct);
   const businessTreasuryPct = readNumber(businessContract.treasuryEfficiencyPct);
   const businessRoutePct = readNumber(businessContract.routePerformancePct);
+  const companyOverview = asRecord((board as (ConsortiumBoard & { companyOverview?: unknown }) | null)?.companyOverview);
+  const overviewRank = asRecord(companyOverview.rank);
+  const overviewDaily = asRecord(companyOverview.dailyProfitLoss);
+  const overviewEmployees = asRecord(companyOverview.employees);
+  const overviewHazard = asRecord(companyOverview.hazard);
+  const overviewBenefits = Array.isArray(companyOverview.currentBenefits) ? companyOverview.currentBenefits : [];
+  const overviewNextSteps = Array.isArray(companyOverview.nextSteps) ? companyOverview.nextSteps : [];
+  const assistanceOpportunities = Array.isArray((board as (ConsortiumBoard & { assistanceOpportunities?: unknown }) | null)?.assistanceOpportunities)
+    ? ((board as ConsortiumBoard & { assistanceOpportunities?: Array<Record<string, unknown>> }).assistanceOpportunities ?? [])
+    : [];
   const commandCards = board
     ? [
         {
@@ -481,31 +491,39 @@ export default function ConsortiumsPage() {
                   </section>
 
                   <div className="guild-tabs">
-                    <button
-                      type="button"
-                      className={`guild-tab${memberTab === "overview" ? " guild-tab--active" : ""}`}
-                      onClick={() => setMemberTab("overview")}
-                    >
-                      Overview
-                    </button>
-                    <button
-                      type="button"
-                      className={`guild-tab${memberTab === "logistics" ? " guild-tab--active" : ""}`}
-                      onClick={() => setMemberTab("logistics")}
-                    >
-                      Logistics
-                    </button>
-                    <button
-                      type="button"
-                      className={`guild-tab${memberTab === "base" ? " guild-tab--active" : ""}`}
-                      onClick={() => setMemberTab("base")}
-                    >
-                      Base
-                    </button>
+                    {[
+                      ["overview", "Overview"],
+                      ["employees", "Employees"],
+                      ["contracts", "Contracts"],
+                      ["logistics", "Logistics"],
+                      ["assets", "Assets"],
+                      ["finance", "Finance"],
+                      ["advancement", "Advancement"],
+                      ["base", "Base"],
+                    ].map(([key, label]) => (
+                      <button key={key} type="button" className={`guild-tab${memberTab === key ? " guild-tab--active" : ""}`} onClick={() => setMemberTab(key as ConsortiumMemberTab)}>
+                        {label}
+                      </button>
+                    ))}
                   </div>
 
                   {memberTab === "overview" ? (
                     <>
+                      <section className="panel org-panel">
+                        <div className="org-panel__head"><div><p className="org-eyebrow">Company First View</p><h3>{String(asRecord(companyOverview.companyType).name ?? board.consortiumTypeName ?? "Company")}</h3></div></div>
+                        <div className="org-detail-list">
+                          <StatusRow label="Rank / Advancement" value={`${String(overviewRank.label ?? `Rank ${board.starRating ?? 1}`)} | next: ${String(overviewRank.nextLabel ?? "unlisted")}`} />
+                          <StatusRow label="Daily Profit / Loss" value={String(overviewDaily.label ?? `${getDailyGeneration(board).toLocaleString("en-GB")} company points`)} />
+                          <StatusRow label="Employees" value={`${String(overviewEmployees.count ?? board.members.length)} / ${String(overviewEmployees.capacity ?? board.members.length)}`} />
+                          <StatusRow label="Active Routes" value={String(companyOverview.activeRoutes ?? 0)} />
+                          <StatusRow label="Hazard State" value={`${String(overviewHazard.level ?? "Guarded")} - ${String(overviewHazard.effects ?? getHazardExplanation(getHazardPressure(board)))}`} />
+                        </div>
+                        <div className="org-stack-list">
+                          <article><strong>Current benefits</strong><p>{overviewBenefits.length ? overviewBenefits.slice(0, 4).map(String).join(" | ") : "No unlocked company passives yet."}</p></article>
+                          <article><strong>Next steps</strong><p>{overviewNextSteps.length ? overviewNextSteps.slice(0, 4).map(String).join(" | ") : "Staff roles, routes, and advancement are the next pressure points."}</p></article>
+                        </div>
+                      </section>
+
                       <section className="org-stat-strip">
                         <article className="org-stat-card">
                           <span>Treasury</span>
@@ -621,6 +639,30 @@ export default function ConsortiumsPage() {
                         </div>
                       </section>
                     </>
+                  ) : null}
+
+                  {memberTab === "employees" ? (
+                    <ContentPanel title="Employees">
+                      <div className="org-table-wrap"><table className="org-compact-table"><thead><tr><th>Employee</th><th>Company Role</th><th>Effect</th></tr></thead><tbody>{employeeRows.map((employee) => <tr key={employee.key}><td>{employee.summary.split(" | ")[0]}</td><td>{employee.roleLabel}</td><td>{employee.summary.split(" | ").slice(1).join(" | ") || "Supports output, route success, and company cadence."}</td></tr>)}</tbody></table></div>
+                    </ContentPanel>
+                  ) : null}
+
+                  {memberTab === "contracts" ? (
+                    <ContentPanel title="Contracts">
+                      <div className="org-stack-list"><article><strong>Company contracts</strong><p>Active company work is fed by city identity, logistics routes, marketplace demand, and board opportunities.</p></article>{assistanceOpportunities.map((entry) => <article key={String(entry.key)}><strong>{String(entry.label)}</strong><p>{String(entry.summary)} Consortium gain: {String(entry.consortiumReward ?? "company progress")}.</p></article>)}</div>
+                    </ContentPanel>
+                  ) : null}
+
+                  {memberTab === "assets" ? (
+                    <ContentPanel title="Assets"><div className="org-detail-list"><StatusRow label="Base" value="Managed through Base Ledger" /><StatusRow label="Treasury" value={`${board.treasury.gold.toLocaleString("en-GB")} gold`} /><StatusRow label="Facilities" value="Assets modify logistics where eligible" /></div></ContentPanel>
+                  ) : null}
+
+                  {memberTab === "finance" ? (
+                    <ContentPanel title="Finance"><div className="org-detail-list"><StatusRow label="Treasury" value={`${board.treasury.gold.toLocaleString("en-GB")} gold`} /><StatusRow label="Daily pulse" value={String(overviewDaily.label ?? `${getDailyGeneration(board)} points`)} /><StatusRow label="Hazard effect" value={String(overviewHazard.effects ?? "No hazard model reported")} /></div></ContentPanel>
+                  ) : null}
+
+                  {memberTab === "advancement" ? (
+                    <ContentPanel title="Advancement"><div className="org-detail-list"><StatusRow label="Current Rank" value={String(overviewRank.label ?? `Rank ${board.starRating ?? 1}`)} /><StatusRow label="Next Rank" value={String(overviewRank.nextLabel ?? "Unlisted")} /><StatusRow label="Requirements" value={Array.isArray(overviewRank.nextRequires) ? overviewRank.nextRequires.map(String).join(" | ") : "Improve performance score, staffing, and route outcomes"} /></div></ContentPanel>
                   ) : null}
 
                   {memberTab === "logistics" ? (

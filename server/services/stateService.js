@@ -100,6 +100,9 @@ function mergeRuntimeState(existingRuntime, payload) {
       worldEvents: existingPlayer.worldEvents ?? payloadPlayer.worldEvents ?? {},
       prestige: existingPlayer.prestige ?? payloadPlayer.prestige ?? {},
       shadow: existingPlayer.shadow ?? payloadPlayer.shadow ?? {},
+      progressionEvents: existingPlayer.progressionEvents ?? payloadPlayer.progressionEvents ?? {},
+      records: existingPlayer.records ?? payloadPlayer.records ?? {},
+      rareManualEligibility: existingPlayer.rareManualEligibility ?? payloadPlayer.rareManualEligibility ?? {},
       portrait: existingPlayer.portrait ?? {},
     },
     // These are server-authoritative now. The browser can report state around

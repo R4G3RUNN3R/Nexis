@@ -10,6 +10,8 @@ import { getTravelOpponentForRoute } from "../data/combatData.js";
 import { rollLoot } from "../data/lootData.js";
 import { resolveCombat } from "./combatService.js";
 import { recordTravelDiscoveryFromEncounter } from "./liveWorldService.js";
+import { addPlayerExperience } from "./progressionService.js";
+import { addPlayerRecord } from "./playerRecordsService.js";
 import {
   DEFAULT_CITY_ID,
   getCityName,
@@ -311,7 +313,7 @@ function applyTravelEncounterResult(runtimeState, encounter, now, route = {}) {
 
   player.gold = Math.max(0, Math.floor(asNumber(player.gold, 500) + asNumber(reward.gold, 0)));
   player.currencies = { ...asRecord(player.currencies), gold: player.gold };
-  player.experience = Math.max(0, Math.floor(asNumber(player.experience, 0) + asNumber(reward.experience, 0)));
+  addPlayerExperience(runtimeState, asNumber(reward.experience, 0), "travel", { now });
   const rewardItems = asArray(reward.items).length ? asArray(reward.items) : reward.item?.itemId ? [reward.item] : [];
   if (rewardItems.length) {
     player.inventory = { ...asRecord(player.inventory) };
@@ -322,6 +324,7 @@ function applyTravelEncounterResult(runtimeState, encounter, now, route = {}) {
     }
   }
   player.counters.lastTravelEncounterRewardAt = now;
+  addPlayerRecord(runtimeState, { category: "travel", summary: `Travel encounter resolved: ${encounter.title ?? encounter.type ?? "route event"}.`, detail: { reward, route: { originCityId: route?.originCityId, destinationCityId: route?.destinationCityId } }, source: "travel-encounter", route: "/travel", timestamp: now });
   recordTravelDiscovery(runtimeState, encounter, now, route);
   return encounter;
 }

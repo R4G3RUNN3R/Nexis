@@ -1,3 +1,6 @@
+import { getItemSummary } from "../data/itemData.js";
+import { getPlayerRecords } from "../services/playerRecordsService.js";
+import { getRareManualEligibility } from "../services/rareManualService.js";
 const DEFAULT_STATS = {
   energy: 100,
   maxEnergy: 100,
@@ -33,6 +36,10 @@ function asRecord(value) {
 function asNumber(value, fallback = 0) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function getMaxLifeForLevel(level) {
+  return 100 + (Math.max(1, Math.floor(asNumber(level, 1))) - 1) * 50;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -174,11 +181,17 @@ export function buildMutableRuntimeState(user, playerState) {
           ? asRecord(player.property).installedUpgrades.filter((entry) => typeof entry === "string")
           : [],
       },
-      stats: {
-        ...DEFAULT_STATS,
-        ...asRecord(playerState?.stats),
-        ...asRecord(player.stats),
-      },
+      stats: (() => {
+        const merged = {
+          ...DEFAULT_STATS,
+          ...asRecord(playerState?.stats),
+          ...asRecord(player.stats),
+        };
+        const expectedMaxHealth = getMaxLifeForLevel(Math.max(1, Math.floor(asNumber(player.level, playerState?.level ?? 1))));
+        merged.maxHealth = Math.max(expectedMaxHealth, Math.floor(asNumber(merged.maxHealth, expectedMaxHealth)));
+        merged.health = Math.max(1, Math.min(merged.maxHealth, Math.floor(asNumber(merged.health, merged.maxHealth))));
+        return merged;
+      })(),
       workingStats: {
         ...DEFAULT_WORKING_STATS,
         ...asRecord(playerState?.workingStats),
@@ -220,6 +233,9 @@ export function buildMutableRuntimeState(user, playerState) {
       worldEvents: asRecord(player.worldEvents),
       prestige: asRecord(player.prestige),
       shadow: asRecord(player.shadow),
+      progressionEvents: asRecord(player.progressionEvents),
+      records: asRecord(player.records),
+      rareManualEligibility: asRecord(player.rareManualEligibility),
     },
     jobs: asRecord(runtime.jobs),
     education: asRecord(runtime.education),
@@ -233,6 +249,107 @@ export function buildMutableRuntimeState(user, playerState) {
   };
 }
 
+function summarizeInventory(inventory) {
+  return Object.entries(asRecord(inventory))
+    .map(([itemId, quantity]) => ({
+      itemId,
+      quantity: Math.max(0, Math.floor(asNumber(quantity, 0))),
+      item: getItemSummary(itemId),
+    }))
+    .filter((entry) => entry.quantity > 0)
+    .sort((left, right) => left.itemId.localeCompare(right.itemId));
+}
+
+function summarizeEquipment(equipment) {
+  return Object.entries(asRecord(equipment)).map(([slot, itemId]) => ({
+    slot,
+    itemId: typeof itemId === "string" ? itemId : null,
+    item: typeof itemId === "string" ? getItemSummary(itemId) : null,
+  }));
+}
+
+function summarizeLoadouts(loadouts) {
+  return Object.entries(asRecord(loadouts)).map(([slot, value]) => ({ slot, ...(asRecord(value)) }));
+}
+
+function summarizeContracts(cityContracts) {
+  const records = asRecord(asRecord(cityContracts).records);
+  return Object.entries(records).map(([contractId, value]) => ({ contractId, ...asRecord(value) }));
+}
+
+function buildAdminDossier(user, runtimeState) {
+  const player = runtimeState.player;
+  const travel = runtimeState.travel ?? player.current?.travel ?? {};
+  const activeEducation = asRecord(runtimeState.education).activeCourse ?? player.current?.education ?? null;
+  const academyState = asRecord(player.cityAcademy);
+  const activeAcademy = academyState.activeStudy ?? null;
+  const skills = asRecord(player.skills);
+  const guild = asRecord(runtimeState.guild);
+  const consortium = asRecord(runtimeState.consortium);
+  const records = getPlayerRecords(runtimeState, { limit: 160 });
+
+  return {
+    summary: {
+      displayName: `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`.trim(),
+      publicId: user.publicId,
+      entityType: user.entityType ?? "player",
+      privilegeRole: user.privilegeRole ?? "player",
+      location: player.current?.currentCityId ?? travel.currentCityId ?? "nexis",
+      condition: player.condition,
+      level: player.level,
+      experience: player.experience,
+      title: player.title,
+      prestige: player.prestige,
+      guild: guild.publicId ? guild : player.guild ?? null,
+      consortium: consortium.publicId ? consortium : player.consortium ?? null,
+      travel,
+      activeContract: player.current?.job ?? null,
+      activeEducation,
+      activeAcademy,
+    },
+    inventory: summarizeInventory(player.inventory),
+    equipment: summarizeEquipment(player.equipment),
+    equipmentMaintenance: player.equipmentMaintenance,
+    loadouts: summarizeLoadouts(player.equipmentLoadouts),
+    skills: {
+      activeSlots: skills.activeSlots ?? [],
+      passiveSlots: skills.passiveSlots ?? [],
+      unlocked: skills.unlocked ?? [],
+      learning: skills.learning ?? {},
+      useCounts: skills.useCounts ?? {},
+      evolutionChoices: skills.evolutionChoices ?? {},
+      unlockHistory: skills.unlockHistory ?? [],
+    },
+    education: {
+      activeCourse: activeEducation,
+      completed: asRecord(runtimeState.education).completed ?? asRecord(runtimeState.education).completedCourses ?? {},
+      history: asRecord(runtimeState.education).history ?? [],
+      categoryProgress: asRecord(runtimeState.education).categoryProgress ?? {},
+    },
+    academy: {
+      activeStudy: activeAcademy,
+      completed: academyState.completed ?? {},
+      history: academyState.history ?? [],
+      paused: academyState.paused ?? null,
+    },
+    contractsTravelDiscovery: {
+      activeContracts: summarizeContracts(player.cityContracts),
+      travel,
+      discoveries: player.worldDiscovery,
+      hiddenSites: asRecord(player.worldDiscovery).hiddenSites ?? {},
+    },
+    organizations: {
+      guild,
+      consortium,
+      cityStanding: player.cityStanding,
+      civicEmployment: runtimeState.civicEmployment,
+    },
+    rareManualEligibility: getRareManualEligibility(runtimeState),
+    records,
+    auditNote: "Admin actions require reasons and are written to the server audit log.",
+  };
+}
+
 export function buildAdminPlayerPayload(user, playerState) {
   const runtimeState = buildMutableRuntimeState(user, playerState);
   const player = runtimeState.player;
@@ -240,6 +357,8 @@ export function buildAdminPlayerPayload(user, playerState) {
     typeof player.current?.job === "string" && player.current.job.trim()
       ? player.current.job
       : null;
+
+  const dossier = buildAdminDossier(user, runtimeState);
 
   return {
     user: {
@@ -275,5 +394,6 @@ export function buildAdminPlayerPayload(user, playerState) {
         reason: typeof player.condition?.reason === "string" ? player.condition.reason : null,
       },
     },
+    dossier,
   };
 }
