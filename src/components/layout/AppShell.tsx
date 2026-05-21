@@ -126,16 +126,21 @@ function ProgressionEventPanel({
   const rareManualUnlocks = Array.isArray(detail.rareManualUnlocks)
     ? detail.rareManualUnlocks.filter((entry): entry is string => typeof entry === "string")
     : [];
+  const eventTitle = typeof event.title === "string" && event.title.trim() ? event.title : event.summary || "Progress recorded";
+  const isLevelEvent = event.type === "level_up" || (oldLevel !== null && newLevel !== null);
+  const rewardPoints = toNumber(detail.rewardPoints);
 
   return (
     <section className="progression-event" aria-live="polite">
       <div className="progression-event__copy">
         <div className="progression-event__eyebrow">Progression record</div>
-        <h2>{event.summary || "Level advanced"}</h2>
+        <h2>{eventTitle}</h2>
         <div className="progression-event__facts">
           {oldLevel !== null && newLevel !== null ? <span>Level {oldLevel} to {newLevel}</span> : null}
           {oldMaxLife !== null && newMaxLife !== null ? <span>Max Life {oldMaxLife} to {newMaxLife}</span> : null}
-          <span>Life fully restored</span>
+          {isLevelEvent ? <span>Life fully restored</span> : null}
+          {!isLevelEvent && rewardPoints !== null ? <span>+{rewardPoints} Legacy Point{rewardPoints === 1 ? "" : "s"}</span> : null}
+          {!isLevelEvent && rewardPoints === null ? <span>{event.summary}</span> : null}
         </div>
         {milestones.length || rareManualUnlocks.length ? (
           <div className="progression-event__milestones">

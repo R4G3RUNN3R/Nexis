@@ -7,6 +7,7 @@ import { ADVENTURE_CATEGORIES, getAdventureBoardNotices, getAdventureCategory, g
 import { getItemDisplayName, getItemSummary } from "../data/itemData.js";
 import { applyCombatReward, resolveCombat } from "./combatService.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
+import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asArray(value) { return Array.isArray(value) ? value : []; }
@@ -127,6 +128,7 @@ export async function startAdventureForUser(user, adventureId, payload = {}) {
       runtimeState.player = player;
     }
     addPlayerRecord(runtimeState, { category: "adventure", summary: `${adventure.title}: ${combat.outcome}${reward ? `, ${reward.items.length} item reward(s)` : ""}.`, detail: { adventureId: adventure.id, outcome: combat.outcome, reward, hiddenSite }, source: "adventure", route: "/adventure", timestamp: now });
+    evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, board: buildBoard(runtimeState), adventure: serializeAdventure(runtimeState, adventure), combat, reward, hiddenSite, message: reward ? `${adventure.title} completed. Rewards added to inventory.` : `${adventure.title} resolved as ${combat.outcome}.` };
   });

@@ -1,6 +1,6 @@
 .legacy-summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -91,7 +91,7 @@
 .legacy-achievements-header,
 .legacy-achievement-row {
   display: grid;
-  grid-template-columns: 90px 160px 1fr 180px 70px;
+  grid-template-columns: 76px 130px minmax(180px, 1fr) 170px 64px;
   gap: 10px;
   padding: 9px 10px;
   align-items: center;
@@ -116,8 +116,63 @@
 }
 
 .legacy-achievement-name {
+  display: block;
   font-weight: 700;
   color: #f1f3f0;
+}
+
+.legacy-achievement-kind {
+  color: #d8c278;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.legacy-achievement-row small {
+  display: block;
+  margin-top: 3px;
+  color: #aeb8b0;
+  line-height: 1.35;
+}
+
+.legacy-empty-row {
+  padding: 12px;
+  color: #aeb8b0;
+  background: #111417;
+}
+
+.legacy-kind-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.legacy-kind-pill {
+  border: 1px solid #414842;
+  background: #101418;
+  color: #d8dccf;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.legacy-kind-pill--active {
+  border-color: #8a734a;
+  background: #2c2618;
+  color: #f4dfab;
+}
+
+.legacy-permanent-note {
+  margin-bottom: 10px;
+  border: 1px solid #38392f;
+  background: #141611;
+  color: #d2c7a1;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .legacy-progress {
@@ -314,7 +369,7 @@
   }
 
   .legacy-summary-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

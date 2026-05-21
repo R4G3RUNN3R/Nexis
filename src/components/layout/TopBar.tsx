@@ -233,13 +233,19 @@ export function TopBar() {
             onClick={() => setPlayerOpen((value) => !value)}
           >
             <PlayerAvatar name={player.name} lastName={player.lastName} portrait={portrait} size={30} className="player-menu__avatar" />
-            <span className="player-menu__name">{displayNameWithPublicId}</span>
+            <span className="player-menu__name">P{displayPublicId} ? Lv {player.level}</span>
             <span className="player-menu__caret">{playerOpen ? "^" : "v"}</span>
           </button>
 
           {playerOpen ? (
             <div className="player-menu__dropdown">
-              <div className="player-menu__server">Shard: Cay</div>
+              <div className="player-menu__identity">
+                <PlayerAvatar name={player.name} lastName={player.lastName} portrait={portrait} size={34} className="player-menu__avatar" />
+                <div>
+                  <strong>{displayNameWithPublicId}</strong>
+                  <span>Shard: Cay ? Level {player.level}</span>
+                </div>
+              </div>
               <NavLink to={profileRoute} className="player-menu__item" onClick={() => setPlayerOpen(false)}>
                 Character Profile
               </NavLink>
@@ -249,7 +255,7 @@ export function TopBar() {
                 </NavLink>
               ) : null}
               <NavLink to="/achievements" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
-                Achievements
+                Achievements / Legacy
               </NavLink>
               <NavLink to="/housing" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
                 Housing

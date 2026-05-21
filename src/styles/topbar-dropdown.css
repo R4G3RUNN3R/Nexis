@@ -249,3 +249,31 @@
     justify-content: stretch;
   }
 }
+
+.player-menu__identity {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 9px;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(205, 220, 233, 0.08);
+}
+
+.player-menu__identity strong {
+  display: block;
+  color: #edf3f8;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.player-menu__identity span {
+  display: block;
+  margin-top: 2px;
+  color: #8fa0af;
+  font-size: 11px;
+}
+
+.player-menu__trigger {
+  max-width: 170px;
+}

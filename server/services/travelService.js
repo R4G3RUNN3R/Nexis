@@ -12,6 +12,7 @@ import { resolveCombat } from "./combatService.js";
 import { recordTravelDiscoveryFromEncounter } from "./liveWorldService.js";
 import { addPlayerExperience } from "./progressionService.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
+import { evaluateLegacyAchievementsForRuntime, getLegacyPerkEffect } from "./achievementService.js";
 import {
   DEFAULT_CITY_ID,
   getCityName,
@@ -354,6 +355,14 @@ export function resolveTravelForRuntimeState(runtimeState, now = Date.now()) {
       },
       encounterNotice: current.encounterNotice ?? null,
     };
+    const player = asRecord(runtimeState.player);
+    player.counters = {
+      ...asRecord(player.counters),
+      travelArrivals: Math.max(0, Math.floor(asNumber(player.counters?.travelArrivals, 0))) + 1,
+      lastTravelArrivalAt: now,
+    };
+    runtimeState.player = player;
+    addPlayerRecord(runtimeState, { category: "travel", summary: `Arrived in ${getCityName(current.destinationCityId)}.`, detail: { originCityId: current.originCityId, destinationCityId: current.destinationCityId }, source: "travel", route: "/travel", timestamp: now });
     syncTravelOntoPlayer(runtimeState, resolved);
     return { changed: true, travelState: resolved };
   }
@@ -371,6 +380,7 @@ async function loadRuntimeState(client, user) {
   const runtimeState = buildMutableRuntimeState(user, playerState);
   const resolution = resolveTravelForRuntimeState(runtimeState);
   if (resolution.changed) {
+    evaluateLegacyAchievementsForRuntime(runtimeState, user);
     const nextPlayerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return {
       playerState: nextPlayerState,
@@ -435,11 +445,14 @@ export async function startTravelForUser(user, payload) {
         encounterNotice: encounter,
       };
       syncTravelOntoPlayer(runtimeState, nextTravel);
+      evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
       const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
       return { playerState, travel: nextTravel };
     }
 
-    const durationMs = route.durationMs + (encounter?.delayMs ?? 0);
+    const rawDurationMs = route.durationMs + (encounter?.delayMs ?? 0);
+    const travelEfficiency = Math.min(25, Math.max(0, getLegacyPerkEffect(runtimeState, "travel-efficiency")));
+    const durationMs = Math.max(60 * 1000, Math.round(rawDurationMs * (1 - travelEfficiency / 100)));
     const nextTravel = {
       status: "in_transit",
       originCityId,
@@ -455,6 +468,7 @@ export async function startTravelForUser(user, payload) {
     };
 
     syncTravelOntoPlayer(runtimeState, nextTravel);
+    evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, travel: nextTravel };
   });

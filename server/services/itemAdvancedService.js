@@ -9,6 +9,8 @@ import {
 import { getCityDefinition, normalizeCityId } from "../data/cityData.js";
 import { getRecipeDefinition, getRecipeDefinitions } from "../data/recipeData.js";
 import { EQUIPMENT_SLOTS, getAllowedEquipSlots, getItemDefinition, getItemDisplayName, getItemSummary, isEquippable } from "../data/itemData.js";
+import { addPlayerRecord } from "./playerRecordsService.js";
+import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
 
 const LOADOUT_SLOTS = ["1", "2", "3"];
 const MAINTENANCE_DURATION_MS = 6 * 60 * 60 * 1000;
@@ -297,6 +299,8 @@ export async function craftRecipeForUser(user, recipeId) {
     crafting.craftedCounts[recipe.id] = Math.max(0, Math.floor(asNumber(crafting.craftedCounts[recipe.id], 0))) + 1;
     crafting.history = [{ id: `craft_${recipe.id}_${Date.now()}`, recipeId: recipe.id, title: recipe.title, outputs: recipe.outputs, craftedAt: Date.now() }, ...crafting.history].slice(0, 40);
     runtimeState.player.counters = { ...asRecord(runtimeState.player.counters), itemsCrafted: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.itemsCrafted, 0))) + 1 };
+    addPlayerRecord(runtimeState, { category: "crafting", summary: `Crafted ${recipe.title}.`, detail: { recipeId: recipe.id, outputs: recipe.outputs }, source: "crafting", route: "/crafting", timestamp: Date.now() });
+    evaluateLegacyAchievementsForRuntime(runtimeState, user);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return serializeCraftingPayload(playerState, buildMutableRuntimeState(user, playerState), `${recipe.title} crafted.`);
   });
@@ -312,6 +316,9 @@ export async function salvageItemForUser(user, itemId, quantityInput = 1) {
     for (const yieldItem of option.yieldItems) addInventory(runtimeState, yieldItem.itemId, yieldItem.quantity * quantity);
     const crafting = ensureCrafting(runtimeState);
     crafting.salvagedCounts[itemId] = Math.max(0, Math.floor(asNumber(crafting.salvagedCounts[itemId], 0))) + quantity;
+    runtimeState.player.counters = { ...asRecord(runtimeState.player.counters), itemsSalvaged: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.itemsSalvaged, 0))) + quantity };
+    addPlayerRecord(runtimeState, { category: "crafting", summary: `Salvaged ${getItemDisplayName(itemId)} x${quantity}.`, detail: { itemId, quantity, yields: option.yieldItems.map((entry) => ({ itemId: entry.itemId, quantity: entry.quantity * quantity })) }, source: "salvage", route: "/crafting", timestamp: Date.now() });
+    evaluateLegacyAchievementsForRuntime(runtimeState, user);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     const summary = option.yieldItems.map((entry) => `${entry.item.displayName} x${entry.quantity * quantity}`).join(", ");
     return serializeCraftingPayload(playerState, buildMutableRuntimeState(user, playerState), `Salvaged ${getItemDisplayName(itemId)} x${quantity} into ${summary}.`);

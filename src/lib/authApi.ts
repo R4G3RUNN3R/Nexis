@@ -27,6 +27,7 @@ export type ServerProgressionEvent = {
   type: string;
   createdAt: number;
   acknowledgedAt?: number | null;
+  title?: string;
   summary: string;
   detail?: Record<string, unknown>;
   route?: string | null;
@@ -735,6 +736,7 @@ export type ApiChronicleStatusResponse =
 
 export type ServerLegacyAchievement = {
   id: string;
+  kind?: "honor" | "medal" | string;
   category: string;
   name: string;
   description: string;
@@ -749,6 +751,7 @@ export type ApiLegacyAchievementsResponse =
   | {
       ok: true;
       achievementCategories: string[];
+      achievementKinds?: Array<"honor" | "medal" | string>;
       achievements: ServerLegacyAchievement[];
       legacyPoints: {
         totalEarned: number;
@@ -756,9 +759,12 @@ export type ApiLegacyAchievementsResponse =
         available: number;
       };
       perkRanks: Record<string, number>;
+      legacyPerkCategories?: string[];
+      legacyPerks?: Array<Record<string, unknown>>;
       newlyAwarded: Array<{
         id: string;
         name: string;
+        kind?: "honor" | "medal" | string;
         category: string;
         rewardPoints: number;
       }>;
@@ -1612,6 +1618,7 @@ export function submitChronicleChoice(
 export function getLegacyAchievements(sessionToken: string): Promise<ApiLegacyAchievementsResponse> {
   return requestJson<{
     achievementCategories: string[];
+    achievementKinds?: Array<"honor" | "medal" | string>;
     achievements: ServerLegacyAchievement[];
     legacyPoints: {
       totalEarned: number;
@@ -1619,9 +1626,12 @@ export function getLegacyAchievements(sessionToken: string): Promise<ApiLegacyAc
       available: number;
     };
     perkRanks: Record<string, number>;
+    legacyPerkCategories?: string[];
+    legacyPerks?: Array<Record<string, unknown>>;
     newlyAwarded: Array<{
       id: string;
       name: string;
+      kind?: "honor" | "medal" | string;
       category: string;
       rewardPoints: number;
     }>;
@@ -1640,6 +1650,7 @@ export function spendLegacyPerkRank(
 ): Promise<ApiLegacyAchievementsResponse> {
   return requestJson<{
     achievementCategories: string[];
+    achievementKinds?: Array<"honor" | "medal" | string>;
     achievements: ServerLegacyAchievement[];
     legacyPoints: {
       totalEarned: number;
@@ -1647,9 +1658,12 @@ export function spendLegacyPerkRank(
       available: number;
     };
     perkRanks: Record<string, number>;
+    legacyPerkCategories?: string[];
+    legacyPerks?: Array<Record<string, unknown>>;
     newlyAwarded: Array<{
       id: string;
       name: string;
+      kind?: "honor" | "medal" | string;
       category: string;
       rewardPoints: number;
     }>;

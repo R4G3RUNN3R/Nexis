@@ -9,9 +9,12 @@ import {
 import {
   LEGACY_ACHIEVEMENT_CATEGORIES,
   LEGACY_ACHIEVEMENTS,
+  LEGACY_PERK_CATEGORIES,
+  LEGACY_PERKS,
   getLegacyPerk,
   getLegacyRankCost,
 } from "../data/legacyAchievementsData.js";
+import { addPlayerRecord, queueProgressionEvent } from "./playerRecordsService.js";
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -135,15 +138,49 @@ function countDiscoveredWorldNodes(runtimeState) {
   const world = asRecord(runtimeState.world);
   const discovery = asRecord(runtimeState.discovery);
   const map = asRecord(runtimeState.map);
+  const playerDiscovery = asRecord(asRecord(runtimeState.player).worldDiscovery);
+  const education = asRecord(runtimeState.education);
   const discoveredNodes = [
     ...asArray(world.discoveredNodes),
     ...asArray(discovery.discoveredNodes),
     ...asArray(map.discoveredNodes),
+    ...asArray(playerDiscovery.discoveredNodes),
   ].filter((nodeId) => typeof nodeId === "string");
-  return new Set(discoveredNodes).size;
+  const discoveryRecords = [
+    ...asArray(playerDiscovery.discoveries),
+    ...asArray(education.discoveries),
+  ].map((entry) => asRecord(entry).id ?? asRecord(entry).siteId ?? asRecord(entry).title).filter(Boolean);
+  return new Set([...discoveredNodes, ...discoveryRecords]).size;
 }
 
-function evaluateAchievementProgress(definition, runtimeState, user) {
+function countHiddenSites(runtimeState) {
+  const hiddenSites = asRecord(asRecord(asRecord(runtimeState.player).worldDiscovery).hiddenSites);
+  return Object.values(hiddenSites).filter((entry) => ["discovered", "explored"].includes(String(asRecord(entry).status ?? ""))).length;
+}
+
+function sumRecordNumbers(record) {
+  return Object.values(asRecord(record)).reduce((sum, value) => sum + asWholeNumber(value, 0), 0);
+}
+
+function countCrafted(runtimeState) {
+  const counters = asRecord(asRecord(runtimeState.player).counters);
+  const crafting = asRecord(asRecord(runtimeState.player).crafting);
+  return Math.max(asWholeNumber(counters.itemsCrafted, 0), sumRecordNumbers(crafting.craftedCounts));
+}
+
+function countSalvaged(runtimeState) {
+  const counters = asRecord(asRecord(runtimeState.player).counters);
+  const crafting = asRecord(asRecord(runtimeState.player).crafting);
+  return Math.max(asWholeNumber(counters.itemsSalvaged, 0), sumRecordNumbers(crafting.salvagedCounts));
+}
+
+function daysPlayedForUser(user, now) {
+  const createdAt = asWholeNumber(user?.createdAt, 0);
+  if (!createdAt) return 0;
+  return Math.max(0, Math.floor((now - createdAt) / (24 * 60 * 60 * 1000)));
+}
+
+function evaluateAchievementProgress(definition, runtimeState, user, now = Date.now()) {
   const player = asRecord(runtimeState.player);
   const education = asRecord(runtimeState.education);
   const civicEmployment = asRecord(runtimeState.civicEmployment);
@@ -155,6 +192,8 @@ function evaluateAchievementProgress(definition, runtimeState, user) {
   switch (definition.metric) {
     case "account_registered":
       return user?.internalId ? 1 : 0;
+    case "days_played":
+      return daysPlayedForUser(user, now);
     case "education_started":
       return completedCourses.length || asRecord(education.activeCourse).courseId ? 1 : 0;
     case "education_completed":
@@ -165,6 +204,8 @@ function evaluateAchievementProgress(definition, runtimeState, user) {
         typeof travel.destinationCityId === "string"
         ? 1
         : 0;
+    case "travel_resolved":
+      return asWholeNumber(counters.travelArrivals, 0);
     case "gold_held":
       return asWholeNumber(player.gold ?? player.currencies?.gold, 0);
     case "civic_job_joined":
@@ -174,13 +215,32 @@ function evaluateAchievementProgress(definition, runtimeState, user) {
     case "organization_joined":
       return hasOrganizationState(runtimeState) ? 1 : 0;
     case "world_nodes_discovered":
+    case "discoveries_found":
       return countDiscoveredWorldNodes(runtimeState);
+    case "hidden_sites_found":
+      return countHiddenSites(runtimeState);
+    case "marketplace_listings_created":
+      return asWholeNumber(counters.marketplaceListingsCreated, 0);
+    case "marketplace_trades":
+      return asWholeNumber(counters.marketplacePurchases, 0) + asWholeNumber(counters.marketplaceSales, 0);
+    case "items_crafted":
+      return countCrafted(runtimeState);
+    case "items_salvaged":
+      return countSalvaged(runtimeState);
+    case "adventures_completed":
+      return asWholeNumber(counters.adventuresCompleted, 0) + asWholeNumber(counters.contractsCompleted, 0);
+    case "elite_hunts_won":
+      return asWholeNumber(counters.eliteHuntsWon, 0);
+    case "weapon_actions":
+      return asWholeNumber(counters.weaponActions, 0);
+    case "organization_assistance":
+      return asWholeNumber(counters.organizationAssistanceResolved, 0);
     case "skills_unlocked":
       return asWholeNumber(counters.skillsUnlocked, asArray(player.skills?.unlocked).length);
     case "skill_evolutions":
       return asWholeNumber(counters.skillEvolutions, Object.keys(asRecord(player.skills?.evolved)).length);
     case "combat_resolved":
-      return asWholeNumber(counters.combatWins, 0) + asWholeNumber(counters.combatLosses, 0);
+      return asWholeNumber(counters.combatWins, 0) + asWholeNumber(counters.combatLosses, 0) + asWholeNumber(counters.duelsResolved, 0);
     case "duels_resolved":
       return asWholeNumber(counters.duelsResolved, 0);
     case "academy_stages_completed":
@@ -213,7 +273,7 @@ function evaluateAchievements(runtimeState, user, now = Date.now()) {
   const newlyAwarded = [];
 
   for (const achievement of LEGACY_ACHIEVEMENTS) {
-    const rawProgress = evaluateAchievementProgress(achievement, runtimeState, user);
+    const rawProgress = evaluateAchievementProgress(achievement, runtimeState, user, now);
     const progress = Math.max(0, Math.floor(Number(rawProgress) || 0));
     legacy.achievements.progress[achievement.id] = progress;
 
@@ -225,6 +285,24 @@ function evaluateAchievements(runtimeState, user, now = Date.now()) {
       };
       newlyAwarded.push(achievement);
       insertVisibleEntry(legacy, achievement, now);
+      addPlayerRecord(runtimeState, {
+        id: `record_achievement_${achievement.id}`,
+        category: "progression",
+        summary: `${achievement.kind === "medal" ? "Medal" : "Honor"} earned: ${achievement.name}.`,
+        detail: { achievementId: achievement.id, kind: achievement.kind, category: achievement.category, rewardPoints: achievement.rewardPoints },
+        source: "legacy-achievements",
+        route: "/achievements",
+        timestamp: now,
+      });
+      queueProgressionEvent(runtimeState, {
+        id: `achievement_${achievement.id}_${now}`,
+        type: "achievement",
+        title: `${achievement.kind === "medal" ? "Medal" : "Honor"} earned`,
+        summary: `${achievement.name}: +${achievement.rewardPoints} Legacy Point`,
+        detail: { achievementId: achievement.id, kind: achievement.kind, category: achievement.category, rewardPoints: achievement.rewardPoints },
+        route: "/achievements",
+        createdAt: now,
+      });
     }
   }
 
@@ -263,6 +341,7 @@ function serializeAchievements(legacy) {
     const progress = asWholeNumber(legacy.achievements.progress[achievement.id], 0);
     return {
       id: achievement.id,
+      kind: achievement.kind ?? "honor",
       category: achievement.category,
       name: achievement.name,
       description: achievement.description,
@@ -279,12 +358,16 @@ function serializeAchievementState(runtimeState, newlyAwarded = []) {
   const legacy = normalizeLegacyState(runtimeState);
   return {
     achievementCategories: LEGACY_ACHIEVEMENT_CATEGORIES,
+    achievementKinds: ["honor", "medal"],
     achievements: serializeAchievements(legacy),
+    legacyPerkCategories: LEGACY_PERK_CATEGORIES,
+    legacyPerks: LEGACY_PERKS,
     legacyPoints: legacy.points,
     perkRanks: legacy.perks.ranks,
     newlyAwarded: newlyAwarded.map((achievement) => ({
       id: achievement.id,
       name: achievement.name,
+      kind: achievement.kind ?? "honor",
       category: achievement.category,
       rewardPoints: achievement.rewardPoints,
     })),
@@ -302,6 +385,23 @@ async function loadRuntimeState(client, user) {
     playerState,
     runtimeState: buildMutableRuntimeState(user, playerState),
   };
+}
+
+export function evaluateLegacyAchievementsForRuntime(runtimeState, user, now = Date.now()) {
+  return evaluateAchievements(runtimeState, user, now);
+}
+
+export function getLegacyPerkRank(runtimeState, perkId) {
+  const perk = getLegacyPerk(perkId);
+  if (!perk) return 0;
+  return normalizeRank(asRecord(asRecord(normalizeLegacyState(runtimeState).perks).ranks)[perkId], perk.maxRank);
+}
+
+export function getLegacyPerkEffect(runtimeState, perkId) {
+  const perk = getLegacyPerk(perkId);
+  if (!perk) return 0;
+  const baseEffect = Number(perk.baseEffect);
+  return getLegacyPerkRank(runtimeState, perkId) * (Number.isFinite(baseEffect) ? baseEffect : 0);
 }
 
 export async function getAchievementStateForUser(user) {
@@ -340,6 +440,14 @@ export async function spendLegacyPerkRankForUser(user, payload) {
       ...legacy.perks.ranks,
       [perk.id]: nextRank,
     };
+    addPlayerRecord(runtimeState, {
+      category: "progression",
+      summary: `Legacy rank purchased: ${perk.name ?? perk.id} rank ${nextRank}.`,
+      detail: { perkId: perk.id, nextRank, spent: nextRankCost },
+      source: "legacy-perks",
+      route: "/achievements",
+      timestamp: Date.now(),
+    });
     legacy.points = normalizeLegacyPoints(legacy);
     runtimeState.legacy = legacy;
     await upsertPlayerRuntimeState(client, user.internalId, runtimeState);

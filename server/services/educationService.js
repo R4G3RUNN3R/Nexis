@@ -5,6 +5,7 @@ import { createDefaultPlayerState, findPlayerStateByUserInternalId, upsertPlayer
 import { educationCategories, educationCourseMap, getCourseLabel } from "../data/educationData.js";
 import { addPlayerExperience } from "./progressionService.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
+import { evaluateLegacyAchievementsForRuntime, getLegacyPerkEffect } from "./achievementService.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ADMIN_DURATION_MS = 1000;
@@ -68,7 +69,9 @@ function missingPrereqs(course, completedCourses) {
 
 function durationMs(runtimeState, course, admin) {
   if (admin) return ADMIN_DURATION_MS;
-  const speedBonus = Math.min(65, Math.max(0, asNumber(ensureEducationState(runtimeState).passiveBonuses.educationSpeed, 0)));
+  const educationState = ensureEducationState(runtimeState);
+  const legacyReduction = Math.min(30, Math.max(0, getLegacyPerkEffect(runtimeState, "education-length")));
+  const speedBonus = Math.min(75, Math.max(0, asNumber(educationState.passiveBonuses.educationSpeed, 0) + legacyReduction));
   return Math.max(60 * 1000, Math.round(asNumber(course.durationDays, 1) * DAY_MS * Math.max(0.25, 1 - speedBonus / 100)));
 }
 
@@ -210,6 +213,7 @@ export async function startEducationForUser(user, courseId) {
     nextEducation.activeCourse = { courseId: course.id, categoryId: course.categoryId, startedAt: now, durationMs: ms, completesAt: now + ms, adminFastTrack: admin };
     addPlayerRecord(runtimeState, { category: "education", summary: `Started education: ${course.name}.`, detail: { courseId: course.id, categoryId: course.categoryId, completesAt: now + ms }, source: "education", route: "/education", timestamp: now });
     ensureEducationState(runtimeState);
+    evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, education: serializeEducation(buildMutableRuntimeState(user, playerState), user), message: `${course.name} started.` };
   });
@@ -247,6 +251,7 @@ export async function completeEducationForUser(user, courseId = null) {
     completeCourse(runtimeState, course, now, admin);
     if (ensureEducationState(runtimeState).activeCourse?.courseId === course.id) runtimeState.education.activeCourse = null;
     ensureEducationState(runtimeState);
+    evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, education: serializeEducation(buildMutableRuntimeState(user, playerState), user), message: `${course.name} completed.` };
   });
@@ -262,6 +267,7 @@ export async function adminCompleteEducationForUser(user, payload = {}) {
     for (const id of ids) if (educationCourseMap[id]) completeCourse(runtimeState, educationCourseMap[id], now, true);
     ensureEducationState(runtimeState).activeCourse = null;
     ensureEducationState(runtimeState);
+    evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, education: serializeEducation(buildMutableRuntimeState(user, playerState), user), message: ids.length > 1 ? "All education courses completed for admin testing." : `${getCourseLabel(ids[0])} completed for admin testing.` };
   });

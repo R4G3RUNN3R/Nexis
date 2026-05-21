@@ -8,6 +8,7 @@ import { findUserByInternalId } from "../repositories/usersRepository.js";
 import { createMarketplaceListing, expireOldMarketplaceListings, findMarketplaceListingById, listMarketplaceListings, listMarketplaceListingsBySeller, updateMarketplaceListingStatus } from "../repositories/marketplaceRepository.js";
 import { getCityDemandProfile } from "./liveWorldService.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
+import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asNumber(value, fallback = 0) { const numeric = Number(value); return Number.isFinite(numeric) ? numeric : fallback; }
@@ -137,6 +138,7 @@ export async function createMarketplaceListingForUser(user, payload = {}) {
     const listing = await createMarketplaceListing(client, { sellerInternalId: user.internalId, sellerPublicId: user.publicId, sellerName, itemId, quantity, unitPrice, cityId });
     runtimeState.player.counters = { ...asRecord(runtimeState.player.counters), marketplaceListingsCreated: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.marketplaceListingsCreated, 0) + 1)) };
     addPlayerRecord(runtimeState, { category: "marketplace", summary: `Listed ${getItemDisplayName(itemId)} x${quantity} for ${unitPrice} gold each.`, detail: { itemId, quantity, unitPrice, cityId }, source: "marketplace", route: "/market", timestamp: Date.now() });
+    evaluateLegacyAchievementsForRuntime(runtimeState, user);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, listing: serializeListing(listing, user), marketplace: await buildMarketplacePayload(client, user, runtimeState, readFilters({})), message: `Listed ${getItemDisplayName(itemId)} x${quantity} for ${unitPrice} gold each.` };
   });
@@ -162,6 +164,8 @@ export async function buyMarketplaceListingForUser(user, listingIdInput) {
     sellerState.player.counters = { ...asRecord(sellerState.player.counters), marketplaceSales: Math.max(0, Math.floor(asNumber(sellerState.player.counters?.marketplaceSales, 0) + 1)) };
     addPlayerRecord(sellerState, { category: "marketplace", summary: `Sold ${getItemDisplayName(listing.itemId)} x${listing.quantity} for ${totalPrice} gold.`, detail: { listingId, itemId: listing.itemId, quantity: listing.quantity, totalPrice, buyerPublicId: user.publicId }, source: "marketplace", route: "/market", timestamp: Date.now() });
     await updateMarketplaceListingStatus(client, listing.id, "sold", { buyerInternalId: user.internalId, buyerPublicId: user.publicId, soldAt: Date.now() });
+    evaluateLegacyAchievementsForRuntime(buyerState, user);
+    evaluateLegacyAchievementsForRuntime(sellerState, sellerUser);
     const buyerPlayerState = await upsertPlayerRuntimeState(client, user.internalId, buyerState);
     await upsertPlayerRuntimeState(client, sellerUser.internalId, sellerState);
     return { playerState: buyerPlayerState, listing: serializeListing({ ...listing, status: "sold", soldAt: Date.now() }, user), marketplace: await buildMarketplacePayload(client, user, buyerState, readFilters({})), message: `Bought ${getItemDisplayName(listing.itemId)} x${listing.quantity} for ${totalPrice} gold.` };

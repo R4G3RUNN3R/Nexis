@@ -377,54 +377,130 @@ export const educationCategories: EducationCategory[] = [
   {
     id: "trade",
     name: "Commerce & Trade / Economics",
-    description: "Trade, ledgers, supply lines, and the noble profession of weaponizing paperwork.",
+    description: "Trade, ledgers, supply lines, demand reading, and city-facing profit work.",
     courses: [
       makeCourse("trade", 1, {
-        id: "ledger-basics",
-        name: "Ledger Basics",
-        durationDays: 10,
-        costGold: 1500,
-        description: "Bookkeeping, margins, and not losing coin to stupidity.",
-        rewardKind: "economy",
-        workingStatRewards: { intelligence: 2 },
-        summaryLines: ["Intelligence +2", "Foundation for advanced trade courses"],
+              "id": "ledger-basics",
+              "name": "Ledger Basics",
+              "durationDays": 10,
+              "costGold": 1500,
+              "description": "Bookkeeping, margins, and the discipline of knowing where coin went.",
+              "rewardKind": "economy",
+              "workingStatRewards": {
+                      "intelligence": 2
+              },
+              "systemEffects": [
+                      "Trade record clarity +5%"
+              ],
+              "summaryLines": [
+                      "Trade record clarity +5%",
+                      "Foundation for advanced trade courses",
+                      "Intelligence +2"
+              ]
       }),
       makeCourse("trade", 2, {
-        id: "supply-discipline",
-        name: "Supply Discipline",
-        durationDays: 11,
-        costGold: 1700,
-        description: "Storage logic, movement efficiency, and keeping stock where stock belongs.",
-        rewardKind: "economy",
-        prerequisites: ["ledger-basics"],
-        workingStatRewards: { manualLabor: 2, intelligence: 1 },
-        systemEffects: ["Storage efficiency +5%"],
-        summaryLines: ["Storage efficiency +5%", "Manual Labor +2, Intelligence +1"],
+              "id": "supply-discipline",
+              "name": "Supply Discipline",
+              "durationDays": 11,
+              "costGold": 1700,
+              "description": "Storage logic, stock rotation, and moving goods without losing half the manifest.",
+              "rewardKind": "economy",
+              "prerequisites": [
+                      "ledger-basics"
+              ],
+              "workingStatRewards": {
+                      "manualLabor": 2,
+                      "intelligence": 1
+              },
+              "systemEffects": [
+                      "Storage efficiency +5%"
+              ],
+              "summaryLines": [
+                      "Storage efficiency +5%",
+                      "Manual Labor +2, Intelligence +1"
+              ]
       }),
       makeCourse("trade", 3, {
-        id: "caravan-operations",
-        name: "Caravan Operations",
-        durationDays: 13,
-        costGold: 2200,
-        description: "Trade routes, convoy pacing, cargo security, and surviving greedy roads.",
-        rewardKind: "travel",
-        prerequisites: ["supply-discipline"],
-        workingStatRewards: { manualLabor: 1, intelligence: 2, endurance: 2 },
-        systemEffects: ["Trade route income +4%"],
-        summaryLines: ["Trade route income +4%", "Manual Labor +1, Intelligence +2, Endurance +2"],
+              "id": "caravan-operations",
+              "name": "Caravan Operations",
+              "durationDays": 13,
+              "costGold": 2200,
+              "description": "Convoy pacing, cargo security, and choosing routes that do not invite disaster.",
+              "rewardKind": "travel",
+              "prerequisites": [
+                      "supply-discipline",
+                      "world-geography"
+              ],
+              "workingStatRewards": {
+                      "manualLabor": 1,
+                      "intelligence": 2,
+                      "endurance": 2
+              },
+              "systemEffects": [
+                      "Trade route income +4%"
+              ],
+              "unlocksSystems": [
+                      "trade_route_readiness"
+              ],
+              "summaryLines": [
+                      "Trade route income +4%",
+                      "Improves cargo route readiness",
+                      "Manual Labor +1, Intelligence +2, Endurance +2"
+              ]
       }),
       makeCourse("trade", 4, {
-        id: "merchant-command",
-        name: "Merchant Command",
-        durationDays: 16,
-        costGold: 3000,
-        description: "Negotiation, delegation, and convincing a roomful of traders to respect numbers.",
-        rewardKind: "governance",
-        prerequisites: ["caravan-operations"],
-        workingStatRewards: { intelligence: 3, endurance: 1 },
-        systemEffects: ["Consortium income +5%"],
-        summaryLines: ["Consortium income +5%", "Intelligence +3, Endurance +1"],
+              "id": "demand-reading",
+              "name": "Demand Reading",
+              "durationDays": 14,
+              "costGold": 2500,
+              "description": "City demand, surplus signals, and when a good is worth hauling instead of hoarding.",
+              "rewardKind": "economy",
+              "prerequisites": [
+                      "caravan-operations",
+                      "practical-arithmetic"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 3
+              },
+              "systemEffects": [
+                      "City demand visibility +1"
+              ],
+              "unlocksSystems": [
+                      "city_demand_reading"
+              ],
+              "summaryLines": [
+                      "Improves city demand hints",
+                      "Better market opportunity reads",
+                      "Intelligence +3"
+              ]
       }),
+      makeCourse("trade", 5, {
+              "id": "merchant-command",
+              "name": "Merchant Command",
+              "durationDays": 18,
+              "costGold": 3400,
+              "description": "Delegation, negotiation, and running profitable work without turning every route into a fire drill.",
+              "rewardKind": "governance",
+              "prerequisites": [
+                      "demand-reading",
+                      "institutional-logistics"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 3,
+                      "endurance": 1
+              },
+              "systemEffects": [
+                      "Consortium income +5%"
+              ],
+              "unlocksSystems": [
+                      "trade_mastery"
+              ],
+              "summaryLines": [
+                      "Consortium income +5%",
+                      "Improves company trade planning",
+                      "Intelligence +3, Endurance +1"
+              ]
+      })
     ],
   },
   {
@@ -484,65 +560,235 @@ export const educationCategories: EducationCategory[] = [
   {
     id: "medicine",
     name: "Medical & Biology",
-    description: "Field treatment, recovery care, and cleaning up after everyone else's spectacular choices.",
+    description: "Field treatment, recovery care, practical biology, and hospital-side support.",
     courses: [
       makeCourse("medicine", 1, {
-        id: "field-triage",
-        name: "Field Triage",
-        durationDays: 9,
-        costGold: 1400,
-        description: "Stop bleeding, sort priorities, and try not to faint professionally.",
-        rewardKind: "utility",
-        workingStatRewards: { intelligence: 2, endurance: 1 },
-        summaryLines: ["Intelligence +2, Endurance +1", "Foundation for medical study"],
+              "id": "field-triage",
+              "name": "Field Triage",
+              "durationDays": 9,
+              "costGold": 1400,
+              "description": "Bleeding control, injury sorting, and useful calm when everyone else gets theatrical.",
+              "rewardKind": "utility",
+              "workingStatRewards": {
+                      "intelligence": 2,
+                      "endurance": 1
+              },
+              "systemEffects": [
+                      "Field healing clarity +5%"
+              ],
+              "summaryLines": [
+                      "Field healing clarity +5%",
+                      "Intelligence +2, Endurance +1"
+              ]
       }),
       makeCourse("medicine", 2, {
-        id: "herbal-remedies",
-        name: "Herbal Remedies",
-        durationDays: 11,
-        costGold: 1800,
-        description: "Useful plants, useless plants, and plants with revenge issues.",
-        rewardKind: "utility",
-        prerequisites: ["field-triage"],
-        workingStatRewards: { intelligence: 2, manualLabor: 1 },
-        systemEffects: ["Hospital recovery speed +4%"],
-        summaryLines: ["Hospital recovery speed +4%", "Intelligence +2, Manual Labor +1"],
+              "id": "herbal-remedies",
+              "name": "Herbal Remedies",
+              "durationDays": 11,
+              "costGold": 1800,
+              "description": "Useful plants, dangerous plants, and which ones belong in medicine instead of stew.",
+              "rewardKind": "utility",
+              "prerequisites": [
+                      "field-triage"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2,
+                      "manualLabor": 1
+              },
+              "systemEffects": [
+                      "Hospital recovery speed +4%"
+              ],
+              "summaryLines": [
+                      "Hospital recovery speed +4%",
+                      "Intelligence +2, Manual Labor +1"
+              ]
       }),
       makeCourse("medicine", 3, {
-        id: "ward-management",
-        name: "Ward Management",
-        durationDays: 13,
-        costGold: 2200,
-        description: "Supplies, patient flow, and the administrative side of human bad luck.",
-        rewardKind: "governance",
-        prerequisites: ["herbal-remedies"],
-        workingStatRewards: { intelligence: 3 },
-        systemEffects: ["Medical civic job performance +5%"],
-        summaryLines: ["Medical civic job performance +5%", "Intelligence +3"],
+              "id": "ward-management",
+              "name": "Ward Management",
+              "durationDays": 13,
+              "costGold": 2200,
+              "description": "Supplies, patient flow, and recovery logistics for crowded city wards.",
+              "rewardKind": "governance",
+              "prerequisites": [
+                      "herbal-remedies"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 3
+              },
+              "systemEffects": [
+                      "Medical civic job performance +5%"
+              ],
+              "summaryLines": [
+                      "Medical civic job performance +5%",
+                      "Intelligence +3"
+              ]
       }),
       makeCourse("medicine", 4, {
-        id: "restorative-practice",
-        name: "Restorative Practice",
-        durationDays: 16,
-        costGold: 2900,
-        description: "Long-form recovery care for when brute force stops being a treatment plan.",
-        rewardKind: "utility",
-        prerequisites: ["ward-management"],
-        workingStatRewards: { intelligence: 2, endurance: 2 },
-        systemEffects: ["Hospital time reduced by 5%"],
-        summaryLines: ["Hospital time reduced by 5%", "Intelligence +2, Endurance +2"],
+              "id": "restorative-practice",
+              "name": "Restorative Practice",
+              "durationDays": 16,
+              "costGold": 2900,
+              "description": "Long-form recovery care for serious wounds and exhausting expeditions.",
+              "rewardKind": "utility",
+              "prerequisites": [
+                      "ward-management"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2,
+                      "endurance": 2
+              },
+              "systemEffects": [
+                      "Hospital time reduced by 5%"
+              ],
+              "summaryLines": [
+                      "Hospital time reduced by 5%",
+                      "Intelligence +2, Endurance +2"
+              ]
       }),
+      makeCourse("medicine", 5, {
+              "id": "field-medicine-mastery",
+              "name": "Field Medicine Mastery",
+              "durationDays": 20,
+              "costGold": 3700,
+              "description": "A capstone for making medicine matter in expeditions, recovery, and city support work.",
+              "rewardKind": "utility",
+              "prerequisites": [
+                      "restorative-practice",
+                      "field-survival"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 3,
+                      "endurance": 2
+              },
+              "systemEffects": [
+                      "Medical and recovery outcomes +5%"
+              ],
+              "unlocksSystems": [
+                      "medical_mastery"
+              ],
+              "summaryLines": [
+                      "Medical and recovery outcomes +5%",
+                      "Intelligence +3, Endurance +2",
+                      "Medical capstone"
+              ]
+      })
     ],
   },
   {
     id: "physical",
     name: "Physical Conditioning",
-    description: "Body conditioning, stamina, recovery, and field durability.",
+    description: "Body conditioning, stamina, recovery, and field durability without pretending this is weapon mastery.",
     courses: [
-      makeCourse("physical", 1, { id: "body-conditioning", name: "Body Conditioning", durationDays: 11, costGold: 1700, description: "Body Conditioning develops the physical conditioning track with practical Nexis flavor.", rewardKind: "combat", workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Physical Conditioning progress +5%"], summaryLines: ["Body Conditioning progression", "Visible unlock and specialization support"] }),
-      makeCourse("physical", 2, { id: "stamina-circuits", name: "Stamina Circuits", durationDays: 13, costGold: 2200, description: "Stamina Circuits develops the physical conditioning track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["body-conditioning"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Physical Conditioning progress +5%"], summaryLines: ["Stamina Circuits progression", "Visible unlock and specialization support"] }),
-      makeCourse("physical", 3, { id: "recovery-discipline", name: "Recovery Discipline", durationDays: 15, costGold: 2700, description: "Recovery Discipline develops the physical conditioning track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["stamina-circuits"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Physical Conditioning progress +5%"], summaryLines: ["Recovery Discipline progression", "Visible unlock and specialization support"] }),
-      makeCourse("physical", 4, { id: "conditioning-mastery", name: "Conditioning Mastery", durationDays: 17, costGold: 3200, description: "Conditioning Mastery develops the physical conditioning track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["recovery-discipline", "field-survival"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Physical Conditioning progress +5%"], summaryLines: ["Conditioning Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("physical", 1, {
+              "id": "body-conditioning",
+              "name": "Body Conditioning",
+              "durationDays": 11,
+              "costGold": 1700,
+              "description": "Baseline strength, posture, and controlled exertion for long-term survivability.",
+              "rewardKind": "combat",
+              "workingStatRewards": {
+                      "endurance": 2
+              },
+              "systemEffects": [
+                      "Recovery readiness +3%"
+              ],
+              "summaryLines": [
+                      "Recovery readiness +3%",
+                      "Endurance +2"
+              ]
+      }),
+      makeCourse("physical", 2, {
+              "id": "stamina-circuits",
+              "name": "Stamina Circuits",
+              "durationDays": 13,
+              "costGold": 2200,
+              "description": "Repeated conditioning circuits that improve sustained action under pressure.",
+              "rewardKind": "combat",
+              "prerequisites": [
+                      "body-conditioning"
+              ],
+              "workingStatRewards": {
+                      "endurance": 2,
+                      "manualLabor": 1
+              },
+              "systemEffects": [
+                      "Stamina recovery +3%"
+              ],
+              "summaryLines": [
+                      "Stamina recovery +3%",
+                      "Endurance +2, Manual Labor +1"
+              ]
+      }),
+      makeCourse("physical", 3, {
+              "id": "recovery-discipline",
+              "name": "Recovery Discipline",
+              "durationDays": 15,
+              "costGold": 2700,
+              "description": "Rest cycles, injury management, and returning to duty without heroic stupidity.",
+              "rewardKind": "utility",
+              "prerequisites": [
+                      "stamina-circuits"
+              ],
+              "workingStatRewards": {
+                      "endurance": 3
+              },
+              "systemEffects": [
+                      "Health recovery +4%"
+              ],
+              "summaryLines": [
+                      "Health recovery +4%",
+                      "Endurance +3"
+              ]
+      }),
+      makeCourse("physical", 4, {
+              "id": "field-load-bearing",
+              "name": "Field Load Bearing",
+              "durationDays": 16,
+              "costGold": 3000,
+              "description": "Carrying armor, tools, and supplies while remaining useful at the destination.",
+              "rewardKind": "travel",
+              "prerequisites": [
+                      "recovery-discipline",
+                      "field-survival"
+              ],
+              "workingStatRewards": {
+                      "endurance": 3,
+                      "manualLabor": 2
+              },
+              "systemEffects": [
+                      "Travel fatigue resistance +5%"
+              ],
+              "summaryLines": [
+                      "Travel fatigue resistance +5%",
+                      "Endurance +3, Manual Labor +2"
+              ]
+      }),
+      makeCourse("physical", 5, {
+              "id": "conditioning-mastery",
+              "name": "Conditioning Mastery",
+              "durationDays": 19,
+              "costGold": 3600,
+              "description": "A capstone for durable characters who want recovery and travel stamina to feel earned.",
+              "rewardKind": "combat",
+              "prerequisites": [
+                      "field-load-bearing"
+              ],
+              "workingStatRewards": {
+                      "endurance": 4
+              },
+              "systemEffects": [
+                      "Recovery and fatigue bonuses +5%"
+              ],
+              "unlocksSystems": [
+                      "conditioning_mastery"
+              ],
+              "summaryLines": [
+                      "Recovery and fatigue bonuses +5%",
+                      "Endurance +4",
+                      "Conditioning capstone"
+              ]
+      })
     ],
   },
   {
@@ -550,21 +796,246 @@ export const educationCategories: EducationCategory[] = [
     name: "History & Relics",
     description: "Ruins, relic custody, old wars, and atlas interpretation.",
     courses: [
-      makeCourse("history", 1, { id: "archive-orientation", name: "Archive Orientation", durationDays: 11, costGold: 1700, description: "Archive Orientation develops the history & relics track with practical Nexis flavor.", rewardKind: "travel", prerequisites: ["basic-literacy"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["History progress +5%"], summaryLines: ["Archive Orientation progression", "Visible unlock and specialization support"] }),
-      makeCourse("history", 2, { id: "ruin-provenance", name: "Ruin Provenance", durationDays: 13, costGold: 2200, description: "Ruin Provenance develops the history & relics track with practical Nexis flavor.", rewardKind: "travel", prerequisites: ["historical-awareness"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["History progress +5%"], summaryLines: ["Ruin Provenance progression", "Visible unlock and specialization support"] }),
-      makeCourse("history", 3, { id: "relic-custody", name: "Relic Custody", durationDays: 15, costGold: 2700, description: "Relic Custody develops the history & relics track with practical Nexis flavor.", rewardKind: "travel", prerequisites: ["ruin-provenance"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["History progress +5%"], summaryLines: ["Relic Custody progression", "Visible unlock and specialization support"] }),
-      makeCourse("history", 4, { id: "relic-mastery", name: "Relic Mastery", durationDays: 17, costGold: 3200, description: "Relic Mastery develops the history & relics track with practical Nexis flavor.", rewardKind: "travel", prerequisites: ["relic-custody", "field-investigation"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["History progress +5%"], summaryLines: ["Relic Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("history", 1, {
+              "id": "archive-orientation",
+              "name": "Archive Orientation",
+              "durationDays": 11,
+              "costGold": 1700,
+              "description": "Learning how civic archives organize old sites, claims, and sealed reports.",
+              "rewardKind": "travel",
+              "prerequisites": [
+                      "basic-literacy"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2
+              },
+              "systemEffects": [
+                      "Archive reading +5%"
+              ],
+              "summaryLines": [
+                      "Archive reading +5%",
+                      "Intelligence +2"
+              ]
+      }),
+      makeCourse("history", 2, {
+              "id": "ruin-provenance",
+              "name": "Ruin Provenance",
+              "durationDays": 13,
+              "costGold": 2200,
+              "description": "Identifying who built a ruin, who broke it, and why that matters now.",
+              "rewardKind": "travel",
+              "prerequisites": [
+                      "historical-awareness",
+                      "archive-orientation"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2,
+                      "endurance": 1
+              },
+              "systemEffects": [
+                      "Ruin discovery quality +5%"
+              ],
+              "unlocksSystems": [
+                      "ruin_provenance"
+              ],
+              "summaryLines": [
+                      "Ruin discovery quality +5%",
+                      "Intelligence +2, Endurance +1"
+              ]
+      }),
+      makeCourse("history", 3, {
+              "id": "relic-custody",
+              "name": "Relic Custody",
+              "durationDays": 15,
+              "costGold": 2700,
+              "description": "Handling relic claims, custody chains, and artifacts that should not be pocketed casually.",
+              "rewardKind": "governance",
+              "prerequisites": [
+                      "ruin-provenance"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 3
+              },
+              "systemEffects": [
+                      "Relic contract clarity +5%"
+              ],
+              "summaryLines": [
+                      "Relic contract clarity +5%",
+                      "Intelligence +3"
+              ]
+      }),
+      makeCourse("history", 4, {
+              "id": "battlefield-context",
+              "name": "Battlefield Context",
+              "durationDays": 16,
+              "costGold": 3000,
+              "description": "Reading old battlefields for route danger, claims, and salvage leads.",
+              "rewardKind": "travel",
+              "prerequisites": [
+                      "relic-custody"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2,
+                      "endurance": 1
+              },
+              "systemEffects": [
+                      "Battlefield discovery quality +5%"
+              ],
+              "summaryLines": [
+                      "Battlefield discovery quality +5%",
+                      "Intelligence +2, Endurance +1"
+              ]
+      }),
+      makeCourse("history", 5, {
+              "id": "relic-mastery",
+              "name": "Relic Mastery",
+              "durationDays": 20,
+              "costGold": 3800,
+              "description": "A capstone for turning old places into safer discoveries, better records, and stronger relic work.",
+              "rewardKind": "travel",
+              "prerequisites": [
+                      "battlefield-context",
+                      "field-investigation"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 4
+              },
+              "systemEffects": [
+                      "Relic and ruin outcomes +5%"
+              ],
+              "unlocksSystems": [
+                      "relic_mastery"
+              ],
+              "summaryLines": [
+                      "Relic and ruin outcomes +5%",
+                      "Intelligence +4",
+                      "History capstone"
+              ]
+      })
     ],
   },
   {
     id: "law",
     name: "Law & Governance",
-    description: "Civic law, warrants, petitions, and institutional power.",
+    description: "Civic law, warrants, petitions, institutional access, and public authority.",
     courses: [
-      makeCourse("law", 1, { id: "legal-literacy", name: "Legal Literacy", durationDays: 11, costGold: 1700, description: "Legal Literacy develops the law & governance track with practical Nexis flavor.", rewardKind: "governance", prerequisites: ["civic-fundamentals"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Law progress +5%"], summaryLines: ["Legal Literacy progression", "Visible unlock and specialization support"] }),
-      makeCourse("law", 2, { id: "petition-routing", name: "Petition Routing", durationDays: 13, costGold: 2200, description: "Petition Routing develops the law & governance track with practical Nexis flavor.", rewardKind: "governance", prerequisites: ["legal-literacy"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Law progress +5%"], summaryLines: ["Petition Routing progression", "Visible unlock and specialization support"] }),
-      makeCourse("law", 3, { id: "warrant-procedure", name: "Warrant Procedure", durationDays: 15, costGold: 2700, description: "Warrant Procedure develops the law & governance track with practical Nexis flavor.", rewardKind: "governance", prerequisites: ["petition-routing"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Law progress +5%"], summaryLines: ["Warrant Procedure progression", "Visible unlock and specialization support"] }),
-      makeCourse("law", 4, { id: "governance-mastery", name: "Governance Mastery", durationDays: 17, costGold: 3200, description: "Governance Mastery develops the law & governance track with practical Nexis flavor.", rewardKind: "governance", prerequisites: ["warrant-procedure", "permit-procedure"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Law progress +5%"], summaryLines: ["Governance Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("law", 1, {
+              "id": "legal-literacy",
+              "name": "Legal Literacy",
+              "durationDays": 11,
+              "costGold": 1700,
+              "description": "Reading ordinances, warrants, and civic limits without needing a clerk to translate every line.",
+              "rewardKind": "governance",
+              "prerequisites": [
+                      "civic-fundamentals"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2
+              },
+              "systemEffects": [
+                      "Legal access clarity +5%"
+              ],
+              "summaryLines": [
+                      "Legal access clarity +5%",
+                      "Intelligence +2"
+              ]
+      }),
+      makeCourse("law", 2, {
+              "id": "petition-routing",
+              "name": "Petition Routing",
+              "durationDays": 13,
+              "costGold": 2200,
+              "description": "Knowing which office receives which request before the request becomes a fossil.",
+              "rewardKind": "governance",
+              "prerequisites": [
+                      "legal-literacy"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2,
+                      "endurance": 1
+              },
+              "systemEffects": [
+                      "Petition handling +5%"
+              ],
+              "summaryLines": [
+                      "Petition handling +5%",
+                      "Intelligence +2, Endurance +1"
+              ]
+      }),
+      makeCourse("law", 3, {
+              "id": "warrant-procedure",
+              "name": "Warrant Procedure",
+              "durationDays": 15,
+              "costGold": 2700,
+              "description": "Formal authority, evidence standards, and lawful pressure inside city systems.",
+              "rewardKind": "governance",
+              "prerequisites": [
+                      "petition-routing"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 3
+              },
+              "systemEffects": [
+                      "Civic contract access +5%"
+              ],
+              "unlocksSystems": [
+                      "advanced_civic_contracts"
+              ],
+              "summaryLines": [
+                      "Civic contract access +5%",
+                      "Unlocks stronger civic contract reads",
+                      "Intelligence +3"
+              ]
+      }),
+      makeCourse("law", 4, {
+              "id": "civic-arbitration",
+              "name": "Civic Arbitration",
+              "durationDays": 16,
+              "costGold": 3100,
+              "description": "Resolving disputes between guilds, companies, courts, and citizens without creating a second dispute.",
+              "rewardKind": "governance",
+              "prerequisites": [
+                      "warrant-procedure",
+                      "pressure-control"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2,
+                      "endurance": 2
+              },
+              "systemEffects": [
+                      "Civic dispute success +5%"
+              ],
+              "summaryLines": [
+                      "Civic dispute success +5%",
+                      "Intelligence +2, Endurance +2"
+              ]
+      }),
+      makeCourse("law", 5, {
+              "id": "governance-mastery",
+              "name": "Governance Mastery",
+              "durationDays": 20,
+              "costGold": 3900,
+              "description": "A capstone for players who want authority systems to open because they understand them.",
+              "rewardKind": "governance",
+              "prerequisites": [
+                      "civic-arbitration",
+                      "permit-procedure"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 4
+              },
+              "systemEffects": [
+                      "Governance systems +5%"
+              ],
+              "unlocksSystems": [
+                      "governance_mastery"
+              ],
+              "summaryLines": [
+                      "Governance systems +5%",
+                      "Intelligence +4",
+                      "Law capstone"
+              ]
+      })
     ],
   },
   {
@@ -572,10 +1043,119 @@ export const educationCategories: EducationCategory[] = [
     name: "Psychology & Influence",
     description: "Motives, morale, pressure, persuasion, and room control.",
     courses: [
-      makeCourse("psychology", 1, { id: "motive-reading", name: "Motive Reading", durationDays: 11, costGold: 1700, description: "Motive Reading develops the psychology & influence track with practical Nexis flavor.", rewardKind: "utility", prerequisites: ["basic-literacy"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Psychology progress +5%"], summaryLines: ["Motive Reading progression", "Visible unlock and specialization support"] }),
-      makeCourse("psychology", 2, { id: "pressure-control", name: "Pressure Control", durationDays: 13, costGold: 2200, description: "Pressure Control develops the psychology & influence track with practical Nexis flavor.", rewardKind: "utility", prerequisites: ["motive-reading"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Psychology progress +5%"], summaryLines: ["Pressure Control progression", "Visible unlock and specialization support"] }),
-      makeCourse("psychology", 3, { id: "crew-morale", name: "Crew Morale", durationDays: 15, costGold: 2700, description: "Crew Morale develops the psychology & influence track with practical Nexis flavor.", rewardKind: "utility", prerequisites: ["pressure-control"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Psychology progress +5%"], summaryLines: ["Crew Morale progression", "Visible unlock and specialization support"] }),
-      makeCourse("psychology", 4, { id: "influence-mastery", name: "Influence Mastery", durationDays: 17, costGold: 3200, description: "Influence Mastery develops the psychology & influence track with practical Nexis flavor.", rewardKind: "utility", prerequisites: ["crew-morale", "applied-reasoning"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Psychology progress +5%"], summaryLines: ["Influence Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("psychology", 1, {
+              "id": "motive-reading",
+              "name": "Motive Reading",
+              "durationDays": 11,
+              "costGold": 1700,
+              "description": "Reading motive, hesitation, and the difference between fear and bargaining.",
+              "rewardKind": "utility",
+              "prerequisites": [
+                      "basic-literacy"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2
+              },
+              "systemEffects": [
+                      "Social read quality +5%"
+              ],
+              "summaryLines": [
+                      "Social read quality +5%",
+                      "Intelligence +2"
+              ]
+      }),
+      makeCourse("psychology", 2, {
+              "id": "pressure-control",
+              "name": "Pressure Control",
+              "durationDays": 13,
+              "costGold": 2200,
+              "description": "Keeping control of tense rooms without letting pride drive the cart.",
+              "rewardKind": "utility",
+              "prerequisites": [
+                      "motive-reading"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2,
+                      "endurance": 1
+              },
+              "systemEffects": [
+                      "Pressure handling +5%"
+              ],
+              "summaryLines": [
+                      "Pressure handling +5%",
+                      "Intelligence +2, Endurance +1"
+              ]
+      }),
+      makeCourse("psychology", 3, {
+              "id": "crew-morale",
+              "name": "Crew Morale",
+              "durationDays": 15,
+              "costGold": 2700,
+              "description": "Maintaining group focus for guild operations, convoy work, and hard travel.",
+              "rewardKind": "utility",
+              "prerequisites": [
+                      "pressure-control"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 2,
+                      "endurance": 2
+              },
+              "systemEffects": [
+                      "Group operation stability +5%"
+              ],
+              "summaryLines": [
+                      "Group operation stability +5%",
+                      "Intelligence +2, Endurance +2"
+              ]
+      }),
+      makeCourse("psychology", 4, {
+              "id": "public-influence",
+              "name": "Public Influence",
+              "durationDays": 16,
+              "costGold": 3100,
+              "description": "Public voice, reputation pressure, and getting people to move without a drawn blade.",
+              "rewardKind": "governance",
+              "prerequisites": [
+                      "crew-morale",
+                      "civic-fundamentals"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 3
+              },
+              "systemEffects": [
+                      "Public notice influence +5%"
+              ],
+              "summaryLines": [
+                      "Public notice influence +5%",
+                      "Intelligence +3"
+              ]
+      }),
+      makeCourse("psychology", 5, {
+              "id": "influence-mastery",
+              "name": "Influence Mastery",
+              "durationDays": 20,
+              "costGold": 3900,
+              "description": "A capstone for negotiation, morale, and high-pressure social systems.",
+              "rewardKind": "utility",
+              "prerequisites": [
+                      "public-influence",
+                      "applied-reasoning"
+              ],
+              "workingStatRewards": {
+                      "intelligence": 4
+              },
+              "systemEffects": [
+                      "Influence systems +5%"
+              ],
+              "unlocksSystems": [
+                      "influence_mastery"
+              ],
+              "summaryLines": [
+                      "Influence systems +5%",
+                      "Intelligence +4",
+                      "Influence capstone"
+              ]
+      })
     ],
   },
   {
@@ -583,10 +1163,10 @@ export const educationCategories: EducationCategory[] = [
     name: "Melee Arts",
     description: "Close combat, blades, shields, and heavy strikes.",
     courses: [
-      makeCourse("melee", 1, { id: "blade-footing", name: "Blade Footing", durationDays: 11, costGold: 1700, description: "Blade Footing develops the melee arts track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["drill-square-basics"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Melee Arts progress +5%"], summaryLines: ["Blade Footing progression", "Visible unlock and specialization support"] }),
-      makeCourse("melee", 2, { id: "guard-breaking", name: "Guard Breaking", durationDays: 13, costGold: 2200, description: "Guard Breaking develops the melee arts track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["blade-footing"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Melee Arts progress +5%"], summaryLines: ["Guard Breaking progression", "Visible unlock and specialization support"] }),
-      makeCourse("melee", 3, { id: "close-quarter-drills", name: "Close-Quarter Drills", durationDays: 15, costGold: 2700, description: "Close-Quarter Drills develops the melee arts track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["guard-breaking"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Melee Arts progress +5%"], summaryLines: ["Close-Quarter Drills progression", "Visible unlock and specialization support"] }),
-      makeCourse("melee", 4, { id: "melee-mastery", name: "Melee Mastery", durationDays: 17, costGold: 3200, description: "Melee Mastery develops the melee arts track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["close-quarter-drills"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Melee Arts progress +5%"], summaryLines: ["Melee Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("melee", 1, { id: "blade-footing", name: "Blade Footing", durationDays: 11, costGold: 1700, description: "Blade Footing provides focused melee arts training for Nexis progression.", rewardKind: "combat", prerequisites: ["drill-square-basics"], workingStatRewards: { endurance: 1 }, systemEffects: ["Melee Arts progress +5%"], summaryLines: ["Blade Footing training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("melee", 2, { id: "guard-breaking", name: "Guard Breaking", durationDays: 13, costGold: 2200, description: "Guard Breaking provides focused melee arts training for Nexis progression.", rewardKind: "combat", prerequisites: ["blade-footing"], workingStatRewards: { endurance: 1 }, systemEffects: ["Melee Arts progress +5%"], summaryLines: ["Guard Breaking training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("melee", 3, { id: "close-quarter-drills", name: "Close-Quarter Drills", durationDays: 15, costGold: 2700, description: "Close-Quarter Drills provides focused melee arts training for Nexis progression.", rewardKind: "combat", prerequisites: ["guard-breaking"], workingStatRewards: { endurance: 1 }, systemEffects: ["Melee Arts progress +5%"], summaryLines: ["Close-Quarter Drills training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("melee", 4, { id: "melee-mastery", name: "Melee Mastery", durationDays: 17, costGold: 3200, description: "Melee Mastery provides focused melee arts training for Nexis progression.", rewardKind: "combat", prerequisites: ["close-quarter-drills"], workingStatRewards: { endurance: 1 }, systemEffects: ["Melee Arts progress +5%"], summaryLines: ["Melee Mastery training progress +5%", "Supports linked unlocks and specialization paths"] }),
     ],
   },
   {
@@ -594,10 +1174,10 @@ export const educationCategories: EducationCategory[] = [
     name: "Ranged Arts",
     description: "Bows, crossbows, thrown tools, and line control.",
     courses: [
-      makeCourse("ranged", 1, { id: "range-sighting", name: "Range Sighting", durationDays: 11, costGold: 1700, description: "Range Sighting develops the ranged arts track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["drill-square-basics"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Ranged Arts progress +5%"], summaryLines: ["Range Sighting progression", "Visible unlock and specialization support"] }),
-      makeCourse("ranged", 2, { id: "draw-discipline", name: "Draw Discipline", durationDays: 13, costGold: 2200, description: "Draw Discipline develops the ranged arts track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["range-sighting"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Ranged Arts progress +5%"], summaryLines: ["Draw Discipline progression", "Visible unlock and specialization support"] }),
-      makeCourse("ranged", 3, { id: "volley-coordination", name: "Volley Coordination", durationDays: 15, costGold: 2700, description: "Volley Coordination develops the ranged arts track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["draw-discipline"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Ranged Arts progress +5%"], summaryLines: ["Volley Coordination progression", "Visible unlock and specialization support"] }),
-      makeCourse("ranged", 4, { id: "ranged-mastery", name: "Ranged Mastery", durationDays: 17, costGold: 3200, description: "Ranged Mastery develops the ranged arts track with practical Nexis flavor.", rewardKind: "combat", prerequisites: ["volley-coordination"], workingStatRewards: { intelligence: 0, endurance: 1 }, systemEffects: ["Ranged Arts progress +5%"], summaryLines: ["Ranged Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("ranged", 1, { id: "range-sighting", name: "Range Sighting", durationDays: 11, costGold: 1700, description: "Range Sighting provides focused ranged arts training for Nexis progression.", rewardKind: "combat", prerequisites: ["drill-square-basics"], workingStatRewards: { endurance: 1 }, systemEffects: ["Ranged Arts progress +5%"], summaryLines: ["Range Sighting training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("ranged", 2, { id: "draw-discipline", name: "Draw Discipline", durationDays: 13, costGold: 2200, description: "Draw Discipline provides focused ranged arts training for Nexis progression.", rewardKind: "combat", prerequisites: ["range-sighting"], workingStatRewards: { endurance: 1 }, systemEffects: ["Ranged Arts progress +5%"], summaryLines: ["Draw Discipline training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("ranged", 3, { id: "volley-coordination", name: "Volley Coordination", durationDays: 15, costGold: 2700, description: "Volley Coordination provides focused ranged arts training for Nexis progression.", rewardKind: "combat", prerequisites: ["draw-discipline"], workingStatRewards: { endurance: 1 }, systemEffects: ["Ranged Arts progress +5%"], summaryLines: ["Volley Coordination training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("ranged", 4, { id: "ranged-mastery", name: "Ranged Mastery", durationDays: 17, costGold: 3200, description: "Ranged Mastery provides focused ranged arts training for Nexis progression.", rewardKind: "combat", prerequisites: ["volley-coordination"], workingStatRewards: { endurance: 1 }, systemEffects: ["Ranged Arts progress +5%"], summaryLines: ["Ranged Mastery training progress +5%", "Supports linked unlocks and specialization paths"] }),
     ],
   },
   {
@@ -605,10 +1185,10 @@ export const educationCategories: EducationCategory[] = [
     name: "Arcane Studies",
     description: "Wards, sigils, focus discipline, and relic-safe channeling.",
     courses: [
-      makeCourse("arcane", 1, { id: "sigil-literacy", name: "Sigil Literacy", durationDays: 11, costGold: 1700, description: "Sigil Literacy develops the arcane studies track with practical Nexis flavor.", rewardKind: "utility", prerequisites: ["basic-literacy"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Arcane Studies progress +5%"], summaryLines: ["Sigil Literacy progression", "Visible unlock and specialization support"] }),
-      makeCourse("arcane", 2, { id: "focus-handling", name: "Focus Handling", durationDays: 13, costGold: 2200, description: "Focus Handling develops the arcane studies track with practical Nexis flavor.", rewardKind: "utility", prerequisites: ["sigil-literacy"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Arcane Studies progress +5%"], summaryLines: ["Focus Handling progression", "Visible unlock and specialization support"] }),
-      makeCourse("arcane", 3, { id: "ward-geometry", name: "Ward Geometry", durationDays: 15, costGold: 2700, description: "Ward Geometry develops the arcane studies track with practical Nexis flavor.", rewardKind: "utility", prerequisites: ["focus-handling", "world-geography"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Arcane Studies progress +5%"], summaryLines: ["Ward Geometry progression", "Visible unlock and specialization support"] }),
-      makeCourse("arcane", 4, { id: "arcane-mastery", name: "Arcane Mastery", durationDays: 17, costGold: 3200, description: "Arcane Mastery develops the arcane studies track with practical Nexis flavor.", rewardKind: "utility", prerequisites: ["ward-geometry", "historical-awareness"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Arcane Studies progress +5%"], summaryLines: ["Arcane Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("arcane", 1, { id: "sigil-literacy", name: "Sigil Literacy", durationDays: 11, costGold: 1700, description: "Sigil Literacy provides focused arcane studies training for Nexis progression.", rewardKind: "utility", prerequisites: ["basic-literacy"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Arcane Studies progress +5%"], summaryLines: ["Sigil Literacy training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("arcane", 2, { id: "focus-handling", name: "Focus Handling", durationDays: 13, costGold: 2200, description: "Focus Handling provides focused arcane studies training for Nexis progression.", rewardKind: "utility", prerequisites: ["sigil-literacy"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Arcane Studies progress +5%"], summaryLines: ["Focus Handling training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("arcane", 3, { id: "ward-geometry", name: "Ward Geometry", durationDays: 15, costGold: 2700, description: "Ward Geometry provides focused arcane studies training for Nexis progression.", rewardKind: "utility", prerequisites: ["focus-handling", "world-geography"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Arcane Studies progress +5%"], summaryLines: ["Ward Geometry training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("arcane", 4, { id: "arcane-mastery", name: "Arcane Mastery", durationDays: 17, costGold: 3200, description: "Arcane Mastery provides focused arcane studies training for Nexis progression.", rewardKind: "utility", prerequisites: ["ward-geometry", "historical-awareness"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Arcane Studies progress +5%"], summaryLines: ["Arcane Mastery training progress +5%", "Supports linked unlocks and specialization paths"] }),
     ],
   },
   {
@@ -616,10 +1196,10 @@ export const educationCategories: EducationCategory[] = [
     name: "Craftsmanship & Artifice",
     description: "Tools, repairs, materials, mechanisms, and practical artifice.",
     courses: [
-      makeCourse("craftsmanship", 1, { id: "tool-use-foundations", name: "Tool Use Foundations", durationDays: 11, costGold: 1700, description: "Tool Use Foundations develops the craftsmanship & artifice track with practical Nexis flavor.", rewardKind: "economy", prerequisites: ["practical-arithmetic"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Craftsmanship progress +5%"], summaryLines: ["Tool Use Foundations progression", "Visible unlock and specialization support"] }),
-      makeCourse("craftsmanship", 2, { id: "material-sorting", name: "Material Sorting", durationDays: 13, costGold: 2200, description: "Material Sorting develops the craftsmanship & artifice track with practical Nexis flavor.", rewardKind: "economy", prerequisites: ["tool-use-foundations"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Craftsmanship progress +5%"], summaryLines: ["Material Sorting progression", "Visible unlock and specialization support"] }),
-      makeCourse("craftsmanship", 3, { id: "repair-discipline", name: "Repair Discipline", durationDays: 15, costGold: 2700, description: "Repair Discipline develops the craftsmanship & artifice track with practical Nexis flavor.", rewardKind: "economy", prerequisites: ["material-sorting"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Craftsmanship progress +5%"], summaryLines: ["Repair Discipline progression", "Visible unlock and specialization support"] }),
-      makeCourse("craftsmanship", 4, { id: "artifice-mastery", name: "Artifice Mastery", durationDays: 17, costGold: 3200, description: "Artifice Mastery develops the craftsmanship & artifice track with practical Nexis flavor.", rewardKind: "economy", prerequisites: ["repair-discipline", "applied-ledgers"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Craftsmanship progress +5%"], summaryLines: ["Artifice Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("craftsmanship", 1, { id: "tool-use-foundations", name: "Tool Use Foundations", durationDays: 11, costGold: 1700, description: "Tool Use Foundations provides focused craftsmanship & artifice training for Nexis progression.", rewardKind: "economy", prerequisites: ["practical-arithmetic"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Craftsmanship progress +5%"], summaryLines: ["Tool Use Foundations training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("craftsmanship", 2, { id: "material-sorting", name: "Material Sorting", durationDays: 13, costGold: 2200, description: "Material Sorting provides focused craftsmanship & artifice training for Nexis progression.", rewardKind: "economy", prerequisites: ["tool-use-foundations"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Craftsmanship progress +5%"], summaryLines: ["Material Sorting training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("craftsmanship", 3, { id: "repair-discipline", name: "Repair Discipline", durationDays: 15, costGold: 2700, description: "Repair Discipline provides focused craftsmanship & artifice training for Nexis progression.", rewardKind: "economy", prerequisites: ["material-sorting"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Craftsmanship progress +5%"], summaryLines: ["Repair Discipline training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("craftsmanship", 4, { id: "artifice-mastery", name: "Artifice Mastery", durationDays: 17, costGold: 3200, description: "Artifice Mastery provides focused craftsmanship & artifice training for Nexis progression.", rewardKind: "economy", prerequisites: ["repair-discipline", "applied-ledgers"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Craftsmanship progress +5%"], summaryLines: ["Artifice Mastery training progress +5%", "Supports linked unlocks and specialization paths"] }),
     ],
   },
   {
@@ -627,10 +1207,10 @@ export const educationCategories: EducationCategory[] = [
     name: "Diplomacy & Influence",
     description: "Negotiation, court pressure, public voice, and formal access.",
     courses: [
-      makeCourse("diplomacy", 1, { id: "formal-address", name: "Formal Address", durationDays: 11, costGold: 1700, description: "Formal Address develops the diplomacy & influence track with practical Nexis flavor.", rewardKind: "governance", prerequisites: ["civic-fundamentals"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Diplomacy progress +5%"], summaryLines: ["Formal Address progression", "Visible unlock and specialization support"] }),
-      makeCourse("diplomacy", 2, { id: "negotiated-access", name: "Negotiated Access", durationDays: 13, costGold: 2200, description: "Negotiated Access develops the diplomacy & influence track with practical Nexis flavor.", rewardKind: "governance", prerequisites: ["formal-address"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Diplomacy progress +5%"], summaryLines: ["Negotiated Access progression", "Visible unlock and specialization support"] }),
-      makeCourse("diplomacy", 3, { id: "envoy-practice", name: "Envoy Practice", durationDays: 15, costGold: 2700, description: "Envoy Practice develops the diplomacy & influence track with practical Nexis flavor.", rewardKind: "governance", prerequisites: ["negotiated-access", "world-geography"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Diplomacy progress +5%"], summaryLines: ["Envoy Practice progression", "Visible unlock and specialization support"] }),
-      makeCourse("diplomacy", 4, { id: "diplomacy-mastery", name: "Diplomacy Mastery", durationDays: 17, costGold: 3200, description: "Diplomacy Mastery develops the diplomacy & influence track with practical Nexis flavor.", rewardKind: "governance", prerequisites: ["envoy-practice", "influence-mastery"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Diplomacy progress +5%"], summaryLines: ["Diplomacy Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("diplomacy", 1, { id: "formal-address", name: "Formal Address", durationDays: 11, costGold: 1700, description: "Formal Address provides focused diplomacy & influence training for Nexis progression.", rewardKind: "governance", prerequisites: ["civic-fundamentals"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Diplomacy progress +5%"], summaryLines: ["Formal Address training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("diplomacy", 2, { id: "negotiated-access", name: "Negotiated Access", durationDays: 13, costGold: 2200, description: "Negotiated Access provides focused diplomacy & influence training for Nexis progression.", rewardKind: "governance", prerequisites: ["formal-address"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Diplomacy progress +5%"], summaryLines: ["Negotiated Access training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("diplomacy", 3, { id: "envoy-practice", name: "Envoy Practice", durationDays: 15, costGold: 2700, description: "Envoy Practice provides focused diplomacy & influence training for Nexis progression.", rewardKind: "governance", prerequisites: ["negotiated-access", "world-geography"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Diplomacy progress +5%"], summaryLines: ["Envoy Practice training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("diplomacy", 4, { id: "diplomacy-mastery", name: "Diplomacy Mastery", durationDays: 17, costGold: 3200, description: "Diplomacy Mastery provides focused diplomacy & influence training for Nexis progression.", rewardKind: "governance", prerequisites: ["envoy-practice", "influence-mastery"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Diplomacy progress +5%"], summaryLines: ["Diplomacy Mastery training progress +5%", "Supports linked unlocks and specialization paths"] }),
     ],
   },
   {
@@ -638,10 +1218,10 @@ export const educationCategories: EducationCategory[] = [
     name: "Maritime Training",
     description: "Ports, tides, manifests, escort lanes, and Blackharbor travel literacy.",
     courses: [
-      makeCourse("maritime", 1, { id: "dock-procedure", name: "Dock Procedure", durationDays: 11, costGold: 1700, description: "Dock Procedure develops the maritime training track with practical Nexis flavor.", rewardKind: "travel", prerequisites: ["world-geography"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Maritime Training progress +5%"], summaryLines: ["Dock Procedure progression", "Visible unlock and specialization support"] }),
-      makeCourse("maritime", 2, { id: "manifest-reading", name: "Manifest Reading", durationDays: 13, costGold: 2200, description: "Manifest Reading develops the maritime training track with practical Nexis flavor.", rewardKind: "travel", prerequisites: ["dock-procedure", "practical-arithmetic"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Maritime Training progress +5%"], summaryLines: ["Manifest Reading progression", "Visible unlock and specialization support"] }),
-      makeCourse("maritime", 3, { id: "escort-lanes", name: "Escort Lanes", durationDays: 15, costGold: 2700, description: "Escort Lanes develops the maritime training track with practical Nexis flavor.", rewardKind: "travel", prerequisites: ["manifest-reading"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Maritime Training progress +5%"], summaryLines: ["Escort Lanes progression", "Visible unlock and specialization support"] }),
-      makeCourse("maritime", 4, { id: "maritime-mastery", name: "Maritime Mastery", durationDays: 17, costGold: 3200, description: "Maritime Mastery develops the maritime training track with practical Nexis flavor.", rewardKind: "travel", prerequisites: ["escort-lanes", "route-surveying"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Maritime Training progress +5%"], summaryLines: ["Maritime Mastery progression", "Visible unlock and specialization support"] }),
+      makeCourse("maritime", 1, { id: "dock-procedure", name: "Dock Procedure", durationDays: 11, costGold: 1700, description: "Dock Procedure provides focused maritime training training for Nexis progression.", rewardKind: "travel", prerequisites: ["world-geography"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Maritime Training progress +5%"], summaryLines: ["Dock Procedure training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("maritime", 2, { id: "manifest-reading", name: "Manifest Reading", durationDays: 13, costGold: 2200, description: "Manifest Reading provides focused maritime training training for Nexis progression.", rewardKind: "travel", prerequisites: ["dock-procedure", "practical-arithmetic"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Maritime Training progress +5%"], summaryLines: ["Manifest Reading training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("maritime", 3, { id: "escort-lanes", name: "Escort Lanes", durationDays: 15, costGold: 2700, description: "Escort Lanes provides focused maritime training training for Nexis progression.", rewardKind: "travel", prerequisites: ["manifest-reading"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Maritime Training progress +5%"], summaryLines: ["Escort Lanes training progress +5%", "Supports linked unlocks and specialization paths"] }),
+      makeCourse("maritime", 4, { id: "maritime-mastery", name: "Maritime Mastery", durationDays: 17, costGold: 3200, description: "Maritime Mastery provides focused maritime training training for Nexis progression.", rewardKind: "travel", prerequisites: ["escort-lanes", "route-surveying"], workingStatRewards: { intelligence: 1, endurance: 1 }, systemEffects: ["Maritime Training progress +5%"], summaryLines: ["Maritime Mastery training progress +5%", "Supports linked unlocks and specialization paths"] }),
     ],
   }
 ];

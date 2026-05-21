@@ -8,6 +8,7 @@ import { getItemDefinition, getItemDisplayName } from "../data/itemData.js";
 import { getEquipmentStatTotalsForRuntimeState } from "./itemService.js";
 import { getMaintenanceCombatBonus } from "./itemAdvancedService.js";
 import { getScaledSkillCombat, getScaledSkillForUse, getSlottedSkillIds, grantSkillXp, syncUnlockedSkills } from "./skillService.js";
+import { getLegacyPerkEffect } from "./achievementService.js";
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -122,6 +123,11 @@ function applyPassiveEffects(runtimeState) {
     initiativeBonus: 0,
     maxHealthBonus: 0,
   };
+  effects.damageMultiplier += getLegacyPerkEffect(runtimeState, "brawn") / 100;
+  effects.mitigationBonus += getLegacyPerkEffect(runtimeState, "protection") / 100;
+  effects.accuracyBonus += getLegacyPerkEffect(runtimeState, "sharpness") / 2;
+  effects.evadeBonus += getLegacyPerkEffect(runtimeState, "evasion") / 2;
+  effects.critBonus += getLegacyPerkEffect(runtimeState, "critical-rate");
   for (const skillId of passiveIds) {
     const skill = getSkillDefinition(skillId);
     if (!skill) continue;
@@ -180,7 +186,8 @@ function buildPlayerCombatant(runtimeState, name = "You") {
     effects[pendingCombat.effect] = asNumber(effects[pendingCombat.effect], 0) + asNumber(pendingCombat.amount, 0);
   }
   const combinedPassive = { ids: passive.ids, effects };
-  const maxHealth = Math.max(30, asNumber(stats.maxHealth, 100) + asNumber(effects.maxHealthBonus, 0) + asNumber(equipment.stats?.maxHealth, 0));
+  const vitalReserveMultiplier = 1 + Math.min(0.3, Math.max(0, getLegacyPerkEffect(runtimeState, "vital-reserve") / 100));
+  const maxHealth = Math.max(30, Math.round((asNumber(stats.maxHealth, 100) + asNumber(effects.maxHealthBonus, 0) + asNumber(equipment.stats?.maxHealth, 0)) * vitalReserveMultiplier));
   return {
     side: "player",
     name,
@@ -457,8 +464,10 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
     itemBuffs.lastConsumedCombatBuff = { ...player.pendingCombatItem, consumedAt: now, context: context };
     playerRecord.itemBuffs = itemBuffs;
   }
+  const playerWeaponActions = log.filter((entry) => entry.actor === player.name && ["hit", "crit", "miss"].includes(entry.outcome)).length;
   playerRecord.counters = {
     ...asRecord(playerRecord.counters),
+    weaponActions: Math.max(0, Math.floor(asNumber(playerRecord.counters?.weaponActions, 0))) + playerWeaponActions,
     combatRoundsResolved: Math.max(0, Math.floor(asNumber(playerRecord.counters?.combatRoundsResolved, 0))) + log.length,
     combatWins: Math.max(0, Math.floor(asNumber(playerRecord.counters?.combatWins, 0))) + (winner === "player" ? 1 : 0),
     combatLosses: Math.max(0, Math.floor(asNumber(playerRecord.counters?.combatLosses, 0))) + (winner === "opponent" ? 1 : 0),

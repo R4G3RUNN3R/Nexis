@@ -250,6 +250,17 @@ export default function Education() {
   const externalPrerequisites = (selectedCourse.prerequisites ?? []).filter(
     (courseId) => educationCourseMap[courseId]?.categoryId !== selectedCourse.categoryId,
   );
+  const selectedMissingPrerequisites = (selectedCourse.prerequisites ?? []).filter((courseId) => !education.isCourseCompleted(courseId));
+  const selectedStatus = education.isCourseCompleted(selectedCourse.id)
+    ? "completed"
+    : education.activeCourse?.courseId === selectedCourse.id
+      ? "current"
+      : selectedMissingPrerequisites.length
+        ? "locked"
+        : "available";
+  const selectedLockReason = selectedMissingPrerequisites.length
+    ? `Missing required education: ${selectedMissingPrerequisites.map((courseId) => educationCourseMap[courseId]?.name ?? courseId).join(", ")}.`
+    : null;
 
   const [bannerRemainingMs, setBannerRemainingMs] = useState(() => education.getRemainingMs());
 
@@ -373,6 +384,32 @@ export default function Education() {
               <div className="edu-detail-card__body">
                 <div className="edu-detail-card__course-title">{selectedCourse.name}</div>
                 <div className="edu-detail-card__description">{selectedCourse.description}</div>
+
+                <div className={`edu-lock-banner edu-lock-banner--${selectedStatus}`}>
+                  <strong>Status: {formatEducationKey(selectedStatus)}</strong>
+                  {selectedLockReason ? <span>Reason: {selectedLockReason}</span> : <span>{selectedStatus === "completed" ? "This requirement is complete." : selectedStatus === "current" ? "This course is in progress." : "Available to start."}</span>}
+                  {selectedMissingPrerequisites.length ? (
+                    <div className="edu-lock-banner__paths">
+                      Unlock path:
+                      {selectedMissingPrerequisites.map((courseId) => {
+                        const prerequisiteCourse = educationCourseMap[courseId];
+                        return (
+                          <button
+                            key={courseId}
+                            type="button"
+                            className="edu-lock-banner__path"
+                            onClick={() => {
+                              if (prerequisiteCourse?.categoryId) setSelectedCategoryId(prerequisiteCourse.categoryId);
+                              setSelectedCourseId(courseId);
+                            }}
+                          >
+                            {prerequisiteCourse?.name ?? courseId}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
 
                 <div className="edu-detail-section">
                   <div className="edu-detail-section__label">Learning outcome:</div>

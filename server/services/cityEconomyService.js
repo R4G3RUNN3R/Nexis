@@ -18,6 +18,7 @@ import {
 } from "../data/cityEconomyData.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
 import { getItemDisplayName, getItemSummary } from "../data/itemData.js";
+import { getCourseLabel } from "../data/educationData.js";
 import { ensureShadowState, getCityDemandProfile, spendShadow } from "./liveWorldService.js";
 
 const MAX_PURCHASE_QUANTITY = 99;
@@ -134,6 +135,10 @@ function getMissingCourses(runtimeState, requiredCourses = []) {
   return requiredCourses.filter((courseId) => !completed.has(courseId));
 }
 
+function describeCourseList(courseIds) {
+  return courseIds.map((courseId) => getCourseLabel(courseId)).join(", ");
+}
+
 function addLegacyEntry(runtimeState, entry) {
   const legacy = asRecord(runtimeState.legacy);
   const visibleEntries = asArray(legacy.visibleEntries);
@@ -242,7 +247,7 @@ function serializeLegalSellOffer(good, runtimeState, context, quantity = 1) {
   if (!context.isCurrentCity) reasons.push(`Travel to ${context.city.name} to sell to this market.`);
   if (unitPrice === null) reasons.push(`${context.city.name} is not buying this good right now.`);
   if (ownedQuantity < quantity) reasons.push(`You have ${ownedQuantity}; selling ${quantity} requires more stock.`);
-  if (missingCourses.length) reasons.push(`Requires ${missingCourses.join(", ")} to sell this trade lot confidently.`);
+  if (missingCourses.length) reasons.push(`Requires ${describeCourseList(missingCourses)} to sell this trade lot confidently.`);
   const bestDestination = getBestLegalDestination(good, context.cityId, runtimeState);
 
   return {
@@ -304,7 +309,7 @@ function serializeTradeOpportunities(profile, runtimeState, discountPercent) {
       expectedMargin: bestDestination.price - buyPrice,
       requiredCourses: good.requiredCourses ?? [],
       missingCourses,
-      lockReason: missingCourses.length ? `Requires ${missingCourses.join(", ")} to use this route cleanly.` : null,
+      lockReason: missingCourses.length ? `Requires ${describeCourseList(missingCourses)} to use this route cleanly.` : null,
       note: good.note,
     });
   }
@@ -367,7 +372,7 @@ function serializeStockItem(stockItem, runtimeState, context, quantity = 1, mark
   if (context.inTransit) reasons.push("Finish current travel before buying local goods.");
   if (!context.isCurrentCity) reasons.push(`Travel to ${context.city.name} to buy this stock.`);
   if (standingMissing > 0) reasons.push(`Requires ${minimumStanding} ${context.city.name} standing. Current standing: ${context.standing.value}.`);
-  if (missingCourses.length) reasons.push(`Requires ${missingCourses.join(", ")}.`);
+  if (missingCourses.length) reasons.push(`Requires ${describeCourseList(missingCourses)}.`);
   if (gold < totalPrice) reasons.push(`Requires ${totalPrice} gold. Current gold: ${gold}.`);
 
   return {
@@ -467,7 +472,7 @@ function serializeBlackMarketSellOffer(fenceItem, blackMarket, runtimeState, con
   if (!context.isCurrentCity) reasons.push(`Travel to ${context.city.name} to use this under-market.`);
   if (ownedQuantity < quantity) reasons.push(`You have ${ownedQuantity}; fencing ${quantity} requires more stock.`);
   if (standingMissing > 0) reasons.push(`Requires ${minimumStanding} ${context.city.name} standing. Current standing: ${context.standing.value}.`);
-  if (missingCourses.length) reasons.push(`Requires ${missingCourses.join(", ")} to fence this safely.`);
+  if (missingCourses.length) reasons.push(`Requires ${describeCourseList(missingCourses)} to fence this safely.`);
   return {
     itemId: fenceItem.itemId,
     item: getItemSummary(fenceItem.itemId),
@@ -506,7 +511,7 @@ function serializeSpecial(special, runtimeState, now = Date.now()) {
   if (context.inTransit) reasons.push("Finish current travel before using city services.");
   if (!context.isCurrentCity) reasons.push(`Travel to ${context.city.name} to use this city special.`);
   if (standingMissing > 0) reasons.push(`Requires ${minimumStanding} ${context.city.name} standing. Current standing: ${context.standing.value}.`);
-  if (missingCourses.length) reasons.push(`Requires ${missingCourses.join(", ")}.`);
+  if (missingCourses.length) reasons.push(`Requires ${describeCourseList(missingCourses)}.`);
   if (cooldownRemainingMs > 0) reasons.push("This city service is cooling down.");
   if (gold < costGold) reasons.push(`Requires ${costGold} gold. Current gold: ${gold}.`);
 

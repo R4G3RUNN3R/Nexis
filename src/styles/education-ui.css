@@ -485,3 +485,53 @@
 .edu-category-card--available { border-color: #7a734d; }
 .edu-category-card--locked { opacity: 0.72; }
 .edu-category-card--completed { border-color: #668a50; }
+
+.edu-lock-banner {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #343b35;
+  background: #101511;
+  color: #d9e0d7;
+  font-size: 13px;
+}
+
+.edu-lock-banner strong {
+  color: #f0dfaa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.edu-lock-banner--locked {
+  border-color: #6c5140;
+  background: #18120f;
+}
+
+.edu-lock-banner--available {
+  border-color: #5b623a;
+}
+
+.edu-lock-banner--current {
+  border-color: #4e6f86;
+}
+
+.edu-lock-banner--completed {
+  border-color: #4f7b45;
+}
+
+.edu-lock-banner__paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.edu-lock-banner__path {
+  border: 1px solid rgba(216, 199, 139, 0.32);
+  background: rgba(216, 199, 139, 0.08);
+  color: #f0dfaa;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
