@@ -32,12 +32,23 @@ export async function findMarketplaceListingById(client, listingId, options = {}
   return mapListingRow(result.rows[0]);
 }
 export async function listMarketplaceListings(client, filters = {}) {
-  const where = ["status = 'active'", "expires_at > NOW()"];
+  const status = filters.status && filters.status !== "any" ? String(filters.status) : "active";
+  const where = [];
   const params = [];
   function add(value, clause) { params.push(value); where.push(clause.replace("?", `$${params.length}`)); }
+  add(status, "status = ?");
+  if (status === "active") where.push("expires_at > NOW()");
   if (filters.cityId) add(filters.cityId, "city_id = ?");
   if (filters.itemId) add(filters.itemId, "item_id = ?");
-  const result = await client.query(`SELECT * FROM marketplace_listings WHERE ${where.join(" AND ")} ORDER BY unit_price ASC, created_at DESC LIMIT 80`, params);
+  const result = await client.query(`SELECT * FROM marketplace_listings WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT 160`, params);
+  return result.rows.map(mapListingRow);
+}
+
+export async function listMarketplaceListingsBySeller(client, sellerInternalId) {
+  const result = await client.query(
+    `SELECT * FROM marketplace_listings WHERE seller_internal_id = $1 ORDER BY created_at DESC LIMIT 80`,
+    [sellerInternalId],
+  );
   return result.rows.map(mapListingRow);
 }
 export async function updateMarketplaceListingStatus(client, listingId, status, fields = {}) {

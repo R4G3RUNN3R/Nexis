@@ -180,6 +180,7 @@ function InventoryDetail({ row, formMode, sendTarget, sendQuantity, marketQuanti
         {item.armorSet ? <span>Set: {item.armorSet.name}</span> : null}
         {item.allowedVisualSlots?.length ? <span>Wear slot: {item.allowedVisualSlots.map(formatSlot).join(" / ")}</span> : null}
         <span>Source: {item.sourceCity !== "neutral" ? formatSlot(item.sourceCity) : "General"}</span>
+        {item.acquisitionPaths?.length ? <span>Find through: {item.acquisitionPaths.slice(0, 2).map((path) => path.category).join(" | ")}</span> : null}
         <span>Sell value: {item.valueSell} gold</span>
         {row.listedQuantity ? <span>Active market listings: x{row.listedQuantity}</span> : null}
       </div>
@@ -422,6 +423,7 @@ export default function InventoryPage() {
 
   const armorReductions = (equipmentTotals.armorReductions ?? {}) as Record<string, number>;
   const weaponStats = (equipmentTotals.weaponStats ?? {}) as Record<string, unknown>;
+  const wardrobeItems = inventoryEntries.filter((entry) => entry.item?.category === "Clothing");
   const armorSets = Array.isArray(equipmentTotals.armorSets) ? equipmentTotals.armorSets as Array<{ name?: string; count?: number; activeBonuses?: Array<{ label?: string }> }> : [];
 
   return (
@@ -480,6 +482,9 @@ export default function InventoryPage() {
           </ContentPanel>
           <ContentPanel title="Worn Clothing">
             <div className="inv-compact-list">{visualEquipment.length ? visualEquipment.map((slot) => <div key={slot.slot} className="inv-slot-line"><span>{formatSlot(slot.slot)}</span><strong>{slot.item?.displayName ?? "Empty"}</strong></div>) : <div className="inv-cat-row inv-cat-row--empty">No visual slots loaded.</div>}</div>
+          </ContentPanel>
+          <ContentPanel title="Wardrobe">
+            <div className="inv-compact-list">{wardrobeItems.length ? wardrobeItems.slice(0, 8).map((entry) => <div key={`wardrobe-${entry.itemId}`} className="inv-slot-line"><span>{entry.item?.allowedVisualSlots?.map(formatSlot).join("/") ?? "Visual"}</span><strong>{entry.item?.displayName ?? entry.itemId} x{entry.quantity}</strong></div>) : <div className="inv-cat-row inv-cat-row--empty">No carried clothing. City markets, prestige notices, expeditions, and player listings can supply visual gear.</div>}</div>
           </ContentPanel>
           <ContentPanel title="Gear Summary">
             <div className="info-list">

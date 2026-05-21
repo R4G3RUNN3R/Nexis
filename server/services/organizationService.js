@@ -513,18 +513,18 @@ function buildConsortiumOverview(organization, derived) {
 function buildGuildAssistanceOpportunities(organization, derived) {
   const reputation = asInt(derived.guildPassives?.reputation, 0);
   return [
-    { key: "convoy_defense", label: "Convoy Defense", summary: "Escort consortium freight through dangerous lanes.", guildReward: "+reputation, treasury gold, operation history", consortiumReward: "hazard reduction and better route stability", recommendedReputation: 0, available: true },
-    { key: "ruin_escort", label: "Ruin Escort", summary: "Guard relic brokers, surveyors, or salvage crews in contested sites.", guildReward: "+prestige and expedition payout quality", consortiumReward: "safer retrieval and stronger contract completion", recommendedReputation: 150, available: reputation >= 150 },
-    { key: "ward_suppression", label: "Ward Suppression", summary: "Contain unstable arcane routes before cargo crews enter.", guildReward: "+city standing and operation record", consortiumReward: "reduced route losses", recommendedReputation: 300, available: reputation >= 300 },
+    { key: "convoy_defense", label: "Convoy Defense", summary: "Escort consortium freight through dangerous lanes; piercing or bludgeoning protection improves readiness.", guildReward: "+reputation, treasury gold, operation history, gear reward bundles", consortiumReward: "hazard reduction, better route stability, and safer item cargo movement", recommendedReputation: 0, available: true, rewardCategory: "convoy gear and materials" },
+    { key: "ruin_escort", label: "Ruin Escort", summary: "Guard relic brokers, surveyors, or salvage crews in contested sites; magical protection and field consumables are recommended.", guildReward: "+prestige, expedition payout quality, and relic gear chances", consortiumReward: "safer retrieval, stronger contract completion, and better relic stock", recommendedReputation: 150, available: reputation >= 150, rewardCategory: "relic gear and manuals" },
+    { key: "ward_suppression", label: "Ward Suppression", summary: "Contain unstable arcane routes before cargo crews enter; magical reduction and Ward Chalk are called out.", guildReward: "+city standing, operation record, and ward supply bundles", consortiumReward: "reduced route losses and steadier arcane cargo", recommendedReputation: 300, available: reputation >= 300, rewardCategory: "ward gear and consumables" },
   ];
 }
 
 function buildConsortiumAssistanceOpportunities(organization, derived) {
   const hazard = buildConsortiumHazardState(organization, derived);
   return [
-    { key: "guild_convoy_defense", label: "Hire Guild: Convoy Defense", summary: "Use a guild escort to raise cover on exposed logistics operations.", guildReward: "reputation and payout", consortiumReward: "higher route success and lower losses", available: hazard.level !== "Low" },
-    { key: "dangerous_retrieval", label: "Guild Retrieval Work", summary: "Post dangerous recovery work that employees should not be handling alone.", guildReward: "operation history and money", consortiumReward: "contract completion and hazard reduction", available: true },
-    { key: "route_security", label: "Route Security Sweep", summary: "Ask a guild to clear bandit pressure or ward trouble before launch.", guildReward: "prestige and city standing", consortiumReward: "safer routes", available: true },
+    { key: "guild_convoy_defense", label: "Hire Guild: Convoy Defense", summary: "Use a guild escort to raise cover on exposed logistics operations and protect marketable item cargo.", guildReward: "reputation, payout, and gear bundle chances", consortiumReward: "higher route success, lower losses, and safer marketplace supply", available: hazard.level !== "Low", rewardCategory: "escort gear" },
+    { key: "dangerous_retrieval", label: "Guild Retrieval Work", summary: "Post dangerous recovery work that employees should not handle alone; hidden-site loot can feed crafting and listings.", guildReward: "operation history, money, and expedition loot", consortiumReward: "contract completion, hazard reduction, and recovered stock", available: true, rewardCategory: "site loot" },
+    { key: "route_security", label: "Route Security Sweep", summary: "Ask a guild to clear bandit pressure or ward trouble before launch; threat type hints now inform gear prep.", guildReward: "prestige, city standing, and combat supply rewards", consortiumReward: "safer routes and more stable trade flow", available: true, rewardCategory: "combat supplies" },
   ];
 }
 

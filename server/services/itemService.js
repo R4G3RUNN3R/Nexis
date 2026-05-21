@@ -111,6 +111,16 @@ function addReduction(totalReductions, type, amount) {
   totalReductions[type] = Math.min(ARMOR_REDUCTION_CAP, asNumber(totalReductions[type], 0) + asNumber(amount, 0));
 }
 
+function addReductionWithSource(totals, type, amount, sourceLabel) {
+  if (!DAMAGE_TYPES.includes(type) || !amount) return;
+  const before = asNumber(totals.armorReductions[type], 0);
+  addReduction(totals.armorReductions, type, amount);
+  const applied = asNumber(totals.armorReductions[type], 0) - before;
+  if (applied <= 0) return;
+  totals.armorReductionSources[type] = asArray(totals.armorReductionSources[type]);
+  totals.armorReductionSources[type].push({ source: sourceLabel, amount: applied });
+}
+
 function addWeaponStats(totals, item) {
   const weapon = asRecord(item.weaponStats);
   if (!Object.keys(weapon).length) return;
@@ -126,7 +136,7 @@ function addWeaponStats(totals, item) {
 
 function getEquipmentStatTotals(runtimeState) {
   const equipment = ensureEquipmentState(runtimeState);
-  const totals = { stats: {}, workingStats: {}, battleStats: {}, combatModifiers: {}, passiveEffects: {}, weaponStats: { damageMin: 0, damageMax: 0, accuracyBonus: 0, critBonus: 0, penetration: 0, primaryDamageType: null, damageTypes: {} }, armorReductions: {}, armorSets: [] };
+  const totals = { stats: {}, workingStats: {}, battleStats: {}, combatModifiers: {}, passiveEffects: {}, weaponStats: { damageMin: 0, damageMax: 0, accuracyBonus: 0, critBonus: 0, penetration: 0, primaryDamageType: null, damageTypes: {} }, armorReductions: {}, armorReductionSources: {}, armorSets: [] };
   const equippedItemIds = [];
   for (const itemId of Object.values(equipment)) {
     if (!itemId) continue;
@@ -139,10 +149,14 @@ function getEquipmentStatTotals(runtimeState) {
     for (const [key, amount] of Object.entries(asRecord(item.combatModifiers))) totals.combatModifiers[key] = asNumber(totals.combatModifiers[key], 0) + asNumber(amount, 0);
     for (const [key, amount] of Object.entries(asRecord(item.passiveEffects))) totals.passiveEffects[key] = asNumber(totals.passiveEffects[key], 0) + asNumber(amount, 0);
     addWeaponStats(totals, item);
-    for (const [type, amount] of Object.entries(asRecord(item.armorStats?.reductions))) addReduction(totals.armorReductions, type, amount);
+    for (const [type, amount] of Object.entries(asRecord(item.armorStats?.reductions))) addReductionWithSource(totals, type, amount, getItemDisplayName(item.id));
   }
   const setBonuses = calculateArmorSetBonuses(equippedItemIds);
-  for (const [type, amount] of Object.entries(asRecord(setBonuses.reductions))) addReduction(totals.armorReductions, type, amount);
+  for (const activeSet of asArray(setBonuses.activeSets)) {
+    for (const bonus of asArray(activeSet.activeBonuses)) {
+      for (const [type, amount] of Object.entries(asRecord(bonus.reductions))) addReductionWithSource(totals, type, amount, `${activeSet.name} ${bonus.threshold}-piece`);
+    }
+  }
   totals.armorSets = asArray(setBonuses.activeSets);
   return totals;
 }

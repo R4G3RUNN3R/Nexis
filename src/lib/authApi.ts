@@ -387,6 +387,7 @@ export type ServerItemSummary = {
   sourceTags: string[];
   academyTags: string[];
   marketEligible?: boolean;
+  acquisitionPaths?: Array<{ category: string; label: string; detail: string }>;
   iconKey: string;
   iconUrl?: string;
   iconBrief: string;
@@ -656,15 +657,68 @@ export type ServerMarketplaceListing = {
   seller: { publicId: number; name: string };
   createdAt: number;
   expiresAt: number | null;
+  soldAt?: number | null;
+  cancelledAt?: number | null;
   isOwnListing: boolean;
+  demandTags?: string[];
+  demandHeadline?: string;
+};
+
+export type ServerMarketplacePriceGuide = {
+  itemId: string;
+  item: ServerItemSummary | null;
+  count: number;
+  totalQuantity: number;
+  minPrice: number;
+  maxPrice: number;
+  averageUnitPrice: number;
 };
 
 export type ServerMarketplacePayload = {
   listings: ServerMarketplaceListing[];
+  ownListings?: ServerMarketplaceListing[];
+  recentActivity?: ServerMarketplaceListing[];
+  priceGuide?: ServerMarketplacePriceGuide[];
   inventory: ServerInventoryEntry[];
   filters: Record<string, string>;
   cityDemand?: ServerCityMarket["demand"];
 };
+
+export type ServerAdventureEntry = {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  categoryLabel: string;
+  cityId: string;
+  cityName: string;
+  riskBand: string;
+  threatType: string;
+  recommendedPrep: string[];
+  rewardCategory: string;
+  rewardItems: Array<{ itemId: string; quantity: number; item: ServerItemSummary | null; label: string }>;
+  sourceLabel: string;
+  sourcePaths: Array<{ label: string; detail: string; route: string }>;
+  hiddenSite?: { id: string; name: string; status: string; summary: string } | null;
+  opponent: { id: string; name: string; level: number; damageType: string; summary: string };
+  gearHint: string;
+  available: boolean;
+  lockReason: string | null;
+};
+
+export type ServerAdventureBoard = {
+  currentCityId: string;
+  cityName: string;
+  rhythm: string;
+  categories: Array<{ id: string; label: string; summary: string; count: number; availableCount: number }>;
+  entries: ServerAdventureEntry[];
+  notices: Array<Record<string, unknown>>;
+  generatedAt: number;
+};
+
+export type ApiAdventureResponse =
+  | { ok: true; playerState: ServerPlayerState; board: ServerAdventureBoard; adventure?: ServerAdventureEntry; combat?: Record<string, unknown>; reward?: Record<string, unknown> | null; hiddenSite?: Record<string, unknown> | null; message?: string }
+  | ApiFailure;
 
 export type ApiMarketplaceResponse =
   | { ok: true; playerState: ServerPlayerState; marketplace: ServerMarketplacePayload; listing?: ServerMarketplaceListing; message?: string }
@@ -1210,13 +1264,18 @@ export function sellServerBlackMarketItem(
 
 export function getServerMarketplace(
   sessionToken: string,
-  options: { category?: string; cityId?: string; rarity?: string; seller?: string } = {},
+  options: { category?: string; cityId?: string; rarity?: string; seller?: string; type?: string; sourceCity?: string; sort?: string; status?: string; maxPrice?: number } = {},
 ): Promise<ApiMarketplaceResponse> {
   const params = new URLSearchParams();
   if (options.category) params.set("category", options.category);
   if (options.cityId) params.set("cityId", options.cityId);
   if (options.rarity) params.set("rarity", options.rarity);
   if (options.seller) params.set("seller", options.seller);
+  if (options.type) params.set("type", options.type);
+  if (options.sourceCity) params.set("sourceCity", options.sourceCity);
+  if (options.sort) params.set("sort", options.sort);
+  if (options.status) params.set("status", options.status);
+  if (options.maxPrice) params.set("maxPrice", String(options.maxPrice));
   const query = params.toString();
   return requestJson<Omit<ApiMarketplaceResponse & { ok: true }, "ok">>(`/api/marketplace${query ? `?${query}` : ""}`, {
     method: "GET",
@@ -1246,6 +1305,22 @@ export function cancelServerMarketplaceListing(sessionToken: string, listingId: 
   return requestJson<Omit<ApiMarketplaceResponse & { ok: true }, "ok">>(`/api/marketplace/listings/${encodeURIComponent(listingId)}/cancel`, {
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+
+export function getServerAdventureBoard(sessionToken: string): Promise<ApiAdventureResponse> {
+  return requestJson<Omit<ApiAdventureResponse & { ok: true }, "ok">>("/api/adventures", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function startServerAdventure(sessionToken: string, adventureId: string, payload: { combatItemId?: string | null } = {}): Promise<ApiAdventureResponse> {
+  return requestJson<Omit<ApiAdventureResponse & { ok: true }, "ok">>(`/api/adventures/${encodeURIComponent(adventureId)}/start`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify(payload),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

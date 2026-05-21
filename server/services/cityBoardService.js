@@ -34,6 +34,7 @@ function composeBoard(runtimeState, requestedCityId) {
   const tradeGoods = getLegalTradeGoods().filter((good) => good.sourceCityId === cityId).slice(0, 3);
   const live = getCityLiveDigest(runtimeState, cityId);
   const discoveryNotices = getBoardDiscoveryNotices(runtimeState, cityId);
+  const adventureNotices = getAdventureBoardNotices(cityId);
   const sections = { civicAppointments: [], opportunities: [], bounties: [], publicNotices: [], classifieds: [] };
   const seen = new Set();
   const leadCandidates = [

@@ -557,6 +557,36 @@ export function summarizeItemEffects(item) {
   return effects;
 }
 
+
+const SOURCE_CITY_LABELS = {
+  nexis: "Nexis City",
+  blackharbor: "Blackharbor",
+  silverbough: "Silverbough",
+  ironhall: "Ironhall",
+  highcourt: "Highcourt",
+  neutral: "All cities",
+};
+
+function sourceCityLabel(sourceCity) {
+  return SOURCE_CITY_LABELS[sourceCity] ?? formatSlotName(sourceCity ?? "unknown");
+}
+
+export function getItemAcquisitionPaths(item) {
+  const definition = typeof item === "string" ? getItemDefinition(item) : item;
+  if (!definition) return [];
+  const paths = [];
+  const city = sourceCityLabel(definition.sourceCity ?? definition.cityBias);
+  if (definition.category === "Equipment" && definition.itemRole === "weapon") paths.push({ category: "City Market", label: `${city} weapon source`, detail: "Common and uncommon weapons appear through city markets, contracts, and expedition rewards." });
+  if (definition.category === "Equipment" && definition.itemRole === "armor") paths.push({ category: "Set Piece", label: `${city} armor source`, detail: "Armor pieces come from city contracts, expedition chains, elite drops, crafting, and player listings." });
+  if (definition.category === "Clothing") paths.push({ category: "Wardrobe", label: `${city} clothing source`, detail: "Visual clothing appears in city markets, prestige notices, organization rewards, and player listings." });
+  if (definition.category === "Consumable") paths.push({ category: "Consumable", label: `${city} support source`, detail: "Consumables come from markets, crafting, contracts, and expedition supply rewards." });
+  if (["Material", "Trade Good", "Academy Item"].includes(definition.category)) paths.push({ category: "Loot / Trade", label: `${city} supply loop`, detail: "Materials and trade goods come from jobs, contracts, travel discoveries, crafting, and city demand loops." });
+  if (definition.blackMarketAvailability?.length) paths.push({ category: "Black Market", label: "Under-market source", detail: "This item can surface through black-market or covert routes where eligible." });
+  if (definition.rarity === "rare" || definition.rarity === "legendary") paths.push({ category: definition.rarity === "legendary" ? "Legendary Lead" : "Rare Lead", label: "Expedition or elite source", detail: "Higher-rarity items are aimed at elite hunts, hidden-site runs, board rumors, and player-market circulation." });
+  paths.push({ category: "Player Market", label: "Citizen listings", detail: "Eligible owned copies can be listed or bought through the player market." });
+  return paths;
+}
+
 export function getItemSummary(itemId) {
   const item = getItemDefinition(itemId);
   if (!item) return null;
@@ -592,6 +622,7 @@ export function getItemSummary(itemId) {
     sourceTags: item.sourceTags,
     academyTags: item.academyTags,
     marketEligible: item.marketEligible,
+    acquisitionPaths: getItemAcquisitionPaths(item),
     iconKey: item.iconKey,
     iconUrl: `/item-icons/${String(item.category).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item"}.svg`,
     iconBrief: item.iconBrief,

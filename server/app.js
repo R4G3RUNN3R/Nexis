@@ -18,6 +18,7 @@ import educationRoutes from "./routes/educationRoutes.js";
 import cityBoardRoutes from "./routes/cityBoardRoutes.js";
 import worldMapRoutes from "./routes/worldMapRoutes.js";
 import marketplaceRoutes from "./routes/marketplaceRoutes.js";
+import adventureRoutes from "./routes/adventureRoutes.js";
 import playerRecordsRoutes from "./routes/playerRecordsRoutes.js";
 import { DatabaseUnavailableError, HttpError } from "./lib/errors.js";
 
@@ -39,6 +40,7 @@ const ROUTE_MODULES = [
   cityBoardRoutes,
   worldMapRoutes,
   marketplaceRoutes,
+  adventureRoutes,
   playerRecordsRoutes,
   adminRoutes,
   adminOrganizationRoutes,

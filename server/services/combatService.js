@@ -236,7 +236,9 @@ function getIncomingDamageType(attacker, skill) {
 }
 
 function getTypedArmorReduction(defender, damageType) {
-  return clamp(asNumber(defender.equipmentTotals?.armorReductions?.[damageType], 0) / 100, 0, 0.45);
+  const percent = Math.round(clamp(asNumber(defender.equipmentTotals?.armorReductions?.[damageType], 0), 0, 45));
+  const sources = asArray(defender.equipmentTotals?.armorReductionSources?.[damageType]).slice(0, 3);
+  return { rate: percent / 100, percent, sources };
 }
 
 function calculateDamage(attacker, defender, skill, randomFn) {
@@ -250,9 +252,9 @@ function calculateDamage(attacker, defender, skill, randomFn) {
   const skillMultiplier = asNumber(combat.damageMultiplier, 1) + asNumber(attacker.passive?.effects?.damageMultiplier, 0);
   const typedReduction = getTypedArmorReduction(defender, damageType);
   const penetration = clamp(asNumber(weapon.penetration, 0) / 100, 0, 0.2);
-  const mitigation = clamp(defenderStats.defense / (defenderStats.defense + 95) + asNumber(defender.passive?.effects?.mitigationBonus, 0) + typedReduction - penetration, 0.03, 0.72);
+  const mitigation = clamp(defenderStats.defense / (defenderStats.defense + 95) + asNumber(defender.passive?.effects?.mitigationBonus, 0) + typedReduction.rate - penetration, 0.03, 0.72);
   const variance = 0.88 + randomFn() * 0.24;
-  return { damage: Math.max(1, Math.round(attackBase * skillMultiplier * (1 - mitigation) * variance)), damageType, typedReduction: Math.round(typedReduction * 100) };
+  return { damage: Math.max(1, Math.round(attackBase * skillMultiplier * (1 - mitigation) * variance)), damageType, typedReduction: typedReduction.percent, armorReductionSources: typedReduction.sources };
 }
 
 function tryAttack({ attacker, defender, skill, randomFn, turn }) {
@@ -294,9 +296,10 @@ function tryAttack({ attacker, defender, skill, randomFn, turn }) {
     damage,
     damageType: damageResult.damageType,
     armorReduction: damageResult.typedReduction,
+    armorReductionSources: damageResult.armorReductionSources,
     heal,
     defenderHealth: defender.health,
-    message: `${attacker.name} used ${skill?.name ?? "Basic Strike"} for ${damage}${crit ? " critical" : ""} ${damageResult.damageType.toLowerCase()} damage${damageResult.typedReduction ? ` after ${damageResult.typedReduction}% armor reduction` : ""}${heal ? ` and recovered ${heal} health` : ""}.`,
+    message: `${attacker.name} ${crit ? "critically " : ""}hit ${defender.name} with ${skill?.name ?? "Basic Strike"} for ${damage} ${damageResult.damageType.toLowerCase()} damage${damageResult.typedReduction ? ` after ${damageResult.typedReduction}% ${damageResult.damageType} reduction${damageResult.armorReductionSources?.length ? ` (${damageResult.armorReductionSources.map((entry) => entry.source).join(", ")})` : ""}` : ""}${heal ? ` and recovered ${heal} health` : ""}.`,
   };
 }
 
@@ -304,7 +307,7 @@ function npcSkill(opponent) {
   return {
     id: `${opponent.id ?? "npc"}_pressure`,
     name: `${opponent.name} pressure`,
-    combat: { damageMultiplier: 1, accuracyBonus: 0, critBonus: 2 },
+    combat: { damageMultiplier: 1, accuracyBonus: 0, critBonus: 2, damageType: opponent.damageType ?? "Bludgeoning" },
   };
 }
 

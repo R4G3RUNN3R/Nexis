@@ -688,3 +688,105 @@
     grid-template-columns: 1fr;
   }
 }
+
+.adventure-board {
+  display: grid;
+  gap: 12px;
+}
+
+.adventure-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.adventure-tabs button[aria-pressed= true] {
+  border-color: rgba(208, 173, 116, 0.72);
+  color: #f0d59a;
+}
+
+.adventure-list {
+  display: grid;
+  gap: 10px;
+}
+
+.adventure-card {
+  border: 1px solid rgba(126, 214, 221, 0.18);
+  background: rgba(7, 13, 20, 0.72);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.adventure-card--locked {
+  opacity: 0.72;
+}
+
+.adventure-card__top,
+.adventure-card__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.adventure-card__top h3 {
+  margin: 2px 0 4px;
+  font-size: 16px;
+}
+
+.adventure-card__top p,
+.adventure-card__hint,
+.adventure-card__footer {
+  color: #aebbc6;
+  font-size: 12px;
+}
+
+.adventure-card__kicker {
+  color: #d0ad74;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.adventure-card__chips,
+.adventure-card__rewards {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.adventure-card__chips span,
+.adventure-card__rewards span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 4px 7px;
+  font-size: 12px;
+  color: #d8e0e8;
+}
+
+.adventure-card__footer label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: #b7c3cf;
+}
+
+.adventure-card__footer select {
+  max-width: 220px;
+}
+
+.adventure-result {
+  margin-bottom: 12px;
+}
+
+.adventure-combat-log {
+  display: grid;
+  gap: 4px;
+  color: #b7c3cf;
+  font-size: 12px;
+}

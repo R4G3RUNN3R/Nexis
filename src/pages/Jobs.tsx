@@ -9,7 +9,10 @@ import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { ITEM_CATALOGUE } from "../data/itemsData";
+import { ItemIcon } from "../components/items/ItemIcon";
+import { getServerAdventureBoard, startServerAdventure, type ServerAdventureBoard, type ServerAdventureEntry } from "../lib/authApi";
 import { usePlayer } from "../state/PlayerContext";
+import { useAuth } from "../state/AuthContext";
 import {
   useJobs,
   computeSuccessRate,
@@ -349,8 +352,126 @@ function CategoryCard({
   );
 }
 
+
+function recordOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function arrayOfRecords(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.map(recordOf) : [];
+}
+
+function AdventureResultPanel({ result, onDismiss }: { result: Record<string, unknown> | null; onDismiss: () => void }) {
+  if (!result) return null;
+  const combat = recordOf(result.combat);
+  const reward = recordOf(result.reward);
+  const log = arrayOfRecords(combat.log).slice(0, 5);
+  return (
+    <div className="jobs-outcome jobs-outcome--success adventure-result">
+      <div className="jobs-outcome__header">
+        <span className="jobs-outcome__title">Adventure Result</span>
+        <span className="jobs-outcome__flavor">{String(result.message ?? combat.outcome ?? "Resolved")}</span>
+        <button type="button" className="jobs-outcome__dismiss" onClick={onDismiss} aria-label="Dismiss">x</button>
+      </div>
+      <div className="jobs-outcome__body">
+        <div className="jobs-outcome__row"><span className="jobs-outcome__row-label">Outcome</span><span className="jobs-outcome__row-value">{String(combat.outcome ?? "unknown")}</span></div>
+        <div className="jobs-outcome__row"><span className="jobs-outcome__row-label">Energy / XP</span><span className="jobs-outcome__row-value">-{String(combat.energySpent ?? 0)} energy | +{String(combat.combatXpGained ?? 0)} combat XP | +{String(combat.skillXpGained ?? 0)} skill XP</span></div>
+        {Array.isArray(reward.items) ? <div className="jobs-outcome__row"><span className="jobs-outcome__row-label">Rewards</span><span className="jobs-outcome__row-value">{reward.items.length} item bundle(s)</span></div> : null}
+        {log.length ? <div className="adventure-combat-log">{log.map((entry, index) => <div key={`${String(entry.turn ?? index)}-${index}`}>{String(entry.message ?? "Combat event resolved.")}</div>)}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+function AdventureEntryCard({
+  entry,
+  busy,
+  combatItemId,
+  combatItems,
+  onCombatItemChange,
+  onStart,
+}: {
+  entry: ServerAdventureEntry;
+  busy: boolean;
+  combatItemId: string;
+  combatItems: Array<{ itemId: string; name: string; quantity: number }>;
+  onCombatItemChange: (adventureId: string, itemId: string) => void;
+  onStart: (adventureId: string) => void;
+}) {
+  return (
+    <article className={`adventure-card${entry.available ? "" : " adventure-card--locked"}`}>
+      <div className="adventure-card__top">
+        <div>
+          <div className="adventure-card__kicker">{entry.categoryLabel} | {entry.cityName}</div>
+          <h3>{entry.title}</h3>
+          <p>{entry.summary}</p>
+        </div>
+        <button type="button" disabled={!entry.available || busy} onClick={() => onStart(entry.id)}>{busy ? "Resolving..." : "Start"}</button>
+      </div>
+      <div className="adventure-card__chips">
+        <span>Risk: {entry.riskBand}</span>
+        <span>Threat: {entry.threatType}</span>
+        <span>Reward: {entry.rewardCategory}</span>
+      </div>
+      <div className="adventure-card__hint">Prep: {entry.recommendedPrep.join(" | ")}</div>
+      <div className="adventure-card__hint">Gear read: {entry.gearHint}</div>
+      {entry.hiddenSite ? <div className="adventure-card__hint">Hidden site: {entry.hiddenSite.name} ({entry.hiddenSite.status})</div> : null}
+      {entry.lockReason ? <div className="jobs-low-stamina">{entry.lockReason}</div> : null}
+      <div className="adventure-card__rewards">
+        {entry.rewardItems.slice(0, 4).map((reward) => <span key={`${entry.id}-${reward.itemId}`}><ItemIcon item={reward.item} /> {reward.label} x{reward.quantity}</span>)}
+      </div>
+      <div className="adventure-card__footer">
+        <label>Combat item
+          <select value={combatItemId} onChange={(event) => onCombatItemChange(entry.id, event.target.value)}>
+            <option value="">None</option>
+            {combatItems.map((item) => <option key={`${entry.id}-${item.itemId}`} value={item.itemId}>{item.name} x{item.quantity}</option>)}
+          </select>
+        </label>
+        <span>Sources: {entry.sourcePaths.map((path) => path.label).join(" | ")}</span>
+      </div>
+    </article>
+  );
+}
+
+function ServerAdventureBoard({
+  board,
+  selectedCategory,
+  onSelectCategory,
+  busyAdventureId,
+  combatSelections,
+  combatItems,
+  onCombatItemChange,
+  onStart,
+}: {
+  board: ServerAdventureBoard;
+  selectedCategory: string;
+  onSelectCategory: (categoryId: string) => void;
+  busyAdventureId: string | null;
+  combatSelections: Record<string, string>;
+  combatItems: Array<{ itemId: string; name: string; quantity: number }>;
+  onCombatItemChange: (adventureId: string, itemId: string) => void;
+  onStart: (adventureId: string) => void;
+}) {
+  const entries = board.entries.filter((entry) => selectedCategory === "all" || entry.category === selectedCategory);
+  return (
+    <ContentPanel title="Expedition Desk">
+      <div className="adventure-board">
+        <div className="jobs-overview__brief">{board.rhythm}</div>
+        <div className="adventure-tabs">
+          <button type="button" onClick={() => onSelectCategory("all")} aria-pressed={selectedCategory === "all"}>All ({board.entries.length})</button>
+          {board.categories.map((category) => <button key={category.id} type="button" onClick={() => onSelectCategory(category.id)} aria-pressed={selectedCategory === category.id}>{category.label} ({category.availableCount}/{category.count})</button>)}
+        </div>
+        <div className="adventure-list">
+          {entries.map((entry) => <AdventureEntryCard key={entry.id} entry={entry} busy={busyAdventureId === entry.id} combatItemId={combatSelections[entry.id] ?? ""} combatItems={combatItems} onCombatItemChange={onCombatItemChange} onStart={onStart} />)}
+        </div>
+      </div>
+    </ContentPanel>
+  );
+}
+
 export default function JobsPage() {
   const jobs = useJobs();
+  const { authSource, serverSessionToken, refreshServerState } = useAuth();
   const {
     player,
     isHospitalized,
@@ -362,6 +483,14 @@ export default function JobsPage() {
     jobCategories[0]?.id ?? "",
   );
   const [outcomes, setOutcomes] = useState<Record<string, OutcomeEntry>>({});
+
+  const [adventureBoard, setAdventureBoard] = useState<ServerAdventureBoard | null>(null);
+  const [adventureCategory, setAdventureCategory] = useState("all");
+  const [busyAdventureId, setBusyAdventureId] = useState<string | null>(null);
+  const [adventureMessage, setAdventureMessage] = useState<string | null>(null);
+  const [adventureError, setAdventureError] = useState<string | null>(null);
+  const [adventureResult, setAdventureResult] = useState<Record<string, unknown> | null>(null);
+  const [combatSelections, setCombatSelections] = useState<Record<string, string>>({});
   const selectedCategory =
     jobCategories.find((c) => c.id === selectedCategoryId) ?? jobCategories[0];
 
@@ -375,6 +504,41 @@ export default function JobsPage() {
   useEffect(() => {
     setOutcomes({});
   }, [selectedCategoryId]);
+
+  const combatItems = Object.entries(player.inventory ?? {})
+    .filter(([itemId, quantity]) => Number(quantity) > 0 && ["field_bandage", "minor_healing_draught", "major_healing_draught", "smoke_pellet", "ward_chalk", "bitter_antidote", "quickstep_tonic", "ironhide_tonic"].includes(itemId))
+    .map(([itemId, quantity]) => ({ itemId, quantity: Number(quantity), name: ITEM_CATALOGUE[itemId]?.name ?? itemId }));
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAdventureBoard() {
+      if (authSource !== "server" || !serverSessionToken) { setAdventureBoard(null); return; }
+      const result = await getServerAdventureBoard(serverSessionToken);
+      if (cancelled) return;
+      if (result.ok) setAdventureBoard(result.board);
+      else setAdventureError(result.error);
+    }
+    void loadAdventureBoard();
+    return () => { cancelled = true; };
+  }, [authSource, serverSessionToken, player.current?.currentCityId]);
+
+  const handleStartAdventure = useCallback(async (adventureId: string) => {
+    if (!serverSessionToken) return;
+    setBusyAdventureId(adventureId);
+    setAdventureMessage(null);
+    setAdventureError(null);
+    const result = await startServerAdventure(serverSessionToken, adventureId, { combatItemId: combatSelections[adventureId] || null });
+    setBusyAdventureId(null);
+    if (!result.ok) { setAdventureError(result.error); return; }
+    setAdventureBoard(result.board);
+    setAdventureMessage(result.message ?? "Adventure resolved.");
+    setAdventureResult(result as unknown as Record<string, unknown>);
+    await refreshServerState();
+  }, [combatSelections, refreshServerState, serverSessionToken]);
+
+  const handleCombatItemChange = useCallback((adventureId: string, itemId: string) => {
+    setCombatSelections((current) => ({ ...current, [adventureId]: itemId }));
+  }, []);
 
   const handleAttempt = useCallback(
     (categoryId: string, subJobId: string) => {
@@ -398,7 +562,7 @@ export default function JobsPage() {
   return (
     <AppShell
       title="Adventuring"
-      hint="Field work, hustles, and street-level opportunity. Pick a category, run operations, gain category mastery, and try not to get folded into a cautionary tale."
+      hint="Expeditions, elite hunts, hidden-site runs, and street operations. Gear choice, damage types, and consumables now matter."
     >
       <div className="jobs-page">
         <ContentPanel title="Operations Board">
