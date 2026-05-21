@@ -362,8 +362,12 @@ export type ServerItemSummary = {
   category: string;
   subtype: string;
   rarity: string;
+  itemRole?: string;
   equipSlot: string | null;
   allowedSlots: string[];
+  visualSlot?: string | null;
+  allowedVisualSlots?: string[];
+  visualOnly?: boolean;
   stackLimit: number;
   valueBuy: number;
   valueSell: number;
@@ -371,6 +375,10 @@ export type ServerItemSummary = {
   sourceCity: string;
   statModifiers: Record<string, Record<string, number>>;
   combatModifiers: Record<string, number>;
+  weaponStats?: { damageMin: number; damageMax: number; damageType: string; accuracy: number; handedness: string; critBonus?: number; speed?: number; penetration?: number } | null;
+  armorStats?: { weightClass: string; reductions: Record<string, number>; setId?: string | null } | null;
+  setId?: string | null;
+  armorSet?: { id: string; name: string; theme: string; profile: string[]; bonuses?: Record<string, unknown> } | null;
   useEffects: Array<Record<string, unknown>>;
   requirements: Record<string, unknown>;
   lockReasonText: string | null;
@@ -378,6 +386,7 @@ export type ServerItemSummary = {
   flavorText: string;
   sourceTags: string[];
   academyTags: string[];
+  marketEligible?: boolean;
   iconKey: string;
   iconUrl?: string;
   iconBrief: string;
@@ -400,14 +409,18 @@ export type ServerEquipmentSlot = {
   effects: string[];
 };
 
+export type ServerVisualEquipmentSlot = ServerEquipmentSlot;
+
 export type ApiItemInventoryResponse =
   | {
       ok: true;
       playerState: ServerPlayerState;
       inventory: ServerInventoryEntry[];
       equipment: ServerEquipmentSlot[];
+      visualEquipment?: ServerVisualEquipmentSlot[];
       equipmentSlots: string[];
-      equipmentTotals: Record<string, Record<string, number>>;
+      visualSlots?: string[];
+      equipmentTotals: Record<string, unknown>;
       itemBuffs: Record<string, unknown>;
       iconManifest: Array<Record<string, unknown>>;
       catalogueCount: number;
@@ -1256,6 +1269,38 @@ export function unequipServerItem(sessionToken: string, slot: string): Promise<A
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
     body: JSON.stringify({ slot }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function wearServerItem(sessionToken: string, itemId: string, slot?: string | null): Promise<ApiItemInventoryResponse> {
+  return requestJson<Omit<ApiItemInventoryResponse & { ok: true }, "ok">>("/api/items/wear", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ itemId, slot }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function removeWornServerItem(sessionToken: string, slot: string): Promise<ApiItemInventoryResponse> {
+  return requestJson<Omit<ApiItemInventoryResponse & { ok: true }, "ok">>("/api/items/remove-worn", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ slot }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function sendServerItem(sessionToken: string, payload: { itemId: string; targetPublicId: string; quantity: number }): Promise<ApiItemInventoryResponse> {
+  return requestJson<Omit<ApiItemInventoryResponse & { ok: true }, "ok">>("/api/items/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify(payload),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function destroyServerItem(sessionToken: string, payload: { itemId: string; quantity: number; confirmation: true | string }): Promise<ApiItemInventoryResponse> {
+  return requestJson<Omit<ApiItemInventoryResponse & { ok: true }, "ok">>("/api/items/destroy", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify(payload),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

@@ -4,6 +4,7 @@ export const EQUIPMENT_SLOTS = [
   "armor",
   "helmet",
   "gloves",
+  "legs",
   "boots",
   "accessory1",
   "accessory2",
@@ -11,12 +12,28 @@ export const EQUIPMENT_SLOTS = [
   "trinket",
 ];
 
+export const VISUAL_EQUIPMENT_SLOTS = ["head", "chest", "hands", "legs", "feet", "outerwear", "accessory"];
+
+export const DAMAGE_TYPES = ["Slashing", "Piercing", "Bludgeoning", "Magical", "Fire", "Cold", "Lightning", "Poison"];
+export const ARMOR_REDUCTION_CAP = 45;
+export const WEAPON_ACCURACY_BASELINE = 75;
+
 export const RARITY_FRAMES = {
   common: "plain-iron",
   uncommon: "brass-trim",
   rare: "blue-steel",
   epic: "violet-arc",
+  legendary: "gold-writ",
   legacy: "gold-writ",
+};
+
+export const ARMOR_SETS = {
+  nexis_watch: { id: "nexis_watch", name: "Nexis Watch Set", city: "nexis", theme: "Civic guard armor for disciplined street defense.", profile: ["Slashing", "Piercing"], pieces: ["watch_helm", "watch_brigandine", "watch_vambraces", "watch_tassets", "watch_marching_boots"], bonuses: { 2: { label: "Watch Pair: Slashing and Piercing DR +2%", reductions: { Slashing: 2, Piercing: 2 } }, 3: { label: "Ordered Line: Slashing and Piercing DR +2%", reductions: { Slashing: 2, Piercing: 2 } }, 5: { label: "Full Watch Detail: Slashing and Piercing DR +3%", reductions: { Slashing: 3, Piercing: 3 } } } },
+  blackharbor_corsair: { id: "blackharbor_corsair", name: "Blackharbor Corsair Set", city: "blackharbor", theme: "Maritime raider armor for deck fighting and toxin work.", profile: ["Piercing", "Poison"], pieces: ["corsair_bandana", "saltcoat", "deck_gloves", "bilge_trousers", "reef_boots"], bonuses: { 2: { label: "Deck Pair: Piercing and Poison DR +2%", reductions: { Piercing: 2, Poison: 2 } }, 3: { label: "Salt Line: Piercing and Poison DR +2%", reductions: { Piercing: 2, Poison: 2 } }, 5: { label: "Full Corsair Rig: Piercing and Poison DR +3%", reductions: { Piercing: 3, Poison: 3 } } } },
+  silverbough_warden: { id: "silverbough_warden", name: "Silverbough Warden Set", city: "silverbough", theme: "Grove warding armor for arcane and venomous threats.", profile: ["Magical", "Poison"], pieces: ["warden_hood", "grove_mantle", "mosswrap_gloves", "briarweave_leggings", "rootstep_boots"], bonuses: { 2: { label: "Grove Pair: Magical and Poison DR +2%", reductions: { Magical: 2, Poison: 2 } }, 3: { label: "Rooted Guard: Magical and Poison DR +2%", reductions: { Magical: 2, Poison: 2 } }, 5: { label: "Full Warden Binding: Magical and Poison DR +3%", reductions: { Magical: 3, Poison: 3 } } } },
+  ironhall_bulwark: { id: "ironhall_bulwark", name: "Ironhall Bulwark Set", city: "ironhall", theme: "Forge-bred heavy armor for hammer and axe pressure.", profile: ["Bludgeoning", "Slashing"], pieces: ["rivet_helm", "forgeplate_cuirass", "hammergrip_gauntlets", "anvil_greaves", "furnace_boots"], bonuses: { 2: { label: "Rivet Pair: Bludgeoning and Slashing DR +2%", reductions: { Bludgeoning: 2, Slashing: 2 } }, 3: { label: "Forge Line: Bludgeoning and Slashing DR +2%", reductions: { Bludgeoning: 2, Slashing: 2 } }, 5: { label: "Full Bulwark Harness: Bludgeoning and Slashing DR +3%", reductions: { Bludgeoning: 3, Slashing: 3 } } } },
+  highcourt_bastion: { id: "highcourt_bastion", name: "Highcourt Bastion Set", city: "highcourt", theme: "Prestige armor for court guards and warded authority.", profile: ["Piercing", "Magical"], pieces: ["court_visor", "bastion_coat", "sealbound_gloves", "tribunal_legguards", "magistrate_boots"], bonuses: { 2: { label: "Court Pair: Piercing and Magical DR +2%", reductions: { Piercing: 2, Magical: 2 } }, 3: { label: "Sealed Detail: Piercing and Magical DR +2%", reductions: { Piercing: 2, Magical: 2 } }, 5: { label: "Full Bastion Attire: Piercing and Magical DR +3%", reductions: { Piercing: 3, Magical: 3 } } } },
+  concordant_aegis: { id: "concordant_aegis", name: "Concordant Aegis Set", city: "neutral", theme: "Legendary all-round armor that favors coverage over specialization.", profile: DAMAGE_TYPES, pieces: ["concordant_circlet", "concordant_vestment", "concordant_grips", "concordant_legguards", "concordant_striders"], bonuses: { 2: { label: "Concordant Pair: all DR +1%", reductions: Object.fromEntries(DAMAGE_TYPES.map((type) => [type, 1])) }, 3: { label: "Balanced Ward: all DR +1%", reductions: Object.fromEntries(DAMAGE_TYPES.map((type) => [type, 1])) }, 5: { label: "Full Aegis Concord: all DR +2%", reductions: Object.fromEntries(DAMAGE_TYPES.map((type) => [type, 2])) } } },
 };
 
 const CITY_PALETTES = {
@@ -48,22 +65,51 @@ function iconDefaults(id, category, rarity, cityBias) {
   const palette = CITY_PALETTES[cityBias] ?? CITY_PALETTES.neutral;
   const silhouette = category === "Equipment"
     ? "gear-profile"
-    : category === "Consumable"
-      ? "stoppered-vial"
-      : category === "Tool"
-        ? "handled-tool"
-        : category === "Academy"
-          ? "academy-token"
-          : category === "Trade Good"
-            ? "bound-crate"
-            : "small-ledger-object";
-  return {
-    iconKey: `${id}_icon`,
-    iconBrief: `${titleFromId(id)} as a readable ${category.toLowerCase()} icon with strong silhouette and Nexis UI contrast.`,
-    iconPalette: palette,
-    iconSilhouette: silhouette,
-    iconRarityFrame: RARITY_FRAMES[rarity] ?? RARITY_FRAMES.common,
-  };
+    : category === "Clothing"
+      ? "tailored-garment"
+      : category === "Consumable"
+        ? "stoppered-vial"
+        : category === "Tool"
+          ? "handled-tool"
+          : category === "Academy"
+            ? "academy-token"
+            : category === "Trade Good"
+              ? "bound-crate"
+              : "small-ledger-object";
+  return { iconKey: `${id}_icon`, iconBrief: `${titleFromId(id)} as a readable ${category.toLowerCase()} icon with strong silhouette and Nexis UI contrast.`, iconPalette: palette, iconSilhouette: silhouette, iconRarityFrame: RARITY_FRAMES[rarity] ?? RARITY_FRAMES.common };
+}
+
+function normalizeWeaponStats(input) {
+  const stats = asRecord(input);
+  if (!Object.keys(stats).length) return null;
+  const damageRange = Array.isArray(stats.damageRange) ? stats.damageRange : [stats.damageMin, stats.damageMax];
+  const damageMin = Math.max(0, Number(damageRange[0] ?? stats.damageMin ?? stats.baseDamage ?? 0));
+  const damageMax = Math.max(damageMin, Number(damageRange[1] ?? stats.damageMax ?? stats.baseDamage ?? damageMin));
+  const damageType = DAMAGE_TYPES.includes(stats.damageType) ? stats.damageType : "Slashing";
+  return { damageMin, damageMax, damageType, accuracy: Math.max(1, Math.min(99, Number(stats.accuracy ?? WEAPON_ACCURACY_BASELINE))), handedness: stats.handedness ?? "oneHand", critBonus: Number(stats.critBonus ?? 0), speed: Number(stats.speed ?? 0), penetration: Number(stats.penetration ?? 0) };
+}
+
+function normalizeArmorStats(input) {
+  const stats = asRecord(input);
+  if (!Object.keys(stats).length) return null;
+  const reductions = {};
+  for (const [type, amount] of Object.entries(asRecord(stats.reductions))) {
+    if (!DAMAGE_TYPES.includes(type)) continue;
+    const numeric = Math.max(0, Math.min(ARMOR_REDUCTION_CAP, Number(amount) || 0));
+    if (numeric) reductions[type] = numeric;
+  }
+  return { weightClass: stats.weightClass ?? "medium", reductions, setId: stats.setId ?? null };
+}
+
+function inferItemRole(input, category, weaponStats, armorStats) {
+  if (input.itemRole) return input.itemRole;
+  if (weaponStats) return "weapon";
+  if (armorStats) return "armor";
+  if (category === "Clothing") return "visual";
+  if (category === "Consumable") return "consumable";
+  if (category === "Trade Good") return "trade";
+  if (category === "Material" || category === "Loot") return "material";
+  return "utility";
 }
 
 function defineItem(input) {
@@ -71,38 +117,10 @@ function defineItem(input) {
   const category = input.category ?? "Material";
   const cityBias = input.cityBias ?? input.sourceCity ?? "neutral";
   const icon = iconDefaults(input.id, category, rarity, cityBias);
-  return {
-    id: input.id,
-    displayName: input.displayName ?? titleFromId(input.id),
-    category,
-    subtype: input.subtype ?? category,
-    rarity,
-    equipSlot: input.equipSlot ?? null,
-    allowedSlots: input.allowedSlots ?? null,
-    stackLimit: input.stackLimit ?? (category === "Equipment" ? 1 : 99),
-    valueBuy: input.valueBuy ?? 20,
-    valueSell: input.valueSell ?? Math.max(1, Math.floor((input.valueBuy ?? 20) * 0.5)),
-    cityBias,
-    sourceCity: input.sourceCity ?? cityBias,
-    legalMarketAvailability: input.legalMarketAvailability ?? [],
-    blackMarketAvailability: input.blackMarketAvailability ?? [],
-    statModifiers: input.statModifiers ?? {},
-    combatModifiers: input.combatModifiers ?? {},
-    useEffects: input.useEffects ?? [],
-    passiveEffects: input.passiveEffects ?? {},
-    requirements: input.requirements ?? {},
-    lockReasonText: input.lockReasonText ?? null,
-    shortDescription: input.shortDescription ?? `A ${category.toLowerCase()} used in Nexis progression.`,
-    flavorText: input.flavorText ?? "Stamped, tracked, and less mysterious than the paperwork claims.",
-    sourceTags: input.sourceTags ?? [],
-    academyTags: input.academyTags ?? [],
-    ...icon,
-    ...(input.iconBrief ? { iconBrief: input.iconBrief } : {}),
-    ...(input.iconPalette ? { iconPalette: input.iconPalette } : {}),
-    ...(input.iconSilhouette ? { iconSilhouette: input.iconSilhouette } : {}),
-    ...(input.lootWeight ? { lootWeight: input.lootWeight } : {}),
-    ...(input.dropFamilies ? { dropFamilies: input.dropFamilies } : {}),
-  };
+  const weaponStats = normalizeWeaponStats(input.weaponStats);
+  const armorStats = normalizeArmorStats(input.armorStats);
+  const itemRole = inferItemRole(input, category, weaponStats, armorStats);
+  return { id: input.id, displayName: input.displayName ?? titleFromId(input.id), category, subtype: input.subtype ?? category, rarity, itemRole, equipSlot: input.equipSlot ?? null, allowedSlots: input.allowedSlots ?? null, visualSlot: input.visualSlot ?? null, allowedVisualSlots: input.allowedVisualSlots ?? null, visualOnly: Boolean(input.visualOnly ?? category === "Clothing"), stackLimit: input.stackLimit ?? (category === "Equipment" || category === "Clothing" ? 1 : 99), valueBuy: input.valueBuy ?? 20, valueSell: input.valueSell ?? Math.max(1, Math.floor((input.valueBuy ?? 20) * 0.5)), cityBias, sourceCity: input.sourceCity ?? cityBias, legalMarketAvailability: input.legalMarketAvailability ?? [], blackMarketAvailability: input.blackMarketAvailability ?? [], statModifiers: input.statModifiers ?? {}, combatModifiers: input.combatModifiers ?? {}, weaponStats, armorStats, setId: input.setId ?? armorStats?.setId ?? null, useEffects: input.useEffects ?? [], passiveEffects: input.passiveEffects ?? {}, requirements: input.requirements ?? {}, lockReasonText: input.lockReasonText ?? null, shortDescription: input.shortDescription ?? `A ${category.toLowerCase()} used in Nexis progression.`, flavorText: input.flavorText ?? "Registered in the Nexis ledger with standard source marks.", sourceTags: input.sourceTags ?? [], academyTags: input.academyTags ?? [], marketEligible: input.marketEligible ?? true, ...icon, ...(input.iconBrief ? { iconBrief: input.iconBrief } : {}), ...(input.iconPalette ? { iconPalette: input.iconPalette } : {}), ...(input.iconSilhouette ? { iconSilhouette: input.iconSilhouette } : {}), ...(input.lootWeight ? { lootWeight: input.lootWeight } : {}), ...(input.dropFamilies ? { dropFamilies: input.dropFamilies } : {}) };
 }
 
 const CORE_ITEMS = [
@@ -275,7 +293,137 @@ const EXTRA_ITEMS = [
   defineItem({ id: "watch_baton", displayName: "Watch Baton", category: "Equipment", subtype: "Civic Weapon", equipSlot: "weapon", rarity: "common", valueBuy: 82, valueSell: 38, cityBias: "nexis", legalMarketAvailability: ["nexis"], statModifiers: { battleStats: { defense: 1, strength: 1 } }, combatModifiers: { mitigationBonus: 0.01 }, shortDescription: "A starter civic weapon for controlled defensive fighting.", flavorText: "Not glamorous. Very persuasive in cramped streets.", sourceTags: ["watch", "starter", "melee"] }),
 ];
 
-const RAW_ITEMS = [...CORE_ITEMS, ...ACADEMY_ITEMS, ...EXTRA_ITEMS];
+const PASS_WEAPONS = [
+  ["quick_knife", "Quick Knife", "common", "Light Blade", "weapon", "oneHand", "Slashing", 6, 10, 84, "nexis", 95, "A short civic blade built for quick, reliable street fighting.", "Balanced for fast draws in crowded lanes."],
+  ["market_dagger", "Market Dagger", "common", "Dagger", "weapon", "oneHand", "Piercing", 6, 9, 86, "nexis", 88, "A compact dagger suited to close work and cautious travel.", "Stamped with a plain trader's mark."],
+  ["watchmans_short_blade", "Watchman's Short Blade", "common", "Short Blade", "weapon", "oneHand", "Slashing", 8, 12, 80, "nexis", 116, "A civic sidearm made for steady guard drills and alley fights.", "Its edge is practical before it is pretty."],
+  ["registry_mace", "Registry Mace", "common", "Mace", "weapon", "oneHand", "Bludgeoning", 8, 13, 77, "nexis", 118, "A blunt civic weapon favored by clerks who expect trouble.", "Heavy enough to end arguments without drawing blood first."],
+  ["dock_shiv", "Dock Shiv", "common", "Knife", "weapon", "oneHand", "Piercing", 7, 11, 82, "blackharbor", 102, "A narrow dockside blade for quick thrusts and rough escorts.", "The grip is wrapped against rain and salt."],
+  ["rivet_hatchet", "Rivet Hatchet", "common", "Hatchet", "weapon", "oneHand", "Slashing", 9, 14, 75, "ironhall", 122, "A compact forge hatchet that trades finesse for reliable bite.", "The head bears old hammer marks from honest work."],
+  ["road_spear", "Road Spear", "common", "Spear", "weapon", "twoHand", "Piercing", 8, 13, 79, "nexis", 124, "A simple spear for caravan guards and cautious road fighters.", "Its ash haft is marked with route notches."],
+  ["pilgrim_staff", "Pilgrim Staff", "common", "Staff", "weapon", "twoHand", "Bludgeoning", 7, 12, 81, "silverbough", 90, "A travel staff that doubles as a measured defensive weapon.", "Smooth from long walks and longer waits."],
+  ["thorn_focus", "Thorn Focus", "common", "Arcane Focus", "focus", "focus", "Magical", 6, 11, 83, "silverbough", 132, "A small thorn-bound focus for controlled novice spellwork.", "The thorns curl inward around a clear bead."],
+  ["clerks_baton", "Clerk's Baton", "common", "Baton", "weapon", "oneHand", "Bludgeoning", 5, 9, 88, "highcourt", 84, "A light baton made for accurate strikes and formal restraint.", "Polished wood, weighted core, no wasted flourish."],
+  ["harbor_rapier", "Harbor Rapier", "uncommon", "Rapier", "weapon", "oneHand", "Piercing", 11, 17, 86, "blackharbor", 235, "A fast maritime blade for thrusting around rigging and rails.", "The guard is narrow enough for cramped decks."],
+  ["corsair_saber", "Corsair Saber", "uncommon", "Saber", "weapon", "oneHand", "Slashing", 13, 19, 80, "blackharbor", 255, "A curved deck blade made for sweeping cuts in close quarters.", "Salt-darkened steel holds a clean edge."],
+  ["willow_ward_staff", "Willow Ward Staff", "uncommon", "Ward Staff", "focus", "twoHand", "Magical", 11, 17, 84, "silverbough", 265, "A ward staff for steady arcane pressure and defensive casting.", "Willow grain runs beneath thin silver inlay."],
+  ["groveglass_wand", "Groveglass Wand", "uncommon", "Wand", "focus", "oneHand", "Magical", 10, 16, 88, "silverbough", 245, "A precise wand for accurate magical strikes and ward practice.", "Green glass catches light even under cloud."],
+  ["foundry_hammer", "Foundry Hammer", "uncommon", "Hammer", "weapon", "oneHand", "Bludgeoning", 14, 21, 74, "ironhall", 270, "A heavy foundry hammer for direct armor-breaking blows.", "The handle is wrapped in heat-darkened leather."],
+  ["forge_pike", "Forge Pike", "uncommon", "Pike", "weapon", "twoHand", "Piercing", 13, 20, 78, "ironhall", 285, "A long pike for keeping brutal fights at working distance.", "Its socket is reinforced with black iron bands."],
+  ["bailiffs_longsword", "Bailiff's Longsword", "uncommon", "Longsword", "weapon", "oneHand", "Slashing", 13, 19, 82, "highcourt", 270, "A balanced legal blade used by court officers and escorts.", "The fuller carries a small seal near the guard."],
+  ["chainhook_axe", "Chainhook Axe", "uncommon", "Axe", "weapon", "twoHand", "Slashing", 15, 22, 73, "ironhall", 300, "A hooked axe for pulling guards open before the main cut lands.", "Built around leverage rather than elegance."],
+  ["salthook_polearm", "Salthook Polearm", "rare", "Polearm", "weapon", "twoHand", "Piercing", 18, 27, 80, "blackharbor", 520, "A rare boarding polearm for reach, control, and deep thrusts.", "Its hook is worn bright from rail work."],
+  ["relicglass_rod", "Relicglass Rod", "rare", "Arcane Rod", "focus", "oneHand", "Magical", 17, 26, 86, "silverbough", 545, "A refined rod that channels relic-laced force with steady accuracy.", "Tiny motes turn inside the glass core."],
+  ["chainbreaker_maul", "Chainbreaker Maul", "rare", "Maul", "weapon", "twoHand", "Bludgeoning", 21, 31, 70, "ironhall", 560, "A brutal maul for crushing armor and stubborn defenses.", "Each face is scarred from controlled ruin."],
+  ["edict_blade", "Edict Blade", "rare", "Court Blade", "weapon", "oneHand", "Slashing", 18, 26, 84, "highcourt", 550, "A formal rare blade for decisive cuts under court authority.", "A fine line of gold marks the spine."],
+  ["blackwake_knife", "Blackwake Knife", "rare", "Knife", "weapon", "oneHand", "Piercing", 16, 24, 90, "blackharbor", 500, "A narrow rare knife for covert work and precise openings.", "Dark oil keeps the blade quiet in the sheath."],
+  ["emberbind_scepter", "Emberbind Scepter", "rare", "Scepter", "focus", "oneHand", "Fire", 18, 27, 82, "ironhall", 575, "A rare scepter that binds forge heat into focused strikes.", "The head glows softly after hard use."],
+  ["concordant_blade", "Concordant Blade", "legendary", "Concordant Weapon", "weapon", "oneHand", "Slashing", 24, 36, 88, "neutral", 2500, "A legendary blade balanced for strong damage without losing accuracy.", "Its edge carries faint marks from five city traditions."],
+  ["concordant_staff", "Concordant Staff", "legendary", "Concordant Focus", "focus", "twoHand", "Magical", 22, 34, 86, "neutral", 2450, "A legendary staff built for controlled universal arcane pressure.", "Set rings from several schools bind the core in harmony."],
+];
+
+function passWeapon([id, displayName, rarity, subtype, slot, handedness, damageType, damageMin, damageMax, accuracy, cityBias, valueBuy, shortDescription, flavorText]) {
+  const covert = id.includes("blackwake");
+  return defineItem({ id, displayName, category: "Equipment", subtype, itemRole: "weapon", equipSlot: slot, rarity, valueBuy, valueSell: Math.max(1, Math.floor(valueBuy * 0.46)), cityBias, sourceCity: cityBias, legalMarketAvailability: rarity === "legendary" || covert ? [] : cityBias === "neutral" ? ["nexis", "highcourt"] : [cityBias], blackMarketAvailability: covert ? ["blackharbor"] : [], weaponStats: { damageMin, damageMax, accuracy, damageType, handedness }, shortDescription, flavorText, sourceTags: ["itemization", "weapon", cityBias, damageType.toLowerCase()] });
+}
+
+const PASS_ARMOR = [
+  ["watch_helm", "Watch Helm", "nexis_watch", "helmet", "medium", { Slashing: 3, Piercing: 4 }, "uncommon", "nexis", 185, "A civic helm made to blunt cuts and stop glancing thrusts.", "Stamped beneath the rim with a watchhouse number."],
+  ["watch_brigandine", "Watch Brigandine", "nexis_watch", "armor", "medium", { Slashing: 6, Piercing: 5 }, "uncommon", "nexis", 330, "Disciplined city armor built against blades and street weapons.", "Layered plates sit under plain civic cloth."],
+  ["watch_vambraces", "Watch Vambraces", "nexis_watch", "gloves", "medium", { Slashing: 3, Piercing: 3 }, "uncommon", "nexis", 170, "Forearm guards for controlled parries and close arrests.", "The buckles are simple and easy to replace."],
+  ["watch_tassets", "Watch Tassets", "nexis_watch", "legs", "medium", { Slashing: 4, Piercing: 3 }, "uncommon", "nexis", 205, "Hanging guards that protect the hips during close blade work.", "Cut short enough for patrol steps."],
+  ["watch_marching_boots", "Watch Marching Boots", "nexis_watch", "boots", "medium", { Slashing: 2, Piercing: 3 }, "uncommon", "nexis", 160, "Hard-wearing boots reinforced for patrol and street fighting.", "The soles are made for stone roads."],
+  ["corsair_bandana", "Corsair Bandana", "blackharbor_corsair", "helmet", "light", { Piercing: 3, Poison: 4 }, "uncommon", "blackharbor", 175, "A wrapped headpiece treated against spray and toxins.", "Salt marks stay in the cloth no matter how it is washed."],
+  ["saltcoat", "Saltcoat", "blackharbor_corsair", "armor", "light", { Piercing: 6, Poison: 5 }, "uncommon", "blackharbor", 320, "A light maritime coat strengthened against points and poison.", "Its lining carries sealed pockets for bad weather and worse jobs."],
+  ["deck_gloves", "Deck Gloves", "blackharbor_corsair", "gloves", "light", { Piercing: 3, Poison: 3 }, "uncommon", "blackharbor", 165, "Grip gloves for rope work, knife fights, and treated cargo.", "The palms are roughened with tarred thread."],
+  ["bilge_trousers", "Bilge Trousers", "blackharbor_corsair", "legs", "light", { Piercing: 4, Poison: 3 }, "uncommon", "blackharbor", 195, "Reinforced trousers for dock work and hazardous bilges.", "The cuffs are narrow enough to stay clear of deck gear."],
+  ["reef_boots", "Reef Boots", "blackharbor_corsair", "boots", "light", { Piercing: 3, Poison: 2 }, "uncommon", "blackharbor", 155, "Soft boots with treated soles for sharp docks and wet stone.", "They grip better than they look."],
+  ["warden_hood", "Warden Hood", "silverbough_warden", "helmet", "light", { Magical: 4, Poison: 3 }, "uncommon", "silverbough", 190, "A hood woven to steady wards and resist toxic spoor.", "Pale thread marks the inner seam."],
+  ["grove_mantle", "Grove Mantle", "silverbough_warden", "armor", "light", { Magical: 6, Poison: 5 }, "uncommon", "silverbough", 335, "A protective mantle for wardens facing spellwork and venom.", "The cloth smells faintly of rain-wet bark."],
+  ["mosswrap_gloves", "Mosswrap Gloves", "silverbough_warden", "gloves", "light", { Magical: 3, Poison: 3 }, "uncommon", "silverbough", 170, "Soft gloves that steady ward gestures and shield against toxins.", "Moss fiber cushions the knuckles without bulk."],
+  ["briarweave_leggings", "Briarweave Leggings", "silverbough_warden", "legs", "light", { Magical: 4, Poison: 3 }, "uncommon", "silverbough", 205, "Flexible leggings reinforced with briar-thread warding.", "The weave tightens under arcane pressure."],
+  ["rootstep_boots", "Rootstep Boots", "silverbough_warden", "boots", "light", { Magical: 3, Poison: 2 }, "uncommon", "silverbough", 160, "Quiet boots for grove patrols and warded ground.", "Their soles are cut to leave a shallow print."],
+  ["rivet_helm", "Rivet Helm", "ironhall_bulwark", "helmet", "heavy", { Bludgeoning: 4, Slashing: 3 }, "rare", "ironhall", 260, "A heavy helm shaped to survive hammer shock and cutting blows.", "Rivets crown the brow in a hard line."],
+  ["forgeplate_cuirass", "Forgeplate Cuirass", "ironhall_bulwark", "armor", "heavy", { Bludgeoning: 7, Slashing: 6 }, "rare", "ironhall", 520, "Heavy forge armor designed to absorb brutal hammer and axe blows.", "Heat stains sit deep beneath the polish."],
+  ["hammergrip_gauntlets", "Hammergrip Gauntlets", "ironhall_bulwark", "gloves", "heavy", { Bludgeoning: 4, Slashing: 3 }, "rare", "ironhall", 245, "Steel gauntlets built to hold through impact and edge pressure.", "The fingers close with deliberate weight."],
+  ["anvil_greaves", "Anvil Greaves", "ironhall_bulwark", "legs", "heavy", { Bludgeoning: 5, Slashing: 4 }, "rare", "ironhall", 310, "Dense greaves that protect the legs from sweeping hits.", "Each plate overlaps like scaled iron."],
+  ["furnace_boots", "Furnace Boots", "ironhall_bulwark", "boots", "heavy", { Bludgeoning: 3, Slashing: 3 }, "rare", "ironhall", 240, "Weighted boots made for forge floors and shield lines.", "The toes carry dark heat caps."],
+  ["court_visor", "Court Visor", "highcourt_bastion", "helmet", "medium", { Piercing: 4, Magical: 3 }, "rare", "highcourt", 270, "A refined visor for stopping points and ward pressure.", "Its narrow sightline keeps the wearer composed."],
+  ["bastion_coat", "Bastion Coat", "highcourt_bastion", "armor", "medium", { Piercing: 7, Magical: 5 }, "rare", "highcourt", 510, "A formal armored coat for court guards and diplomatic escorts.", "Hidden plates keep the silhouette civilized."],
+  ["sealbound_gloves", "Sealbound Gloves", "highcourt_bastion", "gloves", "medium", { Piercing: 4, Magical: 3 }, "rare", "highcourt", 250, "Gloves lined with small seals for warded handwork and blade defense.", "Fine stitching hides narrow reinforcement bands."],
+  ["tribunal_legguards", "Tribunal Legguards", "highcourt_bastion", "legs", "medium", { Piercing: 5, Magical: 3 }, "rare", "highcourt", 315, "Legguards made for formal protection without slowing court movement.", "The plates are lacquered in deep wine enamel."],
+  ["magistrate_boots", "Magistrate Boots", "highcourt_bastion", "boots", "medium", { Piercing: 3, Magical: 3 }, "rare", "highcourt", 235, "Polished boots reinforced for court marches and sudden violence.", "They sound official on marble."],
+  ["concordant_circlet", "Concordant Circlet", "concordant_aegis", "helmet", "light", { Slashing: 2, Piercing: 2, Bludgeoning: 2, Magical: 2, Fire: 2, Cold: 2, Lightning: 2, Poison: 2 }, "legendary", "neutral", 1250, "A legendary circlet that offers light protection against every known damage type.", "Five small marks meet above the brow."],
+  ["concordant_vestment", "Concordant Vestment", "concordant_aegis", "armor", "medium", { Slashing: 3, Piercing: 3, Bludgeoning: 3, Magical: 3, Fire: 3, Cold: 3, Lightning: 3, Poison: 3 }, "legendary", "neutral", 2100, "A legendary vestment with balanced all-round defensive warding.", "Its inner lining changes tone under torchlight."],
+  ["concordant_grips", "Concordant Grips", "concordant_aegis", "gloves", "medium", { Slashing: 2, Piercing: 2, Bludgeoning: 2, Magical: 2, Fire: 2, Cold: 2, Lightning: 2, Poison: 2 }, "legendary", "neutral", 1160, "Legendary grips that preserve hand protection without favoring one threat.", "The leather is marked with neat silver bands."],
+  ["concordant_legguards", "Concordant Legguards", "concordant_aegis", "legs", "medium", { Slashing: 2, Piercing: 2, Bludgeoning: 2, Magical: 2, Fire: 2, Cold: 2, Lightning: 2, Poison: 2 }, "legendary", "neutral", 1280, "Legendary legguards built for steady coverage across mixed battlefields.", "The plates move with quiet precision."],
+  ["concordant_striders", "Concordant Striders", "concordant_aegis", "boots", "medium", { Slashing: 2, Piercing: 2, Bludgeoning: 2, Magical: 2, Fire: 2, Cold: 2, Lightning: 2, Poison: 2 }, "legendary", "neutral", 1150, "Legendary boots that protect evenly without becoming heavy specialist armor.", "Their tread bears five interlocked lines."],
+];
+
+function passArmor([id, displayName, setId, slot, weightClass, reductions, rarity, cityBias, valueBuy, shortDescription, flavorText]) {
+  return defineItem({ id, displayName, category: "Equipment", subtype: "Armor", itemRole: "armor", equipSlot: slot, rarity, valueBuy, valueSell: Math.max(1, Math.floor(valueBuy * 0.45)), cityBias, sourceCity: cityBias, legalMarketAvailability: rarity === "legendary" ? [] : [cityBias], armorStats: { weightClass, reductions, setId }, setId, shortDescription, flavorText, sourceTags: ["itemization", "armor", setId, cityBias] });
+}
+
+const PASS_CLOTHING = [
+  ["plain_traveler_tunic", "Plain Traveler Tunic", "common", "chest", "A plain tunic for everyday travel and city errands.", "Sturdy stitching, neutral dye, easy repair."],
+  ["dustroad_cloak", "Dustroad Cloak", "common", "outerwear", "A practical cloak for road dust, weather, and long waits.", "The hem is weighted against wind."],
+  ["market_runner_coat", "Market Runner Coat", "common", "outerwear", "A short coat for couriers, runners, and busy market hands.", "Cut high enough to move through crowds."],
+  ["soft_wool_hood", "Soft Wool Hood", "common", "head", "A warm hood worn by travelers and early-shift workers.", "Its wool is plain but tightly spun."],
+  ["commoners_boots", "Commoner's Boots", "common", "feet", "Simple boots for city walking and ordinary field work.", "The soles are patched where they need it most."],
+  ["leather_work_gloves", "Leather Work Gloves", "common", "hands", "Work gloves for hauling, handling, and light craft labor.", "Creases show where tools sit in the hand."],
+  ["dockside_shawl", "Dockside Shawl", "common", "outerwear", "A weathered shawl suited to wet evenings and harbor streets.", "The weave carries a faint salt smell."],
+  ["simple_scholar_robe", "Simple Scholar Robe", "common", "chest", "A plain robe worn by students, clerks, and junior archivists.", "The cuffs are ink-marked by habit."],
+  ["ironhall_work_apron", "Ironhall Work Apron", "common", "chest", "A heavy work apron for forge floors and repair benches.", "Heat darkening marks the lower edge."],
+  ["stitched_field_trousers", "Stitched Field Trousers", "common", "legs", "Hard-wearing trousers for travel, labor, and field errands.", "Reinforced seams keep them serviceable."],
+  ["nexis_clerks_coat", "Nexis Clerk's Coat", "uncommon", "outerwear", "A civic coat worn by registry clerks and city runners.", "Grey-blue cloth marks official service without excess."],
+  ["blackharbor_deck_coat", "Blackharbor Deck Coat", "uncommon", "outerwear", "A deck coat cut for wet rails, night watches, and cargo work.", "Its buttons are dark horn and brass."],
+  ["silverbough_herbal_shawl", "Silverbough Herbal Shawl", "uncommon", "outerwear", "A green shawl favored by herbalists and shrine attendants.", "Dried leaf sachets are sewn into the inner fold."],
+  ["ironhall_rivetwork_jacket", "Ironhall Rivetwork Jacket", "uncommon", "chest", "A practical jacket used by riveters, fitters, and foundry clerks.", "Metal buttons sit flush against thick cloth."],
+  ["highcourt_velvet_mantle", "Highcourt Velvet Mantle", "uncommon", "outerwear", "A formal mantle for court visits and careful introductions.", "Deep velvet gives weight to quiet entrances."],
+  ["lettered_citizen_sash", "Lettered Citizen Sash", "uncommon", "accessory", "A public sash marking civic standing and recognized service.", "The letters are embroidered in official thread."],
+  ["magistrates_half_cape", "Magistrate's Half-Cape", "rare", "outerwear", "A formal half-cape for legal officers and prestigious petitioners.", "A narrow clasp bears the court seal."],
+  ["grove_lecturer_robe", "Grove Lecturer Robe", "rare", "chest", "A lecturer's robe used in Silverbough academies and public lessons.", "Pale green panels mark the teaching line."],
+  ["corsair_captains_scarf", "Corsair Captain's Scarf", "rare", "accessory", "A bold scarf worn by captains, pilots, and dock leaders.", "Saltwind has softened the cloth without fading it."],
+  ["forgewarden_cloak", "Forgewarden Cloak", "rare", "outerwear", "A dark cloak worn by senior forge wardens and heavy crews.", "Its clasp is cast from tempered iron."],
+  ["midnight_envoy_coat", "Midnight Envoy Coat", "rare", "outerwear", "A tailored coat for discreet envoys and late arrivals.", "Black-blue cloth hides travel dust well."],
+  ["archive_keepers_mantle", "Archive Keeper's Mantle", "rare", "outerwear", "A reserved mantle worn by keepers of records and restricted stacks.", "Small brass tabs mark its inner pockets."],
+  ["saltwind_cloak", "Saltwind Cloak", "rare", "outerwear", "A rare sea cloak that moves easily through rain and hard weather.", "The outer cloth beads water in silver lines."],
+  ["emberloom_vest", "Emberloom Vest", "rare", "chest", "A fitted vest dyed in warm Ironhall ember tones.", "Fine red thread crosses beneath the collar."],
+  ["tribunal_formalwear", "Tribunal Formalwear", "rare", "chest", "Formal court dress for hearings, appointments, and public vows.", "Every line is measured to look composed."],
+];
+
+function passClothing([id, displayName, rarity, visualSlot, shortDescription, flavorText]) {
+  const cityBias = id.includes("blackharbor") || id.includes("salt") || id.includes("corsair") ? "blackharbor" : id.includes("silverbough") || id.includes("grove") ? "silverbough" : id.includes("ironhall") || id.includes("forge") || id.includes("ember") ? "ironhall" : id.includes("highcourt") || id.includes("tribunal") || id.includes("magistrate") ? "highcourt" : "nexis";
+  const valueBuy = rarity === "rare" ? 260 : rarity === "uncommon" ? 145 : 58;
+  return defineItem({ id, displayName, category: "Clothing", subtype: visualSlot === "accessory" ? "Accessory" : "Visual Gear", itemRole: "visual", rarity, visualSlot, visualOnly: true, valueBuy, valueSell: Math.max(1, Math.floor(valueBuy * 0.45)), cityBias, sourceCity: cityBias, legalMarketAvailability: [cityBias], shortDescription, flavorText, sourceTags: ["visual", "clothing", cityBias] });
+}
+
+const PASS_CONSUMABLES = [
+  ["field_bandage", "Field Bandage", "common", 28, [{ type: "restore_health", amount: 18, context: "combat_or_field" }], "A clean bandage for small wounds during travel or combat.", "Packed tight to stay clean in a belt pouch."],
+  ["minor_healing_draught", "Minor Healing Draught", "common", 52, [{ type: "restore_health", amount: 32, context: "combat_or_field" }], "A basic healing draught for light recovery and early fights.", "Clear glass shows the pale red brew inside."],
+  ["major_healing_draught", "Major Healing Draught", "rare", 180, [{ type: "restore_health", amount: 82, context: "combat_or_field" }], "A stronger healing draught for serious wounds and hard encounters.", "The stopper is sealed with Silverbough wax."],
+  ["focus_tea", "Focus Tea", "common", 60, [{ type: "restore_energy", amount: 16, context: "field" }], "A mild tea that restores focus and a small amount of energy.", "Bitter leaf and warm spice carry the effect."],
+  ["stamina_salts", "Stamina Salts", "common", 64, [{ type: "restore_stamina", amount: 3, context: "field" }], "Sharp salts that restore stamina for travel and work.", "They wake the hands before the mind agrees."],
+  ["smoke_pellet", "Smoke Pellet", "common", 48, [{ type: "combat_buff", effect: "evadeBonus", amount: 5, context: "combat", uses: 1 }], "A compact smoke pellet that improves evasion for one fight.", "Packed black powder breaks into a fast grey screen."],
+  ["ward_chalk", "Ward Chalk", "common", 58, [{ type: "combat_buff", effect: "mitigationBonus", amount: 0.04, context: "combat", uses: 1 }], "Chalk for a quick ward mark that improves mitigation for one fight.", "White lines hold briefly under pressure."],
+  ["bitter_antidote", "Bitter Antidote", "uncommon", 86, [{ type: "combat_buff", effect: "mitigationBonus", amount: 0.03, context: "combat", uses: 1 }], "A bitter antidote that steadies the body against toxins in a fight.", "The taste is harsh enough to prove the point."],
+  ["quickstep_tonic", "Quickstep Tonic", "uncommon", 92, [{ type: "combat_buff", effect: "evadeBonus", amount: 7, context: "combat", uses: 1 }], "A tonic that improves footwork and evasion for one fight.", "A quick burn settles into the calves."],
+  ["ironhide_tonic", "Ironhide Tonic", "uncommon", 96, [{ type: "combat_buff", effect: "mitigationBonus", amount: 0.06, context: "combat", uses: 1 }], "A dense tonic that improves mitigation for one fight.", "It leaves a mineral taste and steady nerves."],
+];
+
+function passConsumable([id, displayName, rarity, valueBuy, useEffects, shortDescription, flavorText]) {
+  const cityBias = id.includes("ward") || id.includes("healing") || id.includes("antidote") ? "silverbough" : id.includes("smoke") ? "blackharbor" : id.includes("ironhide") ? "ironhall" : "nexis";
+  return defineItem({ id, displayName, category: "Consumable", subtype: useEffects.some((effect) => effect.type === "restore_health") ? "Healing" : useEffects.some((effect) => effect.type === "restore_stamina") ? "Stamina" : "Combat Support", itemRole: "consumable", rarity, valueBuy, valueSell: Math.max(1, Math.floor(valueBuy * 0.45)), cityBias, sourceCity: cityBias, legalMarketAvailability: cityBias === "blackharbor" && id.includes("smoke") ? [] : [cityBias, "nexis"].filter((value, index, list) => list.indexOf(value) === index), blackMarketAvailability: id.includes("smoke") ? ["blackharbor"] : [], useEffects, shortDescription, flavorText, sourceTags: ["consumable", "support", cityBias] });
+}
+
+const ITEMIZATION_PASS_ITEMS = [
+  ...PASS_WEAPONS.map(passWeapon),
+  ...PASS_ARMOR.map(passArmor),
+  ...PASS_CLOTHING.map(passClothing),
+  ...PASS_CONSUMABLES.map(passConsumable),
+];
+
+const RAW_ITEMS = [...CORE_ITEMS, ...ACADEMY_ITEMS, ...EXTRA_ITEMS, ...ITEMIZATION_PASS_ITEMS];
 const CATALOGUE_MAP = new Map(RAW_ITEMS.map((item) => [item.id, item]));
 
 export const ACADEMY_ITEM_REWARDS = Object.fromEntries(Object.entries(ACADEMY_PAIRS).map(([academyId, itemIds]) => [academyId, itemIds]));
@@ -291,8 +439,8 @@ function fallbackItem(itemId) {
     rarity: "common",
     valueBuy: 20,
     valueSell: 10,
-    shortDescription: `${displayName} is tracked by inventory but has not received authored item metadata yet.`,
-    flavorText: "A ledger entry waiting for its proper place in the world.",
+    shortDescription: `${displayName} is tracked by inventory as a legacy item.`,
+    flavorText: "Registered in the Nexis ledger with standard source marks.",
     sourceTags: ["legacy-catalogue"],
   });
 }
@@ -318,22 +466,87 @@ export function getAllowedEquipSlots(item) {
   return [];
 }
 
+export function getAllowedVisualSlots(item) {
+  const definition = typeof item === "string" ? getItemDefinition(item) : item;
+  if (!definition) return [];
+  if (Array.isArray(definition.allowedVisualSlots)) return definition.allowedVisualSlots.filter((slot) => VISUAL_EQUIPMENT_SLOTS.includes(slot));
+  if (definition.visualSlot && VISUAL_EQUIPMENT_SLOTS.includes(definition.visualSlot)) return [definition.visualSlot];
+  return [];
+}
+
 export function isEquippable(itemId) {
   return getAllowedEquipSlots(itemId).length > 0;
+}
+
+export function isWearable(itemId) {
+  return getAllowedVisualSlots(itemId).length > 0;
 }
 
 export function isUsable(itemId) {
   return asArray(getItemDefinition(itemId)?.useEffects).length > 0;
 }
 
+function formatSlotName(slot) {
+  return String(slot ?? "").replace(/[0-9]/g, " $&").replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/\b\w/g, (letter) => letter.toUpperCase()).trim();
+}
+
+function formatReductions(reductions) {
+  return Object.entries(asRecord(reductions)).filter(([, value]) => Number(value) > 0).map(([type, value]) => `${type} DR +${value}%`);
+}
+
+export function getArmorSetDefinition(setId) {
+  return ARMOR_SETS[setId] ?? null;
+}
+
+export function getArmorSetSummaries() {
+  return Object.values(ARMOR_SETS).map((set) => ({ id: set.id, name: set.name, city: set.city, theme: set.theme, profile: set.profile, pieces: set.pieces, bonuses: set.bonuses }));
+}
+
+export function calculateArmorSetBonuses(itemIds = []) {
+  const counts = {};
+  for (const itemId of asArray(itemIds)) {
+    const item = getItemDefinition(itemId);
+    const setId = item?.armorStats?.setId ?? item?.setId;
+    if (!setId || !ARMOR_SETS[setId]) continue;
+    counts[setId] = (counts[setId] ?? 0) + 1;
+  }
+  const reductions = {};
+  const activeSets = [];
+  for (const [setId, count] of Object.entries(counts)) {
+    const set = ARMOR_SETS[setId];
+    const activeBonuses = [];
+    const nextThreshold = [2, 3, 5].find((threshold) => count < threshold) ?? null;
+    for (const threshold of [2, 3, 5]) {
+      const bonus = set.bonuses[threshold];
+      if (!bonus || count < threshold) continue;
+      activeBonuses.push({ threshold, label: bonus.label, reductions: bonus.reductions });
+      for (const [type, amount] of Object.entries(asRecord(bonus.reductions))) reductions[type] = Math.min(ARMOR_REDUCTION_CAP, (reductions[type] ?? 0) + Number(amount || 0));
+    }
+    activeSets.push({ id: set.id, name: set.name, city: set.city, theme: set.theme, profile: set.profile, count, pieces: set.pieces, activeBonuses, nextBonus: nextThreshold ? { threshold: nextThreshold, label: set.bonuses[nextThreshold]?.label ?? null } : null });
+  }
+  return { reductions, activeSets };
+}
+
 export function summarizeItemEffects(item) {
   const definition = typeof item === "string" ? getItemDefinition(item) : item;
   if (!definition) return [];
   const effects = [];
-  const statGroups = asRecord(definition.statModifiers);
-  for (const [group, values] of Object.entries(statGroups)) {
-    for (const [key, value] of Object.entries(asRecord(values))) effects.push(`${key} ${Number(value) >= 0 ? "+" : ""}${value} (${group})`);
+  if (definition.weaponStats) {
+    const weapon = definition.weaponStats;
+    effects.push(`Damage ${weapon.damageMin}-${weapon.damageMax} ${weapon.damageType}`);
+    effects.push(`Accuracy ${weapon.accuracy}%`);
+    effects.push(`Handedness: ${formatSlotName(weapon.handedness)}`);
   }
+  if (definition.armorStats) {
+    effects.push(...formatReductions(definition.armorStats.reductions));
+    if (definition.armorStats.weightClass) effects.push(`Weight: ${formatSlotName(definition.armorStats.weightClass)}`);
+    const set = getArmorSetDefinition(definition.armorStats.setId);
+    if (set) effects.push(`Set: ${set.name}`);
+  }
+  const visualSlots = getAllowedVisualSlots(definition);
+  if (visualSlots.length) effects.push(`Wear: ${visualSlots.map(formatSlotName).join(" / ")}${definition.visualOnly ? " (visual)" : ""}`);
+  const statGroups = asRecord(definition.statModifiers);
+  for (const [group, values] of Object.entries(statGroups)) for (const [key, value] of Object.entries(asRecord(values))) effects.push(`${key} ${Number(value) >= 0 ? "+" : ""}${value} (${group})`);
   for (const [key, value] of Object.entries(asRecord(definition.combatModifiers))) effects.push(`${key} ${Number(value) >= 0 ? "+" : ""}${value}`);
   for (const effect of asArray(definition.useEffects)) {
     if (effect.type === "restore_health") effects.push(`Restore ${effect.amount} health`);
@@ -347,14 +560,19 @@ export function summarizeItemEffects(item) {
 export function getItemSummary(itemId) {
   const item = getItemDefinition(itemId);
   if (!item) return null;
+  const armorSet = item.setId ? getArmorSetDefinition(item.setId) : null;
   return {
     id: item.id,
     displayName: item.displayName,
     category: item.category,
     subtype: item.subtype,
     rarity: item.rarity,
+    itemRole: item.itemRole,
     equipSlot: item.equipSlot,
     allowedSlots: getAllowedEquipSlots(item),
+    visualSlot: item.visualSlot,
+    allowedVisualSlots: getAllowedVisualSlots(item),
+    visualOnly: item.visualOnly,
     stackLimit: item.stackLimit,
     valueBuy: item.valueBuy,
     valueSell: item.valueSell,
@@ -362,6 +580,10 @@ export function getItemSummary(itemId) {
     sourceCity: item.sourceCity,
     statModifiers: item.statModifiers,
     combatModifiers: item.combatModifiers,
+    weaponStats: item.weaponStats,
+    armorStats: item.armorStats,
+    setId: item.setId,
+    armorSet: armorSet ? { id: armorSet.id, name: armorSet.name, theme: armorSet.theme, profile: armorSet.profile, bonuses: armorSet.bonuses } : null,
     useEffects: item.useEffects,
     requirements: item.requirements,
     lockReasonText: item.lockReasonText,
@@ -369,6 +591,7 @@ export function getItemSummary(itemId) {
     flavorText: item.flavorText,
     sourceTags: item.sourceTags,
     academyTags: item.academyTags,
+    marketEligible: item.marketEligible,
     iconKey: item.iconKey,
     iconUrl: `/item-icons/${String(item.category).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item"}.svg`,
     iconBrief: item.iconBrief,

@@ -166,6 +166,7 @@ export function buildMutableRuntimeState(user, playerState) {
       isRegistered: true,
       inventory: asRecord(player.inventory),
       equipment: asRecord(player.equipment),
+      visualEquipment: asRecord(player.visualEquipment),
       equipmentMaintenance: asRecord(player.equipmentMaintenance),
       equipmentLoadouts: asRecord(player.equipmentLoadouts),
       crafting: asRecord(player.crafting),
@@ -309,6 +310,7 @@ function buildAdminDossier(user, runtimeState) {
     },
     inventory: summarizeInventory(player.inventory),
     equipment: summarizeEquipment(player.equipment),
+    visualEquipment: summarizeEquipment(player.visualEquipment),
     equipmentMaintenance: player.equipmentMaintenance,
     loadouts: summarizeLoadouts(player.equipmentLoadouts),
     skills: {

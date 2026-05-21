@@ -221,15 +221,38 @@ function buildNpcCombatant(opponent) {
   };
 }
 
+function getWeaponDamageRoll(attacker, randomFn) {
+  const weapon = asRecord(attacker.equipmentTotals?.weaponStats);
+  const min = Math.max(0, asNumber(weapon.damageMin, 0));
+  const max = Math.max(min, asNumber(weapon.damageMax, 0));
+  if (!max) return 0;
+  return min + randomFn() * (max - min);
+}
+
+function getIncomingDamageType(attacker, skill) {
+  const combat = asRecord(skill?.combat);
+  const weapon = asRecord(attacker.equipmentTotals?.weaponStats);
+  return combat.damageType || weapon.primaryDamageType || "Bludgeoning";
+}
+
+function getTypedArmorReduction(defender, damageType) {
+  return clamp(asNumber(defender.equipmentTotals?.armorReductions?.[damageType], 0) / 100, 0, 0.45);
+}
+
 function calculateDamage(attacker, defender, skill, randomFn) {
   const combat = asRecord(skill?.combat);
   const attackerStats = attacker.battleStats;
   const defenderStats = defender.battleStats;
-  const attackBase = 7 + attacker.level * 2 + attackerStats.strength * 0.78 + attackerStats.dexterity * 0.18;
+  const weapon = asRecord(attacker.equipmentTotals?.weaponStats);
+  const damageType = getIncomingDamageType(attacker, skill);
+  const weaponDamage = getWeaponDamageRoll(attacker, randomFn);
+  const attackBase = 7 + attacker.level * 2 + attackerStats.strength * 0.64 + attackerStats.dexterity * 0.16 + weaponDamage;
   const skillMultiplier = asNumber(combat.damageMultiplier, 1) + asNumber(attacker.passive?.effects?.damageMultiplier, 0);
-  const mitigation = clamp(defenderStats.defense / (defenderStats.defense + 95) + asNumber(defender.passive?.effects?.mitigationBonus, 0), 0.03, 0.62);
+  const typedReduction = getTypedArmorReduction(defender, damageType);
+  const penetration = clamp(asNumber(weapon.penetration, 0) / 100, 0, 0.2);
+  const mitigation = clamp(defenderStats.defense / (defenderStats.defense + 95) + asNumber(defender.passive?.effects?.mitigationBonus, 0) + typedReduction - penetration, 0.03, 0.72);
   const variance = 0.88 + randomFn() * 0.24;
-  return Math.max(1, Math.round(attackBase * skillMultiplier * (1 - mitigation) * variance));
+  return { damage: Math.max(1, Math.round(attackBase * skillMultiplier * (1 - mitigation) * variance)), damageType, typedReduction: Math.round(typedReduction * 100) };
 }
 
 function tryAttack({ attacker, defender, skill, randomFn, turn }) {
@@ -239,6 +262,7 @@ function tryAttack({ attacker, defender, skill, randomFn, turn }) {
       (attacker.battleStats.dexterity - defender.battleStats.dexterity) * 0.75 +
       (attacker.battleStats.speed - defender.battleStats.speed) * 0.35 +
       asNumber(combat.accuracyBonus, 0) +
+      asNumber(attacker.equipmentTotals?.weaponStats?.accuracyBonus, 0) +
       asNumber(attacker.passive?.effects?.accuracyBonus, 0) -
       asNumber(defender.passive?.effects?.evadeBonus, 0),
     28,
@@ -249,9 +273,10 @@ function tryAttack({ attacker, defender, skill, randomFn, turn }) {
     return { turn, actor: attacker.name, target: defender.name, skillId: skill?.id ?? null, skillName: skill?.name ?? "Basic Strike", outcome: "miss", damage: 0, message: `${attacker.name} missed ${defender.name} with ${skill?.name ?? "Basic Strike"}.` };
   }
 
-  const critChance = clamp(5 + attacker.battleStats.dexterity / 18 + asNumber(combat.critBonus, 0) + asNumber(attacker.passive?.effects?.critBonus, 0), 2, 45);
+  const critChance = clamp(5 + attacker.battleStats.dexterity / 18 + asNumber(combat.critBonus, 0) + asNumber(attacker.equipmentTotals?.weaponStats?.critBonus, 0) + asNumber(attacker.passive?.effects?.critBonus, 0), 2, 45);
   const crit = randomFn() * 100 < critChance;
-  let damage = calculateDamage(attacker, defender, skill, randomFn);
+  const damageResult = calculateDamage(attacker, defender, skill, randomFn);
+  let damage = damageResult.damage;
   if (crit) damage = Math.round(damage * 1.55);
   defender.health = Math.max(0, defender.health - damage);
   let heal = 0;
@@ -267,9 +292,11 @@ function tryAttack({ attacker, defender, skill, randomFn, turn }) {
     skillName: skill?.name ?? "Basic Strike",
     outcome: crit ? "crit" : "hit",
     damage,
+    damageType: damageResult.damageType,
+    armorReduction: damageResult.typedReduction,
     heal,
     defenderHealth: defender.health,
-    message: `${attacker.name} used ${skill?.name ?? "Basic Strike"} for ${damage}${crit ? " critical" : ""} damage${heal ? ` and recovered ${heal} health` : ""}.`,
+    message: `${attacker.name} used ${skill?.name ?? "Basic Strike"} for ${damage}${crit ? " critical" : ""} ${damageResult.damageType.toLowerCase()} damage${damageResult.typedReduction ? ` after ${damageResult.typedReduction}% armor reduction` : ""}${heal ? ` and recovered ${heal} health` : ""}.`,
   };
 }
 

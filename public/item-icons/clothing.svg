@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Clothing icon">
+  <rect width="64" height="64" fill="#0f171f"/>
+  <path d="M20 12l8 6h8l8-6 10 10-8 8v22H18V30l-8-8 10-10z" fill="#d8a762" opacity="0.92"/>
+  <path d="M28 18l-4 10m12-10l4 10M22 36h20M22 45h20" fill="none" stroke="#1b252e" stroke-width="3" stroke-linecap="round"/>
+  <path d="M18 30l-8-8 10-10 8 6h8l8-6 10 10-8 8" fill="none" stroke="#efe1bd" stroke-width="2" stroke-linejoin="round"/>
+</svg>

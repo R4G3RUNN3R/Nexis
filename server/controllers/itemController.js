@@ -1,8 +1,12 @@
 import {
+  destroyItemForUser,
   equipItemForUser,
   getItemInventoryForUser,
+  removeWornItemForUser,
+  sendItemForUser,
   unequipItemForUser,
   useItemForUser,
+  wearItemForUser,
 } from "../services/itemService.js";
 import {
   craftRecipeForUser,
@@ -37,6 +41,38 @@ export async function equipItem(req, res, next) {
 export async function unequipItem(req, res, next) {
   try {
     sendJson(res, await unequipItemForUser(req.auth.user, req.body?.slot));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function wearItem(req, res, next) {
+  try {
+    sendJson(res, await wearItemForUser(req.auth.user, req.body?.itemId, req.body?.slot ?? null));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function removeWornItem(req, res, next) {
+  try {
+    sendJson(res, await removeWornItemForUser(req.auth.user, req.body?.slot));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function sendItem(req, res, next) {
+  try {
+    sendJson(res, await sendItemForUser(req.auth.user, req.body?.itemId, req.body?.targetPublicId, req.body?.quantity ?? 1));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function destroyItem(req, res, next) {
+  try {
+    sendJson(res, await destroyItemForUser(req.auth.user, req.body?.itemId, req.body?.quantity ?? 1, req.body?.confirmation ?? false));
   } catch (error) {
     next(error);
   }
