@@ -7,6 +7,7 @@ import { getPropertyById } from "../data/propertyData";
 import { formatPlayerPublicId, getProfileRoute, parsePlayerPublicId } from "../lib/publicIds";
 import { resolveDisplayTitle } from "../lib/titleAccess";
 import { getProfileView, setOwnProfileTitle, type ProfileResponse, uploadOwnProfileImage } from "../lib/profileApi";
+import { getLegacyAchievements, getServerRecords, type ServerLegacyAchievement, type ServerRecordEntry } from "../lib/authApi";
 import { readCachedRuntimeState, writeCachedRuntimeState } from "../lib/runtimeStateCache";
 import { getCityName, readTravelStateFromPlayer } from "../lib/travelState";
 import "../styles/character-profile.css";
@@ -67,6 +68,14 @@ function derivePlayerCurrencies(gold: number) {
   };
 }
 
+function formatRecordCategory(category: string) {
+  return category.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatRecordTimestamp(timestamp: number) {
+  return new Date(timestamp).toLocaleString("en-GB");
+}
+
 function formatEntityLabel(entityType: ProfileResponse["publicProfile"]["entityType"]) {
   switch (entityType) {
     case "npc":
@@ -93,6 +102,16 @@ export default function ProfilePage() {
   const [prestigeMessage, setPrestigeMessage] = useState<string | null>(null);
   const [prestigeError, setPrestigeError] = useState<string | null>(null);
   const portraitInputRef = useRef<HTMLInputElement | null>(null);
+  const [chronicleEntries, setChronicleEntries] = useState<ServerRecordEntry[]>([]);
+  const [chronicleTotal, setChronicleTotal] = useState(0);
+  const [chronicleLoading, setChronicleLoading] = useState(false);
+  const [chronicleError, setChronicleError] = useState<string | null>(null);
+  const [chronicleCategory, setChronicleCategory] = useState<string>("all");
+  const [achievementHighlights, setAchievementHighlights] = useState<ServerLegacyAchievement[]>([]);
+  const [achievementsCompletedCount, setAchievementsCompletedCount] = useState(0);
+  const [achievementsTotalCount, setAchievementsTotalCount] = useState(0);
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
+  const [achievementsError, setAchievementsError] = useState<string | null>(null);
 
   const targetPublicId = useMemo(() => {
     const parsed = parsePlayerPublicId(publicIdParam);
@@ -146,6 +165,76 @@ export default function ProfilePage() {
       cancelled = true;
     };
   }, [isOwnRoute, serverSessionToken, targetPublicId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadChronicle() {
+      if (!isOwnRoute || !serverSessionToken) {
+        setChronicleEntries([]);
+        setChronicleTotal(0);
+        setChronicleError(null);
+        return;
+      }
+
+      setChronicleLoading(true);
+      const result = await getServerRecords(serverSessionToken, null, 120);
+      if (cancelled) return;
+      setChronicleLoading(false);
+
+      if (!result.ok) {
+        setChronicleError(result.error);
+        return;
+      }
+
+      setChronicleError(null);
+      setChronicleEntries(result.records);
+      setChronicleTotal(result.summary.total);
+    }
+
+    void loadChronicle();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwnRoute, serverSessionToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAchievements() {
+      if (!isOwnRoute || !serverSessionToken) {
+        setAchievementHighlights([]);
+        setAchievementsCompletedCount(0);
+        setAchievementsTotalCount(0);
+        setAchievementsError(null);
+        return;
+      }
+
+      setAchievementsLoading(true);
+      const result = await getLegacyAchievements(serverSessionToken);
+      if (cancelled) return;
+      setAchievementsLoading(false);
+
+      if (!result.ok) {
+        setAchievementsError(result.error);
+        return;
+      }
+
+      setAchievementsError(null);
+      const completed = result.achievements.filter((achievement) => achievement.completed);
+      const inProgress = result.achievements
+        .filter((achievement) => !achievement.completed)
+        .sort((a, b) => b.progress / Math.max(1, b.target) - a.progress / Math.max(1, a.target));
+      setAchievementsTotalCount(result.achievements.length);
+      setAchievementsCompletedCount(completed.length);
+      setAchievementHighlights((completed.length ? completed : inProgress).slice(0, 4));
+    }
+
+    void loadAchievements();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwnRoute, serverSessionToken]);
 
   const flavor =
     "A citizen record should read like a lived station: title, health, movement, allegiances, holdings, and the inconvenient truths people are allowed to know.";
@@ -437,6 +526,10 @@ export default function ProfilePage() {
     { label: "Travel", value: publicProfile.travel.summary },
     { label: "Status", value: publicProfile.status.label },
   ];
+  const chronicleCategories = Array.from(new Set(chronicleEntries.map((entry) => entry.category))).sort();
+  const filteredChronicleEntries = (
+    chronicleCategory === "all" ? chronicleEntries : chronicleEntries.filter((entry) => entry.category === chronicleCategory)
+  ).slice(0, 40);
 
   return (
     <AppShell title="Character Profile" hint={flavor}>
@@ -642,6 +735,106 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 </div>
+              </PanelSection>
+            ) : null}
+
+            {viewer.isSelf ? (
+              <PanelSection title="Achievements">
+                <div className="profile-panel-summary">
+                  <span>{achievementsCompletedCount} / {achievementsTotalCount} completed</span>
+                </div>
+
+                {achievementsLoading ? (
+                  <div className="profile-empty-note">Syncing achievements...</div>
+                ) : achievementsError ? (
+                  <div className="profile-empty-note">{achievementsError}</div>
+                ) : achievementHighlights.length ? (
+                  <div className="legacy-list">
+                    {achievementHighlights.map((achievement) => (
+                      <article key={achievement.id} className="legacy-entry">
+                        <div className="legacy-entry__date">
+                          {achievement.category}
+                          {" · "}
+                          {achievement.completed
+                            ? "Complete"
+                            : `${achievement.progress.toLocaleString()} / ${achievement.target.toLocaleString()}`}
+                        </div>
+                        <h3>{achievement.name}</h3>
+                        <p>{achievement.description}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="profile-empty-note">No achievements recorded yet.</div>
+                )}
+
+                <Link className="profile-panel-link" to="/achievements">
+                  View full Achievements &amp; Legacy tracker
+                </Link>
+              </PanelSection>
+            ) : null}
+
+            {viewer.isSelf ? (
+              <PanelSection title="Chronicle">
+                <div className="profile-panel-summary">
+                  <span>{chronicleTotal} record{chronicleTotal === 1 ? "" : "s"} on file</span>
+                  {chronicleEntries.length && chronicleEntries.length < chronicleTotal ? (
+                    <span>Showing latest {chronicleEntries.length}</span>
+                  ) : null}
+                </div>
+
+                {chronicleCategories.length ? (
+                  <div className="chronicle-filter-row">
+                    <button
+                      type="button"
+                      className={`chronicle-filter${chronicleCategory === "all" ? " chronicle-filter--active" : ""}`}
+                      onClick={() => setChronicleCategory("all")}
+                    >
+                      All
+                    </button>
+                    {chronicleCategories.map((category) => (
+                      <button
+                        key={category}
+                        type="button"
+                        className={`chronicle-filter${chronicleCategory === category ? " chronicle-filter--active" : ""}`}
+                        onClick={() => setChronicleCategory(category)}
+                      >
+                        {formatRecordCategory(category)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {chronicleLoading ? (
+                  <div className="profile-empty-note">Syncing the permanent record...</div>
+                ) : chronicleError ? (
+                  <div className="profile-empty-note">{chronicleError}</div>
+                ) : filteredChronicleEntries.length ? (
+                  <div className="chronicle-list">
+                    {filteredChronicleEntries.map((entry) => (
+                      <article key={entry.id} className="chronicle-entry">
+                        <div className="chronicle-entry__top">
+                          <span className="chronicle-entry__category">{formatRecordCategory(entry.category)}</span>
+                          <span className="chronicle-entry__date">{formatRecordTimestamp(entry.timestamp)}</span>
+                        </div>
+                        <p>{entry.summary}</p>
+                        {entry.route ? (
+                          <Link className="inline-route-link" to={entry.route}>
+                            Open related page
+                          </Link>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="profile-empty-note">
+                    No account records logged yet. Education, travel, combat, crafting, and other milestones will appear here as they happen.
+                  </div>
+                )}
+
+                <Link className="profile-panel-link" to="/codex?entry=record-city-board">
+                  Browse the full archive in the Codex
+                </Link>
               </PanelSection>
             ) : null}
 
