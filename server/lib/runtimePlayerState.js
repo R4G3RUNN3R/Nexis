@@ -1,6 +1,7 @@
 import { getItemSummary } from "../data/itemData.js";
 import { getPlayerRecords } from "../services/playerRecordsService.js";
 import { getRareManualEligibility } from "../services/rareManualService.js";
+import { isValidLifePathId } from "../data/lifePathsData.js";
 const DEFAULT_STATS = {
   energy: 100,
   maxEnergy: 100,
@@ -112,6 +113,14 @@ function normalizeTravelState(value) {
   };
 }
 
+function normalizeLifePath(value) {
+  const record = asRecord(value);
+  return {
+    current: isValidLifePathId(record.current) ? record.current : null,
+    chosenAt: typeof record.chosenAt === "number" ? record.chosenAt : null,
+  };
+}
+
 function normalizeStringArray(value) {
   if (!Array.isArray(value)) return [];
   return Array.from(
@@ -218,6 +227,7 @@ export function buildMutableRuntimeState(user, playerState) {
             : travel.currentCityId,
       },
       condition: normalizeCondition(player.condition),
+      lifePath: normalizeLifePath(player.lifePath),
       portrait: asRecord(player.portrait),
       bio: asRecord(player.bio),
       counters: asRecord(player.counters),
@@ -300,6 +310,7 @@ function buildAdminDossier(user, runtimeState) {
       level: player.level,
       experience: player.experience,
       title: player.title,
+      lifePath: player.lifePath,
       prestige: player.prestige,
       guild: guild.publicId ? guild : player.guild ?? null,
       consortium: consortium.publicId ? consortium : player.consortium ?? null,

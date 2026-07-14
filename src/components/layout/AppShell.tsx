@@ -22,6 +22,7 @@ type AppShellProps = {
 const core: Array<[string, string]> = [
   ["Home", "/home"],
   ["Profile", "/profile"],
+  ["Life Paths", "/life-paths"],
   ["Inventory", "/inventory"],
   ["Crafting", "/crafting"],
   ["Education", "/education"],

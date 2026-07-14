@@ -9,6 +9,8 @@ import { findOrganizationForUserByType } from "../repositories/organizationRepos
 import { resolveTravelForRuntimeState } from "./travelService.js";
 import { upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
 import { resolvePrestigeState, setPrestigeTitle } from "./liveWorldService.js";
+import { getLifePath } from "../data/lifePathsData.js";
+import { addPlayerRecord } from "./playerRecordsService.js";
 
 const PROFILE_IMAGE_DIR = path.join(process.cwd(), ".data", "profile-images");
 const PROFILE_IMAGE_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -307,5 +309,48 @@ export async function updateOwnPrestigeTitle(viewerUser, titleId) {
     runtimeState.player.title = result.prestige.currentTitle?.label ?? runtimeState.player.title;
     const nextPlayerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState: nextPlayerState, prestige: result.prestige, message: result.message };
+  });
+}
+
+export async function updateOwnLifePath(viewerUser, lifePathId) {
+  if (!viewerUser?.internalId) {
+    throw new HttpError(401, "Authentication required.", "AUTH_REQUIRED");
+  }
+
+  const path = getLifePath(String(lifePathId ?? "").trim().toLowerCase());
+  if (!path) {
+    throw new HttpError(400, "That life path is unavailable.", "LIFE_PATH_INVALID");
+  }
+
+  return withTransaction(async (client) => {
+    const user = await findUserByInternalId(client, viewerUser.internalId);
+    if (!user) throw new HttpError(404, "Citizen record unavailable.", "PROFILE_NOT_FOUND");
+    await createDefaultPlayerState(client, user.internalId);
+    const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+    if (!playerState) throw new HttpError(404, "Citizen record unavailable.", "PROFILE_STATE_NOT_FOUND");
+
+    const runtimeState = buildMutableRuntimeState(user, playerState);
+    if (asRecord(runtimeState.player.lifePath).current) {
+      throw new HttpError(409, "Your life path is already set. It is a one-time origin choice.", "LIFE_PATH_ALREADY_SET");
+    }
+
+    const chosenAt = Date.now();
+    runtimeState.player.lifePath = { current: path.id, chosenAt };
+
+    addPlayerRecord(runtimeState, {
+      category: "progression",
+      source: "life_path",
+      summary: path.chronicleSummary,
+      detail: { lifePathId: path.id, lifePathName: path.name },
+      route: "/life-paths",
+      timestamp: chosenAt,
+    });
+
+    const nextPlayerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+    return {
+      playerState: nextPlayerState,
+      lifePath: { current: path.id, chosenAt },
+      message: `You have chosen the path of the ${path.name}.`,
+    };
   });
 }

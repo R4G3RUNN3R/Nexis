@@ -1,0 +1,233 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Nexis — Life Paths Page CSS
+   Dark UI matching nexis-theme.css / jobs.css. All class names are prefixed
+   with "life-path" / "life-paths" to avoid collisions.
+───────────────────────────────────────────────────────────────────────────── */
+
+.life-paths-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.life-paths-intro {
+  color: #a9b7c4;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 14px;
+}
+
+.life-paths-notice {
+  border: 1px solid #4a3a1c;
+  background: #1a140a;
+  color: #d8c278;
+  font-size: 12px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.life-paths-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.life-path-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid #26303a;
+  border-left: 3px solid transparent;
+  background: #0b1014;
+  color: #dde5ef;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.life-path-card:hover {
+  background: #111820;
+}
+
+.life-path-card--selected {
+  border-color: #6a5a2f;
+  border-left-color: #d8c278;
+  background: linear-gradient(90deg, #201c17 0%, #171410 100%);
+}
+
+.life-path-card__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f0f5fb;
+}
+
+.life-path-card__subtitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7a9b82;
+}
+
+.life-path-card__flavor {
+  margin: 4px 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #a9b7c4;
+}
+
+.life-path-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  border-top: 1px solid #1c242c;
+  padding-top: 5px;
+}
+
+.life-path-card__meta-label {
+  color: #6a7d8e;
+}
+
+.life-path-card__meta-value {
+  color: #eef3fb;
+  text-align: right;
+}
+
+.life-paths-error {
+  margin-top: 12px;
+  border: 1px solid #5a2626;
+  background: #1a0d0d;
+  color: #f0a5a5;
+  font-size: 12px;
+  padding: 10px 12px;
+}
+
+.life-paths-confirm {
+  margin-top: 14px;
+  border: 1px solid #6a5a2f;
+  background: #171410;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.life-paths-confirm__copy {
+  font-size: 12px;
+  color: #dde5ef;
+  line-height: 1.5;
+  flex: 1;
+  min-width: 220px;
+}
+
+.life-paths-confirm__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.life-paths-confirm__cancel,
+.life-paths-confirm__accept {
+  padding: 8px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid #26303a;
+}
+
+.life-paths-confirm__cancel {
+  background: #0c1014;
+  color: #a9b7c4;
+}
+
+.life-paths-confirm__accept {
+  background: #3d3319;
+  border-color: #6a5a2f;
+  color: #f5e6b8;
+  font-weight: 700;
+}
+
+.life-paths-confirm__accept:disabled,
+.life-paths-confirm__cancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ── Chosen state ─────────────────────────────────────────────────────────── */
+
+.life-path-chosen {
+  display: grid;
+  gap: 10px;
+}
+
+.life-path-chosen__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.life-path-chosen__name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f0f5fb;
+}
+
+.life-path-chosen__subtitle {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7a9b82;
+  margin-top: 2px;
+}
+
+.life-path-chosen__date {
+  font-size: 11px;
+  color: #6a7d8e;
+}
+
+.life-path-chosen__flavor {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #a9b7c4;
+}
+
+.life-path-chosen__suggestions {
+  display: grid;
+  gap: 6px;
+}
+
+.life-path-suggestion {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #26303a;
+  background: #0c1014;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.life-path-suggestion__label {
+  color: #8695a4;
+}
+
+.life-path-suggestion__value {
+  color: #d8c278;
+  font-weight: 600;
+}
+
+.life-path-chosen__note {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #6a7d8e;
+}
+
+@media (max-width: 900px) {
+  .life-paths-grid {
+    grid-template-columns: 1fr;
+  }
+}

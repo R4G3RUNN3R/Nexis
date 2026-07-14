@@ -131,6 +131,15 @@ export type ApiPasswordResetRequestResponse =
   | { ok: true; delivered: true }
   | ApiFailure;
 
+export type ApiLifePathResponse =
+  | {
+      ok: true;
+      playerState: ServerPlayerState;
+      lifePath: { current: string | null; chosenAt: number | null };
+      message?: string;
+    }
+  | ApiFailure;
+
 export type ApiPasswordResetResponse =
   | { ok: true; reset: true }
   | ApiFailure;
@@ -1641,6 +1650,16 @@ export function getLegacyAchievements(sessionToken: string): Promise<ApiLegacyAc
     headers: {
       Authorization: `Bearer ${sessionToken}`,
     },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function chooseLifePath(sessionToken: string, lifePathId: string): Promise<ApiLifePathResponse> {
+  return requestJson<{ playerState: ServerPlayerState; lifePath: { current: string | null; chosenAt: number | null }; message?: string }>("/api/me/life-path", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+    body: JSON.stringify({ lifePathId }),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

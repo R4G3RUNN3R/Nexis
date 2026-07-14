@@ -5,6 +5,7 @@ import {
   getProfileImage,
   postOwnProfileImage,
   postOwnPrestigeTitle,
+  postOwnLifePath,
 } from "../controllers/profileController.js";
 import { HttpError } from "../lib/errors.js";
 import { attachOptionalSession } from "../middleware/attachOptionalSession.js";
@@ -43,5 +44,6 @@ router.get("/profile-images/:imageKey", getProfileImage);
 router.get("/me/profile", requireSession, (req, res) => res.redirect(307, `/api/profiles/${req.auth.user.publicId}`));
 router.post("/me/profile-image", requireSession, handleProfileImageUpload, postOwnProfileImage);
 router.post("/me/title", requireSession, postOwnPrestigeTitle);
+router.post("/me/life-path", requireSession, postOwnLifePath);
 
 export default router;
