@@ -6,6 +6,7 @@ import { OrganizationBaseTab } from "../components/organizations/OrganizationBas
 import { ConsortiumLogisticsBoard } from "../components/organizations/ConsortiumLogisticsBoard";
 import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
+import { useEducation } from "../state/EducationContext";
 import { allocatePublicNumericId, formatEntityPublicId } from "../lib/publicIds";
 import { createOrganization, getMyOrganization, getOrganizationByPublicId } from "../lib/organizationApi";
 import { cielPageCopy } from "../data/cielPageCopy";
@@ -177,6 +178,7 @@ export default function ConsortiumsPage() {
   const { publicId: publicIdParam } = useParams();
   const { player, spendGold } = usePlayer();
   const { activeAccount, authSource, serverSessionToken } = useAuth();
+  const education = useEducation();
   const [board, setBoard] = useState<ConsortiumBoard | null>(null);
   const [loadingBoard, setLoadingBoard] = useState(false);
   const [serverTemplates, setServerTemplates] = useState<ConsortiumTypeDefinition[]>([]);
@@ -240,12 +242,16 @@ export default function ConsortiumsPage() {
 
   const consortiumBlockReason = useMemo(() => {
     if (board) return "You already operate a consortium on this character.";
+    // Education hard-gate: Civic Fundamentals -> consortium founding. Checked here (matching the
+    // existing lock-reason pattern this page already uses for name/tag/gold) so the block shows
+    // before the player attempts to found, instead of only surfacing the backend's 403.
+    if (!education.isCourseCompleted("civic-fundamentals")) return "Civic Fundamentals is required before founding a consortium. Complete it in Education first.";
     if (consortiumName.trim().length < 3) return "Consortium name must be at least 3 characters.";
     if (!selectedType) return "No consortium template is available yet.";
     if (!isServerMode && consortiumTag.trim().length < 2) return "Consortium tag must be at least 2 characters.";
     if (player.gold < foundingCost) return `You need ${(foundingCost - player.gold).toLocaleString("en-GB")} more gold.`;
     return null;
-  }, [board, consortiumName, consortiumTag, foundingCost, isServerMode, player.gold, selectedType]);
+  }, [board, consortiumName, consortiumTag, education, foundingCost, isServerMode, player.gold, selectedType]);
 
   const canCreateConsortium = consortiumBlockReason === null;
 

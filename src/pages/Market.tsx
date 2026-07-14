@@ -23,6 +23,9 @@ import {
 import { readTravelStateFromPlayer } from "../lib/travelState";
 import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
+import { useEducation } from "../state/EducationContext";
+
+const PRACTICAL_ARITHMETIC_LOCK_MESSAGE = "Practical Arithmetic is required before you can trade. Complete it in Education to unlock buying, selling, and listing on the player market.";
 
 type MarketTab = "buy" | "sell" | "marketplace";
 
@@ -104,7 +107,7 @@ function OpportunityCard({ opportunity }: { opportunity: ServerTradeOpportunity 
   );
 }
 
-function ListingCard({ listing, busy, onBuy, onCancel }: { listing: ServerMarketplaceListing; busy: boolean; onBuy: (listingId: string) => void; onCancel: (listingId: string) => void }) {
+function ListingCard({ listing, busy, locked, onBuy, onCancel }: { listing: ServerMarketplaceListing; busy: boolean; locked: boolean; onBuy: (listingId: string) => void; onCancel: (listingId: string) => void }) {
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.08)", padding: 12, background: "rgba(10,14,19,0.62)", display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -115,8 +118,9 @@ function ListingCard({ listing, busy, onBuy, onCancel }: { listing: ServerMarket
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Qty {listing.quantity} | {listing.unitPrice.toLocaleString("en-GB")} each | {listing.cityName} | Seller P{listing.seller.publicId} | {listing.status}</div>
       {listing.demandHeadline ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{listing.demandHeadline}</div> : null}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {listing.isOwnListing ? <button type="button" disabled={busy} onClick={() => onCancel(listing.id)}>{busy ? "Cancelling..." : "Cancel listing"}</button> : <button type="button" disabled={busy} onClick={() => onBuy(listing.id)}>{busy ? "Buying..." : "Buy listing"}</button>}
+        {listing.isOwnListing ? <button type="button" disabled={busy} onClick={() => onCancel(listing.id)}>{busy ? "Cancelling..." : "Cancel listing"}</button> : <button type="button" disabled={busy || locked} title={locked ? PRACTICAL_ARITHMETIC_LOCK_MESSAGE : undefined} onClick={() => onBuy(listing.id)}>{busy ? "Buying..." : "Buy listing"}</button>}
       </div>
+      {!listing.isOwnListing && locked ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{PRACTICAL_ARITHMETIC_LOCK_MESSAGE}</div> : null}
     </div>
   );
 }
@@ -124,6 +128,8 @@ function ListingCard({ listing, busy, onBuy, onCancel }: { listing: ServerMarket
 export default function MarketPage() {
   const { player } = usePlayer();
   const { authSource, serverSessionToken, refreshServerState } = useAuth();
+  const education = useEducation();
+  const hasPracticalArithmetic = education.isCourseCompleted("practical-arithmetic");
   const travelState = readTravelStateFromPlayer(player);
   const cityHub = getCityHubContent(travelState.currentCityId);
   const [market, setMarket] = useState<ServerCityMarket | null>(null);
@@ -199,6 +205,7 @@ export default function MarketPage() {
 
   async function createListing() {
     if (!serverSessionToken || !listingItemId) { setError("Choose an item before listing it."); return; }
+    if (!hasPracticalArithmetic) { setError(PRACTICAL_ARITHMETIC_LOCK_MESSAGE); return; }
     setBusyItem("marketplace:create"); setMessage(null); setError(null);
     const result = await createServerMarketplaceListing(serverSessionToken, { itemId: listingItemId, quantity: listingQuantity, unitPrice: listingPrice, cityId: cityHub.cityId });
     setBusyItem(null);
@@ -208,6 +215,7 @@ export default function MarketPage() {
 
   async function buyListing(listingId: string) {
     if (!serverSessionToken) return;
+    if (!hasPracticalArithmetic) { setError(PRACTICAL_ARITHMETIC_LOCK_MESSAGE); return; }
     setBusyItem(`listing:${listingId}`); setMessage(null); setError(null);
     const result = await buyServerMarketplaceListing(serverSessionToken, listingId);
     setBusyItem(null);
@@ -274,6 +282,11 @@ export default function MarketPage() {
           {activeTab === "sell" ? <div style={{ display: "grid", gap: 10 }}>{!sellOffers.length ? <div style={{ color: "#d0ad74", fontSize: 13 }}>No carried legal trade goods are being quoted by this city.</div> : null}{sellOffers.map((offer) => <SellCard key={offer.itemId} offer={offer} quantity={getQuantity(offer.itemId, sellQuantities, offer.ownedQuantity)} busy={busyItem === `sell:${offer.itemId}`} onQuantityChange={updateSellQuantity} onSell={sellItem} />)}</div> : null}
           {activeTab === "marketplace" ? (
             <div style={{ display: "grid", gap: 12 }}>
+              {!hasPracticalArithmetic ? (
+                <div style={{ border: "1px solid rgba(208,173,116,0.35)", padding: 10, background: "rgba(7,13,20,0.48)", color: "#d0ad74", fontSize: 13 }}>
+                  Commerce locked: {PRACTICAL_ARITHMETIC_LOCK_MESSAGE}
+                </div>
+              ) : null}
               <div style={{ border: "1px solid rgba(255,255,255,0.08)", padding: 12, background: "rgba(7,13,20,0.48)", display: "grid", gap: 10 }}>
                 <strong>Create fixed-price listing</strong>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -283,9 +296,10 @@ export default function MarketPage() {
                   </select>
                   <input type="number" min={1} max={99} value={listingQuantity} onChange={(event) => setListingQuantity(Math.max(1, Math.min(99, Number(event.target.value) || 1)))} style={{ width: 72 }} />
                   <input type="number" min={1} value={listingPrice} onChange={(event) => setListingPrice(Math.max(1, Number(event.target.value) || 1))} style={{ width: 92 }} />
-                  <button type="button" disabled={busyItem === "marketplace:create" || !listingItemId} onClick={createListing}>{busyItem === "marketplace:create" ? "Posting..." : "Post listing"}</button>
+                  <button type="button" disabled={busyItem === "marketplace:create" || !listingItemId || !hasPracticalArithmetic} title={!hasPracticalArithmetic ? PRACTICAL_ARITHMETIC_LOCK_MESSAGE : undefined} onClick={createListing}>{busyItem === "marketplace:create" ? "Posting..." : "Post listing"}</button>
                 </div>
                 {!inventory.length ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>No eligible carried items available to list.</div> : null}
+                {!hasPracticalArithmetic ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{PRACTICAL_ARITHMETIC_LOCK_MESSAGE}</div> : null}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <span style={{ color: "#9fb0bf", fontSize: 12 }}>Filters</span>
@@ -338,7 +352,7 @@ export default function MarketPage() {
               {priceGuide.length ? <div style={{ border: "1px solid rgba(255,255,255,0.08)", padding: 10, background: "rgba(7,13,20,0.38)", display: "grid", gap: 6 }}><strong>Price guide</strong><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{priceGuide.slice(0, 6).map((guide) => <span key={guide.itemId} style={{ color: "#b7c3cf", fontSize: 12, border: "1px solid rgba(255,255,255,0.08)", padding: "3px 6px" }}>{getItemName(guide.itemId, guide.item)} avg {guide.averageUnitPrice.toLocaleString("en-GB")}g ({guide.totalQuantity} listed)</span>)}</div></div> : null}
               <div style={{ color: "#9fb0bf", fontSize: 12 }}>Own active listings: {ownListings.filter((listing) => listing.status === "active").length} | Recent closed: {recentActivity.length}</div>
               {!listings.length ? <div style={{ color: "#9fb0bf", fontSize: 13 }}>No citizen listings match this filter.</div> : null}
-              {listings.map((listing) => <ListingCard key={listing.id} listing={listing} busy={busyItem === `listing:${listing.id}`} onBuy={buyListing} onCancel={cancelListing} />)}
+              {listings.map((listing) => <ListingCard key={listing.id} listing={listing} busy={busyItem === `listing:${listing.id}`} locked={!hasPracticalArithmetic} onBuy={buyListing} onCancel={cancelListing} />)}
             </div>
           ) : null}
         </div>

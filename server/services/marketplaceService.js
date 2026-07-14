@@ -9,6 +9,14 @@ import { createMarketplaceListing, expireOldMarketplaceListings, findMarketplace
 import { getCityDemandProfile } from "./liveWorldService.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
 import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
+import { getCompletedCourseIds } from "./educationService.js";
+
+// Education hard-gate: mirrors the hasCompletedCourse(runtimeState, courseId) helper used by
+// travelService.js (world-geography -> travel), built on the shared getCompletedCourseIds export
+// from educationService.js (also used by worldMapService.js/cityBoardService.js/liveWorldService.js).
+function hasCompletedCourse(runtimeState, courseId) {
+  return getCompletedCourseIds(runtimeState).includes(courseId);
+}
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asNumber(value, fallback = 0) { const numeric = Number(value); return Number.isFinite(numeric) ? numeric : fallback; }
@@ -114,6 +122,8 @@ async function buildMarketplacePayload(client, user, runtimeState, filters) {
   };
 }
 
+// Deliberately not education-gated: browsing listings/price guide is not a commerce action itself,
+// so it stays visible even without Practical Arithmetic (matches the city board browsing precedent).
 export async function getMarketplaceForUser(user, query = {}) {
   return withTransaction(async (client) => {
     await expireOldMarketplaceListings(client);
@@ -133,6 +143,9 @@ export async function createMarketplaceListingForUser(user, payload = {}) {
     const unitPrice = Math.max(1, Math.min(999999, Math.floor(asNumber(payload.unitPrice, item.valueSell ?? 1))));
     const cityId = normalizeCityId(payload.cityId, "nexis");
     const { runtimeState } = await loadRuntimeState(client, user);
+    // Education hard-gate: Practical Arithmetic -> commerce. Listing an item is a sell action, so it
+    // is gated same as buying; browsing the marketplace/price guide (getMarketplaceForUser) is not.
+    if (!hasCompletedCourse(runtimeState, "practical-arithmetic")) throw new HttpError(403, "Practical Arithmetic is required before you can trade.", "EDUCATION_LOCKED");
     removeInventory(runtimeState, itemId, quantity);
     const sellerName = `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`.trim() || "Citizen";
     const listing = await createMarketplaceListing(client, { sellerInternalId: user.internalId, sellerPublicId: user.publicId, sellerName, itemId, quantity, unitPrice, cityId });
@@ -151,6 +164,8 @@ export async function buyMarketplaceListingForUser(user, listingIdInput) {
     if (!listing || listing.status !== "active" || (listing.expiresAt && listing.expiresAt <= Date.now())) throw new HttpError(404, "Marketplace listing unavailable.", "MARKETPLACE_LISTING_UNAVAILABLE");
     if (listing.sellerInternalId === user.internalId) throw new HttpError(409, "You cannot buy your own listing.", "MARKETPLACE_SELF_BUY");
     const { runtimeState: buyerState } = await loadRuntimeState(client, user);
+    // Education hard-gate: Practical Arithmetic -> commerce (buy side).
+    if (!hasCompletedCourse(buyerState, "practical-arithmetic")) throw new HttpError(403, "Practical Arithmetic is required before you can trade.", "EDUCATION_LOCKED");
     const totalPrice = listing.quantity * listing.unitPrice;
     if (asNumber(buyerState.player.gold, 0) < totalPrice) throw new HttpError(409, `Requires ${totalPrice} gold.`, "MARKETPLACE_GOLD_INSUFFICIENT");
     const sellerUser = await findUserByInternalId(client, listing.sellerInternalId);
@@ -172,6 +187,9 @@ export async function buyMarketplaceListingForUser(user, listingIdInput) {
   });
 }
 
+// Deliberately not education-gated: cancelling returns the seller's own already-listed item rather
+// than executing a new trade, so it stays available even without Practical Arithmetic (this also
+// avoids stranding items in listings that predate this gate or were created by an admin-granted account).
 export async function cancelMarketplaceListingForUser(user, listingIdInput) {
   return withTransaction(async (client) => {
     const listingId = Math.max(1, Math.floor(asNumber(listingIdInput, 0)));

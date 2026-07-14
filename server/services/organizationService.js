@@ -31,6 +31,15 @@ import {
   listConsortiumTypes,
 } from "../data/consortiumTypes.js";
 import { getOrganizationBaseEffectsForOrg } from "./organizationBaseEffectService.js";
+import { getCompletedCourseIds } from "./educationService.js";
+
+// Education hard-gate: mirrors the hasCompletedCourse(runtimeState, courseId) helper used by
+// travelService.js (world-geography -> travel), built on the shared getCompletedCourseIds export
+// from educationService.js (also used by worldMapService.js/cityBoardService.js/liveWorldService.js)
+// so completion is read from the single normalized education state rather than re-derived here.
+function hasCompletedCourse(runtimeState, courseId) {
+  return getCompletedCourseIds(runtimeState).includes(courseId);
+}
 
 const FIRST_ORGANIZATION_PUBLIC_ID = PLAYER_PUBLIC_ID_BASE + RESERVED_PLAYER_PUBLIC_ID_COUNT;
 const normalizeOrganizationPublicId = (value, type = null) => {
@@ -751,6 +760,9 @@ export async function createOrganizationForUser(user, payload) {
   return withTransaction(async (client) => {
     const existing = await findOrganizationForUserByType(client, user.internalId, type); if (existing) throw new HttpError(409, `You already operate a ${type}.`, "ORG_ALREADY_EXISTS");
     const { runtimeState } = await getRuntimeForUser(client, user); const name = normalizeName(payload?.name, type === "guild" ? "Guild name" : "Consortium name"); const template = type === "consortium" ? getConsortiumTypeDefinition(payload?.consortiumTypeKey) : null; if (type === "consortium" && !template) throw new HttpError(400, "Valid consortium type is required.", "CONSORTIUM_TYPE_REQUIRED");
+    // Education hard-gate: Civic Fundamentals -> consortium founding only. Guild founding shares this
+    // function but is intentionally NOT gated here -- the design doc's gate is specific to consortiums.
+    if (type === "consortium" && !hasCompletedCourse(runtimeState, "civic-fundamentals")) throw new HttpError(403, "Civic Fundamentals is required before founding a consortium.", "EDUCATION_LOCKED");
     const cost = type === "guild" ? getGuildFoundationCost(runtimeState) : getConsortiumFoundationCost(runtimeState, template); if (runtimeState.player.gold < cost) throw new HttpError(400, `Not enough gold to found this ${type}.`, "ORG_FUNDS_REQUIRED");
     runtimeState.player.gold -= cost; runtimeState.player.currencies = { ...runtimeState.player.currencies, gold: runtimeState.player.gold };
     const organization = await createOrganization(client, { internalId: `org_${crypto.randomUUID()}`, publicId: await allocateNextPublicNumericId(client, type, getFirstOrganizationPublicId(type)), type, name, tag: type === "guild" ? normalizeTag(payload?.tag) : null, founderInternalId: user.internalId, founderPublicId: user.publicId, description: type === "guild" ? "A live guild charter with public doctrine, internal command, dungeons, passives, and an armory instead of vague promises." : template.description, statusText: type === "guild" ? "Recruiting" : "Operational", consortiumTypeKey: template?.key ?? null, consortiumTypeName: template?.displayName ?? null, passiveBonusSummary: template ? buildPassiveSummary(template) : "", creationCost: cost, treasury: { copper: 0, silver: 0, gold: 0, platinum: 0 }, metadata: type === "consortium" ? { companyStyle: true, rewardTiers: template.rewards.map((entry) => entry.starTier), rolesFlavor: template.rolesFlavor, management: { positions: {}, applications: [], outreach: { level: 0, campaignsLaunched: 0, lastRunAt: null }, health: {}, performance: {} } } : { guild: { publicProfile: { headline: `${name} moves quietly, cuts deeply, and recruits with standards.`, recruitmentStatus: "Recruiting disciplined members", doctrine: "Strike clean, vanish cleaner.", territory: "Nexis City", diplomacy: "Open to respectful accords, allergic to clowns.", publicNotice: "Visitors see the banner. Members see the machinery." }, passives: { reputation: 120, totalEarned: 120, totalSpent: 0, unlockedSkills: [] }, wars: { doctrine: "Precision Strikes", activeWars: [], history: [] }, adventuring: { lastRunAt: null, currentQuest: null, lastCrew: [], history: [] }, armory: { items: {} }, settings: { invitePolicy: "Officer Approval", warDoctrine: "Precision Strikes" } } } });
