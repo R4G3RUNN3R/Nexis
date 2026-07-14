@@ -4,6 +4,7 @@ import {
   resolveProfileImagePath,
   updateOwnProfileImage,
   updateOwnPrestigeTitle,
+  updateOwnLifePath,
 } from "../services/profileService.js";
 
 export async function getProfile(req, res, next) {
@@ -28,6 +29,15 @@ export async function postOwnProfileImage(req, res, next) {
 export async function postOwnPrestigeTitle(req, res, next) {
   try {
     const result = await updateOwnPrestigeTitle(req.auth?.user ?? null, req.body?.titleId ?? null);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function postOwnLifePath(req, res, next) {
+  try {
+    const result = await updateOwnLifePath(req.auth?.user ?? null, req.body?.lifePathId ?? null);
     res.status(200).json(result);
   } catch (error) {
     next(error);

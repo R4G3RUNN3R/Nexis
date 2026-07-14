@@ -104,6 +104,9 @@ function mergeRuntimeState(existingRuntime, payload) {
       records: existingPlayer.records ?? payloadPlayer.records ?? {},
       rareManualEligibility: existingPlayer.rareManualEligibility ?? payloadPlayer.rareManualEligibility ?? {},
       portrait: existingPlayer.portrait ?? {},
+      // Life path is a one-time server-arbitrated choice (see profileService.js
+      // updateOwnLifePath). It must never be overwritten by a generic client sync.
+      lifePath: existingPlayer.lifePath ?? {},
     },
     // These are server-authoritative now. The browser can report state around
     // them, but it does not get to overwrite them.
