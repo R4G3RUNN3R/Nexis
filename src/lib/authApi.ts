@@ -152,6 +152,48 @@ export type ApiTravelResponse =
     }
   | ApiFailure;
 
+export type ServerTransportTier = {
+  id: string;
+  name: string;
+  category: string;
+  subtype: string;
+  terrainType: string;
+  travelSpeedModifier: number;
+  cargoCapacity: number;
+  passengerCapacity: number;
+  dangerModifier: number;
+  goldCost: number;
+  summary: string;
+  default?: boolean;
+  effectiveSpeedModifier: number;
+  effectiveDangerModifier: number;
+  estimatedEscortCost: number | null;
+};
+
+export type ServerEscortOption = {
+  id: string;
+  name: string;
+  summary: string;
+  baseGoldCost: number;
+  dangerGoldFactor: number;
+  capacityGoldFactor: number;
+  dangerReduction: number;
+  penaltyMitigation: number;
+  delayMitigation: number;
+  cargoLossMitigation: number;
+};
+
+export type ApiTravelOptionsResponse =
+  | {
+      ok: true;
+      playerState: ServerPlayerState;
+      tiers: ServerTransportTier[];
+      escort: ServerEscortOption;
+      route: { originCityId: string; destinationCityId: string; routeType: string; danger: number } | null;
+      defaultTierId: string;
+    }
+  | ApiFailure;
+
 export type ServerCityOccupant = {
   publicId: number;
   displayName: string;
@@ -1454,16 +1496,35 @@ export function equipServerLoadout(sessionToken: string, slot: string): Promise<
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
+export function getServerTravelOptions(
+  sessionToken: string,
+  destinationCityId?: string,
+): Promise<ApiTravelOptionsResponse> {
+  const query = destinationCityId ? `?destinationCityId=${encodeURIComponent(destinationCityId)}` : "";
+  return requestJson<Omit<ApiTravelOptionsResponse & { ok: true }, "ok">>(`/api/travel/options${query}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
 export function startServerTravel(
   sessionToken: string,
   destinationCityId: string,
+  options: { mode?: string; cargo?: Array<{ itemId: string; quantity: number }>; escort?: boolean } = {},
 ): Promise<ApiTravelResponse> {
   return requestJson<{ playerState: ServerPlayerState; travel: Record<string, unknown> }>("/api/travel/start", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${sessionToken}`,
     },
-    body: JSON.stringify({ destinationCityId }),
+    body: JSON.stringify({
+      destinationCityId,
+      mode: options.mode,
+      cargo: options.cargo,
+      escort: options.escort,
+    }),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

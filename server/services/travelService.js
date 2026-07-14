@@ -20,9 +20,24 @@ import {
   isValidCityId,
   normalizeCityId,
 } from "../data/travelData.js";
+import { getItemDefinition } from "../data/itemData.js";
+import {
+  ESCORT_OPTION,
+  calculateEscortCost,
+  getDefaultTransportTier,
+  getTransportTier,
+  listTransportTiers,
+  resolveTransportDangerModifier,
+  resolveTransportSpeedModifier,
+} from "../data/transportData.js";
 
 const TRAVEL_WIN_DELAY_MS = 5 * 60 * 1000;
 const ENCOUNTER_REWARD_COOLDOWN_MS = 15 * 60 * 1000;
+const CARGO_TRADE_BONUS_RATE = 0.16;
+const CARGO_DANGER_VALUE_DIVISOR = 4200;
+const CARGO_DANGER_MODIFIER_CAP = 0.18;
+const MAX_CARGO_LINE_ITEMS = 12;
+const CARGO_TURNED_BACK_BASE_LOSS_CHANCE = 0.4;
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -47,6 +62,26 @@ function normalizeEncounterNotice(value) {
   return record;
 }
 
+function normalizeCargoState(value) {
+  const record = asRecord(value);
+  const manifest = asArray(record.manifest)
+    .map((entry) => asRecord(entry))
+    .filter((entry) => typeof entry.itemId === "string" && entry.itemId)
+    .map((entry) => ({
+      itemId: entry.itemId,
+      quantity: Math.max(0, Math.floor(asNumber(entry.quantity, 0))),
+      unitValue: Math.max(0, Math.floor(asNumber(entry.unitValue, 0))),
+      label: typeof entry.label === "string" ? entry.label : entry.itemId,
+    }))
+    .filter((entry) => entry.quantity > 0);
+  if (!manifest.length) return null;
+  return {
+    manifest,
+    totalValue: Math.max(0, Math.floor(asNumber(record.totalValue, 0))),
+    totalQuantity: Math.max(0, Math.floor(asNumber(record.totalQuantity, 0))),
+  };
+}
+
 function cloneTravelState(runtimeState) {
   const record = asRecord(runtimeState.travel);
   const currentCityId = normalizeCityId(record.currentCityId, DEFAULT_CITY_ID);
@@ -63,6 +98,8 @@ function cloneTravelState(runtimeState) {
     arrivalAt: typeof record.arrivalAt === "number" ? record.arrivalAt : null,
     durationMs: typeof record.durationMs === "number" ? record.durationMs : null,
     currentCityId,
+    cargo: normalizeCargoState(record.cargo),
+    escort: Boolean(record.escort),
     arrivalNotice: normalizeEncounterNotice(record.arrivalNotice),
     encounterNotice: normalizeEncounterNotice(record.encounterNotice),
   };
@@ -330,6 +367,115 @@ function applyTravelEncounterResult(runtimeState, encounter, now, route = {}) {
   return encounter;
 }
 
+// ─── Cargo + Escort helpers (transport tiers roadmap: docs/roadmaps/nexis-travel-vehicles-and-trade-roadmap.md) ───
+
+function normalizeCargoRequest(rawCargo, inventory, tier) {
+  const requested = Array.isArray(rawCargo) ? rawCargo : [];
+  const manifest = [];
+  let totalQuantity = 0;
+  let totalValue = 0;
+
+  for (const entry of requested.slice(0, MAX_CARGO_LINE_ITEMS)) {
+    const record = asRecord(entry);
+    const itemId = typeof record.itemId === "string" ? record.itemId.trim() : "";
+    const quantity = Math.max(0, Math.floor(asNumber(record.quantity, 0)));
+    if (!itemId || quantity <= 0) continue;
+
+    const definition = getItemDefinition(itemId);
+    if (!definition) {
+      throw new HttpError(400, `Unknown cargo item: ${itemId}.`, "TRAVEL_CARGO_ITEM_INVALID");
+    }
+
+    const owned = Math.max(0, Math.floor(asNumber(inventory[itemId], 0)));
+    if (owned < quantity) {
+      throw new HttpError(400, `Not enough ${definition.displayName} on hand to bring as cargo.`, "TRAVEL_CARGO_INSUFFICIENT");
+    }
+
+    const unitValue = Math.max(1, Math.floor(Number(definition.valueSell) || Math.floor((definition.valueBuy ?? 20) * 0.5)));
+    totalQuantity += quantity;
+    totalValue += unitValue * quantity;
+    manifest.push({ itemId, quantity, unitValue, label: definition.displayName });
+  }
+
+  if (totalQuantity > Math.max(0, Math.floor(asNumber(tier?.cargoCapacity, 0)))) {
+    throw new HttpError(400, `That much cargo exceeds ${tier?.name ?? "your transport"}'s capacity.`, "TRAVEL_CARGO_OVER_CAPACITY");
+  }
+
+  return { manifest, totalQuantity, totalValue };
+}
+
+function applyEscortMitigation(encounter, escortHired) {
+  if (!encounter || !escortHired) return encounter;
+  const mitigated = { ...encounter, escorted: true };
+  if (encounter.penalties) {
+    mitigated.penalties = Object.fromEntries(
+      Object.entries(encounter.penalties).map(([key, value]) => [
+        key,
+        Math.max(0, Math.round(asNumber(value, 0) * (1 - ESCORT_OPTION.penaltyMitigation))),
+      ]),
+    );
+  }
+  if (encounter.delayMs) {
+    mitigated.delayMs = Math.round(encounter.delayMs * (1 - ESCORT_OPTION.delayMitigation));
+  }
+  return mitigated;
+}
+
+// Cargo never leaves inventory until departure actually happens, so a turned-back attempt
+// resolves as a single "did the bandits get the goods" roll rather than a partial escrow.
+function resolveCargoRiskOnTurnedBack(runtimeState, cargoRequest, cargoDangerBonus, escortHired, randomFn = Math.random) {
+  if (!cargoRequest?.manifest?.length) return null;
+  const lossChance = clamp(
+    CARGO_TURNED_BACK_BASE_LOSS_CHANCE + cargoDangerBonus - (escortHired ? ESCORT_OPTION.cargoLossMitigation : 0),
+    0.05,
+    0.85,
+  );
+  if (randomFn() >= lossChance) {
+    return { lost: false, items: [] };
+  }
+
+  const player = runtimeState.player;
+  const inventory = { ...asRecord(player.inventory) };
+  const lostItems = [];
+  for (const line of cargoRequest.manifest) {
+    const owned = Math.max(0, Math.floor(asNumber(inventory[line.itemId], 0)));
+    const lostQuantity = Math.min(line.quantity, owned);
+    if (lostQuantity > 0) {
+      inventory[line.itemId] = owned - lostQuantity;
+      lostItems.push({ itemId: line.itemId, label: line.label, quantity: lostQuantity });
+    }
+  }
+  player.inventory = inventory;
+  return { lost: lostItems.length > 0, items: lostItems };
+}
+
+function settleCargoOnArrival(runtimeState, cargo, now) {
+  if (!cargo || !asArray(cargo.manifest).length) return null;
+  const player = runtimeState.player;
+  const inventory = { ...asRecord(player.inventory) };
+  for (const line of cargo.manifest) {
+    inventory[line.itemId] = Math.max(0, Math.floor(asNumber(inventory[line.itemId], 0)) + asNumber(line.quantity, 0));
+  }
+  player.inventory = inventory;
+
+  const bonusGold = Math.max(0, Math.round(asNumber(cargo.totalValue, 0) * CARGO_TRADE_BONUS_RATE));
+  if (bonusGold > 0) {
+    player.gold = Math.max(0, Math.floor(asNumber(player.gold, 0) + bonusGold));
+    player.currencies = { ...asRecord(player.currencies), gold: player.gold };
+  }
+
+  addPlayerRecord(runtimeState, {
+    category: "travel",
+    summary: bonusGold > 0 ? `Delivered cargo for a ${bonusGold} gold trade bonus.` : "Delivered cargo at the destination market.",
+    detail: { manifest: cargo.manifest, bonusGold },
+    source: "travel-cargo",
+    route: "/travel",
+    timestamp: now,
+  });
+
+  return { bonusGold, items: cargo.manifest };
+}
+
 export function resolveTravelForRuntimeState(runtimeState, now = Date.now()) {
   const current = cloneTravelState(runtimeState);
   if (
@@ -338,6 +484,9 @@ export function resolveTravelForRuntimeState(runtimeState, now = Date.now()) {
     now >= current.arrivalAt &&
     current.destinationCityId
   ) {
+    const player = asRecord(runtimeState.player);
+    runtimeState.player = player;
+    const cargoSettlement = settleCargoOnArrival(runtimeState, current.cargo, now);
     const resolved = {
       status: "idle",
       originCityId: current.destinationCityId,
@@ -348,14 +497,17 @@ export function resolveTravelForRuntimeState(runtimeState, now = Date.now()) {
       arrivalAt: null,
       durationMs: null,
       currentCityId: current.destinationCityId,
+      cargo: null,
+      escort: false,
       arrivalNotice: {
         destinationCityId: current.destinationCityId,
         destinationName: getCityName(current.destinationCityId),
         arrivedAt: now,
+        cargoBonusGold: cargoSettlement?.bonusGold ?? 0,
+        cargoDelivered: cargoSettlement?.items ?? [],
       },
       encounterNotice: current.encounterNotice ?? null,
     };
-    const player = asRecord(runtimeState.player);
     player.counters = {
       ...asRecord(player.counters),
       travelArrivals: Math.max(0, Math.floor(asNumber(player.counters?.travelArrivals, 0))) + 1,
@@ -397,6 +549,36 @@ export async function getTravelStateForUser(user) {
   });
 }
 
+export async function getTravelOptionsForUser(user, payload = {}) {
+  return withTransaction(async (client) => {
+    const { playerState, runtimeState } = await loadRuntimeState(client, user);
+    const current = cloneTravelState(runtimeState);
+    const originCityId = normalizeCityId(current.currentCityId, DEFAULT_CITY_ID);
+    const rawDestinationCityId = String(payload?.destinationCityId ?? "").trim().toLowerCase();
+    const destinationCityId = normalizeCityId(rawDestinationCityId, "");
+    const route =
+      destinationCityId && destinationCityId !== originCityId
+        ? getRouteDefinition(originCityId, destinationCityId)
+        : null;
+    const routeDanger = route ? clamp(asNumber(route.danger, 0.3), 0, 1) : null;
+
+    const tiers = listTransportTiers().map((tier) => ({
+      ...tier,
+      effectiveSpeedModifier: resolveTransportSpeedModifier(tier, route?.routeType ?? "road"),
+      effectiveDangerModifier: resolveTransportDangerModifier(tier, route?.routeType ?? "road"),
+      estimatedEscortCost: routeDanger !== null ? calculateEscortCost(routeDanger, tier) : null,
+    }));
+
+    return {
+      playerState,
+      tiers,
+      escort: { ...ESCORT_OPTION },
+      route: route ? { originCityId, destinationCityId, routeType: route.routeType, danger: routeDanger } : null,
+      defaultTierId: getDefaultTransportTier().id,
+    };
+  });
+}
+
 export async function startTravelForUser(user, payload) {
   return withTransaction(async (client) => {
     const { runtimeState } = await loadRuntimeState(client, user);
@@ -419,30 +601,68 @@ export async function startTravelForUser(user, payload) {
 
     const route = getRouteDefinition(originCityId, destinationCityId);
     if (!route) {
-      throw new HttpError(400, "No safe caravan route is available for that destination.", "TRAVEL_ROUTE_INVALID");
+      throw new HttpError(400, "No safe route is available for that destination.", "TRAVEL_ROUTE_INVALID");
     }
 
-    const now = Date.now();
-    const encounter = applyTravelEncounterResult(
-      runtimeState,
-      resolveTravelEncounterForRoute(runtimeState, route, now),
-      now,
-      route,
+    const requestedTierId = typeof payload?.mode === "string" && payload.mode.trim() ? payload.mode : null;
+    const tier = requestedTierId ? getTransportTier(requestedTierId) : getDefaultTransportTier();
+    if (!tier) {
+      throw new HttpError(400, "Unknown transport option.", "TRAVEL_MODE_INVALID");
+    }
+
+    const player = asRecord(runtimeState.player);
+    runtimeState.player = player;
+    const inventory = asRecord(player.inventory);
+    const cargoRequest = normalizeCargoRequest(payload?.cargo, inventory, tier);
+    const escortRequested = Boolean(payload?.escort);
+
+    const routeDangerBase = clamp(asNumber(route.danger, 0.3), 0, 1);
+    const tierDangerModifier = resolveTransportDangerModifier(tier, route.routeType);
+    const cargoDangerBonus =
+      cargoRequest.totalValue > 0 ? Math.min(CARGO_DANGER_MODIFIER_CAP, cargoRequest.totalValue / CARGO_DANGER_VALUE_DIVISOR) : 0;
+    const escortDangerReduction = escortRequested ? ESCORT_OPTION.dangerReduction : 0;
+    const effectiveDanger = clamp(
+      routeDangerBase + tierDangerModifier + cargoDangerBonus - escortDangerReduction,
+      0.02,
+      0.97,
     );
+    const effectiveRoute = { ...route, danger: effectiveDanger };
+
+    const escortCost = escortRequested ? calculateEscortCost(routeDangerBase, tier) : 0;
+    const totalGoldCost = Math.max(0, Math.round(asNumber(tier.goldCost, 0) + escortCost));
+    const currentGold = Math.max(0, Math.floor(asNumber(player.gold, 0)));
+    if (totalGoldCost > currentGold) {
+      throw new HttpError(
+        400,
+        `Not enough gold to depart. ${tier.name}${escortRequested ? " with a hired escort" : ""} costs ${totalGoldCost} gold.`,
+        "TRAVEL_INSUFFICIENT_FUNDS",
+      );
+    }
+
+    player.gold = Math.max(0, currentGold - totalGoldCost);
+    player.currencies = { ...asRecord(player.currencies), gold: player.gold };
+
+    const now = Date.now();
+    const rawEncounter = resolveTravelEncounterForRoute(runtimeState, effectiveRoute, now);
+    const mitigatedEncounter = applyEscortMitigation(rawEncounter, escortRequested);
+    const encounter = applyTravelEncounterResult(runtimeState, mitigatedEncounter, now, route);
 
     if (encounter?.outcome === "turned_back") {
+      const cargoOutcome = resolveCargoRiskOnTurnedBack(runtimeState, cargoRequest, cargoDangerBonus, escortRequested);
       const nextTravel = {
         status: "idle",
         originCityId,
         destinationCityId: null,
         routeType: route.routeType,
-        mode: "caravan",
+        mode: tier.id,
         departureAt: null,
         arrivalAt: null,
         durationMs: null,
         currentCityId: originCityId,
+        cargo: null,
+        escort: false,
         arrivalNotice: null,
-        encounterNotice: encounter,
+        encounterNotice: cargoOutcome ? { ...encounter, cargoLoss: cargoOutcome } : encounter,
       };
       syncTravelOntoPlayer(runtimeState, nextTravel);
       evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
@@ -450,7 +670,16 @@ export async function startTravelForUser(user, payload) {
       return { playerState, travel: nextTravel };
     }
 
-    const rawDurationMs = route.durationMs + (encounter?.delayMs ?? 0);
+    if (cargoRequest.manifest.length) {
+      const nextInventory = { ...asRecord(player.inventory) };
+      for (const line of cargoRequest.manifest) {
+        nextInventory[line.itemId] = Math.max(0, Math.floor(asNumber(nextInventory[line.itemId], 0)) - line.quantity);
+      }
+      player.inventory = nextInventory;
+    }
+
+    const tierSpeedModifier = resolveTransportSpeedModifier(tier, route.routeType);
+    const rawDurationMs = route.durationMs * tierSpeedModifier + (encounter?.delayMs ?? 0);
     const travelEfficiency = Math.min(25, Math.max(0, getLegacyPerkEffect(runtimeState, "travel-efficiency")));
     const durationMs = Math.max(60 * 1000, Math.round(rawDurationMs * (1 - travelEfficiency / 100)));
     const nextTravel = {
@@ -458,11 +687,15 @@ export async function startTravelForUser(user, payload) {
       originCityId,
       destinationCityId,
       routeType: route.routeType,
-      mode: "caravan",
+      mode: tier.id,
       departureAt: now,
       arrivalAt: now + durationMs,
       durationMs,
       currentCityId: originCityId,
+      cargo: cargoRequest.manifest.length
+        ? { manifest: cargoRequest.manifest, totalValue: cargoRequest.totalValue, totalQuantity: cargoRequest.totalQuantity }
+        : null,
+      escort: escortRequested,
       arrivalNotice: null,
       encounterNotice: encounter,
     };
@@ -479,7 +712,7 @@ export async function cancelTravelForUser(user) {
     const { runtimeState } = await loadRuntimeState(client, user);
     const current = cloneTravelState(runtimeState);
     if (current.status !== "in_transit" || !current.originCityId || !current.destinationCityId) {
-      throw new HttpError(409, "No caravan journey is active.", "TRAVEL_NOT_ACTIVE");
+      throw new HttpError(409, "No journey is currently active.", "TRAVEL_NOT_ACTIVE");
     }
 
     const now = Date.now();
@@ -487,6 +720,16 @@ export async function cancelTravelForUser(user) {
       30 * 1000,
       Math.min(current.durationMs ?? 30 * 1000, now - (current.departureAt ?? now)),
     );
+
+    if (current.cargo) {
+      const player = asRecord(runtimeState.player);
+      const inventory = { ...asRecord(player.inventory) };
+      for (const line of current.cargo.manifest) {
+        inventory[line.itemId] = Math.max(0, Math.floor(asNumber(inventory[line.itemId], 0)) + asNumber(line.quantity, 0));
+      }
+      player.inventory = inventory;
+      runtimeState.player = player;
+    }
 
     const reversed = {
       status: "in_transit",
@@ -498,6 +741,8 @@ export async function cancelTravelForUser(user) {
       arrivalAt: now + elapsedMs,
       durationMs: elapsedMs,
       currentCityId: current.currentCityId ?? current.originCityId,
+      cargo: null,
+      escort: false,
       arrivalNotice: null,
       encounterNotice: current.encounterNotice ?? null,
     };
