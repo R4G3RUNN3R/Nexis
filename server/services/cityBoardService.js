@@ -7,6 +7,7 @@ import { getCityAcademies, getCityContracts } from "../data/cityLoopData.js";
 import { getLegalTradeGoods } from "../data/cityEconomyData.js";
 import { getCompletedCourseIds } from "./educationService.js";
 import { getBoardDiscoveryNotices, getCityLiveDigest } from "./liveWorldService.js";
+import { getAdventureBoardNotices } from "../data/adventureData.js";
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asArray(value) { return Array.isArray(value) ? value : []; }
 function currentCity(runtimeState) { const travel = asRecord(runtimeState.travel); const current = asRecord(runtimeState.player?.current); return normalizeCityId(travel.currentCityId ?? current.currentCityId ?? "nexis"); }
