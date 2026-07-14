@@ -888,16 +888,34 @@ export type ApiSkillsResponse =
   | { ok: true; playerState: ServerPlayerState; skills: ServerSkillsPayload; message?: string }
   | ApiFailure;
 
+export type ServerRecordsSummary = {
+  recent: ServerRecordEntry[];
+  total: number;
+  pendingProgressionEvents: ServerProgressionEvent[];
+};
+
+// Mirrors the payload actually returned by getRecordsForUser() in
+// server/services/playerRecordsApiService.js: { playerState, records, summary, progression }.
 export type ApiRecordsResponse =
   | {
       ok: true;
-      records: { entries: ServerRecordEntry[]; categories: Record<string, number>; total: number };
-      progressionEvents: { pending: ServerProgressionEvent[]; history: ServerProgressionEvent[] };
+      playerState: ServerPlayerState;
+      records: ServerRecordEntry[];
+      summary: ServerRecordsSummary;
+      progression: Record<string, unknown>;
     }
   | ApiFailure;
 
+// Mirrors acknowledgeProgressionForUser() in the same service file:
+// { playerState, acknowledged, summary, progression }.
 export type ApiProgressionEventAckResponse =
-  | { ok: true; progressionEvents: { pending: ServerProgressionEvent[]; history: ServerProgressionEvent[] } }
+  | {
+      ok: true;
+      playerState: ServerPlayerState;
+      acknowledged: ServerProgressionEvent[];
+      summary: ServerRecordsSummary;
+      progression: Record<string, unknown>;
+    }
   | ApiFailure;
 
 export type ServerCombatLogEntry = {

@@ -17,8 +17,6 @@
   "exclude": [
     "src/components/Ciel*.tsx",
     "src/pages/city/**",
-    "src/pages/Properties.tsx",
-    "src/pages/PropertyDetail.tsx",
     "src/state/AcademyContext.tsx",
     "src/pages/ArenaRuntime.tsx"
   ]
