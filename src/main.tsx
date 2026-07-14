@@ -19,6 +19,8 @@ import "./styles/hosp-full.css";
 import "./styles/register.css";
 import "./styles/arena.css";
 import "./styles/codex.css";
+import "./styles/public-pages.css";
+import "./styles/ashen-crown-theme.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
