@@ -3,10 +3,18 @@ import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { worldCities, worldRoutes, type WorldCity, type WorldCityId } from "../data/worldMapData";
 import { getCityHubContent } from "../data/cityHubData";
+import { ITEM_CATALOGUE } from "../data/itemsData";
 import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
 import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
-import { cancelServerTravel, getServerTravelState, startServerTravel, type ServerPlayerState } from "../lib/authApi";
+import {
+  cancelServerTravel,
+  getServerTravelOptions,
+  getServerTravelState,
+  startServerTravel,
+  type ServerPlayerState,
+  type ServerTransportTier,
+} from "../lib/authApi";
 import {
   formatTravelDuration,
   getCityName,
@@ -78,6 +86,28 @@ function getEncounterTone(outcome: string) {
   return "#d8c278";
 }
 
+function titleCaseFromId(id: string) {
+  return id
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getModeLabel(mode: string, tiers: ServerTransportTier[]) {
+  return tiers.find((tier) => tier.id === mode)?.name ?? titleCaseFromId(mode || "caravan");
+}
+
+function getItemLabel(itemId: string) {
+  return ITEM_CATALOGUE[itemId]?.name ?? titleCaseFromId(itemId);
+}
+
+function getCargoSummaryText(cargo: PersistedTravelState["cargo"]) {
+  if (!cargo || !cargo.manifest.length) return null;
+  const parts = cargo.manifest.map((line) => `${getItemLabel(line.itemId)} x${line.quantity}`);
+  return `Cargo: ${parts.join(", ")}.`;
+}
+
 export default function TravelPage() {
   const { player } = usePlayer();
   const { activeAccount, authSource, serverSessionToken } = useAuth();
@@ -87,6 +117,11 @@ export default function TravelPage() {
   const [selectedCityId, setSelectedCityId] = useState<WorldCityId>(() => getFocusedCityId(readTravelStateFromPlayer(player)));
   const [message, setMessage] = useState<string | null>(null);
   const travelStateSyncRef = useRef<PersistedTravelState>(travelState);
+
+  const [transportTiers, setTransportTiers] = useState<ServerTransportTier[]>([]);
+  const [selectedTierId, setSelectedTierId] = useState<string>("caravan");
+  const [cargoSelections, setCargoSelections] = useState<Record<string, number>>({});
+  const [escortHired, setEscortHired] = useState(false);
 
   const applyServerTravelState = useCallback((travel: Record<string, unknown>) => {
     setTravelState(
@@ -172,6 +207,28 @@ export default function TravelPage() {
     return () => window.clearInterval(syncTimer);
   }, [authSource, player, refreshServerTravel, serverSessionToken]);
 
+  useEffect(() => {
+    setCargoSelections({});
+    setEscortHired(false);
+  }, [selectedCityId]);
+
+  useEffect(() => {
+    if (authSource !== "server" || !serverSessionToken || !activeAccount) return undefined;
+    if (travelState.status === "in_transit") return undefined;
+    if (selectedCityId === travelState.currentCityId) return undefined;
+
+    let cancelled = false;
+    void (async () => {
+      const result = await getServerTravelOptions(serverSessionToken, selectedCityId);
+      if (cancelled || !("ok" in result) || !result.ok) return;
+      setTransportTiers(result.tiers);
+      setSelectedTierId((current) => (result.tiers.some((tier) => tier.id === current) ? current : result.defaultTierId));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAccount, authSource, selectedCityId, serverSessionToken, travelState.currentCityId, travelState.status]);
+
   const selectedCity = useMemo(
     () => worldCities.find((city) => city.id === selectedCityId) ?? worldCities[0],
     [selectedCityId],
@@ -201,16 +258,68 @@ export default function TravelPage() {
   const selectedCityHub = getCityHubContent(selectedCity.id);
   const academyLabel = selectedCityHub.academy.name;
 
+  const selectedTier = useMemo(
+    () => transportTiers.find((tier) => tier.id === selectedTierId) ?? null,
+    [transportTiers, selectedTierId],
+  );
+
+  const cargoOptions = useMemo(
+    () =>
+      Object.entries(player.inventory)
+        .filter(([, quantity]) => quantity > 0)
+        .map(([itemId, quantity]) => ({ itemId, owned: quantity, label: getItemLabel(itemId) }))
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    [player.inventory],
+  );
+
+  const cargoCapacity = selectedTier?.cargoCapacity ?? 0;
+  const cargoTotalQuantity = useMemo(
+    () => Object.values(cargoSelections).reduce((sum, quantity) => sum + quantity, 0),
+    [cargoSelections],
+  );
+  const cargoEntries = useMemo(
+    () =>
+      Object.entries(cargoSelections)
+        .filter(([, quantity]) => quantity > 0)
+        .map(([itemId, quantity]) => ({ itemId, quantity })),
+    [cargoSelections],
+  );
+
+  function setCargoQuantity(itemId: string, quantity: number, owned: number) {
+    setCargoSelections((current) => {
+      const othersTotal = Object.entries(current).reduce((sum, [id, qty]) => (id === itemId ? sum : sum + qty), 0);
+      const remainingCapacity = Math.max(0, cargoCapacity - othersTotal);
+      const clamped = Math.max(0, Math.min(owned, remainingCapacity, quantity));
+      const next = { ...current };
+      if (clamped <= 0) {
+        delete next[itemId];
+      } else {
+        next[itemId] = clamped;
+      }
+      return next;
+    });
+  }
+
+  const escortCost = escortHired ? selectedTier?.estimatedEscortCost ?? 0 : 0;
+  const totalDepartureCost = (selectedTier?.goldCost ?? 0) + escortCost;
+  const canAffordDeparture = player.gold >= totalDepartureCost;
+
   async function handleTravel() {
     if (!canTravel || authSource !== "server" || !serverSessionToken || !activeAccount) return;
-    const result = await startServerTravel(serverSessionToken, selectedCity.id);
+    const result = await startServerTravel(serverSessionToken, selectedCity.id, {
+      mode: selectedTierId,
+      cargo: cargoEntries,
+      escort: escortHired,
+    });
     if (!("ok" in result) || !result.ok) {
       setMessage(result.error);
       return;
     }
     cacheAndApplyTravelResult(result);
+    setCargoSelections({});
+    setEscortHired(false);
     const nextTravel = readTravelStateFromPlayer({ current: { travel: result.travel, currentCityId: result.travel.currentCityId } });
-    setMessage(nextTravel.encounterNotice?.summary ?? `Caravan assembled for ${selectedCity.name}.`);
+    setMessage(nextTravel.encounterNotice?.summary ?? `${getModeLabel(selectedTierId, transportTiers)} assembled for ${selectedCity.name}.`);
   }
 
   async function handleCancelTravel() {
@@ -226,9 +335,11 @@ export default function TravelPage() {
 
   useEffect(() => {
     if (travelState.arrivalNotice?.arrivedAt && travelState.arrivalNotice.destinationName) {
-      setMessage(`Caravan arrived in ${travelState.arrivalNotice.destinationName}.`);
+      const bonusGold = travelState.arrivalNotice.cargoBonusGold ?? 0;
+      const bonusText = bonusGold > 0 ? ` Cargo sold at market for a ${bonusGold} gold trade bonus.` : "";
+      setMessage(`Caravan arrived in ${travelState.arrivalNotice.destinationName}.${bonusText}`);
     }
-  }, [travelState.arrivalNotice?.arrivedAt, travelState.arrivalNotice?.destinationName]);
+  }, [travelState.arrivalNotice?.arrivedAt, travelState.arrivalNotice?.cargoBonusGold, travelState.arrivalNotice?.destinationName]);
 
   return (
     <AppShell
@@ -327,10 +438,16 @@ export default function TravelPage() {
                   {travelState.encounterNotice.hasWorldGeography ? " World Geography applied" : " World Geography missing"}
                 </div>
                 {travelState.encounterNotice.delayMs ? <div>Travel delay: {formatTravelDuration(travelState.encounterNotice.delayMs)}.</div> : null}
+                {travelState.encounterNotice.escorted ? <div>Hired escort softened the encounter.</div> : null}
                 {travelState.encounterNotice.combat ? (
                   <div>Combat: {travelState.encounterNotice.combat.energySpent ?? 0} energy spent | +{travelState.encounterNotice.combat.combatXpGained ?? 0} combat XP | +{travelState.encounterNotice.combat.skillXpGained ?? 0} skill XP.</div>
                 ) : null}
                 {getEncounterRewardText(travelState.encounterNotice) ? <div>{getEncounterRewardText(travelState.encounterNotice)}</div> : null}
+                {travelState.encounterNotice.cargoLoss?.lost ? (
+                  <div style={{ color: "#d98f8f" }}>
+                    Cargo lost: {travelState.encounterNotice.cargoLoss.items.map((item) => `${item.label} x${item.quantity}`).join(", ")}.
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -341,7 +458,10 @@ export default function TravelPage() {
               </div>
               <div className="travel-info">
                 <span className="travel-info__label">Travel Mode</span>
-                <strong className="travel-info__value">{travelState.mode === "personal_wagon" ? "Personal Wagon" : "Caravan"}</strong>
+                <strong className="travel-info__value">
+                  {isTraveling ? getModeLabel(travelState.mode, transportTiers) : selectedTier?.name ?? getModeLabel(selectedTierId, transportTiers)}
+                  {travelState.escort || (!isTraveling && escortHired) ? " + Escort" : ""}
+                </strong>
               </div>
               <div className="travel-info">
                 <span className="travel-info__label">Academy</span>
@@ -361,6 +481,7 @@ export default function TravelPage() {
                   <span style={{ width: `${progress.percent}%` }} />
                 </div>
                 <div>{progress.percent}% complete | ETA {formatTravelDuration(progress.remainingMs)}</div>
+                {getCargoSummaryText(travelState.cargo) ? <div>{getCargoSummaryText(travelState.cargo)}</div> : null}
                 {location.state?.redirectedFrom ? (
                   <div className="travel-inline-note travel-inline-note--warning">
                     {location.state.redirectedFrom} is unavailable while you are in transit.
@@ -370,6 +491,91 @@ export default function TravelPage() {
             ) : null}
 
             <p className="travel-card__summary">{selectedCity.summary}</p>
+
+            {!isTraveling && canTravel ? (
+              <div className="travel-subsection">
+                <div className="travel-subsection__title">Transport</div>
+                <div className="travel-transport-grid">
+                  {(transportTiers.length ? transportTiers : []).map((tier) => (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      className={`travel-transport-option${selectedTierId === tier.id ? " travel-transport-option--selected" : ""}`}
+                      onClick={() => setSelectedTierId(tier.id)}
+                    >
+                      <div className="travel-transport-option__name">{tier.name}</div>
+                      <div className="travel-transport-option__meta">{tier.subtype}</div>
+                      <div className="travel-transport-option__stats">
+                        Cargo {tier.cargoCapacity} | {tier.goldCost} gold
+                      </div>
+                      <div className="travel-transport-option__stats">{tier.summary}</div>
+                    </button>
+                  ))}
+                  {!transportTiers.length ? (
+                    <div className="travel-inline-note">Loading transport options...</div>
+                  ) : null}
+                </div>
+
+                <div className="travel-subsection__title" style={{ marginTop: 12 }}>
+                  Cargo Manifest {cargoCapacity ? `(${cargoTotalQuantity} / ${cargoCapacity} capacity)` : ""}
+                </div>
+                {cargoOptions.length ? (
+                  <div className="travel-cargo-list">
+                    {cargoOptions.map((option) => {
+                      const carried = cargoSelections[option.itemId] ?? 0;
+                      return (
+                        <div key={option.itemId} className="travel-cargo-row">
+                          <div className="travel-cargo-row__label">
+                            {option.label}
+                            <span className="travel-cargo-row__owned"> ({option.owned} owned)</span>
+                          </div>
+                          <div className="travel-cargo-row__controls">
+                            <button
+                              type="button"
+                              className="travel-cargo-step"
+                              onClick={() => setCargoQuantity(option.itemId, carried - 1, option.owned)}
+                              disabled={carried <= 0}
+                            >
+                              -
+                            </button>
+                            <span className="travel-cargo-row__quantity">{carried}</span>
+                            <button
+                              type="button"
+                              className="travel-cargo-step"
+                              onClick={() => setCargoQuantity(option.itemId, carried + 1, option.owned)}
+                              disabled={carried >= option.owned || cargoTotalQuantity >= cargoCapacity}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="travel-inline-note">Your inventory is empty. Nothing to bring as cargo.</div>
+                )}
+
+                <div className="travel-escort-toggle-row">
+                  <button
+                    type="button"
+                    className={`travel-escort-toggle${escortHired ? " travel-escort-toggle--active" : ""}`}
+                    onClick={() => setEscortHired((current) => !current)}
+                  >
+                    {escortHired ? "Escort Hired" : "Hire Escort"}
+                    {selectedTier?.estimatedEscortCost != null ? ` (${selectedTier.estimatedEscortCost} gold)` : ""}
+                  </button>
+                  <span className="travel-destination-registry__hint" style={{ margin: 0 }}>
+                    A hired guard cuts encounter risk and softens whatever gets through.
+                  </span>
+                </div>
+
+                <div className="travel-inline-note">
+                  Departure cost: {totalDepartureCost} gold ({player.gold} on hand).
+                  {!canAffordDeparture ? " Not enough gold for this loadout." : ""}
+                </div>
+              </div>
+            ) : null}
 
             <div className="travel-subsection">
               <div className="travel-subsection__title">Connected Routes</div>
@@ -387,13 +593,15 @@ export default function TravelPage() {
                 type="button"
                 className="travel-action-button travel-action-button--primary"
                 onClick={() => void handleTravel()}
-                disabled={!canTravel}
+                disabled={!canTravel || !canAffordDeparture}
               >
                 {isTraveling
                   ? "Already Traveling"
                   : selectedCity.id === travelState.currentCityId
                     ? "Already Here"
-                    : `Depart Now: ${selectedCity.name}`}
+                    : !canAffordDeparture
+                      ? "Not Enough Gold"
+                      : `Depart Now: ${selectedCity.name}`}
               </button>
               {isTraveling ? (
                 <button type="button" className="travel-action-button" onClick={() => void handleCancelTravel()}>

@@ -378,3 +378,128 @@
 .world-atlas-card__link { color: #f0d989; font-size: 12px; font-weight: 800; }
 .world-atlas-note,
 .world-atlas-empty { margin-top: 10px; color: #8fa0af; font-size: 12px; }
+
+/* ── Transport, Cargo, and Escort (travel roadmap Phase 1-3) ─────────────── */
+
+.travel-transport-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.travel-transport-option {
+  text-align: left;
+  border: 1px solid #26303a;
+  background: #0b1218;
+  color: #f7fbff;
+  padding: 9px;
+  cursor: pointer;
+}
+
+.travel-transport-option:hover {
+  border-color: #3a4e5f;
+}
+
+.travel-transport-option--selected {
+  border-color: #6ea8cf;
+  background: #0d1821;
+}
+
+.travel-transport-option__name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.travel-transport-option__meta {
+  margin-top: 2px;
+  color: #98b590;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.travel-transport-option__stats {
+  margin-top: 4px;
+  color: #9fb0c3;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.travel-cargo-list {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.travel-cargo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid #26303a;
+  background: #090d11;
+}
+
+.travel-cargo-row__label {
+  color: #dbe5f0;
+  font-size: 12px;
+}
+
+.travel-cargo-row__owned {
+  color: #7e8a96;
+  font-size: 11px;
+}
+
+.travel-cargo-row__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.travel-cargo-row__quantity {
+  min-width: 18px;
+  text-align: center;
+  color: #f7fbff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.travel-cargo-step {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #3b4b59;
+  background: #101820;
+  color: #d5e0ea;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.travel-cargo-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.travel-escort-toggle-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.travel-escort-toggle {
+  border: 1px solid #3b4b59;
+  background: #0b1218;
+  color: #d5e0ea;
+  padding: 7px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.travel-escort-toggle--active {
+  border-color: #4b8d79;
+  background: #0d1f1a;
+  color: #bce9d7;
+}

@@ -1,5 +1,18 @@
 import { worldCities, type WorldCityId } from "../data/worldMapData";
 
+export type TravelCargoLine = {
+  itemId: string;
+  quantity: number;
+  unitValue?: number;
+  label: string;
+};
+
+export type TravelCargoManifest = {
+  manifest: TravelCargoLine[];
+  totalValue: number;
+  totalQuantity: number;
+};
+
 export type TravelEncounterNotice = {
   happened?: boolean;
   outcome: "avoided" | "victory" | "costly_victory" | "turned_back" | string;
@@ -9,6 +22,7 @@ export type TravelEncounterNotice = {
   encounterChance?: number;
   routeDanger?: number;
   delayMs?: number;
+  escorted?: boolean;
   reward?: {
     gold?: number;
     experience?: number;
@@ -24,6 +38,7 @@ export type TravelEncounterNotice = {
     skillXpGained?: number;
     log?: Array<{ message?: string }>;
   } | null;
+  cargoLoss?: { lost: boolean; items: Array<{ itemId: string; label: string; quantity: number }> } | null;
   resolvedAt?: number;
 };
 
@@ -33,7 +48,9 @@ export type PersistedTravelState = {
   originCityId: WorldCityId;
   destinationCityId: WorldCityId | null;
   routeType: "road" | "sea" | "mixed";
-  mode: "caravan" | "personal_wagon";
+  mode: string;
+  cargo: TravelCargoManifest | null;
+  escort: boolean;
   departureAt: number | null;
   arrivalAt: number | null;
   durationMs: number | null;
@@ -41,6 +58,8 @@ export type PersistedTravelState = {
     destinationCityId: WorldCityId | null;
     destinationName: string | null;
     arrivedAt: number | null;
+    cargoBonusGold?: number;
+    cargoDelivered?: TravelCargoLine[];
   } | null;
   encounterNotice: TravelEncounterNotice | null;
 };
@@ -52,6 +71,8 @@ const DEFAULT_STATE: PersistedTravelState = {
   destinationCityId: null,
   routeType: "road",
   mode: "caravan",
+  cargo: null,
+  escort: false,
   departureAt: null,
   arrivalAt: null,
   durationMs: null,
@@ -80,6 +101,27 @@ function readArrivalNotice(
       : null,
     destinationName: typeof record.destinationName === "string" ? record.destinationName : null,
     arrivedAt: typeof record.arrivedAt === "number" ? record.arrivedAt : null,
+    cargoBonusGold: typeof record.cargoBonusGold === "number" ? record.cargoBonusGold : undefined,
+    cargoDelivered: Array.isArray(record.cargoDelivered) ? (record.cargoDelivered as TravelCargoLine[]) : undefined,
+  };
+}
+
+function readCargoState(value: unknown): TravelCargoManifest | null {
+  const record = asRecord(value);
+  const manifest = Array.isArray(record.manifest) ? record.manifest : [];
+  if (!manifest.length) return null;
+  return {
+    manifest: manifest
+      .map((entry) => asRecord(entry))
+      .filter((entry) => typeof entry.itemId === "string" && entry.itemId)
+      .map((entry) => ({
+        itemId: entry.itemId as string,
+        quantity: typeof entry.quantity === "number" ? entry.quantity : 0,
+        unitValue: typeof entry.unitValue === "number" ? entry.unitValue : undefined,
+        label: typeof entry.label === "string" ? entry.label : (entry.itemId as string),
+      })),
+    totalValue: typeof record.totalValue === "number" ? record.totalValue : 0,
+    totalQuantity: typeof record.totalQuantity === "number" ? record.totalQuantity : 0,
   };
 }
 
@@ -95,9 +137,13 @@ function readEncounterNotice(value: unknown): TravelEncounterNotice | null {
     encounterChance: typeof record.encounterChance === "number" ? record.encounterChance : undefined,
     routeDanger: typeof record.routeDanger === "number" ? record.routeDanger : undefined,
     delayMs: typeof record.delayMs === "number" ? record.delayMs : undefined,
+    escorted: typeof record.escorted === "boolean" ? record.escorted : undefined,
     reward: Object.keys(asRecord(record.reward)).length ? (asRecord(record.reward) as TravelEncounterNotice["reward"]) : null,
     penalties: Object.keys(asRecord(record.penalties)).length ? asRecord(record.penalties) as Record<string, number> : null,
     combat: Object.keys(asRecord(record.combat)).length ? (asRecord(record.combat) as TravelEncounterNotice["combat"]) : null,
+    cargoLoss: Object.keys(asRecord(record.cargoLoss)).length
+      ? (asRecord(record.cargoLoss) as TravelEncounterNotice["cargoLoss"])
+      : null,
     resolvedAt: typeof record.resolvedAt === "number" ? record.resolvedAt : undefined,
   };
 }
@@ -112,7 +158,9 @@ export function readTravelStateFromPlayer(player: { current?: { travel?: unknown
     destinationCityId: record.destinationCityId ? asCityId(record.destinationCityId, currentCityId) : null,
     routeType:
       record.routeType === "sea" || record.routeType === "mixed" ? record.routeType : "road",
-    mode: record.mode === "personal_wagon" ? "personal_wagon" : "caravan",
+    mode: typeof record.mode === "string" && record.mode ? record.mode : "caravan",
+    cargo: readCargoState(record.cargo),
+    escort: Boolean(record.escort),
     departureAt: typeof record.departureAt === "number" ? record.departureAt : null,
     arrivalAt: typeof record.arrivalAt === "number" ? record.arrivalAt : null,
     durationMs: typeof record.durationMs === "number" ? record.durationMs : null,
