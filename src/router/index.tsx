@@ -4,6 +4,7 @@ import RouteGuard from "../components/routing/RouteGuard";
 import RegisterPage from "../pages/Register";
 import ForgotPasswordPage from "../pages/ForgotPassword";
 import ResetPasswordPage from "../pages/ResetPassword";
+import LandingPage from "../pages/Landing";
 import NewsPage from "../pages/News";
 import RulesPage from "../pages/Rules";
 import ContactPage from "../pages/Contact";
@@ -69,7 +70,7 @@ function RootEntry() {
     return <Navigate to="/home" replace />;
   }
 
-  return <NewsPage />;
+  return <LandingPage />;
 }
 
 function OwnProfileRedirect() {
