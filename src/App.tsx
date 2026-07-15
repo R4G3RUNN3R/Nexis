@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, useLocation } from "react-router-dom";
 import AppRouter from "./router";
 import { AuthProvider, useAuth } from "./state/AuthContext";
 import { PlayerProvider } from "./state/PlayerContext";
+import { AdminModeProvider } from "./state/AdminModeContext";
 import { EducationProvider } from "./state/EducationContext";
 import { TimerProvider } from "./state/TimerContext";
 import { JobsProvider } from "./state/JobsContext";
@@ -47,20 +48,22 @@ export default function App() {
   return (
     <AuthProvider>
       <PlayerProvider>
-        <TimerProvider>
-          <JobsProvider>
-            <ArenaProvider>
-              <EducationProvider>
-                <BackendStateBridge />
-                <BrowserRouter>
-                  <AuthGate>
-                    <AppRouter />
-                  </AuthGate>
-                </BrowserRouter>
-              </EducationProvider>
-            </ArenaProvider>
-          </JobsProvider>
-        </TimerProvider>
+        <AdminModeProvider>
+          <TimerProvider>
+            <JobsProvider>
+              <ArenaProvider>
+                <EducationProvider>
+                  <BackendStateBridge />
+                  <BrowserRouter>
+                    <AuthGate>
+                      <AppRouter />
+                    </AuthGate>
+                  </BrowserRouter>
+                </EducationProvider>
+              </ArenaProvider>
+            </JobsProvider>
+          </TimerProvider>
+        </AdminModeProvider>
       </PlayerProvider>
     </AuthProvider>
   );

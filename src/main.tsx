@@ -21,6 +21,7 @@ import "./styles/arena.css";
 import "./styles/codex.css";
 import "./styles/public-pages.css";
 import "./styles/ashen-crown-theme.css";
+import "./styles/admin-inline.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

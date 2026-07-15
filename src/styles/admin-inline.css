@@ -1,0 +1,104 @@
+/* Compact inline admin controls (Admin Mode). Only ever rendered for
+   accounts whose server-verified privilegeRole is "admin" — see
+   src/state/AdminModeContext.tsx and src/components/admin/AdminInlineControls.tsx. */
+
+.sidebar-admin-toggle {
+  margin-top: 10px;
+}
+
+.admin-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid rgba(214, 105, 105, 0.45);
+  border-radius: 8px;
+  background: rgba(214, 105, 105, 0.08);
+  color: #e7b3b3;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.admin-mode-toggle:hover {
+  background: rgba(214, 105, 105, 0.16);
+}
+
+.admin-mode-toggle--on {
+  border-color: rgba(126, 184, 91, 0.6);
+  background: rgba(126, 184, 91, 0.14);
+  color: #cbe6ac;
+}
+
+.admin-mode-toggle__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.admin-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-inline__btn {
+  padding: 2px 7px;
+  border: 1px solid rgba(214, 105, 105, 0.5);
+  border-radius: 5px;
+  background: rgba(214, 105, 105, 0.1);
+  color: #e7b3b3;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  line-height: 1.6;
+}
+
+.admin-inline__btn:hover:not(:disabled) {
+  background: rgba(214, 105, 105, 0.22);
+}
+
+.admin-inline__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.admin-inline__error {
+  color: #f2a7a7;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.admin-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px dashed rgba(214, 105, 105, 0.3);
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.admin-inline-row__label {
+  color: #e7b3b3;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.admin-inline-row__value {
+  color: #dbe3e9;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

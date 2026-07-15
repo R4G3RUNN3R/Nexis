@@ -33,6 +33,29 @@ const ADMIN_CURRENCY_CAP = 100_000_000;
 const ADMIN_ITEM_QUANTITY_CAP = 10_000;
 const ADMIN_ITEM_STACK_CAP = 100_000;
 
+// Map (not a plain object) so a payload.stat/currency value of "__proto__",
+// "constructor", etc. can never resolve to something on Object.prototype.
+const RESOURCE_STAT_CONFIG = new Map([
+  ["energy", { maxKey: "maxEnergy", defaultMax: 100, min: 0 }],
+  ["stamina", { maxKey: "maxStamina", defaultMax: 10, min: 0 }],
+  // Health keeps the same floor of 1 that buildMutableRuntimeState enforces
+  // elsewhere, so an admin can't leave the player in an un-triggered 0-health
+  // state outside of the normal combat/hospitalization flow.
+  ["health", { maxKey: "maxHealth", defaultMax: 100, min: 1 }],
+  ["comfort", { maxKey: "maxComfort", defaultMax: 100, min: 0 }],
+  ["nerve", { maxKey: "maxNerve", defaultMax: 84, min: 0 }],
+]);
+
+const ADJUSTABLE_CURRENCIES = new Set(["copper", "silver", "gold", "platinum"]);
+
+function resolveResourceStatConfig(stat) {
+  const config = RESOURCE_STAT_CONFIG.get(stat);
+  if (!config) {
+    throw new HttpError(400, `Unsupported resource stat: ${stat}`, "ADMIN_STAT_UNSUPPORTED");
+  }
+  return config;
+}
+
 function requireAdminWholeNumber(value, { fieldName, min = 0, max, code = "ADMIN_NUMBER_INVALID" }) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || !Number.isInteger(numeric)) {
@@ -205,6 +228,42 @@ function applyAdminAction(runtimeState, actionType, payload) {
       afterSummary = { ...summarizeBars(player.stats), barRevision };
       break;
     }
+    case "setResourceStat": {
+      const stat = String(payload?.stat ?? "").trim();
+      const config = resolveResourceStatConfig(stat);
+      const max = asWholeNumber(player.stats[config.maxKey], config.defaultMax);
+      const value = requireAdminWholeNumber(payload?.value, {
+        fieldName: `${stat} value`,
+        min: config.min,
+        max,
+        code: "ADMIN_STAT_VALUE_INVALID",
+      });
+      const current = asWholeNumber(player.stats[stat]);
+      beforeSummary = { stat, value: current, max, barRevision: readBarRevision(player) };
+      player.stats = { ...player.stats, [stat]: value };
+      const barRevision = stampBarRecovery(player);
+      afterSummary = { stat, value, max, barRevision };
+      break;
+    }
+    case "adjustResourceStat": {
+      const stat = String(payload?.stat ?? "").trim();
+      const config = resolveResourceStatConfig(stat);
+      const max = asWholeNumber(player.stats[config.maxKey], config.defaultMax);
+      const delta = Number(payload?.delta);
+      if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) {
+        throw new HttpError(400, "Delta must be a non-zero whole number.", "ADMIN_STAT_DELTA_INVALID");
+      }
+      const current = asWholeNumber(player.stats[stat]);
+      const next = Math.max(config.min, Math.min(max, current + delta));
+      if (next === current) {
+        throw new HttpError(409, `${stat} is already at its limit for that adjustment.`, "ADMIN_STAT_ALREADY_AT_LIMIT");
+      }
+      beforeSummary = { stat, value: current, max, delta, barRevision: readBarRevision(player) };
+      player.stats = { ...player.stats, [stat]: next };
+      const barRevision = stampBarRecovery(player);
+      afterSummary = { stat, value: next, max, barRevision };
+      break;
+    }
     case "setBattleStats": {
       const nextStats = asRecord(payload?.battleStats);
       beforeSummary = { ...player.battleStats };
@@ -250,6 +309,23 @@ function applyAdminAction(runtimeState, actionType, payload) {
       };
       player.gold = player.currencies.gold;
       afterSummary = { ...player.currencies };
+      break;
+    }
+    case "adjustCurrency": {
+      const currency = String(payload?.currency ?? "").trim();
+      if (!ADJUSTABLE_CURRENCIES.has(currency)) {
+        throw new HttpError(400, `Unsupported currency: ${currency}`, "ADMIN_CURRENCY_UNSUPPORTED");
+      }
+      const delta = Number(payload?.delta);
+      if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) {
+        throw new HttpError(400, "Delta must be a non-zero whole number.", "ADMIN_CURRENCY_DELTA_INVALID");
+      }
+      const current = asWholeNumber(player.currencies[currency]);
+      const next = Math.max(0, Math.min(ADMIN_CURRENCY_CAP, current + delta));
+      beforeSummary = { currency, value: current, delta };
+      player.currencies = { ...player.currencies, [currency]: next };
+      if (currency === "gold") player.gold = player.currencies.gold;
+      afterSummary = { currency, value: next };
       break;
     }
     case "setPlayerJob": {
@@ -474,6 +550,16 @@ function applyAdminAction(runtimeState, actionType, payload) {
       runtimeState.travel = { status: "idle", currentCityId: destination, originCityId: destination, destinationCityId: null, arrivalNotice: null, encounterNotice: null };
       player.current = { ...player.current, travel: runtimeState.travel, currentCityId: destination };
       afterSummary = { travel: runtimeState.travel, currentCityId: destination };
+      break;
+    }
+    case "clearCondition": {
+      const previous = player.condition ?? { type: "normal", until: null, reason: null };
+      if (previous.type === "normal") {
+        throw new HttpError(409, "Condition is already normal.", "ADMIN_CONDITION_ALREADY_NORMAL");
+      }
+      beforeSummary = { type: previous.type, until: previous.until ?? null, reason: previous.reason ?? null };
+      player.condition = { type: "normal", until: null, reason: null };
+      afterSummary = { type: "normal", until: null, reason: null };
       break;
     }
     case "setCityStanding": {

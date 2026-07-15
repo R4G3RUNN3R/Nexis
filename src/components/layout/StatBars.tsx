@@ -1,4 +1,5 @@
 import { usePlayer } from "../../state/PlayerContext";
+import { AdminBarInlineControls, AdminNerveInlineRow } from "../admin/AdminInlineControls";
 
 const ENERGY_INTERVAL_MS = 5 * 60 * 1000;
 const HEALTH_INTERVAL_MS = 3 * 60 * 1000;
@@ -50,12 +51,16 @@ function StatBar({
   max,
   color,
   intervalMs,
+  stat,
+  fillActionType,
 }: {
   label: string;
   current: number;
   max: number;
   color: string;
   intervalMs: number;
+  stat: "energy" | "stamina" | "health" | "comfort";
+  fillActionType: string;
 }) {
   const displayCurrent = Math.floor(current);
   const isFull = displayCurrent >= max;
@@ -67,7 +72,10 @@ function StatBar({
     <div className="sb-row" title={title}>
       <div className="sb-row__copy">
         <div className="sb-row__topline">
-          <span className="sb-row__label">{label}</span>
+          <span className="sb-row__label">
+            {label}
+            <AdminBarInlineControls stat={stat} current={current} max={max} fillActionType={fillActionType} />
+          </span>
           <span className="sb-row__nums">
             {displayCurrent} / {max}
           </span>
@@ -105,6 +113,8 @@ export function StatBars() {
         max={stats.maxEnergy}
         color={COLORS.energy}
         intervalMs={ENERGY_INTERVAL_MS}
+        stat="energy"
+        fillActionType="fillEnergy"
       />
       <StatBar
         label="Health"
@@ -112,6 +122,8 @@ export function StatBars() {
         max={stats.maxHealth}
         color={COLORS.health}
         intervalMs={HEALTH_INTERVAL_MS}
+        stat="health"
+        fillActionType="fillHealth"
       />
       <StatBar
         label="Stamina"
@@ -119,6 +131,8 @@ export function StatBars() {
         max={stats.maxStamina}
         color={COLORS.stamina}
         intervalMs={STAMINA_INTERVAL_MS}
+        stat="stamina"
+        fillActionType="fillStamina"
       />
       <StatBar
         label="Comfort"
@@ -126,7 +140,10 @@ export function StatBars() {
         max={stats.maxComfort}
         color={COLORS.comfort}
         intervalMs={COMFORT_INTERVAL_MS}
+        stat="comfort"
+        fillActionType="fillComfort"
       />
+      <AdminNerveInlineRow current={stats.nerve} max={stats.maxNerve} />
     </div>
   );
 }
