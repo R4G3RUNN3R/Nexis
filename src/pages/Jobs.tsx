@@ -416,6 +416,17 @@ function AdventureEntryCard({
       <div className="adventure-card__hint">Prep: {entry.recommendedPrep.join(" | ")}</div>
       <div className="adventure-card__hint">Gear read: {entry.gearHint}</div>
       {entry.hiddenSite ? <div className="adventure-card__hint">Hidden site: {entry.hiddenSite.name} ({entry.hiddenSite.status})</div> : null}
+      {entry.requiredItem ? (
+        <div className="adventure-card__hint adventure-card__requirement">
+          Requires: {entry.requiredItem.label}{entry.requiredItem.quantity > 1 ? ` x${entry.requiredItem.quantity}` : ""} (have {entry.requiredItem.owned})
+          {entry.requiredItem.hint ? ` — ${entry.requiredItem.hint}` : ""}
+        </div>
+      ) : null}
+      {entry.pityProgress ? (
+        <div className="adventure-card__hint adventure-card__pity">
+          {entry.pityProgress.itemLabel} luck: {entry.pityProgress.attempts}/{entry.pityProgress.threshold} runs since last drop{entry.pityProgress.guaranteedOnNextWin ? " — guaranteed on next win" : ""}
+        </div>
+      ) : null}
       {entry.lockReason ? <div className="jobs-low-stamina">{entry.lockReason}</div> : null}
       <div className="adventure-card__rewards">
         {entry.rewardItems.slice(0, 4).map((reward) => <span key={`${entry.id}-${reward.itemId}`}><ItemIcon item={reward.item} /> {reward.label} x{reward.quantity}</span>)}

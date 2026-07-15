@@ -33,6 +33,13 @@ const LOOT_TABLES = {
     { itemId: "arena_mark", min: 1, max: 3, chance: 0.7 },
     { itemId: "field_bandage", min: 1, max: 1, chance: 0.2 },
   ],
+  abandoned_road: [
+    { itemId: "stolen_coin", min: 1, max: 2, chance: 0.5 },
+    { itemId: "field_bandage", min: 1, max: 1, chance: 0.22 },
+    // Rare key-item drop for the Abandoned Road -> Smuggler's Gate adventure chain.
+    // Guaranteed-after-N-attempts pity logic lives in adventureService.js (see pityItemId/pityThreshold).
+    { itemId: "worn_caravan_seal", min: 1, max: 1, chance: 0.12 },
+  ],
 };
 
 function rollInt(randomFn, min, max) {
