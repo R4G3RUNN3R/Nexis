@@ -754,6 +754,8 @@ export type ServerAdventureEntry = {
   hiddenSite?: { id: string; name: string; status: string; summary: string } | null;
   opponent: { id: string; name: string; level: number; damageType: string; summary: string };
   gearHint: string;
+  requiredItem?: { itemId: string; label: string; quantity: number; owned: number; met: boolean; hint: string | null } | null;
+  pityProgress?: { itemId: string; itemLabel: string; attempts: number; threshold: number; guaranteedOnNextWin: boolean } | null;
   available: boolean;
   lockReason: string | null;
 };
