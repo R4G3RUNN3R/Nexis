@@ -48,3 +48,19 @@ Still held per explicit instruction, not yet started:
 - Admin Panel refinement — blocked on Admin Mode toggle completing
 - Guilds faction rework — blocked on research report + user review
 - Consortiums company rework — blocked on research report + user review
+
+---
+
+## Refinement Phase 0 — Batch 1 Deploy Log (2026-07-15)
+
+Merged in order per approved sequence: Home cleanup → Travel splash → Adventure item-gated chain → Admin Mode toggle. All 4 merged with zero conflicts (only AppShell.tsx touched by two branches, auto-merged cleanly). Build clean, pushed to GitHub (`fb7004e`).
+
+Isolated pglite smoke test (zero contact with production data):
+- Server boots with all 4 branches merged: PASS
+- Travel options endpoint (Travel splash dependency): PASS (200)
+- **Admin security — forged admin action from a plain player account: PASS (403, not 200)**, tested against two independent accounts to rule out a "first user is admin" bug
+- Adventure chain: confirmed "Smuggler's Gate" (Blackharbor) correctly excluded from a new player's board (new players start in "nexis" city; the board is city-scoped by design) — not a bug, just city-scoping caught by an initial wrong assumption in my own test script
+
+Not yet deployed live (frontend build/service restart) — holding until Consortiums and Guilds reworks are also ready, to batch the live deploy per prior session's pattern rather than restarting the service repeatedly.
+
+Dispatching Admin Panel refinement now that Admin Mode toggle is confirmed merged and its server-side enforcement independently verified.
