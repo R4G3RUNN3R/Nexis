@@ -142,6 +142,26 @@ export const ADMIN_ACTION_POLICIES = {
     minimumRole: "admin",
     label: "Clear Travel State",
   },
+  setResourceStat: {
+    category: "sensitive stat action",
+    minimumRole: "admin",
+    label: "Set Resource Stat",
+  },
+  adjustResourceStat: {
+    category: "sensitive stat action",
+    minimumRole: "admin",
+    label: "Adjust Resource Stat",
+  },
+  adjustCurrency: {
+    category: "sensitive economy/progression action",
+    minimumRole: "admin",
+    label: "Adjust Currency",
+  },
+  clearCondition: {
+    category: "player-safe support action",
+    minimumRole: "staff",
+    label: "Clear Condition",
+  },
   setCityStanding: {
     category: "sensitive organization action",
     minimumRole: "admin",

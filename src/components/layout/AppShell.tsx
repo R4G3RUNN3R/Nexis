@@ -9,6 +9,7 @@ import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicI
 import { resolveDisplayTitle } from "../../lib/titleAccess";
 import { getCityName, getTravelProgress, readTravelStateFromPlayer } from "../../lib/travelState";
 import { isStaffOrAdmin } from "../../lib/adminAccess";
+import { AdminModeToggle, AdminGoldInlineControls, AdminConditionInlineControls } from "../admin/AdminInlineControls";
 import { cielLoadingQuotes } from "../../data/cielPageCopy";
 import { getCityHubContent } from "../../data/cityHubData";
 import { acknowledgeProgressionEvent, type ServerProgressionEvent } from "../../lib/authApi";
@@ -267,7 +268,10 @@ export function AppShell({ title, hint, children }: AppShellProps) {
               </div>
               <div className="player-card__row player-card__row--gold">
                 <span className="player-card__key">Gold</span>
-                <span className="player-card__val player-card__val--gold">{formatGold(player.gold)}</span>
+                <span className="player-card__val player-card__val--gold">
+                  {formatGold(player.gold)}
+                  <AdminGoldInlineControls gold={player.gold} />
+                </span>
               </div>
               {shadow ? (
                 <div className="player-card__row">
@@ -284,6 +288,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
             </div>
 
             <div className={conditionClass}>{conditionLabel}</div>
+            <AdminConditionInlineControls conditionType={player.condition.type} isTraveling={isTraveling} />
           </div>
 
           <StatBars />
@@ -303,6 +308,9 @@ export function AppShell({ title, hint, children }: AppShellProps) {
             </>
           )}
           <SidebarSection title="Authority" links={adminLinks} />
+          <div className="sidebar-admin-toggle">
+            <AdminModeToggle />
+          </div>
 
           <div className="sidebar-logout">
             <button type="button" className="sidebar-logout__btn" onClick={handleLogout}>
