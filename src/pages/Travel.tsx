@@ -17,13 +17,14 @@ import {
 } from "../lib/authApi";
 import {
   formatTravelDuration,
-  getCityName,
   getTravelProgress,
   readTravelStateFromPlayer,
   type PersistedTravelState,
 } from "../lib/travelState";
+import { TravelSplash } from "../components/travel/TravelSplash";
 import mapImage from "../assets/maps/nexis-world-map-expanded.jpg";
 import "../styles/world-map-ui.css";
+import "../styles/travel-splash.css";
 
 const CITY_IMAGES: Record<string, string> = {
   nexis: "/images/cities/city_nexis.png",
@@ -102,12 +103,6 @@ function getItemLabel(itemId: string) {
   return ITEM_CATALOGUE[itemId]?.name ?? titleCaseFromId(itemId);
 }
 
-function getCargoSummaryText(cargo: PersistedTravelState["cargo"]) {
-  if (!cargo || !cargo.manifest.length) return null;
-  const parts = cargo.manifest.map((line) => `${getItemLabel(line.itemId)} x${line.quantity}`);
-  return `Cargo: ${parts.join(", ")}.`;
-}
-
 export default function TravelPage() {
   const { player } = usePlayer();
   const { activeAccount, authSource, serverSessionToken } = useAuth();
@@ -117,11 +112,17 @@ export default function TravelPage() {
   const [selectedCityId, setSelectedCityId] = useState<WorldCityId>(() => getFocusedCityId(readTravelStateFromPlayer(player)));
   const [message, setMessage] = useState<string | null>(null);
   const travelStateSyncRef = useRef<PersistedTravelState>(travelState);
+  // Tracks the arrivalAt timestamp we've already triggered an immediate
+  // server resync for, so the "countdown hit zero" resync below fires at
+  // most once per journey instead of on every 1s tick while the server
+  // hasn't caught up yet.
+  const arrivalSyncedForRef = useRef<number | null>(null);
 
   const [transportTiers, setTransportTiers] = useState<ServerTransportTier[]>([]);
   const [selectedTierId, setSelectedTierId] = useState<string>("caravan");
   const [cargoSelections, setCargoSelections] = useState<Record<string, number>>({});
   const [escortHired, setEscortHired] = useState(false);
+  const [cancelingTravel, setCancelingTravel] = useState(false);
 
   const applyServerTravelState = useCallback((travel: Record<string, unknown>) => {
     setTravelState(
@@ -191,11 +192,37 @@ export default function TravelPage() {
     travelStateSyncRef.current = nextTravelState;
   }, [player]);
 
+  // Client-side ticker for DISPLAY ONLY: it advances `now` once per second so
+  // the progress bar / splash countdown animate smoothly. It never flips
+  // travel state to "arrived" itself - `getTravelProgress` derives `active`
+  // purely from the last server-confirmed `travelState.status`, so refreshing
+  // the page or opening a second tab always reflects the true server state,
+  // not a locally-decremented timer. The one side effect here is triggering
+  // an immediate resync the moment the local countdown reaches zero, so the
+  // server-authoritative arrival (resolveTravelForRuntimeState) is fetched
+  // promptly instead of waiting for the slower heartbeat below.
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+    const timer = window.setInterval(() => {
+      const nowValue = Date.now();
+      setNow(nowValue);
 
+      const currentTravel = travelStateSyncRef.current;
+      if (
+        currentTravel.status === "in_transit" &&
+        currentTravel.arrivalAt &&
+        nowValue >= currentTravel.arrivalAt &&
+        arrivalSyncedForRef.current !== currentTravel.arrivalAt
+      ) {
+        arrivalSyncedForRef.current = currentTravel.arrivalAt;
+        void refreshServerTravel();
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [refreshServerTravel]);
+
+  // Fallback heartbeat: keeps re-fetching server travel state periodically
+  // while in transit (covers cases like the tab regaining focus after being
+  // backgrounded, where the 1s ticker above may have been throttled).
   useEffect(() => {
     if (authSource !== "server" || !serverSessionToken) return undefined;
     const syncTimer = window.setInterval(() => {
@@ -252,8 +279,6 @@ export default function TravelPage() {
 
   const progress = getTravelProgress(travelState, now);
   const isTraveling = progress.active;
-  const destinationName = getCityName(travelState.destinationCityId);
-  const originName = getCityName(travelState.originCityId);
   const canTravel = !isTraveling && selectedCity.id !== travelState.currentCityId;
   const selectedCityHub = getCityHubContent(selectedCity.id);
   const academyLabel = selectedCityHub.academy.name;
@@ -261,6 +286,11 @@ export default function TravelPage() {
   const selectedTier = useMemo(
     () => transportTiers.find((tier) => tier.id === selectedTierId) ?? null,
     [transportTiers, selectedTierId],
+  );
+
+  const activeTravelTier = useMemo(
+    () => transportTiers.find((tier) => tier.id === travelState.mode) ?? null,
+    [transportTiers, travelState.mode],
   );
 
   const cargoOptions = useMemo(
@@ -324,13 +354,18 @@ export default function TravelPage() {
 
   async function handleCancelTravel() {
     if (authSource !== "server" || !serverSessionToken || !activeAccount) return;
-    const result = await cancelServerTravel(serverSessionToken);
-    if (!("ok" in result) || !result.ok) {
-      setMessage(result.error);
-      return;
+    setCancelingTravel(true);
+    try {
+      const result = await cancelServerTravel(serverSessionToken);
+      if (!("ok" in result) || !result.ok) {
+        setMessage(result.error);
+        return;
+      }
+      cacheAndApplyTravelResult(result);
+      setMessage("The caravan turns back along the road already traveled.");
+    } finally {
+      setCancelingTravel(false);
     }
-    cacheAndApplyTravelResult(result);
-    setMessage("The caravan turns back along the road already traveled.");
   }
 
   useEffect(() => {
@@ -474,20 +509,14 @@ export default function TravelPage() {
             </div>
 
             {isTraveling ? (
-              <div className="travel-card__status">
-                <strong>Caravan In Transit</strong>
-                <div>{originName} to {destinationName}</div>
-                <div className="travel-progress">
-                  <span style={{ width: `${progress.percent}%` }} />
-                </div>
-                <div>{progress.percent}% complete | ETA {formatTravelDuration(progress.remainingMs)}</div>
-                {getCargoSummaryText(travelState.cargo) ? <div>{getCargoSummaryText(travelState.cargo)}</div> : null}
-                {location.state?.redirectedFrom ? (
-                  <div className="travel-inline-note travel-inline-note--warning">
-                    {location.state.redirectedFrom} is unavailable while you are in transit.
-                  </div>
-                ) : null}
-              </div>
+              <TravelSplash
+                travelState={travelState}
+                now={now}
+                tier={activeTravelTier}
+                redirectedFrom={location.state?.redirectedFrom ?? null}
+                onCancel={() => void handleCancelTravel()}
+                cancelBusy={cancelingTravel}
+              />
             ) : null}
 
             <p className="travel-card__summary">{selectedCity.summary}</p>
@@ -603,11 +632,6 @@ export default function TravelPage() {
                       ? "Not Enough Gold"
                       : `Depart Now: ${selectedCity.name}`}
               </button>
-              {isTraveling ? (
-                <button type="button" className="travel-action-button" onClick={() => void handleCancelTravel()}>
-                  Turn Caravan Back
-                </button>
-              ) : null}
             </div>
           </div>
         </section>
