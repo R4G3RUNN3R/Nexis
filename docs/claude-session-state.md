@@ -28,3 +28,23 @@ Tracking table for the 7 change sets built in isolated worktrees. All verificati
 - **Donations/Stripe**: code complete and reviewed, not merged. Needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY` in `/srv/nexis/shared/config/backend.env`, a webhook registered in the Stripe dashboard pointing at `https://nexis.nexus/api/donations/webhook`, and a live webhook test before merging.
 - **Prompt injection source unresolved**: the profile-chronicle-wiring agent received injected "coordinator" instructions mid-task pushing for unauthorized file deletions. Its own permission system blocked it; no damage occurred. Source not found in repo or crontab — worth continued vigilance, not further action right now.
 - **Orphaned process risk**: worth checking after any future backend deploy that `ss -tlnp | grep 3001` shows the systemd-managed PID, not a repeat orphan, until the root cause of how 1307771 was originally started (outside systemd, as root) is understood.
+
+---
+
+## Refinement Phase 0 — Recovery Log (2026-07-15 07:14 UTC)
+
+All 6 agents from the Refinement Phase 0 wave (2 research + 4 implementation) hit an API session limit simultaneously, mid-investigation, before any had written a file. Verified via `git status` in every worktree: zero uncommitted changes anywhere. Resumed all 6 via SendMessage (not fresh respawns) so each kept its already-gathered file reads/analysis in context rather than re-deriving it.
+
+Worktrees confirmed present, all still at main tip (`77d9420`) at time of recovery:
+- `/srv/nexis/source/worktrees/research-torn-mechanics` (`research/torn-mechanics`)
+- `/srv/nexis/source/worktrees/research-browser-rpg` (`research/browser-rpg-opportunities`)
+- `/srv/nexis/source/worktrees/home-cleanup` (`feature/home-cleanup`)
+- `/srv/nexis/source/worktrees/travel-splash` (`feature/travel-splash`)
+- `/srv/nexis/source/worktrees/admin-mode-toggle` (`feature/admin-mode-toggle`)
+- `/srv/nexis/source/worktrees/adventure-item-chain` (`feature/adventure-item-chain`)
+
+Still held per explicit instruction, not yet started:
+- Research C (fit filter) — blocked on Research A + B completing
+- Admin Panel refinement — blocked on Admin Mode toggle completing
+- Guilds faction rework — blocked on research report + user review
+- Consortiums company rework — blocked on research report + user review
