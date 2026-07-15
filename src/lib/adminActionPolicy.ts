@@ -10,6 +10,7 @@ export type AdminActionCategory =
   | "sensitive travel action"
   | "sensitive organization action"
   | "sensitive contract action"
+  | "sensitive stat action"
   | "account/privilege action";
 
 export type AdminActionType =
@@ -18,9 +19,12 @@ export type AdminActionType =
   | "fillHealth"
   | "fillComfort"
   | "fillAllBars"
+  | "setResourceStat"
+  | "adjustResourceStat"
   | "setBattleStats"
   | "setWorkingStats"
   | "setCurrencies"
+  | "adjustCurrency"
   | "setPlayerJob"
   | "addInventoryItem"
   | "removeInventoryItem"
@@ -41,6 +45,7 @@ export type AdminActionType =
   | "completeAcademyStage"
   | "resetAcademy"
   | "clearTravelState"
+  | "clearCondition"
   | "setCityStanding"
   | "clearContractState";
 
@@ -78,6 +83,16 @@ export const ADMIN_ACTION_POLICIES: Record<AdminActionType, AdminActionPolicy> =
     minimumRole: "staff",
     label: "Fill All Bars",
   },
+  setResourceStat: {
+    category: "sensitive stat action",
+    minimumRole: "admin",
+    label: "Set Resource Stat",
+  },
+  adjustResourceStat: {
+    category: "sensitive stat action",
+    minimumRole: "admin",
+    label: "Adjust Resource Stat",
+  },
   setBattleStats: {
     category: "sensitive economy/progression action",
     minimumRole: "admin",
@@ -92,6 +107,11 @@ export const ADMIN_ACTION_POLICIES: Record<AdminActionType, AdminActionPolicy> =
     category: "sensitive economy/progression action",
     minimumRole: "admin",
     label: "Set Currencies",
+  },
+  adjustCurrency: {
+    category: "sensitive economy/progression action",
+    minimumRole: "admin",
+    label: "Adjust Currency",
   },
   setPlayerJob: {
     category: "sensitive economy/progression action",
@@ -137,6 +157,7 @@ export const ADMIN_ACTION_POLICIES: Record<AdminActionType, AdminActionPolicy> =
   completeAcademyStage: { category: "sensitive academy action", minimumRole: "admin", label: "Complete Academy Stage" },
   resetAcademy: { category: "sensitive academy action", minimumRole: "admin", label: "Reset Academy Line" },
   clearTravelState: { category: "sensitive travel action", minimumRole: "admin", label: "Clear Travel State" },
+  clearCondition: { category: "player-safe support action", minimumRole: "staff", label: "Clear Condition" },
   setCityStanding: { category: "sensitive organization action", minimumRole: "admin", label: "Set City Standing" },
   clearContractState: { category: "sensitive contract action", minimumRole: "admin", label: "Clear Contract State" },
 };

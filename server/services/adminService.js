@@ -6,7 +6,7 @@ import { assertPrivilegeRole } from "../lib/userIdentity.js";
 import { buildAdminPlayerPayload, buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
 import { addPlayerExperience } from "./progressionService.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
-import { insertAdminAuditLog } from "../repositories/adminAuditRepository.js";
+import { insertAdminAuditLog, listAdminAuditLogs } from "../repositories/adminAuditRepository.js";
 import {
   createDefaultPlayerState,
   findPlayerStateByUserInternalId,
@@ -619,6 +619,16 @@ export async function getAdminPlayer(actorUser, targetInternalId) {
     const target = await loadTarget(client, targetInternalId);
     return buildAdminPlayerPayload(target.user, target.playerState);
   });
+}
+
+// Read-only: powers the Admin Panel's "Admin Logs" tab (moderation/action
+// history). Pass targetInternalId to scope to one player's history, or omit
+// it for the most recent admin actions across every target. This is a view,
+// not a mutation, so — unlike performAdminAction — it does not require a
+// reason and does not write a new audit row of its own.
+export async function getAdminAuditLog(actorUser, { targetInternalId = null, limit = 50 } = {}) {
+  assertStaffOrAdmin(actorUser);
+  return withTransaction(async (client) => listAdminAuditLogs(client, { targetInternalId, limit }));
 }
 
 export async function performAdminAction(actorUser, targetInternalId, actionType, payload) {

@@ -1,4 +1,4 @@
-import { getAdminPlayer, performAdminAction, searchAdminPlayers } from "../services/adminService.js";
+import { getAdminAuditLog, getAdminPlayer, performAdminAction, searchAdminPlayers } from "../services/adminService.js";
 
 export async function getAdminPlayerSearch(req, res, next) {
   try {
@@ -22,6 +22,18 @@ export async function postAdminPlayerAction(req, res, next) {
   try {
     const result = await performAdminAction(req.auth.user, req.params.targetInternalId, req.body?.actionType, req.body ?? {});
     res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getAdminAuditLogController(req, res, next) {
+  try {
+    const targetInternalId = typeof req.query.targetInternalId === "string" && req.query.targetInternalId.trim()
+      ? req.query.targetInternalId.trim()
+      : null;
+    const entries = await getAdminAuditLog(req.auth.user, { targetInternalId, limit: req.query.limit });
+    res.status(200).json({ entries });
   } catch (error) {
     next(error);
   }
