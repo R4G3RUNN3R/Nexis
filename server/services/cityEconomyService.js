@@ -17,9 +17,10 @@ import {
   getLegalTradeGoods,
 } from "../data/cityEconomyData.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
-import { getItemDisplayName, getItemSummary } from "../data/itemData.js";
+import { getItemDefinition, getItemDisplayName, getItemSummary } from "../data/itemData.js";
 import { getCourseLabel } from "../data/educationData.js";
 import { ensureShadowState, getCityDemandProfile, spendShadow } from "./liveWorldService.js";
+import { getConsortiumEffectPctForRuntime } from "./consortiumPerkService.js";
 
 const MAX_PURCHASE_QUANTITY = 99;
 const CITY_STANDING_TIERS = [
@@ -107,9 +108,11 @@ function setCityStanding(runtimeState, cityId, standingRecord) {
 function addCityStanding(runtimeState, cityId, amount, now) {
   if (!amount) return getCityStanding(runtimeState, cityId);
   const current = getCityStanding(runtimeState, cityId);
+  const standingGainBonusPct = amount > 0 ? getConsortiumEffectPctForRuntime(runtimeState, "cityStandingGainPct") : 0;
+  const boostedAmount = amount > 0 ? Math.max(amount, Math.round(amount * (1 + Math.max(0, standingGainBonusPct) / 100))) : amount;
   const next = {
     ...current,
-    value: Math.max(0, Math.floor(current.value + asNumber(amount, 0))),
+    value: Math.max(0, Math.floor(current.value + asNumber(boostedAmount, 0))),
     specialUses: current.specialUses + 1,
     updatedAt: now,
   };
@@ -207,11 +210,16 @@ function removeItems(player, itemId, quantity) {
   else delete player.inventory[itemId];
 }
 
-function getLegalSellBonusPercent(runtimeState) {
+// Education contribution stays flat (courses don't know what a consortium's trade goods are); the
+// consortium contribution is scoped per-good so a luxury-goods bonus doesn't leak onto potion sales
+// and vice versa. Both a Merchant Consortium (scope "all") and a Luxury Artisan Consortium (scope
+// "Luxury goods") can be active on the same sale; their percentages simply add.
+function getLegalSellBonusPercent(runtimeState, good = null) {
   const completed = new Set(getCompletedCourses(runtimeState));
   let bonus = 0;
   if (completed.has("practical-arithmetic")) bonus += 5;
   if (completed.has("commerce-1") || completed.has("trade-1")) bonus += 3;
+  bonus += getConsortiumEffectPctForRuntime(runtimeState, "marketSellBonusPct", good?.category ?? null);
   return bonus;
 }
 
@@ -222,14 +230,14 @@ function applySellBonus(price, bonusPercent) {
 function getLegalSellPrice(good, cityId, runtimeState) {
   const rawPrice = asNumber(asRecord(good.sellPrices)[cityId], 0);
   if (rawPrice <= 0) return null;
-  return applySellBonus(rawPrice, getLegalSellBonusPercent(runtimeState));
+  return applySellBonus(rawPrice, getLegalSellBonusPercent(runtimeState, good));
 }
 
 function getBestLegalDestination(good, originCityId, runtimeState) {
   let best = null;
   for (const [cityId, rawPrice] of Object.entries(asRecord(good.sellPrices))) {
     if (cityId === originCityId) continue;
-    const price = applySellBonus(rawPrice, getLegalSellBonusPercent(runtimeState));
+    const price = applySellBonus(rawPrice, getLegalSellBonusPercent(runtimeState, good));
     if (!best || price > best.price) {
       best = { cityId, cityName: getCityDefinition(cityId).name, price };
     }
@@ -393,11 +401,17 @@ function serializeStockItem(stockItem, runtimeState, context, quantity = 1, mark
   };
 }
 
-function getLegalMarketDiscountPercent(runtimeState) {
+// Education/civic contribution stays flat; the consortium contribution is scoped per-item so a
+// Healing Consortium's cheaper-consumables perk doesn't discount ore, and a Merchant Consortium's
+// broad tariff waiver (scope "all") applies to everything. Both can stack on the same purchase.
+function getLegalMarketDiscountPercent(runtimeState, stockItem = null) {
   const civic = asRecord(runtimeState.civicEmployment);
   const progress = asRecord(asRecord(civic.trackProgress).provisioner);
   const rank = Math.max(0, Math.floor(asNumber(progress.rank, 0)));
-  return rank >= 7 ? 8 : 0;
+  let discount = rank >= 7 ? 8 : 0;
+  const itemCategory = stockItem ? getItemDefinition(stockItem.itemId)?.category ?? null : null;
+  discount += getConsortiumEffectPctForRuntime(runtimeState, "marketBuyDiscountPct", itemCategory);
+  return discount;
 }
 
 function applyDiscount(price, discountPercent) {
@@ -421,7 +435,10 @@ function serializeMarketProfile(profile, runtimeState, quantity = 1) {
       demand: getCityDemandProfile(profile.cityId),
       discountPercent,
       sellBonusPercent: getLegalSellBonusPercent(runtimeState),
-      stock: profile.stock.map((entry) => serializeStockItem({ ...entry, price: applyDiscount(entry.price, discountPercent) }, runtimeState, context, quantity)),
+      stock: profile.stock.map((entry) => {
+        const itemDiscountPercent = getLegalMarketDiscountPercent(runtimeState, entry);
+        return serializeStockItem({ ...entry, price: applyDiscount(entry.price, itemDiscountPercent) }, runtimeState, context, quantity);
+      }),
       sellOffers: getLegalSellOffers(runtimeState, context, quantity),
       tradeOpportunities: serializeTradeOpportunities(profile, runtimeState, discountPercent),
       cargoSummary: getCargoSummary(runtimeState, context),
@@ -578,7 +595,7 @@ export async function buyCityMarketItemForUser(user, cityId, itemId, quantityInp
     const stockItem = profile.stock.find((entry) => entry.itemId === itemId);
     if (!stockItem) throw new HttpError(404, "This city does not stock that item.", "CITY_MARKET_ITEM_NOT_FOUND");
     const context = getEconomyContext(runtimeState, profile.cityId);
-    const discountedStockItem = { ...stockItem, price: applyDiscount(stockItem.price, getLegalMarketDiscountPercent(runtimeState)) };
+    const discountedStockItem = { ...stockItem, price: applyDiscount(stockItem.price, getLegalMarketDiscountPercent(runtimeState, stockItem)) };
     const purchase = buyStock(runtimeState, discountedStockItem, context, quantity, true);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return {

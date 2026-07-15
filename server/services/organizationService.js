@@ -21,11 +21,14 @@ import { findUserByPublicId } from "../repositories/usersRepository.js";
 import {
   chooseRandomReward,
   deriveConsortiumStarsFromPerformance,
+  deriveConsortiumStarsFromRoster,
   getActiveRewards,
+  getConsortiumPassiveEffectBundle,
   getConsortiumPositionDefinition,
   getConsortiumTypeDefinition,
   getDailyConsortiumPointsForStars,
   getRewardByKey,
+  getScopedConsortiumEffectPct,
   getUnlockedPassives,
   listConsortiumPositions,
   listConsortiumTypes,
@@ -640,6 +643,17 @@ const buildConsortiumState = async (client, organization, viewerInternalId = nul
   popularity += Number(baseFx.logisticsRewardPct ?? 0) * 0.2;
   efficiency += Number(baseFx.routeEfficiencyPct ?? 0) * 0.9;
   environment += Number(baseFx.logisticsLossMitigationPct ?? 0) * 0.45;
+  // Star-tier consortium type passives that fold straight into the company health board (see
+  // getConsortiumPassiveEffectBundle() in consortiumTypes.js -- effectKey "performanceFold"). Gated
+  // on a roster-based star preview rather than the *stars* value computed a few lines below, since
+  // that value depends on these same metrics; deriveConsortiumStarsFromRoster() is the same
+  // lightweight approximation consortiumLogisticsService.js already uses for this exact chicken-and-
+  // egg reason.
+  const perkPreviewStars = deriveConsortiumStarsFromRoster(organization.members?.length ?? 0);
+  const consortiumPerkBundle = getConsortiumPassiveEffectBundle(template.key, perkPreviewStars);
+  popularity += getScopedConsortiumEffectPct(consortiumPerkBundle, "performanceFold", "popularity");
+  efficiency += getScopedConsortiumEffectPct(consortiumPerkBundle, "performanceFold", "efficiency");
+  environment += getScopedConsortiumEffectPct(consortiumPerkBundle, "performanceFold", "environment");
   for (const member of memberViews) {
     if (!member.position) continue;
     popularity += member.normalizedContribution * member.position.metricImpact.popularity;
@@ -669,7 +683,12 @@ const buildConsortiumState = async (client, organization, viewerInternalId = nul
     return { ...member, dailyCpGain: personalDailyGain };
   });
   const totalDailyGenerationBase = employeeDetails.reduce((sum, member) => sum + member.dailyCpGain, 0);
-  const totalDailyGeneration = Math.max(totalDailyGenerationBase, Math.round(totalDailyGenerationBase * (1 + (academyBusinessYieldPct / 100))));
+  // Recompute the perk bundle against the *final* stars value (e.g. Mining's Master Refiners, unlocked
+  // at 7 stars) so the daily-generation bonus and the bundle exposed to the frontend for the
+  // Advancement tab always agree with getUnlockedPassives(template.key, stars) below.
+  const finalConsortiumPerkBundle = getConsortiumPassiveEffectBundle(template.key, stars);
+  const perkDailyGenerationPct = getScopedConsortiumEffectPct(finalConsortiumPerkBundle, "performanceFold", "dailyGenerationPct");
+  const totalDailyGeneration = Math.max(totalDailyGenerationBase, Math.round(totalDailyGenerationBase * (1 + (academyBusinessYieldPct / 100) + (perkDailyGenerationPct / 100))));
   const consortiumAcademyContract = {
     source: "education",
     businessStudies: {
@@ -690,35 +709,116 @@ const buildConsortiumState = async (client, organization, viewerInternalId = nul
   metadata.management.health = { popularity: round1(popularity), efficiency: round1(efficiency), environment: round1(environment), lastComputedAt: Date.now() };
   metadata.management.performance = { ...performance, lastComputedAt: Date.now() };
   const viewerDetails = employeeDetails.find((entry) => entry.userInternalId === viewerInternalId) ?? null;
-  return { baseEffects, template, metadata, healthMetrics, performance, stars, baseDailyGain, employeeDetails, viewerDetails, applications: pendingApplications, employeeCapacity, totalDailyGeneration, academyContract: consortiumAcademyContract };
+  return { baseEffects, template, metadata, healthMetrics, performance, stars, baseDailyGain, employeeDetails, viewerDetails, applications: pendingApplications, employeeCapacity, totalDailyGeneration, academyContract: consortiumAcademyContract, perkEffects: finalConsortiumPerkBundle };
 };
 const buildDirectoryEntry = (organization, derived, viewerInternalId) => ({ internalId: organization.internalId, publicId: organization.publicId, name: organization.name, type: organization.type, description: organization.description, statusText: organization.statusText, consortiumTypeKey: organization.consortiumTypeKey, consortiumTypeName: organization.consortiumTypeName, starRating: derived.stars, employeeCapacity: derived.employeeCapacity, employeeCount: organization.members.length, treasury: normalizeTreasury(organization.treasury), healthMetrics: derived.healthMetrics, performanceSummary: derived.performance.summary, director: organization.members.find((entry) => entry.roleKey === "director") ?? organization.members[0] ?? null, pendingApplications: derived.applications.length, viewerHasPendingApplication: derived.applications.some((entry) => entry.applicantInternalId === viewerInternalId) });
 const persistConsortiumMetadata = async (client, organization, derived, patch = {}) => updateOrganizationDetails(client, organization.internalId, { ...patch, metadata: { ...derived.metadata }, passiveBonusSummary: buildPassiveSummary(derived.template) });
+// Everything unlocking at the next star tier above the consortium's current rating -- lets the
+// Advancement tab show "here's what you have now" (unlockedPassives/redeemableActives) right next to
+// "here's exactly what the next tier unlocks" per requirement 2 of the perk rework brief.
+const getNextConsortiumTierRewards = (template, stars) => {
+  const upcoming = template.rewards.filter((entry) => entry.starTier > Number(stars ?? 0)).sort((left, right) => left.starTier - right.starTier);
+  const nextTier = upcoming[0]?.starTier;
+  return nextTier === undefined ? [] : upcoming.filter((entry) => entry.starTier === nextTier);
+};
 const refreshConsortiumView = async (client, user, organization) => {
   if (!organization || organization.type !== "consortium") return { organization, consortiumProgress: null };
   const derived = await buildConsortiumState(client, organization, user.internalId);
   const progressEntry = getProgressEntry((await getRuntimeForUser(client, user)).runtimeState, derived.template.key, organization.internalId);
   const consortiumPoints = { consortiumTypeKey: derived.template.key, organizationInternalId: organization.internalId, scope: "type", points: progressEntry.points, totalEarned: progressEntry.totalEarned, totalSpent: progressEntry.totalSpent, lastClaimedAt: progressEntry.lastClaimedAt, dailyGain: derived.viewerDetails?.dailyCpGain ?? derived.baseDailyGain };
   return {
-    organization: { ...organization, tag: null, treasury: normalizeTreasury(organization.treasury), metadata: derived.metadata, starRating: derived.stars, consortiumType: derived.template, rolesFlavor: derived.template.rolesFlavor, memberRoleKey: derived.viewerDetails?.roleKey ?? null, rewardLadder: derived.template.rewards, unlockedPassives: getUnlockedPassives(derived.template.key, derived.stars), redeemableActives: getActiveRewards(derived.template.key, derived.stars, consortiumPoints.points), consortiumPoints, healthMetrics: derived.healthMetrics, performance: derived.performance, academyContract: derived.academyContract, baseMechanicalEffects: derived.baseEffects, employeeCapacity: derived.employeeCapacity, companyDailyGeneration: derived.totalDailyGeneration, positions: listConsortiumPositions(derived.template.key), applications: derived.applications, memberDetails: derived.employeeDetails, yourDetails: derived.viewerDetails, companyAgeDays: getCompanyAgeDays(organization.createdAt), companyOverview: buildConsortiumOverview(organization, derived), assistanceOpportunities: buildConsortiumAssistanceOpportunities(organization, derived), layoutSections: ["Overview", "Employees", "Contracts", "Logistics", "Assets", "Finance", "Advancement"] },
+    organization: { ...organization, tag: null, treasury: normalizeTreasury(organization.treasury), metadata: derived.metadata, starRating: derived.stars, consortiumType: derived.template, rolesFlavor: derived.template.rolesFlavor, memberRoleKey: derived.viewerDetails?.roleKey ?? null, rewardLadder: derived.template.rewards, unlockedPassives: getUnlockedPassives(derived.template.key, derived.stars), redeemableActives: getActiveRewards(derived.template.key, derived.stars, consortiumPoints.points), nextTierRewards: getNextConsortiumTierRewards(derived.template, derived.stars), consortiumPerkEffects: derived.perkEffects, consortiumPoints, healthMetrics: derived.healthMetrics, performance: derived.performance, academyContract: derived.academyContract, baseMechanicalEffects: derived.baseEffects, employeeCapacity: derived.employeeCapacity, companyDailyGeneration: derived.totalDailyGeneration, positions: listConsortiumPositions(derived.template.key), applications: derived.applications, memberDetails: derived.employeeDetails, yourDetails: derived.viewerDetails, companyAgeDays: getCompanyAgeDays(organization.createdAt), companyOverview: buildConsortiumOverview(organization, derived), assistanceOpportunities: buildConsortiumAssistanceOpportunities(organization, derived), layoutSections: ["Overview", "Employees", "Contracts", "Logistics", "Assets", "Finance", "Advancement"] },
     consortiumProgress: consortiumPoints,
   };
 };
 const applyRecoveryReduction = (runtimeState, reductionMs) => { const condition = runtimeState.player.condition ?? { type: "normal", until: null, reason: null }; if (condition.type === "hospitalized" && typeof condition.until === "number") { runtimeState.player.condition = { ...condition, until: Math.max(Date.now(), condition.until - reductionMs) }; return true; } return false; };
 const addHealth = (runtimeState, amount) => { const stats = runtimeState.player.stats ?? {}; runtimeState.player.stats = { ...stats, health: Math.min(Number(stats.maxHealth ?? 100), Number(stats.health ?? 0) + amount) }; };
 const grantInventoryItem = (runtimeState, itemId, quantity) => { runtimeState.player.inventory = { ...(runtimeState.player.inventory ?? {}), [itemId]: Number(runtimeState.player.inventory?.[itemId] ?? 0) + quantity }; };
-const applyRewardEffect = ({ organization, template, reward, runtimeState }) => {
+// Flat treasury injections for actives that don't have an existing consumable/recovery/item mechanic
+// to plug into. Immediate, one-shot, resolved entirely inside this reward's own withTransaction call
+// (see redeemConsortiumRewardForUser) -- same resolution model as the pre-existing credit_line, so no
+// new action-resolution system, no banked/deferred effect, and no route to double-spend it.
+const TREASURY_GOLD_REWARD_BY_KEY = {
+  quick_ledger: 2000,
+  consignment_surge: 9000,
+  golden_manifest: 30000,
+  quick_load: 1800,
+  emergency_reroute: 7500,
+  golden_convoy: 32000,
+  dock_priority: 1800,
+  drydock_surge: 8000,
+  flagship_run: 34000,
+  safe_transfer: 2200,
+  credit_line: 11000,
+  investment_window: 36000,
+};
+// Capstone (10-star) item-grant rewards that also pay a commission/settlement fee straight into the
+// treasury alongside the granted item.
+const EXTRA_TREASURY_BONUS_BY_REWARD_KEY = {
+  masterwork_commission: 4000,
+  arcane_distillation: 4000,
+  grand_harvest: 4000,
+  signature_outfit: 4000,
+  masterpiece_commission: 5000,
+};
+
+const MAX_INTELLIGENCE_SCAN = 25;
+// Real, live-computed intel for the Intelligence Consortium's actives -- reads the same directory data
+// already exposed to every player via getMyOrganization()'s "directory" field, so nothing here exposes
+// information beyond what's already public; the perk is redeeming Consortium Points for a targeted,
+// on-demand pull of it rather than a text summary that never changes.
+async function scanRivalConsortiums(client, organization, limit = MAX_INTELLIGENCE_SCAN) {
+  const all = await listOrganizationsByType(client, "consortium");
+  const rivals = all.filter((entry) => entry.internalId !== organization.internalId).slice(0, limit);
+  const scanned = [];
+  for (const rival of rivals) {
+    const derived = await buildConsortiumState(client, rival, null);
+    if (derived) scanned.push({ org: rival, derived });
+  }
+  return scanned;
+}
+
+const applyRewardEffect = async ({ client, organization, template, reward, runtimeState }) => {
   const now = Date.now(); const treasury = normalizeTreasury(organization.treasury);
+  if (Object.prototype.hasOwnProperty.call(TREASURY_GOLD_REWARD_BY_KEY, reward.rewardKey)) {
+    const grantedGold = TREASURY_GOLD_REWARD_BY_KEY[reward.rewardKey];
+    treasury.gold += grantedGold;
+    return { summary: `${reward.displayName} settled for ${grantedGold.toLocaleString("en-GB")} gold, credited straight to the treasury.`, treasury };
+  }
+  if (reward.poolKey) {
+    const rewardItem = chooseRandomReward(reward.poolKey);
+    if (!rewardItem) throw new HttpError(400, "Reward pool unavailable.", "CONSORTIUM_REWARD_POOL_UNAVAILABLE");
+    grantInventoryItem(runtimeState, rewardItem.itemId, rewardItem.quantity);
+    const extraGold = EXTRA_TREASURY_BONUS_BY_REWARD_KEY[reward.rewardKey] ?? 0;
+    if (extraGold > 0) treasury.gold += extraGold;
+    const goldNote = extraGold > 0 ? ` plus ${extraGold.toLocaleString("en-GB")} gold to the treasury` : "";
+    return { summary: `${reward.displayName} delivered ${rewardItem.label} x${rewardItem.quantity}${goldNote}.`, grantedItem: rewardItem, treasury: extraGold > 0 ? treasury : undefined };
+  }
   switch (reward.rewardKey) {
-    case "price_pulse": return { summary: "Price Pulse: Metals are currently showing the strongest legal vendor spread in Nexis." };
-    case "rumor_pull": return { summary: "Rumor Pull: A licensed rumor broker flagged river toll corruption near the western freight corridor." };
-    case "dossier": return { summary: "Dossier: A refined intel packet highlighted a vulnerable trade route and a cash-heavy contract origin." };
-    case "network_leak": return { summary: "Network Leak: A higher-tier market leak exposed a rival consortium's strained supply channel." };
-    case "forge_cache": case "reagent_cache": case "supply_crate": case "cloth_cache": case "curated_cache": case "motherlode": { const rewardItem = chooseRandomReward(reward.poolKey); if (!rewardItem) throw new HttpError(400, "Reward pool unavailable.", "CONSORTIUM_REWARD_POOL_UNAVAILABLE"); grantInventoryItem(runtimeState, rewardItem.itemId, rewardItem.quantity); return { summary: `${reward.displayName} delivered ${rewardItem.label} x${rewardItem.quantity}.`, grantedItem: rewardItem }; }
     case "field_treatment": { const reduced = applyRecoveryReduction(runtimeState, 30 * 60 * 1000); if (!reduced) addHealth(runtimeState, 25); return { summary: reduced ? "Recovery time reduced by 30 minutes." : "Recovered 25 life immediately." }; }
     case "recovery_protocol": { const reduced = applyRecoveryReduction(runtimeState, 60 * 60 * 1000); if (!reduced) addHealth(runtimeState, 40); return { summary: reduced ? "Recovery time reduced by 1 hour." : "Recovered 40 life immediately." }; }
     case "emergency_intervention": { const reduced = applyRecoveryReduction(runtimeState, 4 * MS_HOUR); if (!reduced) { const stats = runtimeState.player.stats ?? {}; runtimeState.player.stats = { ...stats, health: Number(stats.maxHealth ?? 100) }; } return { summary: reduced ? "Emergency support cut recovery by 4 hours." : "Life fully restored within current rules." }; }
-    case "credit_line": treasury.gold += 5000; return { summary: "Treasury received a controlled 5,000 gold credit injection.", treasury };
+    case "rumor_pull": {
+      const scanned = await scanRivalConsortiums(client, organization, MAX_INTELLIGENCE_SCAN);
+      const richest = scanned.sort((left, right) => normalizeTreasury(right.org.treasury).gold - normalizeTreasury(left.org.treasury).gold)[0];
+      if (!richest) return { summary: "Rumor Pull: no other consortium is chartered yet -- the ledgers are quiet." };
+      return { summary: `Rumor Pull: ${richest.org.name} [${richest.org.consortiumTypeName ?? "Consortium"}] is currently holding the largest visible treasury at ${normalizeTreasury(richest.org.treasury).gold.toLocaleString("en-GB")} gold.` };
+    }
+    case "dossier": {
+      const scanned = await scanRivalConsortiums(client, organization, MAX_INTELLIGENCE_SCAN);
+      const weakest = scanned
+        .map((entry) => ({ ...entry, weakestMetric: Object.values(entry.derived.healthMetrics).sort((left, right) => left.value - right.value)[0] }))
+        .filter((entry) => entry.weakestMetric)
+        .sort((left, right) => left.weakestMetric.value - right.weakestMetric.value)[0];
+      if (!weakest) return { summary: "Dossier: no other consortium currently has a compiled health record." };
+      return { summary: `Dossier: ${weakest.org.name} [${weakest.org.consortiumTypeName ?? "Consortium"}, ${weakest.derived.stars}-star] is running weak on ${weakest.weakestMetric.label} at ${weakest.weakestMetric.value}/100.` };
+    }
+    case "network_leak": {
+      const scanned = await scanRivalConsortiums(client, organization, MAX_INTELLIGENCE_SCAN);
+      const softest = scanned.sort((left, right) => left.derived.performance.score - right.derived.performance.score)[0];
+      if (!softest) return { summary: "Network Leak: no other consortium is exposed on the network yet." };
+      return { summary: `Network Leak: ${softest.org.name} [${softest.org.consortiumTypeName ?? "Consortium"}] sits at ${softest.derived.stars}-star, ${softest.derived.totalDailyGeneration} daily CP generation, and ${normalizeTreasury(softest.org.treasury).gold.toLocaleString("en-GB")} gold in treasury.` };
+    }
     default: appendActiveEffect(runtimeState, template.key, { rewardKey: reward.rewardKey, displayName: reward.displayName, effectSummary: reward.effectSummary, grantedAt: now, charges: 1 }); return { summary: reward.effectSummary };
   }
 };
@@ -819,7 +919,15 @@ export async function removeConsortiumMemberForUser(user, organizationInternalId
 
 export async function depositConsortiumTreasuryForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_treasury"); const amount = asInt(payload?.gold); if (amount <= 0) throw new HttpError(400, "Deposit amount must be greater than zero.", "CONSORTIUM_TREASURY_AMOUNT_INVALID"); const { runtimeState } = await getRuntimeForUser(client, user); if (Number(runtimeState.player.gold ?? 0) < amount) throw new HttpError(400, "Not enough gold for that treasury deposit.", "CONSORTIUM_TREASURY_FUNDS_REQUIRED"); runtimeState.player.gold -= amount; runtimeState.player.currencies = { ...runtimeState.player.currencies, gold: runtimeState.player.gold }; const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState); const updated = await persistConsortiumMetadata(client, organization, await buildConsortiumState(client, { ...organization, treasury: { ...normalizeTreasury(organization.treasury), gold: normalizeTreasury(organization.treasury).gold + amount } }, user.internalId), { treasury: { gold: normalizeTreasury(organization.treasury).gold + amount } }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_treasury_deposit", summary: { gold: amount } }); return { ...(await refreshConsortiumView(client, user, updated)), playerState }; });
+    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_treasury"); const amount = asInt(payload?.gold); if (amount <= 0) throw new HttpError(400, "Deposit amount must be greater than zero.", "CONSORTIUM_TREASURY_AMOUNT_INVALID"); const { runtimeState } = await getRuntimeForUser(client, user); if (Number(runtimeState.player.gold ?? 0) < amount) throw new HttpError(400, "Not enough gold for that treasury deposit.", "CONSORTIUM_TREASURY_FUNDS_REQUIRED"); runtimeState.player.gold -= amount; runtimeState.player.currencies = { ...runtimeState.player.currencies, gold: runtimeState.player.gold }; const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+    // Banking Consortium Treasury Discipline passive: interest is a function of *this* deposit's
+    // amount only (never replayed, never derived from stored state), so crediting it inside the same
+    // withTransaction block as the deposit itself cannot be used to double-spend or drain the treasury.
+    const interestPct = getScopedConsortiumEffectPct(getConsortiumPassiveEffectBundle(organization.consortiumTypeKey, deriveConsortiumStarsFromRoster(organization.members.length)), "treasuryInterestPct");
+    const interestGold = Math.max(0, Math.round(amount * (Math.max(0, interestPct) / 100)));
+    const creditedGold = amount + interestGold;
+    const nextTreasuryGold = normalizeTreasury(organization.treasury).gold + creditedGold;
+    const updated = await persistConsortiumMetadata(client, organization, await buildConsortiumState(client, { ...organization, treasury: { ...normalizeTreasury(organization.treasury), gold: nextTreasuryGold } }, user.internalId), { treasury: { gold: nextTreasuryGold } }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_treasury_deposit", summary: { gold: amount, interestGold, creditedGold } }); return { ...(await refreshConsortiumView(client, user, updated)), playerState, interestGold }; });
 }
 
 export async function runConsortiumOutreachForUser(user, organizationInternalId) {
@@ -834,7 +942,7 @@ export async function claimDailyConsortiumPointsForUser(user, organizationIntern
 
 export async function redeemConsortiumRewardForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const reward = getRewardByKey(template.key, String(payload?.rewardKey ?? "").trim()); if (!reward || reward.mode !== "active") throw new HttpError(400, "That consortium reward cannot be redeemed.", "CONSORTIUM_REWARD_INVALID"); const member = ensureMember(organization, user.internalId); const { runtimeState } = await getRuntimeForUser(client, user); const derived = await buildConsortiumState(client, organization, user.internalId); if (derived.stars < reward.starTier) throw new HttpError(400, `This reward unlocks at ${reward.starTier}?.`, "CONSORTIUM_REWARD_LOCKED"); const progressEntry = getProgressEntry(runtimeState, template.key, organization.internalId); const cost = Number(reward.pointCost ?? 0); if (progressEntry.points < cost) throw new HttpError(400, `You need ${cost - progressEntry.points} more Consortium Points.`, "CONSORTIUM_POINTS_REQUIRED"); const rewardResult = applyRewardEffect({ organization, template, reward, runtimeState }); setProgressEntry(runtimeState, template.key, { ...progressEntry, organizationInternalId: organization.internalId, points: progressEntry.points - cost, totalSpent: progressEntry.totalSpent + cost }); syncMembershipSummary(runtimeState, organization, template, derived.stars, member.roleKey); const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState); const updatedOrganization = rewardResult.treasury ? await updateOrganizationDetails(client, organization.internalId, { treasury: rewardResult.treasury }) : organization; await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_reward_redeemed", summary: { consortiumTypeKey: template.key, rewardKey: reward.rewardKey, rewardName: reward.displayName, pointCost: cost, result: rewardResult.summary, grantedItem: rewardResult.grantedItem ?? null } }); return { ...(await refreshConsortiumView(client, user, updatedOrganization)), playerState, rewardResult }; });
+    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const reward = getRewardByKey(template.key, String(payload?.rewardKey ?? "").trim()); if (!reward || reward.mode !== "active") throw new HttpError(400, "That consortium reward cannot be redeemed.", "CONSORTIUM_REWARD_INVALID"); const member = ensureMember(organization, user.internalId); const { runtimeState } = await getRuntimeForUser(client, user); const derived = await buildConsortiumState(client, organization, user.internalId); if (derived.stars < reward.starTier) throw new HttpError(400, `This reward unlocks at ${reward.starTier} stars.`, "CONSORTIUM_REWARD_LOCKED"); const progressEntry = getProgressEntry(runtimeState, template.key, organization.internalId); const cost = Number(reward.pointCost ?? 0); if (progressEntry.points < cost) throw new HttpError(400, `You need ${cost - progressEntry.points} more Consortium Points.`, "CONSORTIUM_POINTS_REQUIRED"); const rewardResult = await applyRewardEffect({ client, organization, template, reward, runtimeState }); setProgressEntry(runtimeState, template.key, { ...progressEntry, organizationInternalId: organization.internalId, points: progressEntry.points - cost, totalSpent: progressEntry.totalSpent + cost }); syncMembershipSummary(runtimeState, organization, template, derived.stars, member.roleKey); const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState); const updatedOrganization = rewardResult.treasury ? await updateOrganizationDetails(client, organization.internalId, { treasury: rewardResult.treasury }) : organization; await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_reward_redeemed", summary: { consortiumTypeKey: template.key, rewardKey: reward.rewardKey, rewardName: reward.displayName, pointCost: cost, result: rewardResult.summary, grantedItem: rewardResult.grantedItem ?? null } }); return { ...(await refreshConsortiumView(client, user, updatedOrganization)), playerState, rewardResult }; });
 }
 
 export async function planGuildQuestForUser(user, organizationInternalId, payload) {
