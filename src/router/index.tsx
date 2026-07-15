@@ -151,7 +151,7 @@ export default function AppRouter() {
       <Route path="/profiles/:publicId" element={<ProfilePage />} />
       <Route path="/profiles" element={<Navigate to="/profile" replace />} />
       <Route path="/achievements" element={<AchievementsPage />} />
-      <Route path="/housing" element={<HousingPage />} />
+      <Route path="/housing" element={<RouteGuard><HousingPage /></RouteGuard>} />
       <Route path="/guild" element={<Navigate to="/guilds" replace />} />
       <Route path="/guild/:publicId" element={<RouteGuard><GuildsPage /></RouteGuard>} />
       <Route path="/guilds" element={<RouteGuard><GuildsPage /></RouteGuard>} />
@@ -162,7 +162,7 @@ export default function AppRouter() {
       <Route path="/hospital" element={<HospitalPage />} />
       <Route path="/jail" element={<HospitalPage />} />
       <Route path="/salvage-yard" element={<RouteGuard><SalvageYardPage /></RouteGuard>} />
-      <Route path="/city-board" element={<CityBoardPage />} />
+      <Route path="/city-board" element={<RouteGuard><CityBoardPage /></RouteGuard>} />
       <Route path="/skills" element={<SkillsPage />} />
       <Route path="/tavern" element={<TavernPage />} />
 

@@ -50,7 +50,7 @@ const factions: Array<[string, string]> = [
 
 const HOSPITAL_HIDDEN = new Set(["/education", "/crafting", "/salvage-yard", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
 const JAIL_HIDDEN = new Set(["/education", "/crafting", "/salvage-yard", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
-const TRAVEL_HIDDEN = new Set(["/education", "/crafting", "/salvage-yard", "/adventure", "/arena", "/city", "/civic-jobs", "/guilds", "/consortiums", "/housing"]);
+const TRAVEL_HIDDEN = new Set(["/education", "/crafting", "/salvage-yard", "/adventure", "/arena", "/city", "/civic-jobs", "/guilds", "/consortiums", "/housing", "/city-board"]);
 
 function SidebarSection({ title, links }: { title: string; links: Array<[string, string]> }) {
   if (!links.length) return null;

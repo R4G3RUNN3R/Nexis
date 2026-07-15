@@ -48,6 +48,7 @@ const BLOCKED_WHILE_TRAVELING = new Set([
   "/housing",
   "/academies",
   "/life-paths",
+  "/city-board",
 ]);
 
 export default function RouteGuard({ children }: { children: JSX.Element }) {
