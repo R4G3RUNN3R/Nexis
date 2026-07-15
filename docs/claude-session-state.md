@@ -64,3 +64,15 @@ Isolated pglite smoke test (zero contact with production data):
 Not yet deployed live (frontend build/service restart) — holding until Consortiums and Guilds reworks are also ready, to batch the live deploy per prior session's pattern rather than restarting the service repeatedly.
 
 Dispatching Admin Panel refinement now that Admin Mode toggle is confirmed merged and its server-side enforcement independently verified.
+
+---
+
+## Refinement Phase 0 — Batch 2 Deploy Log (2026-07-15)
+
+Merged Consortiums rework (`6067c64`) then Guilds rework (`ab9f43d`) into main, both touching `organizationService.js` but auto-merging cleanly (different functions). Build clean with all 6 approved refinement branches now combined. Pushed as `e52aa4a`.
+
+Combined smoke test: server boots correctly with both large systems merged; pre-existing Civic Fundamentals gate on consortium founding still returns 403 correctly. Guild founding itself was already verified with a properly-funded account in the Guilds rework agent's own 23/23-check smoke test (permission enforcement, cap enforcement, gold-gated respec, rally cooldown) — not re-run here since a fresh unfunded test account correctly hit the pre-existing gold-requirement gate, which is expected behavior, not a regression.
+
+Notable: Consortiums rework agent found the codebase actually has 12 consortium types (not 10 as the brief described) and built real perks for all 12 rather than leaving 2 cosmetic-only.
+
+All 6 approved refinement tasks now merged and pushed: Home cleanup, Travel splash, Adventure item-gated chain, Admin Mode toggle, Consortiums rework, Guilds rework. Only Admin Panel refinement remains in flight. Not yet deployed live — holding for that final piece before one batched frontend deploy + service restart, per established pattern.
