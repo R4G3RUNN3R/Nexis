@@ -457,6 +457,10 @@ export type GuildPassives = {
   totalSpent: number;
   availablePoints: number;
   dailyRenown: number;
+  activeSpecializationCount: number;
+  specializationCap: number;
+  respecGoldCost: number;
+  respecCount: number;
 };
 
 export type OrganizationAcademyContract = {
@@ -480,14 +484,51 @@ export type OrganizationAcademyContract = {
   };
 };
 
-export type GuildSkillNode = {
+export type GuildCoreSkillNode = {
   key: string;
   displayName: string;
-  tier: number;
-  pointCost: number;
+  effectType: "passive" | "active";
   effectSummary: string;
+  memberBenefit: string;
+  isCore: true;
+  unlocked: true;
+};
+
+export type GuildSpecializationNode = {
+  key: string;
+  branch: string;
+  branchLabel: string;
+  displayName: string;
+  pointCost: number;
+  effectType: "passive" | "active";
+  effectSummary: string;
+  memberBenefit: string;
+  isCore: false;
   unlocked: boolean;
-  prerequisites: string[];
+  everUnlocked: boolean;
+  isActive: boolean;
+  canActivate: boolean;
+  canSwapIn: boolean;
+};
+
+export type GuildRallyState = {
+  specializationActive: boolean;
+  bonusPct: number;
+  goldCost: number;
+  cooldownMs: number;
+  ready: boolean;
+  cooldownRemainingMs: number;
+  canTrigger: boolean;
+};
+
+export type GuildSkillTreeState = {
+  cap: number;
+  activeCount: number;
+  respecGoldCost: number;
+  respecCount: number;
+  core: GuildCoreSkillNode[];
+  specializations: GuildSpecializationNode[];
+  rally: GuildRallyState;
 };
 
 export type GuildArmory = {
@@ -554,7 +595,7 @@ export type OrganizationRecord = {
     roomCount: number;
     source: string;
   };
-  skillTree?: GuildSkillNode[];
+  skillTree?: GuildSkillTreeState;
   armory?: GuildArmory;
   settingsView?: GuildSettings;
   viewerPermissions?: OrganizationPermission[];

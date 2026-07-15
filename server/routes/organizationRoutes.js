@@ -15,8 +15,10 @@ import {
   postGuildQuestInitiateController,
   postGuildQuestPlanController,
   postGuildQuestReplanController,
+  postGuildRallyController,
   postGuildRecruitController,
   postGuildSettingsController,
+  postGuildSkillSwapController,
   postGuildSkillUnlockController,
   postConsortiumApplicationReviewController,
   postConsortiumApplyController,
@@ -64,6 +66,8 @@ router.post("/organizations/:organizationId/consortiums/logistics/:operationId/e
 router.post("/organizations/:organizationId/guilds/settings", requireSession, postGuildSettingsController);
 router.post("/organizations/:organizationId/guilds/members", requireSession, postGuildRecruitController);
 router.post("/organizations/:organizationId/guilds/skills/unlock", requireSession, postGuildSkillUnlockController);
+router.post("/organizations/:organizationId/guilds/skills/swap", requireSession, postGuildSkillSwapController);
+router.post("/organizations/:organizationId/guilds/rally", requireSession, postGuildRallyController);
 router.post("/organizations/:organizationId/guilds/armory/deposit", requireSession, postGuildArmoryDepositController);
 router.post("/organizations/:organizationId/guilds/armory/withdraw", requireSession, postGuildArmoryWithdrawController);
 router.post("/organizations/:organizationId/guilds/adventures/launch", requireSession, postGuildDungeonLaunchController);

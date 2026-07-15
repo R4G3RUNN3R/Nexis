@@ -18,6 +18,8 @@ import {
   planGuildQuest,
   replanGuildQuest,
   recruitGuildMember,
+  swapGuildSkill,
+  triggerGuildRally,
   unlockGuildSkill,
   updateGuildSettings,
   withdrawGuildArmory,
@@ -32,12 +34,14 @@ const GUILD_PAGE_COPY = {
 };
 
 type GuildView = GuildBoard;
-type GuildTab = "public" | "members" | "wars" | "adventuring" | "passives" | "armory" | "base" | "settings";
+type GuildTab = "public" | "members" | "wars" | "adventuring" | "specializations" | "armory" | "base" | "settings";
 
-function getSkillBranch(skillKey: string) {
-  if (skillKey.includes("banner") || skillKey.includes("war") || skillKey.includes("sovereign")) return "Command";
-  if (skillKey.includes("quartermaster") || skillKey.includes("logistics")) return "Logistics";
-  return "Adventuring";
+function formatMsCountdown(ms: number) {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
 }
 
 function StatusRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -189,19 +193,12 @@ export default function GuildsPage() {
   const guildAcademyReadinessPct = readNumber(guildAcademyAdventuring.guildReadinessPct);
   const guildAcademySurvivalPct = readNumber(guildAcademyAdventuring.operationSurvivalPct);
   const guildAcademyBattleEdgePct = readNumber(guildAcademyAdventuring.battleEdgePct);
-  const skillTree = board?.skillTree ?? [];
-  const skillColumns = useMemo(() => {
-    const grouped = new Map<number, any[]>();
-    skillTree.forEach((skill: any) => {
-      const tier = Number(skill.tier ?? 1);
-      const current = grouped.get(tier) ?? [];
-      current.push(skill);
-      grouped.set(tier, current);
-    });
-    return Array.from(grouped.entries())
-      .sort((left, right) => left[0] - right[0])
-      .map(([tier, skills]) => ({ tier, skills }));
-  }, [skillTree]);
+  const skillTreeState = board?.skillTree;
+  const coreSkills = skillTreeState?.core ?? [];
+  const specializations = skillTreeState?.specializations ?? [];
+  const activeSpecializations = specializations.filter((entry: any) => entry.isActive);
+  const specializationCap = skillTreeState?.cap ?? 3;
+  const [swapTargetByKey, setSwapTargetByKey] = useState<Record<string, string>>({});
 
   async function reloadGuild() {
     if (authSource !== "server" || !serverSessionToken) return;
@@ -281,7 +278,7 @@ export default function GuildsPage() {
     { key: "members", label: "Members" },
     { key: "wars", label: "War / Rivalries" },
     { key: "adventuring", label: "Operations" },
-    { key: "passives", label: "Gains" },
+    { key: "specializations", label: "Specializations" },
     { key: "armory", label: "Armory" },
     { key: "base", label: "Base" },
     { key: "settings", label: "Settings / Charter" },
@@ -586,6 +583,9 @@ export default function GuildsPage() {
                   <button type="button" className="org-button" onClick={() => setActiveTab("base")}>
                     Base Ledger
                   </button>
+                  <button type="button" className="org-button" onClick={() => setActiveTab("specializations")}>
+                    Specializations
+                  </button>
                   <button type="button" className="org-button org-button--ghost" onClick={() => setActiveTab("settings")}>
                     Adjust Doctrine
                   </button>
@@ -631,6 +631,11 @@ export default function GuildsPage() {
                   <span>Armory</span>
                   <strong>{board.armory?.items?.reduce((sum: number, entry: { quantity: number }) => sum + entry.quantity, 0) ?? 0}</strong>
                   <p>Stored assets</p>
+                </article>
+                <article className="org-stat-card">
+                  <span>Specializations</span>
+                  <strong>{activeSpecializations.length} / {specializationCap}</strong>
+                  <p>{activeSpecializations.length ? activeSpecializations.map((entry: any) => entry.displayName).join(", ") : "None active yet"}</p>
                 </article>
               </section>
 
@@ -981,48 +986,95 @@ export default function GuildsPage() {
             </ContentPanel>
           ) : null}
 
-          {activeTab === "passives" ? (
+          {activeTab === "specializations" ? (
             <div className="guild-layout">
               <div className="guild-column guild-column--wide">
-                <ContentPanel title="Guild Passives">
+                <ContentPanel title="Charter Doctrine">
                   <div className="guild-stack">
                     <section className="guild-card">
                       <div className="guild-card__section-title">Accumulation</div>
                       <StatusRow label="Reputation" value={board.guildPassives?.reputation ?? 0} />
                       <StatusRow label="Daily Renown" value={board.guildPassives?.dailyRenown ?? 0} />
                       <StatusRow label="Skill Points Available" value={board.guildPassives?.availablePoints ?? 0} />
+                      <StatusRow label="Active Specializations" value={`${activeSpecializations.length} / ${specializationCap}`} />
+                      <StatusRow label="Respec Cost" value={`${(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")} gold (guild treasury)`} />
                     </section>
+
                     <section className="guild-card">
-                      <div className="guild-card__section-title">Skill Tree</div>
+                      <div className="guild-card__section-title">Core Doctrine (every guild gets this, free)</div>
                       <div className="guild-skill-board">
-                        {skillColumns.map((column) => (
-                          <div key={column.tier} className="guild-skill-column">
-                            <div className="guild-skill-column__header">Tier {column.tier}</div>
-                            <div className="guild-skill-column__stack">
-                              {column.skills.map((skill: any) => (
-                                <div key={skill.key} className={`guild-skill-node${skill.unlocked ? " guild-skill-node--unlocked" : ""}`}>
-                                  <div className="guild-skill-node__branch">{getSkillBranch(skill.key)}</div>
-                                  <div className="guild-skill-node__topline">
-                                    <strong>{skill.displayName}</strong>
-                                    <span>{skill.pointCost} pt</span>
-                                  </div>
-                                  <div className="guild-card__body guild-card__body--small">{skill.effectSummary}</div>
-                                  <div className="guild-skill-node__requirements">
-                                    {skill.prerequisites?.length ? `Requires ${skill.prerequisites.join(" / ").replace(/_/g, " ")}.` : "Foundation node."}
-                                  </div>
-                                  <div className="guild-skill-node__footer">
-                                    <span className={`guild-skill-node__status${skill.unlocked ? " guild-skill-node__status--unlocked" : ""}`}>
-                                      {skill.unlocked ? "Unlocked" : "Locked"}
-                                    </span>
-                                    <button type="button" className="org-button" disabled={!canManageDoctrine || skill.unlocked} onClick={() => runGuildAction(() => unlockGuildSkill(serverSessionToken!, board.internalId, skill.key), { message: () => `${skill.displayName} unlocked for the guild.` })}>
-                                      {skill.unlocked ? "Owned" : "Unlock"}
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
+                        {coreSkills.map((skill: any) => (
+                          <div key={skill.key} className="guild-skill-node guild-skill-node--unlocked">
+                            <div className="guild-skill-node__branch">Core</div>
+                            <div className="guild-skill-node__topline">
+                              <strong>{skill.displayName}</strong>
+                              <span>Free</span>
+                            </div>
+                            <div className="guild-card__body guild-card__body--small">{skill.memberBenefit}</div>
+                            <div className="guild-skill-node__footer">
+                              <span className="guild-skill-node__status guild-skill-node__status--unlocked">Always Active</span>
                             </div>
                           </div>
                         ))}
+                      </div>
+                    </section>
+
+                    <section className="guild-card">
+                      <div className="guild-card__section-title">Specializations ({activeSpecializations.length}/{specializationCap} active)</div>
+                      <div className="guild-inline-note">
+                        Only {specializationCap} of these {specializations.length} named specializations can be active at once. Activating an open slot costs skill points only; once the guild is at the cap, bringing in something different means swapping -- a {(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")} gold treasury cost every time, so it stays a real decision instead of a free daily toggle.
+                      </div>
+                      <div className="guild-skill-board">
+                        {specializations.map((skill: any) => {
+                          const swapTarget = swapTargetByKey[skill.key] ?? activeSpecializations[0]?.key ?? "";
+                          return (
+                            <div key={skill.key} className={`guild-skill-node${skill.isActive ? " guild-skill-node--unlocked" : ""}`}>
+                              <div className="guild-skill-node__branch">{skill.branchLabel}</div>
+                              <div className="guild-skill-node__topline">
+                                <strong>{skill.displayName}</strong>
+                                <span>{skill.pointCost} pt{skill.effectType === "active" ? " | Active" : ""}</span>
+                              </div>
+                              <div className="guild-card__body guild-card__body--small">{skill.memberBenefit}</div>
+                              <div className="guild-skill-node__footer">
+                                <span className={`guild-skill-node__status${skill.isActive ? " guild-skill-node__status--unlocked" : ""}`}>
+                                  {skill.isActive ? "Active" : skill.everUnlocked ? "Learned (benched)" : "Locked"}
+                                </span>
+                                {skill.isActive ? (
+                                  <span className="org-chip">In use</span>
+                                ) : skill.canActivate ? (
+                                  <button type="button" className="org-button" disabled={!canManageDoctrine} onClick={() => runGuildAction(() => unlockGuildSkill(serverSessionToken!, board.internalId, skill.key), { message: () => `${skill.displayName} is now active for the guild.` })}>
+                                    Activate
+                                  </button>
+                                ) : (
+                                  <div className="guild-swap-controls">
+                                    <select className="org-input" value={swapTarget} onChange={(event) => setSwapTargetByKey((prev) => ({ ...prev, [skill.key]: event.target.value }))}>
+                                      {activeSpecializations.map((entry: any) => (
+                                        <option key={entry.key} value={entry.key}>Bench {entry.displayName}</option>
+                                      ))}
+                                    </select>
+                                    <button type="button" className="org-button" disabled={!canManageDoctrine || !swapTarget} onClick={() => runGuildAction(() => swapGuildSkill(serverSessionToken!, board.internalId, skill.key, swapTarget), { message: () => `Swapped in ${skill.displayName} for ${(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")} gold.` })}>
+                                      Swap ({(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")}g)
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              {skill.key === "strike_cadence" && skill.isActive ? (
+                                <div className="guild-inline-note">
+                                  {skillTreeState?.rally.ready
+                                    ? "A Strike Cadence is primed and will apply to the next guild quest or dungeon delve you initiate."
+                                    : skillTreeState?.rally.canTrigger
+                                      ? `Ready to trigger for ${skillTreeState.rally.goldCost.toLocaleString("en-GB")} gold (+${skillTreeState.rally.bonusPct}% success on the next operation).`
+                                      : `On cooldown: ${formatMsCountdown(skillTreeState?.rally.cooldownRemainingMs ?? 0)} remaining.`}
+                                  <div style={{ marginTop: 8 }}>
+                                    <button type="button" className="org-button" disabled={!canManageDoctrine || !skillTreeState?.rally.canTrigger} onClick={() => runGuildAction(() => triggerGuildRally(serverSessionToken!, board.internalId), { message: () => "Strike Cadence called. The next guild quest or dungeon delve gets the bonus." })}>
+                                      Trigger Strike Cadence
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
                     </section>
                   </div>
@@ -1034,15 +1086,16 @@ export default function GuildsPage() {
                     <section className="guild-card">
                       <div className="guild-card__section-title">Passive Summary</div>
                       <div className="guild-card__body guild-card__body--small">
-                        {board.passiveBonusSummary || "No guild skills unlocked yet."}
+                        {board.passiveBonusSummary || "No specializations active yet."}
                       </div>
                     </section>
                     <section className="guild-card guild-card--hero">
-                      <div className="guild-card__section-title">Faction Skill Ledger</div>
+                      <div className="guild-card__section-title">Doctrine Ledger</div>
                       <StatusRow label="Available Points" value={board.guildPassives?.availablePoints ?? 0} />
-                      <StatusRow label="Unlocked Nodes" value={skillTree.filter((skill: any) => skill.unlocked).length} />
+                      <StatusRow label="Active Specializations" value={`${activeSpecializations.length} / ${specializationCap}`} />
+                      <StatusRow label="Times Respecced" value={board.guildPassives?.respecCount ?? 0} />
                       <div className="guild-card__body guild-card__body--small">
-                        Built to read like a real faction progression board now, instead of a stack of admin memos pretending to be strategy.
+                        Every founded guild keeps its 2 Core Doctrine bonuses for free. The {specializations.length} named specializations below are the guild's real strategic choice -- only {specializationCap} can run at once, so who your guild recruits and what it invests in should shape which ones you pick.
                       </div>
                     </section>
                   </div>

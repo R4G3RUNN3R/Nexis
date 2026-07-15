@@ -303,6 +303,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.guild-swap-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.guild-swap-controls .org-input {
+  min-width: 140px;
 }
 
 .guild-skill-node__status {
