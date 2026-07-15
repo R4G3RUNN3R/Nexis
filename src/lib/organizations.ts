@@ -50,8 +50,19 @@ export type ConsortiumReward = {
   pointCost: number | null;
   effectSummary: string;
   poolKey: string | null;
+  effectKey?: string | null;
+  effectValue?: number;
+  effectScope?: string | null;
   unlocked?: boolean;
   canRedeem?: boolean;
+};
+
+export type ConsortiumHealthMetric = {
+  key: string;
+  label: string;
+  meaning: string;
+  value: number;
+  rating: "Strong" | "Stable" | "Strained";
 };
 
 export type ConsortiumTypeDefinition = {
@@ -521,6 +532,9 @@ export type OrganizationRecord = {
   rewardLadder?: ConsortiumReward[];
   unlockedPassives?: ConsortiumReward[];
   redeemableActives?: ConsortiumReward[];
+  nextTierRewards?: ConsortiumReward[];
+  consortiumPerkEffects?: Record<string, number>;
+  healthMetrics?: Record<string, ConsortiumHealthMetric>;
   consortiumPoints?: ConsortiumPointState | null;
   publicProfile?: GuildPublicProfile;
   memberDetails?: GuildMemberDetail[];

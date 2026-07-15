@@ -11,6 +11,7 @@ import { getRecipeDefinition, getRecipeDefinitions } from "../data/recipeData.js
 import { EQUIPMENT_SLOTS, getAllowedEquipSlots, getItemDefinition, getItemDisplayName, getItemSummary, isEquippable } from "../data/itemData.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
 import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
+import { getConsortiumEffectPctForRuntime } from "./consortiumPerkService.js";
 
 const LOADOUT_SLOTS = ["1", "2", "3"];
 const MAINTENANCE_DURATION_MS = 6 * 60 * 60 * 1000;
@@ -139,6 +140,13 @@ function serializeItemRequirement(runtimeState, entry) {
   return { itemId: entry.itemId, item: getItemSummary(entry.itemId), quantity: entry.quantity, owned, missing: Math.max(0, entry.quantity - owned) };
 }
 
+// A Smithing or Alchemy Consortium's Industrial Rhythm / Reagent Efficiency passive discounts the
+// gold side of every recipe, regardless of category -- both industries share the same workbench.
+function getRecipeGoldCost(runtimeState, recipe) {
+  const discountPct = getConsortiumEffectPctForRuntime(runtimeState, "craftGoldDiscountPct");
+  return Math.max(0, Math.round(asNumber(recipe.goldCost, 0) * (1 - Math.max(0, discountPct) / 100)));
+}
+
 function getRecipeLocks(runtimeState, recipe) {
   const reasons = [];
   const currentCityId = getCurrentCityId(runtimeState);
@@ -154,7 +162,8 @@ function getRecipeLocks(runtimeState, recipe) {
   const missingUnlocks = recipe.requiredAcademyUnlocks.filter((flag) => !unlocks.has(flag));
   if (missingUnlocks.length) reasons.push(recipe.unlockHint ?? `Requires academy unlock: ${missingUnlocks.join(", ")}.`);
   const gold = Math.max(0, Math.floor(asNumber(runtimeState.player?.gold, 0)));
-  if (gold < recipe.goldCost) reasons.push(`Requires ${recipe.goldCost} gold. Current gold: ${gold}.`);
+  const goldCost = getRecipeGoldCost(runtimeState, recipe);
+  if (gold < goldCost) reasons.push(`Requires ${goldCost} gold. Current gold: ${gold}.`);
   for (const input of recipe.inputs) {
     const owned = Math.max(0, Math.floor(asNumber(asRecord(runtimeState.player?.inventory)[input.itemId], 0)));
     if (owned < input.quantity) reasons.push(`Requires ${getItemDisplayName(input.itemId)} x${input.quantity}. Owned: ${owned}.`);
@@ -166,6 +175,8 @@ function serializeRecipe(runtimeState, recipe) {
   const reasons = getRecipeLocks(runtimeState, recipe);
   return {
     ...recipe,
+    goldCost: getRecipeGoldCost(runtimeState, recipe),
+    baseGoldCost: recipe.goldCost,
     city: { id: recipe.cityId, name: getCityDefinition(recipe.cityId).name },
     inputs: recipe.inputs.map((entry) => serializeItemRequirement(runtimeState, entry)),
     outputs: recipe.outputs.map((entry) => ({ ...entry, item: getItemSummary(entry.itemId) })),
@@ -220,6 +231,15 @@ function serializeSalvageOption(runtimeState, itemId, quantity) {
   };
 }
 
+const BASE_REPAIR_FALLBACK_GOLD = 20;
+
+// A Smithing Consortium's Masterwork Discipline passive discounts the gold half of the Iron Rivets
+// fallback repair (the Field Repair Kit path is item-only and unaffected).
+function getRepairFallbackGoldCost(runtimeState) {
+  const discountPct = getConsortiumEffectPctForRuntime(runtimeState, "repairGoldDiscountPct");
+  return Math.max(0, Math.round(BASE_REPAIR_FALLBACK_GOLD * (1 - Math.max(0, discountPct) / 100)));
+}
+
 function serializeRepairOption(runtimeState, slot, now = Date.now()) {
   const equipment = ensureEquipment(runtimeState);
   const itemId = equipment[slot];
@@ -227,11 +247,12 @@ function serializeRepairOption(runtimeState, slot, now = Date.now()) {
   const maintenance = asRecord(ensureMaintenance(runtimeState)[slot]);
   const maintained = itemId && maintenance.itemId === itemId && asNumber(maintenance.bonusUntil, 0) > now;
   const hasKit = asNumber(inventory.field_repair_kit, 0) > 0;
-  const hasFallback = asNumber(inventory.iron_rivets, 0) > 0 && asNumber(runtimeState.player?.gold, 0) >= 20;
+  const fallbackGoldCost = getRepairFallbackGoldCost(runtimeState);
+  const hasFallback = asNumber(inventory.iron_rivets, 0) > 0 && asNumber(runtimeState.player?.gold, 0) >= fallbackGoldCost;
   const reasons = [];
   if (!itemId) reasons.push("No equipment in this slot.");
   if (maintained) reasons.push("This item is already maintained.");
-  if (itemId && !hasKit && !hasFallback) reasons.push("Requires Field Repair Kit, or Iron Rivets x1 plus 20 gold.");
+  if (itemId && !hasKit && !hasFallback) reasons.push(`Requires Field Repair Kit, or Iron Rivets x1 plus ${fallbackGoldCost} gold.`);
   return {
     slot,
     itemId,
@@ -240,7 +261,7 @@ function serializeRepairOption(runtimeState, slot, now = Date.now()) {
     bonusUntil: maintained ? maintenance.bonusUntil : null,
     canRepair: reasons.length === 0,
     lockReason: reasons[0] ?? null,
-    cost: hasKit ? { items: [{ itemId: "field_repair_kit", quantity: 1 }], gold: 0 } : { items: [{ itemId: "iron_rivets", quantity: 1 }], gold: 20 },
+    cost: hasKit ? { items: [{ itemId: "field_repair_kit", quantity: 1 }], gold: 0 } : { items: [{ itemId: "iron_rivets", quantity: 1 }], gold: fallbackGoldCost },
   };
 }
 
@@ -292,7 +313,7 @@ export async function craftRecipeForUser(user, recipeId) {
     if (!serialized.canCraft) throw new HttpError(409, serialized.lockReason ?? "Recipe is locked.", "CRAFTING_RECIPE_LOCKED");
     for (const input of recipe.inputs) removeInventory(runtimeState, input.itemId, input.quantity);
     for (const output of recipe.outputs) addInventory(runtimeState, output.itemId, output.quantity);
-    const gold = Math.max(0, Math.floor(asNumber(runtimeState.player.gold, 0) - recipe.goldCost));
+    const gold = Math.max(0, Math.floor(asNumber(runtimeState.player.gold, 0) - getRecipeGoldCost(runtimeState, recipe)));
     runtimeState.player.gold = gold;
     runtimeState.player.currencies = { ...asRecord(runtimeState.player.currencies), gold };
     const crafting = ensureCrafting(runtimeState);

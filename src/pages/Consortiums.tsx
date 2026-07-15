@@ -8,7 +8,7 @@ import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
 import { useEducation } from "../state/EducationContext";
 import { allocatePublicNumericId, formatEntityPublicId } from "../lib/publicIds";
-import { createOrganization, getMyOrganization, getOrganizationByPublicId } from "../lib/organizationApi";
+import { claimConsortiumPoints, createOrganization, getMyOrganization, getOrganizationByPublicId, redeemConsortiumReward } from "../lib/organizationApi";
 import { cielPageCopy } from "../data/cielPageCopy";
 import {
   CONSORTIUM_STORAGE_PREFIX,
@@ -16,6 +16,8 @@ import {
   formatDate,
   readConsortiumBoard,
   type ConsortiumBoard,
+  type ConsortiumHealthMetric,
+  type ConsortiumReward,
   type ConsortiumTypeDefinition,
   writeJson,
   type OrganizationMember,
@@ -229,6 +231,36 @@ export default function ConsortiumsPage() {
     setBoard(readConsortiumBoard(player.internalId));
   }
 
+  async function runConsortiumAction(
+    runner: () => Promise<unknown>,
+    options?: { message?: (payload: Record<string, unknown>) => string },
+  ) {
+    if (!activeAccount || !serverSessionToken) return;
+    const result = await runner();
+    if (result && typeof result === "object" && "ok" in result && (result as { ok: unknown }).ok === false) {
+      setMessage(String((result as { error?: unknown }).error ?? "Consortium action failed."));
+      return;
+    }
+    const payload = (result ?? {}) as {
+      organization?: ConsortiumBoard;
+      playerState?: Parameters<typeof mergeServerStateIntoCache>[0]["playerState"];
+    };
+    if (payload.organization) setBoard(payload.organization);
+    if (payload.playerState) {
+      mergeServerStateIntoCache({
+        email: activeAccount.email,
+        user: {
+          internalPlayerId: activeAccount.internalPlayerId,
+          publicId: activeAccount.publicId,
+          firstName: activeAccount.firstName,
+          lastName: activeAccount.lastName,
+        },
+        playerState: payload.playerState,
+      });
+    }
+    if (options?.message) setMessage(options.message(payload as Record<string, unknown>));
+  }
+
   useEffect(() => {
     void reloadConsortiumBoard();
   }, [isDetailRoute, isServerMode, player.internalId, routeOrganizationPublicId, serverSessionToken]);
@@ -276,6 +308,15 @@ export default function ConsortiumsPage() {
   const assistanceOpportunities = Array.isArray((board as (ConsortiumBoard & { assistanceOpportunities?: unknown }) | null)?.assistanceOpportunities)
     ? ((board as ConsortiumBoard & { assistanceOpportunities?: Array<Record<string, unknown>> }).assistanceOpportunities ?? [])
     : [];
+  const healthMetrics = board?.healthMetrics ?? {};
+  const healthMetricRows: ConsortiumHealthMetric[] = Object.values(healthMetrics);
+  const rewardLadder: ConsortiumReward[] = board?.rewardLadder ?? [];
+  const unlockedPassives: ConsortiumReward[] = board?.unlockedPassives ?? [];
+  const redeemableActives: ConsortiumReward[] = board?.redeemableActives ?? [];
+  const nextTierRewards: ConsortiumReward[] = board?.nextTierRewards ?? [];
+  const consortiumPerkEffects = board?.consortiumPerkEffects ?? {};
+  const consortiumPointsState = board?.consortiumPoints ?? null;
+  const currentStarTier = board?.starRating ?? 1;
   const commandCards = board
     ? [
         {
@@ -563,6 +604,27 @@ export default function ConsortiumsPage() {
                       <section className="panel org-panel">
                         <div className="org-panel__head">
                           <div>
+                            <p className="org-eyebrow">Company Health</p>
+                            <h3>{board.consortiumTypeName ?? "Company"} - {currentStarTier}-star</h3>
+                          </div>
+                        </div>
+                        <div className="org-stat-strip">
+                          {healthMetricRows.map((metric) => (
+                            <article key={metric.key} className="org-stat-card">
+                              <span>{metric.label}</span>
+                              <strong>{metric.value}</strong>
+                              <p title={metric.meaning}>{metric.rating}</p>
+                            </article>
+                          ))}
+                        </div>
+                        <div className="guild-inline-note">
+                          Popularity, Efficiency, and Environment are server-computed from staffing, roles filled, treasury discipline, and unlocked {board.consortiumTypeName ?? "consortium"} perks -- not flavor text.
+                        </div>
+                      </section>
+
+                      <section className="panel org-panel">
+                        <div className="org-panel__head">
+                          <div>
                             <p className="org-eyebrow">Academy Contract</p>
                             <h3>Business Studies linkage</h3>
                           </div>
@@ -668,7 +730,111 @@ export default function ConsortiumsPage() {
                   ) : null}
 
                   {memberTab === "advancement" ? (
-                    <ContentPanel title="Advancement"><div className="org-detail-list"><StatusRow label="Current Rank" value={String(overviewRank.label ?? `Rank ${board.starRating ?? 1}`)} /><StatusRow label="Next Rank" value={String(overviewRank.nextLabel ?? "Unlisted")} /><StatusRow label="Requirements" value={Array.isArray(overviewRank.nextRequires) ? overviewRank.nextRequires.map(String).join(" | ") : "Improve performance score, staffing, and route outcomes"} /></div></ContentPanel>
+                    <ContentPanel title="Advancement">
+                      <div className="org-detail-list">
+                        <StatusRow label="Current Rank" value={String(overviewRank.label ?? `Rank ${board.starRating ?? 1}`)} />
+                        <StatusRow label="Next Rank" value={String(overviewRank.nextLabel ?? "Unlisted")} />
+                        <StatusRow label="Requirements" value={Array.isArray(overviewRank.nextRequires) ? overviewRank.nextRequires.map(String).join(" | ") : "Improve performance score, staffing, and route outcomes"} />
+                        <StatusRow label="Consortium Points" value={`${consortiumPointsState?.points ?? 0} available (+${consortiumPointsState?.dailyGain ?? 0}/day)`} />
+                      </div>
+
+                      <div className="org-form">
+                        <button
+                          type="button"
+                          className="org-button"
+                          disabled={!isServerMode || !serverSessionToken || !board.internalId}
+                          onClick={() =>
+                            void runConsortiumAction(
+                              () => claimConsortiumPoints(serverSessionToken!, board.internalId),
+                              { message: (payload) => `Claimed ${String(payload.grant ?? 0)} Consortium Points for the day.` },
+                            )
+                          }
+                        >
+                          Claim Daily Consortium Points
+                        </button>
+                      </div>
+
+                      <div className="guild-skill-board">
+                        {[1, 3, 5, 7, 10].map((tier) => {
+                          const tierRewards = rewardLadder.filter((entry) => entry.starTier === tier);
+                          if (!tierRewards.length) return null;
+                          const tierUnlocked = currentStarTier >= tier;
+                          return (
+                            <div className="guild-skill-column" key={tier}>
+                              <div className="guild-skill-column__header">{tier}-star{!tierUnlocked ? " (locked)" : ""}</div>
+                              <div className="guild-skill-column__stack">
+                                {tierRewards.map((reward) => {
+                                  const activeInfo = redeemableActives.find((entry) => entry.rewardKey === reward.rewardKey);
+                                  const isActive = reward.mode === "active";
+                                  const canRedeem = Boolean(activeInfo?.canRedeem);
+                                  return (
+                                    <div key={reward.rewardKey} className={`guild-skill-node${tierUnlocked ? " guild-skill-node--unlocked" : ""}`}>
+                                      <div className="guild-skill-node__branch">{isActive ? "Active" : "Passive"}</div>
+                                      <div className="guild-skill-node__topline">
+                                        <strong>{reward.displayName}</strong>
+                                        {isActive ? <span>{reward.pointCost ?? 0} pt</span> : null}
+                                      </div>
+                                      <div className="guild-card__body guild-card__body--small">{reward.effectSummary}</div>
+                                      <div className="guild-skill-node__footer">
+                                        <span className={`guild-skill-node__status${tierUnlocked ? " guild-skill-node__status--unlocked" : ""}`}>
+                                          {tierUnlocked ? "Unlocked" : `Unlocks at ${tier} stars`}
+                                        </span>
+                                        {isActive ? (
+                                          <button
+                                            type="button"
+                                            className="org-button"
+                                            disabled={!isServerMode || !serverSessionToken || !canRedeem}
+                                            onClick={() =>
+                                              void runConsortiumAction(
+                                                () => redeemConsortiumReward(serverSessionToken!, board.internalId, reward.rewardKey),
+                                                { message: (payload) => String((payload.rewardResult as { summary?: string } | undefined)?.summary ?? `${reward.displayName} redeemed.`) },
+                                              )
+                                            }
+                                          >
+                                            {tierUnlocked ? "Redeem" : "Locked"}
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="org-grid-two">
+                        <section className="panel org-panel">
+                          <div className="org-panel__head"><div><p className="org-eyebrow">Active Now</p><h3>Unlocked passives</h3></div></div>
+                          <div className="org-stack-list">
+                            {unlockedPassives.length ? unlockedPassives.map((entry) => (
+                              <article key={entry.rewardKey}><strong>{entry.displayName} ({entry.starTier}-star)</strong><p>{entry.effectSummary}</p></article>
+                            )) : <article><p>No passives unlocked yet -- reach 3 stars to unlock your first one.</p></article>}
+                          </div>
+                        </section>
+                        <section className="panel org-panel">
+                          <div className="org-panel__head"><div><p className="org-eyebrow">Coming Up</p><h3>Next tier unlocks at {nextTierRewards[0]?.starTier ?? "max"} stars</h3></div></div>
+                          <div className="org-stack-list">
+                            {nextTierRewards.length ? nextTierRewards.map((entry) => (
+                              <article key={entry.rewardKey}><strong>{entry.displayName} ({entry.mode})</strong><p>{entry.effectSummary}</p></article>
+                            )) : <article><p>Maximum star tier reached -- every perk in this reward tree is unlocked.</p></article>}
+                          </div>
+                        </section>
+                      </div>
+
+                      <section className="panel org-panel">
+                        <div className="org-panel__head"><div><p className="org-eyebrow">Server-Computed</p><h3>Active perk effect values</h3></div></div>
+                        <div className="org-detail-list">
+                          {Object.keys(consortiumPerkEffects).length ? Object.entries(consortiumPerkEffects).map(([key, value]) => (
+                            <StatusRow key={key} label={key} value={typeof value === "number" ? `+${value}` : String(value)} />
+                          )) : <StatusRow label="Perk effects" value="None active yet" />}
+                        </div>
+                        <div className="guild-inline-note">
+                          These are the exact numbers applied server-side (market prices, logistics danger, crafting cost, treasury interest, city standing) -- not just numbers shown on this page.
+                        </div>
+                      </section>
+                    </ContentPanel>
                   ) : null}
 
                   {memberTab === "logistics" ? (

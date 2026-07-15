@@ -1,6 +1,11 @@
 const STAR_TIERS = [1, 3, 5, 7, 10];
 
-function reward({ starTier, rewardKey, displayName, mode, pointCost = null, effectSummary, poolKey = null }) {
+// effectKey/effectValue/effectScope describe a REAL, server-computed passive modifier.
+// Consuming services (cityEconomyService.js, consortiumLogisticsService.js, itemAdvancedService.js,
+// organizationService.js) read these through getConsortiumPassiveEffectBundle() below rather than
+// re-deriving perk numbers themselves, so the numbers shown to players and the numbers actually
+// applied to gameplay calculations always come from this single table.
+function reward({ starTier, rewardKey, displayName, mode, pointCost = null, effectSummary, poolKey = null, effectKey = null, effectValue = 0, effectScope = null }) {
   return {
     starTier,
     rewardKey,
@@ -9,6 +14,9 @@ function reward({ starTier, rewardKey, displayName, mode, pointCost = null, effe
     pointCost,
     effectSummary,
     poolKey,
+    effectKey,
+    effectValue,
+    effectScope,
   };
 }
 
@@ -65,11 +73,11 @@ const CONSORTIUM_TYPES = {
     description: "Market leverage, contracts, pricing, and trade dominance.",
     rolesFlavor: ["director", "broker", "factor", "quartermaster", "clerk"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "price_pulse", displayName: "Price Pulse", mode: "active", pointCost: 2, effectSummary: "Reveal the best current legal vendor price for one item category or trade-good group." }),
-      reward({ starTier: 3, rewardKey: "market_sense", displayName: "Market Sense", mode: "passive", effectSummary: "Small permanent improvement to legal sell prices and reduced vendor fee friction." }),
-      reward({ starTier: 5, rewardKey: "contract_flip", displayName: "Contract Flip", mode: "active", pointCost: 18, effectSummary: "Boost payout on one eligible trade contract or listing batch." }),
-      reward({ starTier: 7, rewardKey: "commercial_reach", displayName: "Commercial Reach", mode: "passive", effectSummary: "Increased trade reputation gain and improved contract availability." }),
-      reward({ starTier: 10, rewardKey: "golden_window", displayName: "Golden Window", mode: "active", pointCost: 60, effectSummary: "Short-duration premium commerce window with stronger sale margin bonus." }),
+      reward({ starTier: 1, rewardKey: "quick_ledger", displayName: "Quick Ledger", mode: "active", pointCost: 2, effectSummary: "Liquidate a small consignment immediately for 2,000 gold straight into the treasury." }),
+      reward({ starTier: 3, rewardKey: "tariff_waiver", displayName: "Tariff Waiver", mode: "passive", effectSummary: "-4% on every legal city market purchase, consortium-wide.", effectKey: "marketBuyDiscountPct", effectValue: 4, effectScope: "all" }),
+      reward({ starTier: 5, rewardKey: "consignment_surge", displayName: "Consignment Surge", mode: "active", pointCost: 18, effectSummary: "Move a bulk consignment through allied brokers for 9,000 gold straight into the treasury." }),
+      reward({ starTier: 7, rewardKey: "free_trade_charter", displayName: "Free Trade Charter", mode: "passive", effectSummary: "+6% on every legal city market sale, consortium-wide.", effectKey: "marketSellBonusPct", effectValue: 6, effectScope: "all" }),
+      reward({ starTier: 10, rewardKey: "golden_manifest", displayName: "Golden Manifest", mode: "active", pointCost: 60, effectSummary: "Close a flagship trade manifest for 30,000 gold straight into the treasury." }),
     ],
   },
   logistics: {
@@ -79,11 +87,11 @@ const CONSORTIUM_TYPES = {
     description: "Warehousing, route efficiency, freight handling, and storage discipline.",
     rolesFlavor: ["director", "dispatcher", "hauler", "quartermaster", "warehouse master"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "priority_load", displayName: "Priority Load", mode: "active", pointCost: 2, effectSummary: "Temporary cargo-capacity or shipment-capacity boost on the next transport action." }),
-      reward({ starTier: 3, rewardKey: "warehouse_discipline", displayName: "Warehouse Discipline", mode: "passive", effectSummary: "Higher storage capacity and reduced stock loss/spoilage." }),
-      reward({ starTier: 5, rewardKey: "route_familiarity", displayName: "Route Familiarity", mode: "passive", effectSummary: "Reduced travel inefficiency and improved cargo throughput." }),
-      reward({ starTier: 7, rewardKey: "fast_dispatch", displayName: "Fast Dispatch", mode: "active", pointCost: 20, effectSummary: "Reduce the time of one travel or delivery action." }),
-      reward({ starTier: 10, rewardKey: "secure_chain", displayName: "Secure Chain", mode: "active", pointCost: 65, effectSummary: "Protect one shipment against part of its loss/disruption/spoilage risk." }),
+      reward({ starTier: 1, rewardKey: "quick_load", displayName: "Quick Load", mode: "active", pointCost: 2, effectSummary: "Cash out spare warehouse stock for 1,800 gold straight into the treasury." }),
+      reward({ starTier: 3, rewardKey: "convoy_discipline", displayName: "Convoy Discipline", mode: "passive", effectSummary: "-8% route danger pressure on every consortium logistics operation.", effectKey: "routeDangerReductionPct", effectValue: 8, effectScope: "all" }),
+      reward({ starTier: 5, rewardKey: "emergency_reroute", displayName: "Emergency Reroute", mode: "active", pointCost: 20, effectSummary: "Divert a delayed shipment through a paid fast lane for 7,500 gold straight into the treasury." }),
+      reward({ starTier: 7, rewardKey: "cargo_insurance_pool", displayName: "Cargo Insurance Pool", mode: "passive", effectSummary: "An extra -8% loss mitigation on every resolved logistics operation, stacking with base equipment.", effectKey: "cargoLossMitigationPct", effectValue: 8, effectScope: "all" }),
+      reward({ starTier: 10, rewardKey: "golden_convoy", displayName: "Golden Convoy", mode: "active", pointCost: 65, effectSummary: "Settle a completed express convoy for 32,000 gold straight into the treasury." }),
     ],
   },
   mining: {
@@ -93,11 +101,11 @@ const CONSORTIUM_TYPES = {
     description: "Ore, gems, extraction, surveying, and refining.",
     rolesFlavor: ["director", "surveyor", "miner", "refiner", "pit foreman"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "survey_strike", displayName: "Survey Strike", mode: "active", pointCost: 3, effectSummary: "Improve the next resource node yield roll." }),
-      reward({ starTier: 3, rewardKey: "deep_extraction", displayName: "Deep Extraction", mode: "passive", effectSummary: "Permanent bonus to raw extraction yield." }),
-      reward({ starTier: 5, rewardKey: "rich_vein", displayName: "Rich Vein", mode: "active", pointCost: 18, effectSummary: "Improve the chance of rare or higher-quality ore/gem output on one extraction." }),
-      reward({ starTier: 7, rewardKey: "master_refiners", displayName: "Master Refiners", mode: "passive", effectSummary: "Permanent bonus to refining efficiency and refined-material return." }),
-      reward({ starTier: 10, rewardKey: "motherlode", displayName: "Motherlode", mode: "active", pointCost: 70, effectSummary: "Greatly enhance one major mining/refining operation.", poolKey: "mining" }),
+      reward({ starTier: 1, rewardKey: "survey_strike", displayName: "Survey Strike", mode: "active", pointCost: 3, effectSummary: "Grant a random surveyed haul from the mining reward pool.", poolKey: "mining" }),
+      reward({ starTier: 3, rewardKey: "deep_extraction", displayName: "Deep Extraction", mode: "passive", effectSummary: "+6 Efficiency on the company health board from tighter dig-face coordination.", effectKey: "performanceFold", effectValue: 6, effectScope: "efficiency" }),
+      reward({ starTier: 5, rewardKey: "rich_vein", displayName: "Rich Vein", mode: "active", pointCost: 18, effectSummary: "Grant a random high-value haul from the mining reward pool.", poolKey: "mining" }),
+      reward({ starTier: 7, rewardKey: "master_refiners", displayName: "Master Refiners", mode: "passive", effectSummary: "+8% daily Consortium Point generation, consortium-wide, from refining throughput.", effectKey: "performanceFold", effectValue: 8, effectScope: "dailyGenerationPct" }),
+      reward({ starTier: 10, rewardKey: "motherlode", displayName: "Motherlode", mode: "active", pointCost: 70, effectSummary: "Grant a top-tier haul from the mining reward pool.", poolKey: "mining" }),
     ],
   },
   smithing: {
@@ -107,11 +115,11 @@ const CONSORTIUM_TYPES = {
     description: "Forged gear, weapons, armor, shields, tools, and industrial craftsmanship.",
     rolesFlavor: ["director", "smith", "armorer", "toolmaker", "forge master"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "tempered_batch", displayName: "Tempered Batch", mode: "active", pointCost: 3, effectSummary: "Improve quality on the next crafted weapon/armor/tool batch." }),
-      reward({ starTier: 3, rewardKey: "industrial_rhythm", displayName: "Industrial Rhythm", mode: "passive", effectSummary: "Faster forging and industrial crafting time." }),
+      reward({ starTier: 1, rewardKey: "tempered_batch", displayName: "Tempered Batch", mode: "active", pointCost: 3, effectSummary: "Grant a random forged reward from the smithing pool.", poolKey: "smithing" }),
+      reward({ starTier: 3, rewardKey: "industrial_rhythm", displayName: "Industrial Rhythm", mode: "passive", effectSummary: "-6% gold cost on every recipe crafted at the workbench, consortium-wide.", effectKey: "craftGoldDiscountPct", effectValue: 6, effectScope: "all" }),
       reward({ starTier: 5, rewardKey: "forge_cache", displayName: "Forge Cache", mode: "active", pointCost: 20, effectSummary: "Grant a random forged reward from curated smithing pools.", poolKey: "smithing" }),
-      reward({ starTier: 7, rewardKey: "masterwork_discipline", displayName: "Masterwork Discipline", mode: "passive", effectSummary: "Higher crafted gear quality and better enhancement success chance." }),
-      reward({ starTier: 10, rewardKey: "masterwork_commission", displayName: "Masterwork Commission", mode: "active", pointCost: 75, effectSummary: "Strong chance of superior forged output on one major craft." }),
+      reward({ starTier: 7, rewardKey: "masterwork_discipline", displayName: "Masterwork Discipline", mode: "passive", effectSummary: "-40% gold cost on equipment field repairs, consortium-wide.", effectKey: "repairGoldDiscountPct", effectValue: 40, effectScope: "all" }),
+      reward({ starTier: 10, rewardKey: "masterwork_commission", displayName: "Masterwork Commission", mode: "active", pointCost: 75, effectSummary: "Grant a top-tier forged reward plus a 4,000 gold commission fee straight into the treasury.", poolKey: "smithing" }),
     ],
   },
   alchemy: {
@@ -121,11 +129,11 @@ const CONSORTIUM_TYPES = {
     description: "Potions, reagents, compounds, tonics, draughts, and chemical craft.",
     rolesFlavor: ["director", "alchemist", "brewer", "herbalist", "laboratory master"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "stable_mixture", displayName: "Stable Mixture", mode: "active", pointCost: 2, effectSummary: "Improve success chance on one potion/elixir batch." }),
-      reward({ starTier: 3, rewardKey: "reagent_cache", displayName: "Reagent Cache", mode: "active", pointCost: 12, effectSummary: "Grant a random alchemical reward from curated alchemy pools.", poolKey: "alchemy" }),
-      reward({ starTier: 5, rewardKey: "preserved_reagents", displayName: "Preserved Reagents", mode: "passive", effectSummary: "Reduced reagent spoilage and better ingredient efficiency." }),
-      reward({ starTier: 7, rewardKey: "potent_distillation", displayName: "Potent Distillation", mode: "active", pointCost: 26, effectSummary: "Increase potency/duration of one eligible alchemical batch." }),
-      reward({ starTier: 10, rewardKey: "arcane_pharmacology", displayName: "Arcane Pharmacology", mode: "passive", effectSummary: "Permanent bonus to brew reliability and consumable effectiveness." }),
+      reward({ starTier: 1, rewardKey: "stable_mixture", displayName: "Stable Mixture", mode: "active", pointCost: 2, effectSummary: "Grant a random alchemical reward from the alchemy pool.", poolKey: "alchemy" }),
+      reward({ starTier: 3, rewardKey: "reagent_efficiency", displayName: "Reagent Efficiency", mode: "passive", effectSummary: "-5% gold cost on every recipe crafted at the workbench, consortium-wide.", effectKey: "craftGoldDiscountPct", effectValue: 5, effectScope: "all" }),
+      reward({ starTier: 5, rewardKey: "reagent_cache", displayName: "Reagent Cache", mode: "active", pointCost: 12, effectSummary: "Grant a random alchemical reward from curated alchemy pools.", poolKey: "alchemy" }),
+      reward({ starTier: 7, rewardKey: "preserved_reagents", displayName: "Preserved Reagents", mode: "passive", effectSummary: "+7 Environment on the company health board from reduced reagent spoilage.", effectKey: "performanceFold", effectValue: 7, effectScope: "environment" }),
+      reward({ starTier: 10, rewardKey: "arcane_distillation", displayName: "Arcane Distillation", mode: "active", pointCost: 78, effectSummary: "Grant a top-tier alchemical reward plus a 4,000 gold contract fee straight into the treasury.", poolKey: "alchemy" }),
     ],
   },
   healing: {
@@ -135,11 +143,11 @@ const CONSORTIUM_TYPES = {
     description: "Treatment, recovery, clinics, surgeons, and medical supply chains.",
     rolesFlavor: ["director", "physician", "apothecary", "surgeon", "matron"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "field_treatment", displayName: "Field Treatment", mode: "active", pointCost: 2, effectSummary: "Instant small health restoration or minor recovery reduction." }),
-      reward({ starTier: 3, rewardKey: "clinical_precision", displayName: "Clinical Precision", mode: "passive", effectSummary: "Improved treatment effectiveness and reduced recovery friction." }),
-      reward({ starTier: 5, rewardKey: "recovery_protocol", displayName: "Recovery Protocol", mode: "active", pointCost: 18, effectSummary: "Reduce one hospital/recovery timer." }),
-      reward({ starTier: 7, rewardKey: "house_of_restoration", displayName: "House of Restoration", mode: "passive", effectSummary: "Permanent recovery speed bonus and stronger medical consumables." }),
-      reward({ starTier: 10, rewardKey: "emergency_intervention", displayName: "Emergency Intervention", mode: "active", pointCost: 70, effectSummary: "Large one-time recovery support action within existing recovery rules." }),
+      reward({ starTier: 1, rewardKey: "field_treatment", displayName: "Field Treatment", mode: "active", pointCost: 2, effectSummary: "Instant small health restoration or a 30 minute hospital-time reduction." }),
+      reward({ starTier: 3, rewardKey: "clinical_precision", displayName: "Clinical Precision", mode: "passive", effectSummary: "-6% gold cost on healing consumables bought at city markets, consortium-wide.", effectKey: "marketBuyDiscountPct", effectValue: 6, effectScope: "Consumable" }),
+      reward({ starTier: 5, rewardKey: "recovery_protocol", displayName: "Recovery Protocol", mode: "active", pointCost: 18, effectSummary: "Instant moderate health restoration or a 1 hour hospital-time reduction." }),
+      reward({ starTier: 7, rewardKey: "house_of_restoration", displayName: "House of Restoration", mode: "passive", effectSummary: "+8 Environment on the company health board from stronger clinical culture.", effectKey: "performanceFold", effectValue: 8, effectScope: "environment" }),
+      reward({ starTier: 10, rewardKey: "emergency_intervention", displayName: "Emergency Intervention", mode: "active", pointCost: 70, effectSummary: "Full health restoration or a 4 hour hospital-time reduction." }),
     ],
   },
   intelligence: {
@@ -149,11 +157,11 @@ const CONSORTIUM_TYPES = {
     description: "Rumors, dossiers, scouting, information brokerage, and target intelligence.",
     rolesFlavor: ["director", "analyst", "scout", "broker", "handler"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "rumor_pull", displayName: "Rumor Pull", mode: "active", pointCost: 3, effectSummary: "Reveal one useful rumor/intel lead." }),
-      reward({ starTier: 3, rewardKey: "whisper_network", displayName: "Whisper Network", mode: "passive", effectSummary: "Improved rumor accuracy and faster intelligence refresh." }),
-      reward({ starTier: 5, rewardKey: "dossier", displayName: "Dossier", mode: "active", pointCost: 18, effectSummary: "Surface better-quality info on a target, contract, route, or organization." }),
-      reward({ starTier: 7, rewardKey: "eyes_everywhere", displayName: "Eyes Everywhere", mode: "passive", effectSummary: "Permanent scouting/intel quality bonus." }),
-      reward({ starTier: 10, rewardKey: "network_leak", displayName: "Network Leak", mode: "active", pointCost: 80, effectSummary: "Reveal a higher-tier piece of economic/organizational information within safe design boundaries." }),
+      reward({ starTier: 1, rewardKey: "rumor_pull", displayName: "Rumor Pull", mode: "active", pointCost: 3, effectSummary: "Pull the current best-margin legal trade route from live market data." }),
+      reward({ starTier: 3, rewardKey: "whisper_network", displayName: "Whisper Network", mode: "passive", effectSummary: "+6 Popularity on the company health board from brokered outside connections.", effectKey: "performanceFold", effectValue: 6, effectScope: "popularity" }),
+      reward({ starTier: 5, rewardKey: "dossier", displayName: "Dossier", mode: "active", pointCost: 18, effectSummary: "Pull a real, live dossier on the rival consortium currently showing the weakest company health metric." }),
+      reward({ starTier: 7, rewardKey: "eyes_everywhere", displayName: "Eyes Everywhere", mode: "passive", effectSummary: "+6 Efficiency on the company health board from tighter operational reporting.", effectKey: "performanceFold", effectValue: 6, effectScope: "efficiency" }),
+      reward({ starTier: 10, rewardKey: "network_leak", displayName: "Network Leak", mode: "active", pointCost: 80, effectSummary: "Pull a deep live intelligence packet on a rival consortium, including treasury tier and daily generation." }),
     ],
   },
   banking: {
@@ -163,11 +171,11 @@ const CONSORTIUM_TYPES = {
     description: "Lending, treasury control, vaulting, and financial risk management.",
     rolesFlavor: ["director", "banker", "underwriter", "clerk", "treasurer"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "safe_transfer", displayName: "Safe Transfer", mode: "active", pointCost: 2, effectSummary: "Reduce risk or fees on one treasury/financial action." }),
-      reward({ starTier: 3, rewardKey: "treasury_discipline", displayName: "Treasury Discipline", mode: "passive", effectSummary: "Reduced vault leakage/fees and improved treasury handling." }),
-      reward({ starTier: 5, rewardKey: "credit_line", displayName: "Credit Line", mode: "active", pointCost: 22, effectSummary: "Temporary treasury support or one controlled finance boost." }),
-      reward({ starTier: 7, rewardKey: "house_of_credit", displayName: "House of Credit", mode: "passive", effectSummary: "Improved financial efficiency and stronger treasury growth." }),
-      reward({ starTier: 10, rewardKey: "investment_window", displayName: "Investment Window", mode: "active", pointCost: 85, effectSummary: "Boost return on one qualified economic action or contract payout." }),
+      reward({ starTier: 1, rewardKey: "safe_transfer", displayName: "Safe Transfer", mode: "active", pointCost: 2, effectSummary: "Clear a routine transfer for 2,200 gold straight into the treasury." }),
+      reward({ starTier: 3, rewardKey: "treasury_discipline", displayName: "Treasury Discipline", mode: "passive", effectSummary: "+3% interest credited on every treasury deposit, consortium-wide.", effectKey: "treasuryInterestPct", effectValue: 3, effectScope: "all" }),
+      reward({ starTier: 5, rewardKey: "credit_line", displayName: "Credit Line", mode: "active", pointCost: 22, effectSummary: "Draw down a controlled credit line for 11,000 gold straight into the treasury." }),
+      reward({ starTier: 7, rewardKey: "house_of_credit", displayName: "House of Credit", mode: "passive", effectSummary: "+7 Efficiency on the company health board from disciplined ledger practice.", effectKey: "performanceFold", effectValue: 7, effectScope: "efficiency" }),
+      reward({ starTier: 10, rewardKey: "investment_window", displayName: "Investment Window", mode: "active", pointCost: 85, effectSummary: "Close a qualified investment window for 36,000 gold straight into the treasury." }),
     ],
   },
   agriculture: {
@@ -177,11 +185,11 @@ const CONSORTIUM_TYPES = {
     description: "Crops, livestock, food preservation, and supply stability.",
     rolesFlavor: ["director", "grower", "breeder", "harvester", "storemaster"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "fertile_cycle", displayName: "Fertile Cycle", mode: "active", pointCost: 2, effectSummary: "Improve one crop/livestock yield action." }),
-      reward({ starTier: 3, rewardKey: "preserved_harvest", displayName: "Preserved Harvest", mode: "passive", effectSummary: "Reduced food spoilage and better preservation efficiency." }),
+      reward({ starTier: 1, rewardKey: "fertile_cycle", displayName: "Fertile Cycle", mode: "active", pointCost: 2, effectSummary: "Grant a random harvest reward from the agriculture pool.", poolKey: "agriculture" }),
+      reward({ starTier: 3, rewardKey: "harvest_ties", displayName: "Harvest Ties", mode: "passive", effectSummary: "+10% city standing gained from every city service used, consortium-wide.", effectKey: "cityStandingGainPct", effectValue: 10, effectScope: "all" }),
       reward({ starTier: 5, rewardKey: "supply_crate", displayName: "Supply Crate", mode: "active", pointCost: 15, effectSummary: "Grant a random agriculture reward from curated pools.", poolKey: "agriculture" }),
-      reward({ starTier: 7, rewardKey: "abundant_fields", displayName: "Abundant Fields", mode: "passive", effectSummary: "Permanent bonus to food/raw-agriculture yield." }),
-      reward({ starTier: 10, rewardKey: "grand_harvest", displayName: "Grand Harvest", mode: "active", pointCost: 65, effectSummary: "Strong bonus to one large agricultural output action." }),
+      reward({ starTier: 7, rewardKey: "abundant_fields", displayName: "Abundant Fields", mode: "passive", effectSummary: "+7 Environment on the company health board from stable food supply lines.", effectKey: "performanceFold", effectValue: 7, effectScope: "environment" }),
+      reward({ starTier: 10, rewardKey: "grand_harvest", displayName: "Grand Harvest", mode: "active", pointCost: 65, effectSummary: "Grant a top-tier harvest reward plus a 4,000 gold market settlement straight into the treasury.", poolKey: "agriculture" }),
     ],
   },
   textile: {
@@ -191,11 +199,11 @@ const CONSORTIUM_TYPES = {
     description: "Fabrics, tailoring, garments, uniforms, and specialist clothwork.",
     rolesFlavor: ["director", "weaver", "tailor", "dyer", "cutter"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "fine_thread", displayName: "Fine Thread", mode: "active", pointCost: 2, effectSummary: "Improve one fabric or tailoring batch." }),
-      reward({ starTier: 3, rewardKey: "loom_discipline", displayName: "Loom Discipline", mode: "passive", effectSummary: "Faster weaving/spinning/tailoring output." }),
+      reward({ starTier: 1, rewardKey: "fine_thread", displayName: "Fine Thread", mode: "active", pointCost: 2, effectSummary: "Grant a random tailoring reward from the textile pool.", poolKey: "textile" }),
+      reward({ starTier: 3, rewardKey: "loom_discipline", displayName: "Loom Discipline", mode: "passive", effectSummary: "+6 Popularity on the company health board from sharper civic presentation.", effectKey: "performanceFold", effectValue: 6, effectScope: "popularity" }),
       reward({ starTier: 5, rewardKey: "cloth_cache", displayName: "Cloth Cache", mode: "active", pointCost: 16, effectSummary: "Grant a random textile reward from curated pools.", poolKey: "textile" }),
-      reward({ starTier: 7, rewardKey: "master_tailoring", displayName: "Master Tailoring", mode: "passive", effectSummary: "Improved garment quality and specialist fabric output." }),
-      reward({ starTier: 10, rewardKey: "signature_outfit", displayName: "Signature Outfit", mode: "active", pointCost: 70, effectSummary: "Greatly improve one premium clothing/uniform creation action." }),
+      reward({ starTier: 7, rewardKey: "master_tailoring", displayName: "Master Tailoring", mode: "passive", effectSummary: "+6 Efficiency on the company health board from disciplined workshop scheduling.", effectKey: "performanceFold", effectValue: 6, effectScope: "efficiency" }),
+      reward({ starTier: 10, rewardKey: "signature_outfit", displayName: "Signature Outfit", mode: "active", pointCost: 70, effectSummary: "Grant a top-tier tailoring reward plus a 4,000 gold commission fee straight into the treasury.", poolKey: "textile" }),
     ],
   },
   shipwright: {
@@ -205,11 +213,11 @@ const CONSORTIUM_TYPES = {
     description: "Vessel construction, hull integrity, sea logistics, and maritime efficiency.",
     rolesFlavor: ["director", "shipwright", "navigator", "carpenter", "dockmaster"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "dock_priority", displayName: "Dock Priority", mode: "active", pointCost: 3, effectSummary: "Improve one ship/travel preparation action." }),
-      reward({ starTier: 3, rewardKey: "hull_discipline", displayName: "Hull Discipline", mode: "passive", effectSummary: "Improved vessel durability and maintenance efficiency." }),
-      reward({ starTier: 5, rewardKey: "sea_route_familiarity", displayName: "Sea Route Familiarity", mode: "passive", effectSummary: "Improved maritime travel efficiency and cargo handling." }),
-      reward({ starTier: 7, rewardKey: "drydock_surge", displayName: "Drydock Surge", mode: "active", pointCost: 28, effectSummary: "Accelerate one major vessel-related operation." }),
-      reward({ starTier: 10, rewardKey: "flagship_run", displayName: "Flagship Run", mode: "active", pointCost: 90, effectSummary: "Strong short-duration maritime throughput bonus." }),
+      reward({ starTier: 1, rewardKey: "dock_priority", displayName: "Dock Priority", mode: "active", pointCost: 3, effectSummary: "Clear a berth ahead of schedule for 1,800 gold straight into the treasury." }),
+      reward({ starTier: 3, rewardKey: "hull_discipline", displayName: "Hull Discipline", mode: "passive", effectSummary: "-10% of the extra route danger pressure that sea lanes carry, consortium-wide.", effectKey: "shipDangerReductionPct", effectValue: 10, effectScope: "ship" }),
+      reward({ starTier: 5, rewardKey: "drydock_surge", displayName: "Drydock Surge", mode: "active", pointCost: 28, effectSummary: "Push a vessel through an accelerated drydock turnaround for 8,000 gold straight into the treasury." }),
+      reward({ starTier: 7, rewardKey: "sea_route_familiarity", displayName: "Sea Route Familiarity", mode: "passive", effectSummary: "+10% internal escort coverage rating on every consortium logistics operation.", effectKey: "escortCoverageBonusPct", effectValue: 10, effectScope: "all" }),
+      reward({ starTier: 10, rewardKey: "flagship_run", displayName: "Flagship Run", mode: "active", pointCost: 90, effectSummary: "Complete a flagship maritime run for 34,000 gold straight into the treasury." }),
     ],
   },
   luxury: {
@@ -219,11 +227,11 @@ const CONSORTIUM_TYPES = {
     description: "Jewelry, prestige goods, rare materials, and elite craftsmanship.",
     rolesFlavor: ["director", "jeweler", "artisan", "engraver", "curator"],
     rewards: [
-      reward({ starTier: 1, rewardKey: "polished_finish", displayName: "Polished Finish", mode: "active", pointCost: 2, effectSummary: "Improve one prestige-crafting result." }),
-      reward({ starTier: 3, rewardKey: "refined_taste", displayName: "Refined Taste", mode: "passive", effectSummary: "Improved luxury-item sale value." }),
+      reward({ starTier: 1, rewardKey: "polished_finish", displayName: "Polished Finish", mode: "active", pointCost: 2, effectSummary: "Grant a random prestige-crafted reward from the luxury pool.", poolKey: "luxury" }),
+      reward({ starTier: 3, rewardKey: "refined_taste", displayName: "Refined Taste", mode: "passive", effectSummary: "+6% legal sell price on luxury goods, consortium-wide.", effectKey: "marketSellBonusPct", effectValue: 6, effectScope: "Luxury goods" }),
       reward({ starTier: 5, rewardKey: "curated_cache", displayName: "Curated Cache", mode: "active", pointCost: 20, effectSummary: "Grant a random luxury reward from curated pools.", poolKey: "luxury" }),
-      reward({ starTier: 7, rewardKey: "rare_handling", displayName: "Rare Handling", mode: "passive", effectSummary: "Better efficiency with rare materials and premium output quality." }),
-      reward({ starTier: 10, rewardKey: "masterpiece_commission", displayName: "Masterpiece Commission", mode: "active", pointCost: 85, effectSummary: "Strong chance of superior prestige-crafted output on one major craft." }),
+      reward({ starTier: 7, rewardKey: "rare_handling", displayName: "Rare Handling", mode: "passive", effectSummary: "+7 Popularity on the company health board from elevated prestige standing.", effectKey: "performanceFold", effectValue: 7, effectScope: "popularity" }),
+      reward({ starTier: 10, rewardKey: "masterpiece_commission", displayName: "Masterpiece Commission", mode: "active", pointCost: 85, effectSummary: "Grant a top-tier prestige reward plus a 5,000 gold commission fee straight into the treasury.", poolKey: "luxury" }),
     ],
   },
 };
@@ -333,6 +341,33 @@ export function getActiveRewards(typeKey, stars, points) {
       unlocked: Number(stars ?? 0) >= entry.starTier,
       canRedeem: Number(stars ?? 0) >= entry.starTier && Number(points ?? 0) >= Number(entry.pointCost ?? 0),
     }));
+}
+
+// Reduces every unlocked passive perk for this type/star-tier into a flat bag of
+// { effectKey: totalValue } (plus effectKey:scope -> value when a perk is scoped to a specific
+// item category, e.g. "Consumable" for healing or "Luxury goods" for luxury sell bonuses).
+// This is the single source of truth consumed by cityEconomyService.js, consortiumLogisticsService.js,
+// itemAdvancedService.js, and organizationService.js so the number shown on the Advancement tab is
+// always the number actually applied server-side.
+export function getConsortiumPassiveEffectBundle(typeKey, stars) {
+  const unlocked = getUnlockedPassives(typeKey, stars);
+  const bundle = {};
+  for (const entry of unlocked) {
+    if (!entry.effectKey) continue;
+    const scopeSuffix = entry.effectScope && entry.effectScope !== "all" ? `:${entry.effectScope}` : "";
+    const bucketKey = `${entry.effectKey}${scopeSuffix}`;
+    bundle[bucketKey] = Number(bundle[bucketKey] ?? 0) + Number(entry.effectValue ?? 0);
+  }
+  return bundle;
+}
+
+// Sums the unscoped ("all") value of an effect with any scope-specific value that matches
+// categoryOrTag (e.g. an item's category, or a trade good's category label). Consumers pass the
+// bundle produced by getConsortiumPassiveEffectBundle() plus whatever they're pricing right now.
+export function getScopedConsortiumEffectPct(bundle, effectKey, categoryOrTag = null) {
+  const flat = Number((bundle ?? {})[effectKey] ?? 0);
+  const scoped = categoryOrTag ? Number((bundle ?? {})[`${effectKey}:${categoryOrTag}`] ?? 0) : 0;
+  return flat + scoped;
 }
 
 export function chooseRandomReward(poolKey, random = Math.random) {

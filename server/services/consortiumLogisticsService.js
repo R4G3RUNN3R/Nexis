@@ -21,6 +21,7 @@ import {
   findPlayerStateByUserInternalId,
 } from "../repositories/playerStateRepository.js";
 import { getOrganizationBaseEffectsForOrg } from "./organizationBaseEffectService.js";
+import { deriveConsortiumStarsFromRoster, getConsortiumPassiveEffectBundle, getScopedConsortiumEffectPct } from "../data/consortiumTypes.js";
 
 const MS_HOUR = 60 * 60 * 1000;
 const asRecord = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
@@ -103,13 +104,25 @@ function formatDangerList(tags) {
   return `${tags.slice(0, -1).map(titleCaseDanger).join(", ")}, and ${titleCaseDanger(tags[tags.length - 1])}`;
 }
 
-function normalizeEscortContractForScoring(operation) {
+function normalizeEscortContractForScoring(operation, perkBundle = {}) {
   const escortContract = { ...asRecord(operation.escortContract) };
   if (escortContract.mode === "internal_team") {
-    escortContract.coverageRating = computeInternalEscortCoverage(operation.assignedWorkers ?? []);
+    escortContract.coverageRating = computeInternalEscortCoverage(operation.assignedWorkers ?? [], perkBundle);
     escortContract.status = escortContract.coverageRating > 0 ? "internal_cover" : "understaffed_internal_cover";
   }
   return escortContract;
+}
+
+// Single source of truth for "what star-tier passive perks does this consortium currently have
+// active". Uses deriveConsortiumStarsFromRoster() as a lightweight roster-based star estimate rather
+// than the full performance-score calculation in organizationService.js's buildConsortiumState()
+// (which is private to that module) -- consistent with how that helper is already exported from
+// consortiumTypes.js specifically for callers outside organizationService.js that just need "roughly
+// how many stars does this consortium have" without recomputing the whole health-metric model.
+function getOrganizationConsortiumPerkBundle(organization) {
+  if (!organization?.consortiumTypeKey) return {};
+  const stars = deriveConsortiumStarsFromRoster(organization.members?.length ?? 0);
+  return getConsortiumPassiveEffectBundle(organization.consortiumTypeKey, stars);
 }
 
 function createBlankOutcome() {
@@ -157,27 +170,37 @@ async function buildWorkerPool(client, organization) {
   return workers;
 }
 
-function getDangerPressure(template) {
+// perkBundle is the consortium's own star-tier passive effect bundle (see
+// getOrganizationConsortiumPerkBundle() below). A Logistics Consortium's Convoy Discipline
+// (routeDangerReductionPct) shaves danger pressure on every route; a Shipwright Consortium's Hull
+// Discipline (shipDangerReductionPct) only shaves the extra pressure that sea lanes carry.
+function getDangerPressure(template, perkBundle = {}) {
   const riskWeight = {
     low: 18,
     medium: 28,
     high: 40,
     severe: 52,
   }[template.riskLevel] ?? 24;
-  return riskWeight + (template.dangerTags.length * 4) + (template.routeType === "ship" ? 6 : 0);
+  const shipSurcharge = template.routeType === "ship" ? 6 : 0;
+  const shipReductionPct = template.routeType === "ship" ? clamp(getScopedConsortiumEffectPct(perkBundle, "shipDangerReductionPct"), 0, 100) : 0;
+  const basePressure = riskWeight + (template.dangerTags.length * 4) + (shipSurcharge * (1 - shipReductionPct / 100));
+  const routeReductionPct = clamp(getScopedConsortiumEffectPct(perkBundle, "routeDangerReductionPct"), 0, 60);
+  return Math.max(0, basePressure * (1 - routeReductionPct / 100));
 }
 
-function computeInternalEscortCoverage(assignedWorkers) {
+function computeInternalEscortCoverage(assignedWorkers, perkBundle = {}) {
   if (!assignedWorkers.length) return 0;
   const totalBattle = assignedWorkers.reduce((sum, worker) => sum + asInt(asRecord(worker.battleStats).strength) + asInt(asRecord(worker.battleStats).defense) + asInt(asRecord(worker.battleStats).speed) + asInt(asRecord(worker.battleStats).dexterity), 0);
-  return clamp(Math.round(totalBattle / (assignedWorkers.length * 4.5)), 0, 100);
+  const base = Math.round(totalBattle / (assignedWorkers.length * 4.5));
+  const escortBonusPct = clamp(getScopedConsortiumEffectPct(perkBundle, "escortCoverageBonusPct"), 0, 50);
+  return clamp(Math.round(base * (1 + escortBonusPct / 100)), 0, 100);
 }
 
-function computeSuccessPreview(template, assignedWorkers, escortContract) {
+function computeSuccessPreview(template, assignedWorkers, escortContract, perkBundle = {}) {
   const totalWorking = assignedWorkers.reduce((sum, worker) => sum + asInt(asRecord(worker.workingStats).manualLabor) + asInt(asRecord(worker.workingStats).intelligence) + asInt(asRecord(worker.workingStats).endurance), 0);
   const totalBattle = assignedWorkers.reduce((sum, worker) => sum + asInt(asRecord(worker.battleStats).strength) + asInt(asRecord(worker.battleStats).defense) + asInt(asRecord(worker.battleStats).speed) + asInt(asRecord(worker.battleStats).dexterity), 0);
   const escortScore = asInt(escortContract.coverageRating);
-  const dangerPressure = getDangerPressure(template);
+  const dangerPressure = getDangerPressure(template, perkBundle);
   const workerCoverage = clamp(Math.round((assignedWorkers.length / Math.max(1, template.recommendedWorkers)) * 100), 0, 150);
   const workingLift = totalWorking / Math.max(1, template.recommendedWorkingScore);
   const battleLift = totalBattle / Math.max(1, template.recommendedBattleScore);
@@ -363,14 +386,20 @@ function applyRewardModifier(goldReturned, baseEffects) {
   return { modified: Math.round(goldReturned * (1 + (pct / 100))), pct: Number(pct.toFixed(2)) };
 }
 
-function applyLossMitigation(lossGold, baseEffects) {
-  const pct = clamp(Number(asRecord(baseEffects).effects?.logisticsLossMitigationPct ?? 0), 0, 18);
-  return { modified: Math.max(0, Math.round(lossGold * (1 - (pct / 100)))), pct: Number(pct.toFixed(2)) };
+// baseEffects come from the consortium's base building/rooms (organizationBaseEffectService.js);
+// perkBundle comes from the consortium type's own star-tier passives (consortiumTypes.js). A
+// Logistics Consortium's Cargo Insurance Pool (cargoLossMitigationPct) stacks additively with any
+// base-building loss mitigation, capped so the two sources together can't zero out losses entirely.
+function applyLossMitigation(lossGold, baseEffects, perkBundle = {}) {
+  const basePct = clamp(Number(asRecord(baseEffects).effects?.logisticsLossMitigationPct ?? 0), 0, 18);
+  const perkPct = clamp(getScopedConsortiumEffectPct(perkBundle, "cargoLossMitigationPct"), 0, 18);
+  const pct = clamp(basePct + perkPct, 0, 32);
+  return { modified: Math.max(0, Math.round(lossGold * (1 - (pct / 100)))), pct: Number(pct.toFixed(2)), basePct, perkPct };
 }
 
-function settleOperationOutcome(template, operation, treasury, baseEffects) {
-  const escortContract = normalizeEscortContractForScoring(operation);
-  const preview = computeSuccessPreview(template, operation.assignedWorkers ?? [], escortContract);
+function settleOperationOutcome(template, operation, treasury, baseEffects, perkBundle = {}) {
+  const escortContract = normalizeEscortContractForScoring(operation, perkBundle);
+  const preview = computeSuccessPreview(template, operation.assignedWorkers ?? [], escortContract, perkBundle);
   const seed = `${operation.internalId}|${operation.startedAt ?? operation.createdAt}|${template.key}|${(operation.assignedWorkers ?? []).map((worker) => worker.publicId).sort().join(",")}|${escortContract.mode}|${escortContract.guildPublicId ?? "none"}|${escortContract.coverageRating}`;
   const chaos = deterministicRange(`${seed}:chaos`, -12, 12);
   const disciplineShift = deterministicRange(`${seed}:discipline`, -6, 8);
@@ -382,7 +411,7 @@ function settleOperationOutcome(template, operation, treasury, baseEffects) {
   const rewardAdj = applyRewardModifier(baseGoldReturned, baseEffects);
   const goldReturned = rewardAdj.modified;
   const rawLossGoldBase = computeExtraLoss(template, outcomeKey, triggeredDangers, seed);
-  const lossAdj = applyLossMitigation(rawLossGoldBase, baseEffects);
+  const lossAdj = applyLossMitigation(rawLossGoldBase, baseEffects, perkBundle);
   const rawLossGold = lossAdj.modified;
 
   const nextTreasury = normalizeTreasury(treasury);
@@ -432,6 +461,7 @@ async function resolveDueOperations(client, organization) {
 
   let treasury = normalizeTreasury(consortium.treasury);
   const baseEffects = await getOrganizationBaseEffectsForOrg(client, consortium);
+  const perkBundle = getOrganizationConsortiumPerkBundle(consortium);
   const resolutionLogs = [];
 
   logisticsState.operations = logisticsState.operations.map((operation) => {
@@ -458,7 +488,7 @@ async function resolveDueOperations(client, organization) {
       };
     }
 
-    const settled = settleOperationOutcome(template, operation, treasury, baseEffects);
+    const settled = settleOperationOutcome(template, operation, treasury, baseEffects, perkBundle);
     treasury = settled.treasury;
     const resolvedOperation = {
       ...operation,
@@ -530,7 +560,7 @@ async function resolveDueOperations(client, organization) {
   return updated;
 }
 
-function enrichOperation(operation, workerPool) {
+function enrichOperation(operation, workerPool, perkBundle = {}) {
   const template = getConsortiumLogisticsTemplate(operation.templateKey);
   if (!template) return null;
   const assignedWorkers = operation.assignedWorkers.map((worker) => {
@@ -539,8 +569,8 @@ function enrichOperation(operation, workerPool) {
       ? { ...worker, displayName: latest.displayName, roleKey: latest.roleKey, workingStats: latest.workingStats, battleStats: latest.battleStats }
       : worker;
   });
-  const escortContract = normalizeEscortContractForScoring({ ...operation, assignedWorkers });
-  const preview = computeSuccessPreview(template, assignedWorkers, escortContract);
+  const escortContract = normalizeEscortContractForScoring({ ...operation, assignedWorkers }, perkBundle);
+  const preview = computeSuccessPreview(template, assignedWorkers, escortContract, perkBundle);
   return {
     ...operation,
     template,
@@ -557,8 +587,9 @@ export async function buildConsortiumLogisticsBoard(client, organization, viewer
   const member = ensureMember(consortium, viewerUserInternalId);
   const workerPool = await buildWorkerPool(client, consortium);
   const logisticsState = readConsortiumLogisticsState(consortium);
+  const perkBundle = getOrganizationConsortiumPerkBundle(consortium);
   const operations = logisticsState.operations
-    .map((operation) => enrichOperation(operation, workerPool))
+    .map((operation) => enrichOperation(operation, workerPool, perkBundle))
     .filter(Boolean);
 
   const baseEffects = await getOrganizationBaseEffectsForOrg(client, consortium);
@@ -576,6 +607,7 @@ export async function buildConsortiumLogisticsBoard(client, organization, viewer
       escortLinkedCount: operations.filter((operation) => operation.escortContract.mode === "guild_contract").length,
     },
     baseMechanicalEffects: baseEffects,
+    consortiumPerkEffects: perkBundle,
     placeholderNotice: "Guild escort links already change route outcomes. Negotiation, pricing, and full contract workflow come in the next pass.",
   };
 }
@@ -724,7 +756,7 @@ export async function assignConsortiumLogisticsWorkerForUser(user, organizationI
     if (operation.escortContract?.mode === "internal_team") {
       operation.escortContract = {
         ...operation.escortContract,
-        coverageRating: computeInternalEscortCoverage(operation.assignedWorkers),
+        coverageRating: computeInternalEscortCoverage(operation.assignedWorkers, getOrganizationConsortiumPerkBundle(organization)),
         status: operation.assignedWorkers.length ? "internal_cover" : "understaffed_internal_cover",
       };
     }
@@ -786,7 +818,7 @@ export async function setConsortiumLogisticsEscortForUser(user, organizationInte
         guildOrganizationInternalId: null,
         guildPublicId: null,
         guildName: null,
-        coverageRating: computeInternalEscortCoverage(operation.assignedWorkers),
+        coverageRating: computeInternalEscortCoverage(operation.assignedWorkers, getOrganizationConsortiumPerkBundle(organization)),
         notes: "Escort coverage is currently being provided by assigned consortium staff.",
         attachedAt: Date.now(),
       };
