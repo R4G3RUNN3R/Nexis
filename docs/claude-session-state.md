@@ -76,3 +76,20 @@ Combined smoke test: server boots correctly with both large systems merged; pre-
 Notable: Consortiums rework agent found the codebase actually has 12 consortium types (not 10 as the brief described) and built real perks for all 12 rather than leaving 2 cosmetic-only.
 
 All 6 approved refinement tasks now merged and pushed: Home cleanup, Travel splash, Adventure item-gated chain, Admin Mode toggle, Consortiums rework, Guilds rework. Only Admin Panel refinement remains in flight. Not yet deployed live — holding for that final piece before one batched frontend deploy + service restart, per established pattern.
+
+---
+
+## Refinement Phase 0 — LIVE DEPLOY (2026-07-15 13:42 UTC)
+
+All 6 approved refinement tasks deployed to production and verified live:
+
+1. Frontend backed up to `/srv/nexis/backups/live-change-20260715-134203`, then deployed.
+2. `nexis-waitlist.service` restarted — new PID (2771504) correctly bound to port 3001 on first attempt, no repeat of the earlier orphaned-process issue.
+3. Live verification with a real production test account: travel options 200, admin audit-logs correctly 403 for a plain player, education gating still 403, City Board still 200 (no regression on the earlier fix), all 7 core page shells (/, /home, /life-paths, /travel, /guilds, /consortiums, /admin) return 200.
+4. Browser check via Playwright: zero console errors on Home.
+
+**Batch complete.** All 6 approved refinement tasks (Home cleanup, Travel splash visuals, Admin Mode toggle, Admin Panel refinement, Adventure item-gated chain, Guilds faction rework, Consortiums company rework) are merged, built, smoke-tested, pushed, deployed, and live-verified.
+
+**Still awaiting explicit user approval before any implementation:** everything in the research docs' "Present To User For Approval" section — Guild Warfare, Consortium Roster Requests, Guild Charters, Caravan Trade Runs, Bold Strike difficulty toggle, Outreach Budget, Operation Capacity, Nexis Stalls, Warden's Ledger, Guild Sanctum, Consortium Rivalries, Calling perks, Mastery Diplomas. None of these have been built.
+
+**Donations/Stripe** still held pending real Stripe credentials (unrelated to this batch, unchanged from prior status).
