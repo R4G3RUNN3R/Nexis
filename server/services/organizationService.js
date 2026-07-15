@@ -153,14 +153,33 @@ const normalizeManagement = (organization, template) => {
     },
   };
 };
-const GUILD_SKILL_TREE = [
-  { key: "banner_discipline", displayName: "Banner Discipline", tier: 1, pointCost: 1, effectSummary: "Members earn reputation more steadily from guild actions.", prerequisites: [] },
-  { key: "quartermaster_cache", displayName: "Quartermaster Cache", tier: 1, pointCost: 1, effectSummary: "Guild armory deposits and dungeon spoils come in a little cleaner.", prerequisites: [] },
-  { key: "dungeon_cunning", displayName: "Dungeon Cunning", tier: 2, pointCost: 2, effectSummary: "Dungeon runs gain stronger success odds and reputation payouts.", prerequisites: ["banner_discipline"] },
-  { key: "war_college", displayName: "War College", tier: 2, pointCost: 2, effectSummary: "Improves war readiness and member combat coordination.", prerequisites: ["banner_discipline"] },
-  { key: "shadow_logistics", displayName: "Shadow Logistics", tier: 3, pointCost: 3, effectSummary: "Treasury discipline and operation support both improve.", prerequisites: ["quartermaster_cache", "dungeon_cunning"] },
-  { key: "sovereign_doctrine", displayName: "Sovereign Doctrine", tier: 4, pointCost: 4, effectSummary: "A capstone doctrine that sharpens readiness, reputation flow, and guild prestige.", prerequisites: ["war_college", "shadow_logistics"] },
+// Guild skill tree v2 ("Charter Doctrine"): a small fixed CORE every guild gets for free (no
+// purchase, no swapping, granted the moment a guild is founded), plus a wider pool of named
+// SPECIALIZATIONS a guild can invest reputation-derived skill points into. Only GUILD_SPECIALIZATION_CAP
+// of those specializations can be active at once -- see buildGuildState()/unlockGuildSkillForUser()/
+// swapGuildSkillForUser() for how the cap and the gold-priced respec are enforced.
+const GUILD_CORE_SKILLS = [
+  { key: "chartered_discipline", displayName: "Chartered Discipline", effectType: "passive", effectSummary: "+5% reputation from every guild source.", memberBenefit: "Every charter signed at founding carries this clause: the guild earns 5% more reputation from quests, dungeon delves, and recruiting, no points spent and nothing to swap out.", effectValue: 0.05 },
+  { key: "standing_muster", displayName: "Standing Muster", effectType: "passive", effectSummary: "+5 flat readiness and operation success on every guild action.", memberBenefit: "Baseline command structure every founded guild starts with: a flat readiness boost and a small success bump on guild quests and dungeon delves, so a brand-new guild isn't rolling from zero.", effectValue: 5 },
 ];
+const GUILD_SPECIALIZATION_CAP = 3;
+const GUILD_SKILL_RESPEC_GOLD_COST = 5000;
+const GUILD_RALLY_GOLD_COST = 1500;
+const GUILD_RALLY_COOLDOWN_MS = 8 * MS_HOUR;
+const GUILD_RALLY_WINDOW_MS = 4 * MS_HOUR;
+const GUILD_SPECIALIZATIONS = [
+  { key: "vault_discipline", branch: "armory", branchLabel: "Armory", displayName: "Vault Discipline", pointCost: 2, effectType: "passive", effectSummary: "+20% quantity credited on armory deposits.", memberBenefit: "Members who deposit spare gear into the guild armory see 20% more quantity credited to the vault than what they handed over -- donating to the guild stops being a straight loss.", effectValue: 0.20 },
+  { key: "strike_cadence", branch: "chaining", branchLabel: "Chaining", displayName: "Strike Cadence", pointCost: 3, effectType: "active", effectSummary: "Leader-triggered: +15% success on the next guild quest or dungeon delve.", memberBenefit: "A guildmaster or officer can call a Strike Cadence before an operation, funded by the treasury and gated on a cooldown -- the whole crew gets +15% success on the very next guild quest or dungeon delve, rewarding coordinated timing over solo luck.", effectValue: 0.15 },
+  { key: "delve_mastery", branch: "expedition", branchLabel: "Expedition", displayName: "Delve Mastery", pointCost: 3, effectType: "passive", effectSummary: "+12% success rating on quests/dungeons, +8% member gold on success.", memberBenefit: "Sharpens every expedition the guild runs: +12% success rating on guild quests and dungeon delves, plus +8% personal gold for members on a successful run.", effectValue: 0.12, secondaryEffectValue: 0.08 },
+  { key: "bastion_wardwork", branch: "fortification", branchLabel: "Fortification", displayName: "Bastion Wardwork", pointCost: 2, effectType: "passive", effectSummary: "Failed operations keep 65% of their payout instead of the usual reduced cut.", memberBenefit: "Softens a bad roll: when a guild quest or dungeon delve fails, the crew still keeps 65% of the reputation and gold payout instead of the usual steep cut, so one rough night doesn't wreck the guild's week.", effectValue: 0.65 },
+  { key: "open_roster_accord", branch: "recruitment", branchLabel: "Recruitment", displayName: "Open Roster Accord", pointCost: 2, effectType: "passive", effectSummary: "+75% reputation from recruiting a new member.", memberBenefit: "Every new member the guild recruits brings in 75% more reputation than usual, rewarding guilds that actively grow their roster instead of sitting on a fixed crew.", effectValue: 0.75 },
+  { key: "trade_concord", branch: "territory", branchLabel: "Territory", displayName: "Trade Concord", pointCost: 3, effectType: "passive", effectSummary: "+8% reputation from every guild source -- a passive economic footprint, not a claim to defend.", memberBenefit: "Represents the guild's peaceful trade footprint across Nexis' territories: a standing economic presence that adds +8% to all guild reputation gains (quests, dungeons, and recruiting alike) as steady goodwill income. No war, no holding, no upkeep to defend -- just quiet regional pull.", effectValue: 0.08 },
+  { key: "field_medic_corps", branch: "medical", branchLabel: "Medical", displayName: "Field Medic Corps", pointCost: 2, effectType: "passive", effectSummary: "Cuts remaining hospital time by 25% for members after a guild operation.", memberBenefit: "Any guild member who is hospitalized when a guild quest or dungeon delve resolves gets 25% of their remaining recovery time cut automatically, the same field-treatment support consortiums already extend to their own people.", effectValue: 0.25 },
+  { key: "reclaimers_eye", branch: "looting", branchLabel: "Looting", displayName: "Reclaimer's Eye", pointCost: 2, effectType: "passive", effectSummary: "+20% treasury and member gold from successful operations.", memberBenefit: "The guild simply walks away with more of what it finds: +20% treasury gold and personal member gold from every successful guild quest and dungeon delve.", effectValue: 0.20 },
+  { key: "drillyard_regimen", branch: "training", branchLabel: "Training", displayName: "Drillyard Regimen", pointCost: 3, effectType: "passive", effectSummary: "+25% effect from members' Adventuring & Survival academy bonuses.", memberBenefit: "Amplifies what members already learn at the Academies: readiness, operation-survival, and battle-edge bonuses from completed Adventuring & Survival coursework are boosted by 25%, so an educated roster pulls even more weight for the guild.", effectValue: 0.25 },
+  { key: "accord_brokerage", branch: "diplomacy", branchLabel: "Diplomacy", displayName: "Accord Brokerage", pointCost: 2, effectType: "passive", effectSummary: "Guild-to-consortium assistance work unlocks 20% earlier.", memberBenefit: "Smooths guild-to-consortium relations: the reputation thresholds for offering assistance work to consortiums drop by 20%, so younger guilds get access to higher-tier collaborative contracts sooner.", effectValue: 0.20 },
+];
+const findGuildSpecialization = (key) => GUILD_SPECIALIZATIONS.find((entry) => entry.key === key) ?? null;
 const GUILD_DUNGEONS = [
   { key: "ember_catacombs", displayName: "Ember Catacombs", summary: "A starter delve through scorched burial halls and half-mad sentries.", minMembers: 1, recommendedPower: 20, reputationReward: 70, goldReward: 800, cooldownHours: 6 },
   { key: "drowned_archive", displayName: "Drowned Archive", summary: "Recover relic ledgers and forbidden scraps before the water does.", minMembers: 2, recommendedPower: 45, reputationReward: 110, goldReward: 1400, cooldownHours: 10 },
@@ -217,6 +236,42 @@ const getGuildStore = (runtimeState) => asRecord(runtimeState.guild);
 const syncGuildMembershipSummary = (runtimeState, organization, roleKey) => { runtimeState.guild = { membership: { organizationInternalId: organization.internalId, publicId: organization.publicId, name: organization.name, tag: organization.tag, roleKey, statusText: organization.statusText } }; };
 const clearGuildMembershipSummary = (runtimeState) => { runtimeState.guild = { membership: null }; };
 const labelFromItemId = (itemId) => titleCase(String(itemId ?? "").replace(/[_-]+/g, " "));
+// Reads the guild's stored skill/reputation passives and migrates them onto the v2 core+specialization
+// shape. `everUnlocked` persists every specialization the guild has ever paid points for (so a benched
+// specialization's sunk point cost is never lost); `activeSpecializations` is the capped subset that is
+// actually granting its bonus right now. Legacy records from the old flat 6-node tree (field name
+// `unlockedSkills`, keys like "war_college") simply have no matching keys in GUILD_SPECIALIZATIONS, so
+// they safely resolve to an empty everUnlocked list -- the guild's reputation/totalEarned counters are
+// untouched, it just starts the new specialization pool fresh.
+const normalizeGuildPassives = (passives) => {
+  const rawEverUnlocked = Array.isArray(passives.everUnlocked)
+    ? passives.everUnlocked
+    : Array.isArray(passives.unlockedSkills)
+      ? passives.unlockedSkills
+      : [];
+  const everUnlocked = Array.from(new Set(rawEverUnlocked.filter((entry) => typeof entry === "string" && findGuildSpecialization(entry))));
+  const rawActive = Array.isArray(passives.activeSpecializations) ? passives.activeSpecializations : null;
+  const activeSpecializations = (rawActive
+    ? rawActive.filter((entry) => typeof entry === "string" && everUnlocked.includes(entry))
+    : [...everUnlocked]
+  ).slice(0, GUILD_SPECIALIZATION_CAP);
+  const rally = asRecord(passives.rally);
+  return {
+    reputation: asInt(passives.reputation),
+    totalEarned: asInt(passives.totalEarned),
+    totalSpent: everUnlocked.reduce((sum, key) => sum + Number(findGuildSpecialization(key)?.pointCost ?? 0), 0),
+    everUnlocked,
+    activeSpecializations,
+    respecCount: asInt(passives.respecCount),
+    lastRespecAt: typeof passives.lastRespecAt === "number" ? passives.lastRespecAt : null,
+    rally: {
+      active: Boolean(rally.active),
+      activatedAt: typeof rally.activatedAt === "number" ? rally.activatedAt : null,
+      expiresAt: typeof rally.expiresAt === "number" ? rally.expiresAt : null,
+      lastTriggeredAt: typeof rally.lastTriggeredAt === "number" ? rally.lastTriggeredAt : null,
+    },
+  };
+};
 const normalizeGuildMetadata = (organization) => {
   const metadata = asRecord(organization.metadata);
   const guild = asRecord(metadata.guild);
@@ -241,12 +296,7 @@ const normalizeGuildMetadata = (organization) => {
         diplomacy,
         publicNotice: String(publicProfile.publicNotice ?? "Visitors see the charter. Members see the machinery.").trim(),
       },
-      passives: {
-        reputation: asInt(passives.reputation),
-        totalEarned: asInt(passives.totalEarned),
-        totalSpent: asInt(passives.totalSpent),
-        unlockedSkills: Array.isArray(passives.unlockedSkills) ? passives.unlockedSkills.filter((entry) => typeof entry === "string") : [],
-      },
+      passives: normalizeGuildPassives(passives),
       wars: {
         doctrine: String(wars.doctrine ?? "Measured escalation").trim() || "Measured escalation",
         activeWars: Array.isArray(wars.activeWars) ? wars.activeWars.map((entry) => ({ ...asRecord(entry) })) : [],
@@ -268,7 +318,49 @@ const normalizeGuildMetadata = (organization) => {
     },
   };
 };
-const getGuildSkillSummary = (skillKey) => GUILD_SKILL_TREE.find((entry) => entry.key === skillKey)?.effectSummary ?? titleCase(skillKey);
+const getGuildSkillSummary = (skillKey) => findGuildSpecialization(skillKey)?.effectSummary ?? GUILD_CORE_SKILLS.find((entry) => entry.key === skillKey)?.effectSummary ?? titleCase(skillKey);
+// Aggregates the numeric bonuses granted by whichever specializations are currently active (plus the
+// always-on core), as a single bundle every guild-action function can pull from instead of re-deriving
+// "is X active" checks inline. isRecruit only affects the reputation multiplier (Open Roster Accord is
+// recruit-specific; Trade Concord and the core bonus apply to every reputation source).
+const computeGuildSpecializationEffects = (activeSpecializations) => {
+  const active = new Set(Array.isArray(activeSpecializations) ? activeSpecializations : []);
+  const core = GUILD_CORE_SKILLS;
+  const coreReputationPct = core.find((entry) => entry.key === "chartered_discipline")?.effectValue ?? 0;
+  const coreReadinessFlat = core.find((entry) => entry.key === "standing_muster")?.effectValue ?? 0;
+  const has = (key) => active.has(key);
+  return {
+    active,
+    reputationMultiplier: (isRecruit = false) => {
+      let multiplier = 1 + coreReputationPct;
+      if (has("trade_concord")) multiplier += findGuildSpecialization("trade_concord").effectValue;
+      if (isRecruit && has("open_roster_accord")) multiplier += findGuildSpecialization("open_roster_accord").effectValue;
+      return multiplier;
+    },
+    readinessFlat: coreReadinessFlat + (active.size * 4),
+    successFlat: coreReadinessFlat,
+    successCountBoost: active.size * 8,
+    successMultiplier: 1 + (has("delve_mastery") ? findGuildSpecialization("delve_mastery").effectValue : 0),
+    memberGoldMultiplier: 1 + (has("delve_mastery") ? findGuildSpecialization("delve_mastery").secondaryEffectValue : 0) + (has("reclaimers_eye") ? findGuildSpecialization("reclaimers_eye").effectValue : 0),
+    treasuryGoldMultiplier: 1 + (has("reclaimers_eye") ? findGuildSpecialization("reclaimers_eye").effectValue : 0),
+    failurePayoutFloor: has("bastion_wardwork") ? findGuildSpecialization("bastion_wardwork").effectValue : null,
+    armoryDepositMultiplier: 1 + (has("vault_discipline") ? findGuildSpecialization("vault_discipline").effectValue : 0),
+    medicalRecoveryReductionPct: has("field_medic_corps") ? findGuildSpecialization("field_medic_corps").effectValue : 0,
+    academyBonusMultiplier: 1 + (has("drillyard_regimen") ? findGuildSpecialization("drillyard_regimen").effectValue : 0),
+    diplomacyThresholdMultiplier: 1 - (has("accord_brokerage") ? findGuildSpecialization("accord_brokerage").effectValue : 0),
+    rallyAvailable: has("strike_cadence"),
+    rallyBonusPct: findGuildSpecialization("strike_cadence")?.effectValue ?? 0,
+  };
+};
+// Reduces a hospitalized member's remaining recovery time by a percentage of what's left, mirroring
+// applyRecoveryReduction()'s absolute-ms version above (used by consortium field-treatment rewards).
+const applyRecoveryReductionPct = (runtimeState, pct) => {
+  const condition = runtimeState.player.condition ?? { type: "normal", until: null, reason: null };
+  if (condition.type !== "hospitalized" || typeof condition.until !== "number") return false;
+  const remaining = Math.max(0, condition.until - Date.now());
+  runtimeState.player.condition = { ...condition, until: Date.now() + Math.round(remaining * (1 - pct)) };
+  return true;
+};
 const buildGuildState = async (client, organization, viewerInternalId = null) => {
   const metadata = normalizeGuildMetadata(organization);
   const guild = metadata.guild;
@@ -311,21 +403,22 @@ const buildGuildState = async (client, organization, viewerInternalId = null) =>
   const memberCount = memberProfiles.length;
   const averageLevel = memberCount ? memberProfiles.reduce((sum, member) => sum + member.level, 0) / memberCount : 1;
   const combinedBattle = memberProfiles.reduce((sum, member) => sum + member.battleTotal, 0);
-  const unlockedSkills = guild.passives.unlockedSkills;
-  const skillBonus = unlockedSkills.length * 6;
-  const academyReadinessPct = memberCount ? round1(memberProfiles.reduce((sum, member) => sum + Number(asRecord(member.academyProfile).adventuringSurvival?.guildReadinessPct ?? 0), 0) / memberCount) : 0;
-  const academySurvivalPct = memberCount ? round1(memberProfiles.reduce((sum, member) => sum + Number(asRecord(member.academyProfile).adventuringSurvival?.operationSurvivalPct ?? 0), 0) / memberCount) : 0;
-  const academyBattleEdgePct = memberCount ? round1(memberProfiles.reduce((sum, member) => sum + Number(asRecord(member.academyProfile).adventuringSurvival?.battleEdgePct ?? 0), 0) / memberCount) : 0;
+  const everUnlockedSkills = guild.passives.everUnlocked;
+  const activeSpecializations = guild.passives.activeSpecializations;
+  const specializationEffects = computeGuildSpecializationEffects(activeSpecializations);
+  const academyReadinessPct = (memberCount ? round1(memberProfiles.reduce((sum, member) => sum + Number(asRecord(member.academyProfile).adventuringSurvival?.guildReadinessPct ?? 0), 0) / memberCount) : 0) * specializationEffects.academyBonusMultiplier;
+  const academySurvivalPct = (memberCount ? round1(memberProfiles.reduce((sum, member) => sum + Number(asRecord(member.academyProfile).adventuringSurvival?.operationSurvivalPct ?? 0), 0) / memberCount) : 0) * specializationEffects.academyBonusMultiplier;
+  const academyBattleEdgePct = (memberCount ? round1(memberProfiles.reduce((sum, member) => sum + Number(asRecord(member.academyProfile).adventuringSurvival?.battleEdgePct ?? 0), 0) / memberCount) : 0) * specializationEffects.academyBonusMultiplier;
   const academyTrackCompletionPct = memberCount ? round1(memberProfiles.reduce((sum, member) => sum + Number(asRecord(member.academyProfile).adventuringSurvival?.trackCompletionPct ?? 0), 0) / memberCount) : 0;
   const academyTrackCompletedCourses = memberCount ? round1(memberProfiles.reduce((sum, member) => sum + Number(asRecord(member.academyProfile).adventuringSurvival?.completedCourses ?? 0), 0) / memberCount) : 0;
-  const readinessBase = 26 + (combinedBattle / Math.max(1, memberCount * 18)) + (averageLevel * 2) + skillBonus;
+  const readinessBase = 26 + (combinedBattle / Math.max(1, memberCount * 18)) + (averageLevel * 2) + specializationEffects.readinessFlat;
   const readiness = clamp(readinessBase * (1 + (academyReadinessPct / 100)) * (1 + (Number(asRecord(baseEffects).effects?.questPowerPct ?? 0) / 300)), 0, 220);
   const warRating = round1((((combinedBattle * (1 + (academyBattleEdgePct / 100))) / Math.max(1, memberCount))) + (readiness * 1.6) + Number(asRecord(baseEffects).effects?.dungeonPowerFlat ?? 0));
   const reputation = guild.passives.reputation;
-  const totalSkillCostSpent = unlockedSkills.reduce((sum, key) => sum + Number(GUILD_SKILL_TREE.find((entry) => entry.key === key)?.pointCost ?? 0), 0);
+  const totalSkillCostSpent = guild.passives.totalSpent;
   const totalPointsEarned = Math.max(asInt(guild.passives.totalEarned), Math.floor(reputation / 120));
   const availablePoints = Math.max(0, totalPointsEarned - totalSkillCostSpent);
-  const dailyRenownBase = (memberCount * 6) + averageLevel + (skillBonus / 2);
+  const dailyRenownBase = (memberCount * 6) + averageLevel + (specializationEffects.readinessFlat / 2);
   const dailyRenown = Math.max(8, Math.round(dailyRenownBase * (1 + (academySurvivalPct / 100)) * (1 + (Number(asRecord(baseEffects).effects?.renownDailyPct ?? 0) / 100))));
   const guildAcademyContract = {
     source: "education",
@@ -345,10 +438,36 @@ const buildGuildState = async (client, organization, viewerInternalId = null) =>
     blockedReason: memberCount < entry.minMembers ? `Requires ${entry.minMembers} members.` : cooldownRemaining > 0 ? "Guild adventuring is still on cooldown." : null,
   }));
   const warHistory = guild.wars.history.slice(0, 6).map((entry) => ({ summary: String(entry.summary ?? "No recorded campaign result."), createdAt: asInt(entry.createdAt, Date.now()) }));
-  const skillTree = GUILD_SKILL_TREE.map((entry) => ({
-    ...entry,
-    unlocked: unlockedSkills.includes(entry.key),
-  }));
+  const rallyReady = guild.passives.rally.active && Number(guild.passives.rally.expiresAt ?? 0) > Date.now();
+  const rallyCooldownRemaining = Math.max(0, Number(guild.passives.rally.lastTriggeredAt ?? 0) + GUILD_RALLY_COOLDOWN_MS - Date.now());
+  const skillTree = {
+    cap: GUILD_SPECIALIZATION_CAP,
+    activeCount: activeSpecializations.length,
+    respecGoldCost: GUILD_SKILL_RESPEC_GOLD_COST,
+    respecCount: guild.passives.respecCount,
+    core: GUILD_CORE_SKILLS.map((entry) => ({ ...entry, isCore: true, unlocked: true })),
+    specializations: GUILD_SPECIALIZATIONS.map((entry) => {
+      const isActive = activeSpecializations.includes(entry.key);
+      return {
+        ...entry,
+        isCore: false,
+        unlocked: isActive,
+        everUnlocked: everUnlockedSkills.includes(entry.key),
+        isActive,
+        canActivate: !isActive && activeSpecializations.length < GUILD_SPECIALIZATION_CAP,
+        canSwapIn: !isActive && activeSpecializations.length >= GUILD_SPECIALIZATION_CAP,
+      };
+    }),
+    rally: {
+      specializationActive: specializationEffects.rallyAvailable,
+      bonusPct: Math.round(specializationEffects.rallyBonusPct * 100),
+      goldCost: GUILD_RALLY_GOLD_COST,
+      cooldownMs: GUILD_RALLY_COOLDOWN_MS,
+      ready: rallyReady,
+      cooldownRemainingMs: rallyCooldownRemaining,
+      canTrigger: specializationEffects.rallyAvailable && rallyCooldownRemaining <= 0,
+    },
+  };
   const armoryItems = Object.entries(guild.armory.items).filter(([, quantity]) => asInt(quantity) > 0).map(([itemId, quantity]) => ({ itemId, label: labelFromItemId(itemId), quantity: asInt(quantity) }));
   const viewerMember = memberProfiles.find((entry) => entry.userInternalId === viewerInternalId) ?? null;
   const viewerRole = organization.roles.find((entry) => entry.roleKey === viewerMember?.roleKey);
@@ -458,7 +577,7 @@ const buildGuildState = async (client, organization, viewerInternalId = null) =>
       currentPlan,
       history: questHistory,
     },
-    guildPassives: { reputation, totalEarned: Math.max(asInt(guild.passives.totalEarned), reputation), totalSpent: totalSkillCostSpent, availablePoints, dailyRenown },
+    guildPassives: { reputation, totalEarned: Math.max(asInt(guild.passives.totalEarned), reputation), totalSpent: totalSkillCostSpent, availablePoints, dailyRenown, activeSpecializationCount: activeSpecializations.length, specializationCap: GUILD_SPECIALIZATION_CAP, respecGoldCost: GUILD_SKILL_RESPEC_GOLD_COST, respecCount: guild.passives.respecCount },
     baseEffects,
     academyContract: guildAcademyContract,
     skillTree,
@@ -521,10 +640,13 @@ function buildConsortiumOverview(organization, derived) {
 
 function buildGuildAssistanceOpportunities(organization, derived) {
   const reputation = asInt(derived.guildPassives?.reputation, 0);
+  const thresholdMultiplier = computeGuildSpecializationEffects(asRecord(derived.metadata?.guild?.passives).activeSpecializations ?? []).diplomacyThresholdMultiplier;
+  const ruinThreshold = Math.round(150 * thresholdMultiplier);
+  const wardThreshold = Math.round(300 * thresholdMultiplier);
   return [
     { key: "convoy_defense", label: "Convoy Defense", summary: "Escort consortium freight through dangerous lanes; piercing or bludgeoning protection improves readiness.", guildReward: "+reputation, treasury gold, operation history, gear reward bundles", consortiumReward: "hazard reduction, better route stability, and safer item cargo movement", recommendedReputation: 0, available: true, rewardCategory: "convoy gear and materials" },
-    { key: "ruin_escort", label: "Ruin Escort", summary: "Guard relic brokers, surveyors, or salvage crews in contested sites; magical protection and field consumables are recommended.", guildReward: "+prestige, expedition payout quality, and relic gear chances", consortiumReward: "safer retrieval, stronger contract completion, and better relic stock", recommendedReputation: 150, available: reputation >= 150, rewardCategory: "relic gear and manuals" },
-    { key: "ward_suppression", label: "Ward Suppression", summary: "Contain unstable arcane routes before cargo crews enter; magical reduction and Ward Chalk are called out.", guildReward: "+city standing, operation record, and ward supply bundles", consortiumReward: "reduced route losses and steadier arcane cargo", recommendedReputation: 300, available: reputation >= 300, rewardCategory: "ward gear and consumables" },
+    { key: "ruin_escort", label: "Ruin Escort", summary: "Guard relic brokers, surveyors, or salvage crews in contested sites; magical protection and field consumables are recommended.", guildReward: "+prestige, expedition payout quality, and relic gear chances", consortiumReward: "safer retrieval, stronger contract completion, and better relic stock", recommendedReputation: ruinThreshold, available: reputation >= ruinThreshold, rewardCategory: "relic gear and manuals" },
+    { key: "ward_suppression", label: "Ward Suppression", summary: "Contain unstable arcane routes before cargo crews enter; magical reduction and Ward Chalk are called out.", guildReward: "+city standing, operation record, and ward supply bundles", consortiumReward: "reduced route losses and steadier arcane cargo", recommendedReputation: wardThreshold, available: reputation >= wardThreshold, rewardCategory: "ward gear and consumables" },
   ];
 }
 
@@ -540,10 +662,12 @@ function buildConsortiumAssistanceOpportunities(organization, derived) {
 function buildGuildOverview(organization, derived) {
   const currentPlan = derived.guildQuestBoard?.currentPlan ?? null;
   const activeWar = derived.warRoom?.activeWars?.[0] ?? null;
+  const activeSpecializationKeys = derived.skillTree?.specializations?.filter((entry) => entry.isActive).map((entry) => entry.displayName) ?? [];
   const gains = [
     `+${asInt(derived.guildPassives?.dailyRenown, 0)} daily renown`,
     `Readiness ${asInt(derived.warRoom?.readiness, 0)}%`,
     `+${asInt(derived.academyContract?.adventuringSurvival?.guildReadinessPct, 0)}% readiness from survival education`,
+    activeSpecializationKeys.length ? `Active specializations: ${activeSpecializationKeys.join(", ")}` : "No specializations active yet",
     "Armory and base effects apply to operations where eligible",
   ].filter((entry) => !String(entry).startsWith("+0%"));
   return {
@@ -555,9 +679,10 @@ function buildGuildOverview(organization, derived) {
       rivalry: activeWar ? `${activeWar.target}: ${activeWar.status}` : "No declared rivalry",
       consortiumAssistance: buildGuildAssistanceOpportunities(organization, derived).find((entry) => entry.available)?.label ?? null,
       readinessState: asInt(derived.warRoom?.readiness, 0) >= 70 ? "Ready" : "Needs assignments",
+      specializations: `${asInt(derived.guildPassives?.activeSpecializationCount, 0)} / ${asInt(derived.guildPassives?.specializationCap, GUILD_SPECIALIZATION_CAP)} active`,
     },
     nextSteps: currentPlan ? ["Fill all operation slots", "Check participant condition", "Initiate when ready"] : ["Plan an operation", "Stock the armory", "Offer assistance to a consortium route"],
-    sections: ["Headquarters", "Members", "Operations", "War / Rivalries", "Armory", "Base", "Settings / Charter"],
+    sections: ["Headquarters", "Members", "War / Rivalries", "Operations", "Specializations", "Armory", "Base", "Settings / Charter"],
   };
 }
 
@@ -583,7 +708,7 @@ const refreshGuildView = async (client, user, organization) => {
       viewerPermissions: derived.viewerPermissions,
       guildOverview: buildGuildOverview(organization, derived),
       assistanceOpportunities: buildGuildAssistanceOpportunities(organization, derived),
-      layoutSections: ["Headquarters", "Members", "Operations", "War / Rivalries", "Armory", "Base", "Settings / Charter"],
+      layoutSections: ["Headquarters", "Members", "War / Rivalries", "Operations", "Specializations", "Armory", "Base", "Settings / Charter"],
     },
   };
 };
@@ -765,7 +890,7 @@ export async function createOrganizationForUser(user, payload) {
     if (type === "consortium" && !hasCompletedCourse(runtimeState, "civic-fundamentals")) throw new HttpError(403, "Civic Fundamentals is required before founding a consortium.", "EDUCATION_LOCKED");
     const cost = type === "guild" ? getGuildFoundationCost(runtimeState) : getConsortiumFoundationCost(runtimeState, template); if (runtimeState.player.gold < cost) throw new HttpError(400, `Not enough gold to found this ${type}.`, "ORG_FUNDS_REQUIRED");
     runtimeState.player.gold -= cost; runtimeState.player.currencies = { ...runtimeState.player.currencies, gold: runtimeState.player.gold };
-    const organization = await createOrganization(client, { internalId: `org_${crypto.randomUUID()}`, publicId: await allocateNextPublicNumericId(client, type, getFirstOrganizationPublicId(type)), type, name, tag: type === "guild" ? normalizeTag(payload?.tag) : null, founderInternalId: user.internalId, founderPublicId: user.publicId, description: type === "guild" ? "A live guild charter with public doctrine, internal command, dungeons, passives, and an armory instead of vague promises." : template.description, statusText: type === "guild" ? "Recruiting" : "Operational", consortiumTypeKey: template?.key ?? null, consortiumTypeName: template?.displayName ?? null, passiveBonusSummary: template ? buildPassiveSummary(template) : "", creationCost: cost, treasury: { copper: 0, silver: 0, gold: 0, platinum: 0 }, metadata: type === "consortium" ? { companyStyle: true, rewardTiers: template.rewards.map((entry) => entry.starTier), rolesFlavor: template.rolesFlavor, management: { positions: {}, applications: [], outreach: { level: 0, campaignsLaunched: 0, lastRunAt: null }, health: {}, performance: {} } } : { guild: { publicProfile: { headline: `${name} moves quietly, cuts deeply, and recruits with standards.`, recruitmentStatus: "Recruiting disciplined members", doctrine: "Strike clean, vanish cleaner.", territory: "Nexis City", diplomacy: "Open to respectful accords, allergic to clowns.", publicNotice: "Visitors see the banner. Members see the machinery." }, passives: { reputation: 120, totalEarned: 120, totalSpent: 0, unlockedSkills: [] }, wars: { doctrine: "Precision Strikes", activeWars: [], history: [] }, adventuring: { lastRunAt: null, currentQuest: null, lastCrew: [], history: [] }, armory: { items: {} }, settings: { invitePolicy: "Officer Approval", warDoctrine: "Precision Strikes" } } } });
+    const organization = await createOrganization(client, { internalId: `org_${crypto.randomUUID()}`, publicId: await allocateNextPublicNumericId(client, type, getFirstOrganizationPublicId(type)), type, name, tag: type === "guild" ? normalizeTag(payload?.tag) : null, founderInternalId: user.internalId, founderPublicId: user.publicId, description: type === "guild" ? "A live guild charter with public doctrine, internal command, dungeons, passives, and an armory instead of vague promises." : template.description, statusText: type === "guild" ? "Recruiting" : "Operational", consortiumTypeKey: template?.key ?? null, consortiumTypeName: template?.displayName ?? null, passiveBonusSummary: template ? buildPassiveSummary(template) : "", creationCost: cost, treasury: { copper: 0, silver: 0, gold: 0, platinum: 0 }, metadata: type === "consortium" ? { companyStyle: true, rewardTiers: template.rewards.map((entry) => entry.starTier), rolesFlavor: template.rolesFlavor, management: { positions: {}, applications: [], outreach: { level: 0, campaignsLaunched: 0, lastRunAt: null }, health: {}, performance: {} } } : { guild: { publicProfile: { headline: `${name} moves quietly, cuts deeply, and recruits with standards.`, recruitmentStatus: "Recruiting disciplined members", doctrine: "Strike clean, vanish cleaner.", territory: "Nexis City", diplomacy: "Open to respectful accords, allergic to clowns.", publicNotice: "Visitors see the banner. Members see the machinery." }, passives: { reputation: 120, totalEarned: 120, totalSpent: 0, everUnlocked: [], activeSpecializations: [], respecCount: 0, lastRespecAt: null, rally: { active: false, activatedAt: null, expiresAt: null, lastTriggeredAt: null } }, wars: { doctrine: "Precision Strikes", activeWars: [], history: [] }, adventuring: { lastRunAt: null, currentQuest: null, lastCrew: [], history: [] }, armory: { items: {} }, settings: { invitePolicy: "Officer Approval", warDoctrine: "Precision Strikes" } } } });
     const roles = type === "guild" ? buildGuildRoles() : buildConsortiumRoles(template); await replaceOrganizationRoles(client, organization.internalId, roles); await addOrganizationMember(client, organization.internalId, { userInternalId: user.internalId, userPublicId: user.publicId, displayName: founderDisplayName(user), roleKey: roles[0].roleKey }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "organization_created", summary: { type, name: organization.name, publicId: organization.publicId, creationCost: cost, consortiumTypeKey: template?.key ?? null } });
     let hydratedOrganization = await findOrganizationByInternalId(client, organization.internalId);
     if (type === "consortium") { const derived = await buildConsortiumState(client, hydratedOrganization, user.internalId); hydratedOrganization = await persistConsortiumMetadata(client, hydratedOrganization, derived); syncMembershipSummary(runtimeState, hydratedOrganization, template, derived.stars, roles[0].roleKey); setProgressEntry(runtimeState, template.key, getProgressEntry(runtimeState, template.key, hydratedOrganization.internalId)); }
@@ -985,25 +1110,41 @@ export async function initiateGuildQuestForUser(user, organizationInternalId) {
       });
     }
     const participants = memberProfiles.filter(Boolean);
-    const skillBoost = metadata.guild.passives.unlockedSkills.length * 10;
+    const specializationEffects = computeGuildSpecializationEffects(metadata.guild.passives.activeSpecializations);
     const guildBaseFx = asRecord(derived.baseEffects).effects ?? {};
     const baseQuestPowerPct = Number(guildBaseFx.questPowerPct ?? 0);
     const baseDungeonFlat = Number(guildBaseFx.dungeonPowerFlat ?? 0);
+    const rally = metadata.guild.passives.rally;
+    const rallyConsumed = Boolean(rally.active && Number(rally.expiresAt ?? 0) > Date.now());
     const successScoreBase = round1(currentPlan.slots.reduce((sum, slot) => {
       const assigned = participants.find((member) => member.userInternalId === slot.assignedMember?.userInternalId);
       return sum + (assigned ? getGuildQuestFocusScore(slot.focus, assigned) : 0);
-    }, 0) + (Number(derived.warRoom?.readiness ?? 0) * 0.8) + skillBoost + (baseDungeonFlat * 0.75));
-    const successScore = round1(successScoreBase * (1 + (baseQuestPowerPct / 100)));
+    }, 0) + (Number(derived.warRoom?.readiness ?? 0) * 0.8) + specializationEffects.successFlat + specializationEffects.successCountBoost + (baseDungeonFlat * 0.75));
+    let successScore = round1(successScoreBase * specializationEffects.successMultiplier * (1 + (baseQuestPowerPct / 100)));
+    if (rallyConsumed) {
+      successScore = round1(successScore * (1 + specializationEffects.rallyBonusPct));
+      metadata.guild.passives.rally = { ...rally, active: false };
+    }
     const succeeded = successScore >= quest.powerFloor;
-    const reputationGain = succeeded ? quest.reputationReward : Math.max(35, Math.round(quest.reputationReward * 0.38));
-    const treasuryGoldGain = succeeded ? quest.treasuryGoldReward : Math.max(400, Math.round(quest.treasuryGoldReward * 0.22));
-    const memberGoldGain = succeeded ? quest.memberGoldReward : Math.max(100, Math.round(quest.memberGoldReward * 0.35));
+    const failureFloor = specializationEffects.failurePayoutFloor ?? null;
+    const reputationFailurePct = failureFloor ?? 0.38;
+    const treasuryFailurePct = failureFloor ?? 0.22;
+    const memberFailurePct = failureFloor ?? 0.35;
+    const reputationMultiplier = specializationEffects.reputationMultiplier(false);
+    const reputationGain = Math.round((succeeded ? quest.reputationReward : Math.max(35, Math.round(quest.reputationReward * reputationFailurePct))) * reputationMultiplier);
+    const treasuryGoldGain = succeeded
+      ? Math.round(quest.treasuryGoldReward * specializationEffects.treasuryGoldMultiplier)
+      : Math.max(400, Math.round(quest.treasuryGoldReward * treasuryFailurePct));
+    const memberGoldGain = succeeded
+      ? Math.round(quest.memberGoldReward * specializationEffects.memberGoldMultiplier)
+      : Math.max(100, Math.round(quest.memberGoldReward * memberFailurePct));
     for (const member of participants) {
       const targetUser = await findUserByPublicId(client, member.publicId);
       if (!targetUser) continue;
       const { runtimeState } = await getRuntimeForUser(client, targetUser);
       runtimeState.player.gold = Number(runtimeState.player.gold ?? 0) + memberGoldGain;
       runtimeState.player.currencies = { ...(runtimeState.player.currencies ?? {}), gold: runtimeState.player.gold };
+      if (specializationEffects.medicalRecoveryReductionPct > 0) applyRecoveryReductionPct(runtimeState, specializationEffects.medicalRecoveryReductionPct);
       await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState);
     }
     metadata.guild.adventuring.lastRunAt = Date.now();
@@ -1042,7 +1183,7 @@ export async function initiateGuildQuestForUser(user, organizationInternalId) {
       actorInternalId: user.internalId,
       actorPublicId: user.publicId,
       actionType: "guild_quest_initiated",
-      summary: { questKey: quest.key, succeeded, successScore, reputationGain, treasuryGoldGain, memberGoldGain, participants: participants.map((member) => member.publicId) },
+      summary: { questKey: quest.key, succeeded, successScore, reputationGain, treasuryGoldGain, memberGoldGain, rallyConsumed, participants: participants.map((member) => member.publicId) },
     });
     return refreshGuildView(client, user, updated);
   });
@@ -1091,14 +1232,24 @@ export async function recruitGuildMemberForUser(user, organizationInternalId, pa
     syncGuildMembershipSummary(runtimeState, organization, memberRole.roleKey);
     await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState);
     const metadata = normalizeGuildMetadata(await findOrganizationByInternalId(client, organization.internalId));
-    metadata.guild.passives.reputation += 45;
-    metadata.guild.passives.totalEarned += 45;
+    const recruitReputationBase = 45;
+    const recruitMultiplier = computeGuildSpecializationEffects(metadata.guild.passives.activeSpecializations).reputationMultiplier(true);
+    const recruitReputationGain = Math.round(recruitReputationBase * recruitMultiplier);
+    metadata.guild.passives.reputation += recruitReputationGain;
+    metadata.guild.passives.totalEarned += recruitReputationGain;
     const updated = await updateOrganizationDetails(client, organization.internalId, { metadata });
-    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_member_recruited", summary: { targetPublicId } });
+    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_member_recruited", summary: { targetPublicId, reputationGain: recruitReputationGain } });
     return refreshGuildView(client, user, updated);
   });
 }
 
+// Activates a specialization into an open slot (activeSpecializations.length < GUILD_SPECIALIZATION_CAP).
+// First-time activation of a key costs guild skill points; re-activating something the guild already
+// paid for (i.e. it's still in everUnlocked from an earlier stint, just currently benched) is free of
+// points -- but note it can only ever get benched via swapGuildSkillForUser(), which is the gold-gated
+// action, so this alone can never be used to cycle specializations for free. Leader/officer only
+// (declare_operations), enforced server-side below -- a plain "member" role lacks that permission and
+// ensurePermission() throws a 403.
 export async function unlockGuildSkillForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
     const organization = await findOrganizationByInternalId(client, organizationInternalId);
@@ -1106,19 +1257,88 @@ export async function unlockGuildSkillForUser(user, organizationInternalId, payl
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
     const skillKey = String(payload?.skillKey ?? "").trim();
-    const node = GUILD_SKILL_TREE.find((entry) => entry.key === skillKey);
-    if (!node) throw new HttpError(400, "Guild skill unavailable.", "GUILD_SKILL_INVALID");
+    const node = findGuildSpecialization(skillKey);
+    if (!node) throw new HttpError(400, "Guild specialization unavailable.", "GUILD_SKILL_INVALID");
     const metadata = normalizeGuildMetadata(organization);
-    const unlockedSkills = metadata.guild.passives.unlockedSkills;
-    if (unlockedSkills.includes(skillKey)) throw new HttpError(409, "Guild skill already unlocked.", "GUILD_SKILL_EXISTS");
-    const missingPrereq = node.prerequisites.find((entry) => !unlockedSkills.includes(entry));
-    if (missingPrereq) throw new HttpError(400, `Requires ${titleCase(missingPrereq.replace(/_/g, " "))} first.`, "GUILD_SKILL_PREREQ");
-    const availablePoints = Math.max(0, Math.floor(metadata.guild.passives.reputation / 120) - unlockedSkills.reduce((sum, key) => sum + Number(GUILD_SKILL_TREE.find((entry) => entry.key === key)?.pointCost ?? 0), 0));
-    if (availablePoints < node.pointCost) throw new HttpError(400, "Not enough guild skill points.", "GUILD_SKILL_POINTS_REQUIRED");
-    metadata.guild.passives.unlockedSkills = [...unlockedSkills, node.key];
-    metadata.guild.passives.totalSpent += node.pointCost;
-    const updated = await updateOrganizationDetails(client, organization.internalId, { passiveBonusSummary: metadata.guild.passives.unlockedSkills.map(getGuildSkillSummary).join(", "), metadata });
-    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_skill_unlocked", summary: { skillKey } });
+    const passives = metadata.guild.passives;
+    if (passives.activeSpecializations.includes(skillKey)) throw new HttpError(409, "That specialization is already active.", "GUILD_SKILL_EXISTS");
+    if (passives.activeSpecializations.length >= GUILD_SPECIALIZATION_CAP) throw new HttpError(409, `Only ${GUILD_SPECIALIZATION_CAP} specializations can be active at once. Swap one out first.`, "GUILD_SKILL_CAP_REACHED");
+    const alreadyLearned = passives.everUnlocked.includes(skillKey);
+    if (!alreadyLearned) {
+      const availablePoints = Math.max(0, Math.floor(passives.reputation / 120) - passives.totalSpent);
+      if (availablePoints < node.pointCost) throw new HttpError(400, "Not enough guild skill points.", "GUILD_SKILL_POINTS_REQUIRED");
+      passives.everUnlocked = [...passives.everUnlocked, node.key];
+      passives.totalSpent += node.pointCost;
+    }
+    passives.activeSpecializations = [...passives.activeSpecializations, node.key];
+    const updated = await updateOrganizationDetails(client, organization.internalId, { passiveBonusSummary: passives.activeSpecializations.map(getGuildSkillSummary).join(", "), metadata });
+    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_skill_unlocked", summary: { skillKey, wasAlreadyLearned: alreadyLearned } });
+    return refreshGuildView(client, user, updated);
+  });
+}
+
+// Swaps one active specialization for another -- the only way to change your active loadout once you
+// (or a future purchase) fill it. Costs GUILD_SKILL_RESPEC_GOLD_COST from the guild treasury every time,
+// which is what makes this a real decision instead of a free daily toggle; if the incoming specialization
+// was never learned before, its point cost is charged on top. Leader/officer only (declare_operations).
+export async function swapGuildSkillForUser(user, organizationInternalId, payload) {
+  return withTransaction(async (client) => {
+    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
+    const actorMember = ensureMember(organization, user.internalId);
+    ensurePermission(organization, actorMember, "declare_operations");
+    const activateKey = String(payload?.activateKey ?? "").trim();
+    const deactivateKey = String(payload?.deactivateKey ?? "").trim();
+    const activateNode = findGuildSpecialization(activateKey);
+    if (!activateNode) throw new HttpError(400, "Guild specialization unavailable.", "GUILD_SKILL_INVALID");
+    const metadata = normalizeGuildMetadata(organization);
+    const passives = metadata.guild.passives;
+    if (!passives.activeSpecializations.includes(deactivateKey)) throw new HttpError(400, "That specialization is not currently active.", "GUILD_SKILL_NOT_ACTIVE");
+    if (passives.activeSpecializations.includes(activateKey)) throw new HttpError(409, "That specialization is already active.", "GUILD_SKILL_EXISTS");
+    const treasury = normalizeTreasury(organization.treasury);
+    if (treasury.gold < GUILD_SKILL_RESPEC_GOLD_COST) throw new HttpError(400, `Swapping specializations costs ${GUILD_SKILL_RESPEC_GOLD_COST.toLocaleString("en-GB")} gold from the guild treasury.`, "GUILD_SKILL_RESPEC_FUNDS_REQUIRED");
+    const alreadyLearned = passives.everUnlocked.includes(activateKey);
+    if (!alreadyLearned) {
+      const availablePoints = Math.max(0, Math.floor(passives.reputation / 120) - passives.totalSpent);
+      if (availablePoints < activateNode.pointCost) throw new HttpError(400, "Not enough guild skill points for the incoming specialization.", "GUILD_SKILL_POINTS_REQUIRED");
+      passives.everUnlocked = [...passives.everUnlocked, activateNode.key];
+      passives.totalSpent += activateNode.pointCost;
+    }
+    passives.activeSpecializations = [...passives.activeSpecializations.filter((entry) => entry !== deactivateKey), activateKey];
+    passives.respecCount += 1;
+    passives.lastRespecAt = Date.now();
+    const updated = await updateOrganizationDetails(client, organization.internalId, {
+      treasury: { gold: treasury.gold - GUILD_SKILL_RESPEC_GOLD_COST },
+      passiveBonusSummary: passives.activeSpecializations.map(getGuildSkillSummary).join(", "),
+      metadata,
+    });
+    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_skill_respec", summary: { activateKey, deactivateKey, goldCost: GUILD_SKILL_RESPEC_GOLD_COST } });
+    return refreshGuildView(client, user, updated);
+  });
+}
+
+// Leader/officer-triggered guild-wide buff (the Chaining branch's Strike Cadence node): follows the same
+// treasury-cost + cooldown pattern as runConsortiumOutreachForUser() rather than inventing a new
+// action-resolution system. Requires "strike_cadence" to currently be an active specialization. The
+// resulting bonus is consumed by the next guild quest or dungeon delve initiation (see
+// initiateGuildQuestForUser()/launchGuildDungeonForUser()).
+export async function triggerGuildRallyForUser(user, organizationInternalId) {
+  return withTransaction(async (client) => {
+    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
+    const actorMember = ensureMember(organization, user.internalId);
+    ensurePermission(organization, actorMember, "declare_operations");
+    const metadata = normalizeGuildMetadata(organization);
+    const passives = metadata.guild.passives;
+    if (!passives.activeSpecializations.includes("strike_cadence")) throw new HttpError(400, "Strike Cadence is not an active specialization.", "GUILD_RALLY_INACTIVE");
+    const cooldownRemaining = Number(passives.rally.lastTriggeredAt ?? 0) + GUILD_RALLY_COOLDOWN_MS - Date.now();
+    if (cooldownRemaining > 0) throw new HttpError(409, "Strike Cadence is still cooling down.", "GUILD_RALLY_COOLDOWN");
+    const treasury = normalizeTreasury(organization.treasury);
+    if (treasury.gold < GUILD_RALLY_GOLD_COST) throw new HttpError(400, `Strike Cadence costs ${GUILD_RALLY_GOLD_COST.toLocaleString("en-GB")} gold from the guild treasury.`, "GUILD_RALLY_FUNDS_REQUIRED");
+    const now = Date.now();
+    passives.rally = { active: true, activatedAt: now, expiresAt: now + GUILD_RALLY_WINDOW_MS, lastTriggeredAt: now };
+    const updated = await updateOrganizationDetails(client, organization.internalId, { treasury: { gold: treasury.gold - GUILD_RALLY_GOLD_COST }, metadata });
+    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_rally_triggered", summary: { goldCost: GUILD_RALLY_GOLD_COST, expiresAt: passives.rally.expiresAt } });
     return refreshGuildView(client, user, updated);
   });
 }
@@ -1139,9 +1359,11 @@ export async function depositGuildArmoryForUser(user, organizationInternalId, pa
     if (runtimeState.player.inventory[itemId] <= 0) delete runtimeState.player.inventory[itemId];
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     const metadata = normalizeGuildMetadata(organization);
-    metadata.guild.armory.items[itemId] = asInt(metadata.guild.armory.items[itemId]) + quantity;
+    const depositMultiplier = computeGuildSpecializationEffects(metadata.guild.passives.activeSpecializations).armoryDepositMultiplier;
+    const creditedQuantity = Math.round(quantity * depositMultiplier);
+    metadata.guild.armory.items[itemId] = asInt(metadata.guild.armory.items[itemId]) + creditedQuantity;
     const updated = await updateOrganizationDetails(client, organization.internalId, { metadata });
-    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_armory_deposit", summary: { itemId, quantity } });
+    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_armory_deposit", summary: { itemId, quantity, creditedQuantity } });
     return { ...(await refreshGuildView(client, user, updated)), playerState };
   });
 }
@@ -1183,12 +1405,22 @@ export async function launchGuildDungeonForUser(user, organizationInternalId, pa
     const lastRunAt = Number(derived.metadata.guild.adventuring.lastRunAt ?? 0);
     if (Date.now() - lastRunAt < dungeon.cooldownHours * MS_HOUR) throw new HttpError(409, "Guild adventuring is still on cooldown.", "GUILD_DUNGEON_COOLDOWN");
     const guildBaseFx = asRecord(derived.baseEffects).effects ?? {};
-    const successRatingBase = derived.memberDetails.reduce((sum, member) => sum + member.level, 0) + (derived.guildPassives.availablePoints * 4) + (derived.warRoom.readiness / 4) + Number(guildBaseFx.dungeonPowerFlat ?? 0);
-    const successRating = round1(successRatingBase * (1 + (Number(guildBaseFx.questPowerPct ?? 0) / 100)));
-    const succeeded = successRating >= dungeon.recommendedPower;
-    const reputationGain = succeeded ? dungeon.reputationReward : Math.max(25, Math.round(dungeon.reputationReward * 0.35));
-    const goldGain = succeeded ? dungeon.goldReward : Math.max(150, Math.round(dungeon.goldReward * 0.25));
     const metadata = derived.metadata;
+    const specializationEffects = computeGuildSpecializationEffects(metadata.guild.passives.activeSpecializations);
+    const rally = metadata.guild.passives.rally;
+    const rallyConsumed = Boolean(rally.active && Number(rally.expiresAt ?? 0) > Date.now());
+    const successRatingBase = derived.memberDetails.reduce((sum, member) => sum + member.level, 0) + specializationEffects.successFlat + specializationEffects.successCountBoost + (derived.warRoom.readiness / 4) + Number(guildBaseFx.dungeonPowerFlat ?? 0);
+    let successRating = round1(successRatingBase * specializationEffects.successMultiplier * (1 + (Number(guildBaseFx.questPowerPct ?? 0) / 100)));
+    if (rallyConsumed) {
+      successRating = round1(successRating * (1 + specializationEffects.rallyBonusPct));
+      metadata.guild.passives.rally = { ...rally, active: false };
+    }
+    const succeeded = successRating >= dungeon.recommendedPower;
+    const failureFloor = specializationEffects.failurePayoutFloor;
+    const reputationGain = Math.round((succeeded ? dungeon.reputationReward : Math.max(25, Math.round(dungeon.reputationReward * (failureFloor ?? 0.35)))) * specializationEffects.reputationMultiplier(false));
+    const goldGain = succeeded
+      ? Math.round(dungeon.goldReward * specializationEffects.treasuryGoldMultiplier)
+      : Math.max(150, Math.round(dungeon.goldReward * (failureFloor ?? 0.25)));
     metadata.guild.adventuring.lastRunAt = Date.now();
     metadata.guild.adventuring.history = [{ dungeonKey, displayName: dungeon.displayName, summary: succeeded ? `${dungeon.displayName} was cleared cleanly.` : `${dungeon.displayName} turned ugly, but the guild still learned something.`, createdAt: Date.now() }, ...metadata.guild.adventuring.history].slice(0, 8);
     metadata.guild.passives.reputation += reputationGain;
@@ -1196,8 +1428,18 @@ export async function launchGuildDungeonForUser(user, organizationInternalId, pa
     if (succeeded) {
       metadata.guild.armory.items.raid_token = asInt(metadata.guild.armory.items.raid_token) + 1;
     }
+    if (specializationEffects.medicalRecoveryReductionPct > 0) {
+      for (const member of organization.members) {
+        const targetUser = await findUserByPublicId(client, member.publicId);
+        if (!targetUser) continue;
+        const { runtimeState } = await getRuntimeForUser(client, targetUser);
+        if (applyRecoveryReductionPct(runtimeState, specializationEffects.medicalRecoveryReductionPct)) {
+          await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState);
+        }
+      }
+    }
     const updated = await updateOrganizationDetails(client, organization.internalId, { treasury: { gold: normalizeTreasury(organization.treasury).gold + goldGain }, metadata, statusText: succeeded ? "Dungeon success recorded" : "Recovering after a rough delve" });
-    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_dungeon_launched", summary: { dungeonKey, succeeded, reputationGain, goldGain } });
+    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_dungeon_launched", summary: { dungeonKey, succeeded, reputationGain, goldGain, rallyConsumed } });
     return refreshGuildView(client, user, updated);
   });
 }
