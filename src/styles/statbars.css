@@ -54,10 +54,19 @@
   font-weight: 700;
 }
 
+.sb-row__icon {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-right: 4px;
+  opacity: 0.9;
+}
+
 .sb-row__nums {
   color: #b6c2cb;
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sb-track {
