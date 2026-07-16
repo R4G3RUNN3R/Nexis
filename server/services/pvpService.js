@@ -3,7 +3,7 @@ import { HttpError } from "../lib/errors.js";
 import { buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
 import { createDefaultPlayerState, findPlayerStateByUserInternalId, upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
 import { findUserByPublicId } from "../repositories/usersRepository.js";
-import { PVP_MODES, PVP_NOTORIETY_TIERS, PVP_SAFETY_RULES, PVP_SEASON_TEMPLATE, getNotorietyTier } from "../data/pvpData.js";
+import { PVP_CORE_VERSION, PVP_MODES, PVP_NOTORIETY_TIERS, PVP_SAFETY_RULES, PVP_SEASON_TEMPLATE, getNotorietyTier } from "../data/pvpData.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
@@ -34,7 +34,7 @@ export function ensurePvpProfile(runtimeState) {
   const existing = asRecord(player.pvpProfile);
   const notorietyScore = asWholeNumber(asRecord(existing.notoriety).score, 0);
   player.pvpProfile = {
-    version: "pvp-core-v1",
+    version: PVP_CORE_VERSION,
     safety: normalizeSafety(asRecord(existing.safety)),
     notoriety: {
       score: notorietyScore,
@@ -62,6 +62,10 @@ export function ensurePvpProfile(runtimeState) {
   return player.pvpProfile;
 }
 
+function pvpBountyWritsEnabled() {
+  return process.env.NEXIS_ENABLE_PVP_BOUNTIES === "true";
+}
+
 function serializePvpHub(runtimeState) {
   const pvp = ensurePvpProfile(runtimeState);
   return {
@@ -71,6 +75,10 @@ function serializePvpHub(runtimeState) {
       safetyRules: PVP_SAFETY_RULES,
       season: PVP_SEASON_TEMPLATE,
       notorietyTiers: PVP_NOTORIETY_TIERS,
+      availability: {
+        bountyWritsEnabled: pvpBountyWritsEnabled(),
+        note: pvpBountyWritsEnabled() ? "Bounty writs are enabled." : "Bounty writs are inactive until live operations enables them.",
+      },
     },
   };
 }
@@ -102,6 +110,9 @@ export async function updatePvpSafetyForUser(user, payload = {}) {
 }
 
 export async function issueBountyWritForUser(user, payload = {}) {
+  if (!pvpBountyWritsEnabled()) {
+    throw new HttpError(423, "Bounty writs are not live yet. Arena duels remain the active player combat route.", "PVP_BOUNTIES_NOT_LIVE");
+  }
   return withTransaction(async (client) => {
     const targetPublicId = Math.floor(asNumber(payload.targetPublicId, 0));
     const escrowGold = asWholeNumber(payload.gold, 0);

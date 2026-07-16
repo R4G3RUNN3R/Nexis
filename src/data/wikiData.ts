@@ -175,7 +175,7 @@ export const wikiSections: WikiSection[] = [
   {
     id: "combat-pvp",
     label: "Combat and PvP",
-    summary: "Arena, duels, bounty writs, damage types, armor reduction, and future PvP modes.",
+    summary: "Arena, duels, damage types, armor reduction, and protected PvP foundations.",
     entries: [
       {
         id: "combat-basics",
@@ -194,12 +194,12 @@ export const wikiSections: WikiSection[] = [
         rules: ["Blank, invalid, self, not found, or ineligible targets must produce visible errors.", "Declined invites spend no energy.", "Resolved duels write combat history."],
       },
       {
-        id: "pvp-scaffold",
+        id: "pvp-foundation",
         category: "Combat and PvP",
         title: "PvP Modes",
-        summary: "The PvP scaffold supports sparring duels, ranked duels, bounty writs, guild rivalries, caravan interception, and arena seasons.",
+        summary: "The PvP foundation defines protected modes such as sparring, ranked duels, guild rivalries, caravan danger routes, and arena seasons. Bounty writs remain inactive until live operations enables them.",
         routes: [{ label: "Arena", to: "/arena" }, { label: "Guilds", to: "/guilds" }, { label: "Consortiums", to: "/consortiums" }],
-        rules: ["PvP starts protected by default.", "Bounties need a valid target state.", "Danger-route PvP belongs to Travel and consortium logistics."],
+        rules: ["PvP starts protected by default.", "Bounty writs are inactive until explicitly enabled by live operations.", "Danger-route PvP belongs to Travel and consortium logistics."],
       },
       {
         id: "notoriety",

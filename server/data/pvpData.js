@@ -1,4 +1,4 @@
-export const PVP_SCAFFOLD_VERSION = "pvp-core-v1";
+export const PVP_CORE_VERSION = "pvp-core-v1";
 
 export const PVP_MODES = [
   {
@@ -22,7 +22,7 @@ export const PVP_MODES = [
     label: "Bounty Writ",
     summary: "A lawful hunt created from valid aggression, outlaw status, or explicit bounty eligibility.",
     risk: "targeted",
-    unlock: "Requires a bounty-eligible target and escrowed gold.",
+    unlock: "Inactive until bounty writs are enabled by live operations.",
     rewards: ["bounty gold", "hunt record", "notoriety pressure"],
   },
   {
@@ -55,7 +55,7 @@ export const PVP_SAFETY_RULES = [
   { id: "protected_default", label: "Protected by default", summary: "Players must opt into ranked, bounty, rivalry, or danger-route risk before high-stakes PvP applies." },
   { id: "same_city_default", label: "Same-city by default", summary: "Ordinary duels remain same-city interactions unless an explicit travel, bounty, or event rule says otherwise." },
   { id: "valid_bounty_target", label: "Valid bounty target", summary: "Bounty writs require opt-in, wanted status, or another lawful target state; random protected targets are blocked." },
-  { id: "anti_farming", label: "Anti-farming", summary: "Repeated farming of the same target should be limited by cooldowns, diminished rewards, and record flags." },
+  { id: "anti_farming", label: "Anti-farming", summary: "Repeated farming of the same target is limited by cooldowns, diminished rewards, and record flags before rewards go live." },
   { id: "travel_owns_danger_routes", label: "Travel owns danger routes", summary: "Danger-route PvP belongs to Travel and Consortium logistics, not World Map." },
   { id: "record_results", label: "Record results", summary: "Every PvP result should write a compact combat record with participants, damage summary, and reward source." },
 ];
@@ -71,7 +71,7 @@ export const PVP_NOTORIETY_TIERS = [
 export const PVP_SEASON_TEMPLATE = {
   id: "season-0-foundation",
   label: "Foundation Season",
-  status: "scaffolded",
+  status: "inactive",
   ratingFloor: 700,
   defaultRating: 1000,
   bands: ["Initiate", "Proven", "Vanguard", "Champion", "Mythic"],

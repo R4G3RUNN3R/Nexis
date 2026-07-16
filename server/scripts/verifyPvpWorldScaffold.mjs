@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 
-import { PVP_MODES, PVP_SAFETY_RULES, getNotorietyTier } from "../data/pvpData.js";
+import { PVP_MODES, PVP_SAFETY_RULES, PVP_SEASON_TEMPLATE, getNotorietyTier } from "../data/pvpData.js";
 import { CITY_DIARIES, QUALITY_DEFINITIONS, WORLD_EVENT_TEMPLATES } from "../data/worldProgressionData.js";
 import { ORGANIZATION_ONE_SHOT_MIN_SIGNUPS, ORGANIZATION_ONE_SHOT_TOKEN_REFUND_CHANCE, getOrganizationOneShotCampaigns } from "../data/organizationOneShotData.js";
 import { buildOrganizationOneShotBoardSnapshot, canResolveOrganizationOneShot, normalizeOrganizationOneShotState, consumeOrganizationOneShotToken, refundOrganizationOneShotToken, shouldRefundOrganizationOneShotToken } from "../services/organizationOneShotService.js";
 
-assert.equal(PVP_MODES.length >= 6, true, "PvP scaffold should expose at least six playable modes");
+assert.equal(PVP_MODES.length >= 6, true, "PvP foundation should describe at least six protected modes");
 assert.equal(PVP_SAFETY_RULES.some((rule) => rule.id === "same_city_default"), true, "PvP safety rules should document same-city default safety");
+assert.equal(PVP_SEASON_TEMPLATE.status, "inactive", "PvP season must not present itself as live before explicit enablement");
 assert.equal(getNotorietyTier(0).id, "clean");
 assert.equal(getNotorietyTier(75).id, "outlaw");
 assert.equal(getNotorietyTier(125).id, "infamous");
 
-assert.equal(Object.keys(CITY_DIARIES).length >= 5, true, "Every major launch city should have a diary scaffold");
+assert.equal(Object.keys(CITY_DIARIES).length >= 5, true, "Every major launch city should have a diary foundation");
 assert.equal(Object.keys(QUALITY_DEFINITIONS).length >= 6, true, "Quality flags should cover remembered choices and status");
 assert.equal(WORLD_EVENT_TEMPLATES.length >= 5, true, "World-event templates should cover all major cities");
 
@@ -63,4 +64,4 @@ assert.equal(tokenRuntime.player.dmosOneShots.tokens.sealed, 1);
 assert.equal(shouldRefundOrganizationOneShotToken(() => 0.00009), true);
 assert.equal(shouldRefundOrganizationOneShotToken(() => 0.00011), false);
 
-console.log("pvp/world/org one-shot scaffold verification passed");
+console.log("pvp/world/org one-shot foundation verification passed");
