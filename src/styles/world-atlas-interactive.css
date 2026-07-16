@@ -1,0 +1,689 @@
+/* ── Interactive World Atlas (/world-map) ──────────────────────────────────
+   The map is the page. Ashen Crown palette: ambers on near-black, Georgia
+   serif headers. Marker states encode discovery: discovered (full amber),
+   rumored (hollow + "?"), locked (dimmed + "?"). Unknown renders nothing. */
+
+.wm-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 14px;
+  align-items: start;
+}
+
+.wm-map-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.wm-map-panel {
+  border: 1px solid rgba(216, 154, 71, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #17110d 0%, #0f0b08 100%);
+  overflow: hidden;
+}
+
+.wm-map-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(216, 154, 71, 0.16);
+  background: linear-gradient(180deg, #281911 0%, #17100c 100%);
+}
+
+.wm-map-panel__title {
+  margin: 0;
+  color: #f6d7a3;
+  font-family: Georgia, serif;
+  font-size: 17px;
+  letter-spacing: 0.06em;
+}
+
+.wm-map-panel__hint {
+  color: #baa27e;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wm-map-scroll {
+  overflow-x: auto;
+}
+
+.wm-map-frame {
+  position: relative;
+  min-width: 640px;
+}
+
+.wm-map-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #0b0908;
+  filter: saturate(0.82) brightness(0.9);
+}
+
+.wm-map-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 46% 46%, rgba(216, 154, 71, 0.08), transparent 42%),
+    linear-gradient(180deg, rgba(11, 9, 8, 0.34) 0%, rgba(11, 9, 8, 0) 18%, rgba(11, 9, 8, 0) 78%, rgba(11, 9, 8, 0.42) 100%);
+}
+
+.wm-routes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.wm-spotlight {
+  position: absolute;
+  width: 92px;
+  height: 92px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 2;
+  border: 1px solid rgba(242, 207, 149, 0.65);
+  background: radial-gradient(circle, rgba(216, 154, 71, 0.32) 0%, rgba(216, 154, 71, 0.12) 48%, rgba(216, 154, 71, 0) 76%);
+}
+
+/* City pins */
+
+.wm-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  z-index: 4;
+  min-width: 16px;
+  min-height: 16px;
+  overflow: visible;
+}
+
+.wm-pin__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 2px solid #f2cf95;
+  background: #d89a47;
+  color: #2a1c0d;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 0 4px rgba(216, 154, 71, 0.18), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.wm-pin__label {
+  position: absolute;
+  left: 50%;
+  top: 20px;
+  transform: translate(var(--pin-label-x, -50%), var(--pin-label-y, 0%));
+  display: inline-block;
+  padding: 3px 7px;
+  border: 1px solid rgba(216, 154, 71, 0.32);
+  background: rgba(11, 9, 8, 0.92);
+  color: #f2cf95;
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.wm-pin--rumored .wm-pin__dot {
+  background: rgba(216, 154, 71, 0.16);
+  border-color: rgba(216, 154, 71, 0.75);
+  color: #d0ad74;
+}
+
+.wm-pin--rumored .wm-pin__label {
+  color: #d0ad74;
+  border-color: rgba(208, 173, 116, 0.3);
+}
+
+.wm-pin--locked .wm-pin__dot {
+  background: rgba(60, 50, 40, 0.72);
+  border-color: rgba(160, 138, 108, 0.55);
+  color: #a08a6c;
+  box-shadow: 0 0 0 3px rgba(60, 50, 40, 0.22);
+}
+
+.wm-pin--locked .wm-pin__label {
+  color: #a08a6c;
+  border-color: rgba(160, 138, 108, 0.24);
+  background: rgba(11, 9, 8, 0.86);
+  font-style: italic;
+}
+
+.wm-pin--selected .wm-pin__dot {
+  box-shadow: 0 0 0 5px rgba(242, 207, 149, 0.4), 0 2px 6px rgba(0, 0, 0, 0.5);
+  border-color: #fff3dc;
+}
+
+.wm-pin--selected .wm-pin__label {
+  border-color: #d89a47;
+  color: #ffe9c4;
+}
+
+.wm-pin--current .wm-pin__label {
+  border-color: rgba(154, 175, 103, 0.6);
+}
+
+.wm-pin--current .wm-pin__label::after {
+  content: " · here";
+  color: #9aaf67;
+  font-style: normal;
+  font-size: 10px;
+}
+
+/* Hidden-site markers */
+
+.wm-site {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  z-index: 3;
+  overflow: visible;
+}
+
+.wm-site__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(11, 9, 8, 0.68);
+  box-shadow: 0 0 0 1px rgba(216, 154, 71, 0.28);
+  font-size: 11px;
+  line-height: 1;
+  color: #e8b86b;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.wm-site--rumored .wm-site__mark {
+  color: #cdb28a;
+  font-size: 12px;
+  font-weight: 800;
+  font-family: Georgia, serif;
+}
+
+.wm-site:hover .wm-site__mark,
+.wm-site--selected .wm-site__mark {
+  background: rgba(11, 9, 8, 0.86);
+  box-shadow: 0 0 0 1px rgba(242, 207, 149, 0.6);
+}
+
+.wm-site--explored .wm-site__mark {
+  color: #f2cf95;
+}
+
+.wm-site__label {
+  position: absolute;
+  left: 50%;
+  top: 15px;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border: 1px solid rgba(216, 154, 71, 0.3);
+  background: rgba(11, 9, 8, 0.92);
+  color: #e5cf9f;
+  font-size: 10px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.wm-site:hover .wm-site__label,
+.wm-site:focus-visible .wm-site__label,
+.wm-site--selected .wm-site__label {
+  opacity: 1;
+}
+
+.wm-site--selected .wm-site__mark {
+  text-shadow: 0 0 8px rgba(242, 207, 149, 0.9);
+}
+
+/* Region labels */
+
+.wm-region {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 4px;
+  z-index: 2;
+  font-family: Georgia, serif;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(242, 207, 149, 0.78);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.8);
+}
+
+.wm-region--rumored,
+.wm-region--frontier {
+  color: rgba(205, 178, 138, 0.6);
+  font-style: italic;
+  letter-spacing: 0.16em;
+}
+
+.wm-region--locked {
+  color: rgba(160, 138, 108, 0.48);
+  font-style: italic;
+  letter-spacing: 0.16em;
+}
+
+.wm-region:hover,
+.wm-region--selected {
+  color: #ffe9c4;
+}
+
+/* Legend */
+
+.wm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  padding: 9px 14px;
+  border-top: 1px solid rgba(216, 154, 71, 0.14);
+  background: rgba(9, 7, 6, 0.6);
+  color: #baa27e;
+  font-size: 11px;
+}
+
+.wm-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wm-legend__swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.wm-legend__swatch--discovered {
+  background: #d89a47;
+  border: 1px solid #f2cf95;
+}
+
+.wm-legend__swatch--rumored {
+  background: rgba(216, 154, 71, 0.16);
+  border: 1px solid rgba(216, 154, 71, 0.75);
+  color: #d0ad74;
+}
+
+.wm-legend__swatch--locked {
+  background: rgba(60, 50, 40, 0.72);
+  border: 1px solid rgba(160, 138, 108, 0.55);
+  color: #a08a6c;
+}
+
+.wm-legend__swatch--site {
+  background: transparent;
+  border: 0;
+  color: #e8b86b;
+  font-size: 11px;
+}
+
+/* Side panel */
+
+.wm-side {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.wm-side-panel {
+  border: 1px solid rgba(216, 154, 71, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #17110d 0%, #0f0b08 100%);
+  overflow: hidden;
+}
+
+.wm-side-panel__body {
+  padding: 14px;
+}
+
+.wm-place-kicker {
+  color: #baa27e;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.wm-place-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.wm-place-title {
+  margin: 0;
+  color: #f6d7a3;
+  font-family: Georgia, serif;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.wm-status {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.wm-status--discovered,
+.wm-status--explored {
+  color: #9fbf8a;
+  border-color: rgba(159, 191, 138, 0.4);
+  background: rgba(112, 145, 90, 0.1);
+}
+
+.wm-status--rumored {
+  color: #d0ad74;
+  border-color: rgba(208, 173, 116, 0.42);
+  background: rgba(208, 173, 116, 0.08);
+}
+
+.wm-status--locked,
+.wm-status--charted {
+  color: #b28a80;
+  border-color: rgba(178, 138, 128, 0.4);
+  background: rgba(140, 92, 82, 0.1);
+}
+
+.wm-place-subtitle {
+  margin-top: 3px;
+  color: #d8c278;
+  font-size: 12px;
+}
+
+.wm-place-summary {
+  margin: 12px 0 0;
+  color: #d7c9b2;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.wm-lock-note {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border: 1px solid rgba(208, 173, 116, 0.3);
+  border-left: 3px solid #d0ad74;
+  background: rgba(208, 173, 116, 0.06);
+  color: #d0ad74;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.wm-subsection {
+  margin-top: 16px;
+}
+
+.wm-subsection__title {
+  margin-bottom: 7px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(216, 154, 71, 0.14);
+  color: #baa27e;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.wm-route-list {
+  display: grid;
+  gap: 7px;
+}
+
+.wm-route-row {
+  padding: 8px 10px;
+  border: 1px solid rgba(216, 154, 71, 0.12);
+  background: rgba(9, 7, 6, 0.5);
+  font-size: 12px;
+  line-height: 1.5;
+  color: #cbbda5;
+}
+
+.wm-route-row strong {
+  color: #f0dfc2;
+}
+
+.wm-route-row--rumored {
+  border-style: dashed;
+  color: #a89a82;
+}
+
+.wm-route-row__tag {
+  margin-left: 6px;
+  color: #d0ad74;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.wm-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid rgba(216, 154, 71, 0.26);
+  background: rgba(23, 17, 13, 0.85);
+  color: #e5cf9f;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.wm-chip:hover {
+  border-color: #d89a47;
+  color: #ffe9c4;
+}
+
+.wm-chip__state {
+  color: #baa27e;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.wm-note-list {
+  display: grid;
+  gap: 6px;
+}
+
+.wm-note-row {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #cbbda5;
+}
+
+.wm-note-row strong {
+  color: #e5cf9f;
+}
+
+.wm-side-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.wm-depart-btn {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid rgba(216, 154, 71, 0.45);
+  background: linear-gradient(180deg, #7a2b14 0%, #56190c 100%);
+  color: #ffe9c4;
+  font-family: Georgia, serif;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-decoration: none;
+}
+
+.wm-depart-btn:hover {
+  border-color: #f2cf95;
+  color: #fff3dc;
+}
+
+.wm-side-link {
+  display: block;
+  text-align: center;
+  color: #f0d989;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wm-empty-hint {
+  color: #baa27e;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.wm-count-table {
+  display: grid;
+  gap: 0;
+  margin-top: 12px;
+}
+
+.wm-count-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(216, 154, 71, 0.1);
+  font-size: 12px;
+  color: #baa27e;
+}
+
+.wm-count-row:last-child {
+  border-bottom: 0;
+}
+
+.wm-count-row strong {
+  color: #f0dfc2;
+}
+
+/* Collapsed atlas records under the map */
+
+.wm-records-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: linear-gradient(180deg, #281911 0%, #17100c 100%);
+  color: #f6d7a3;
+  font-family: Georgia, serif;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wm-records-toggle span {
+  color: #c9b17a;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.wm-records-body {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 14px;
+  border-top: 1px solid rgba(216, 154, 71, 0.16);
+}
+
+.wm-records-block__title {
+  margin-bottom: 7px;
+  color: #baa27e;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.wm-records-block {
+  min-width: 0;
+  font-size: 12px;
+  color: #cbbda5;
+  line-height: 1.55;
+}
+
+.wm-records-block .inline-route-link {
+  color: #f0d989;
+  font-weight: 700;
+}
+
+.wm-volume-list {
+  display: grid;
+  gap: 4px;
+}
+
+.wm-volume-list a {
+  color: #e5cf9f;
+}
+
+.wm-volume-list a:hover {
+  color: #ffe9c4;
+}
+
+.wm-training-note {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 1240px) {
+  .wm-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .wm-side {
+    position: static;
+  }
+
+  .wm-records-body {
+    grid-template-columns: 1fr;
+  }
+}

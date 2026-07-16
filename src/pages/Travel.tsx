@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
-import { worldCities, worldRoutes, type WorldCity, type WorldCityId } from "../data/worldMapData";
+import { worldCities, worldRoutes, type WorldCityId } from "../data/worldMapData";
+import { getPinClass, getPinStyle } from "../lib/mapPins";
 import { getCityHubContent } from "../data/cityHubData";
 import { ITEM_CATALOGUE } from "../data/itemsData";
 import { useAuth } from "../state/AuthContext";
@@ -38,34 +39,10 @@ function getFocusedCityId(state: PersistedTravelState): WorldCityId {
   return state.status === "in_transit" && state.destinationCityId ? state.destinationCityId : state.currentCityId;
 }
 
-const PIN_LABEL_OFFSETS: Partial<Record<WorldCityId, { x: string; y: string }>> = {
-  nexis: { x: "-112%", y: "8%" },
-  south: { x: "12%", y: "-132%" },
-};
-
-function getPinStyle(city: WorldCity): CSSProperties {
-  const offset = PIN_LABEL_OFFSETS[city.id];
-  return {
-    left: `${city.xPercent}%`,
-    top: `${city.yPercent}%`,
-    "--pin-label-x": offset?.x ?? "-50%",
-    "--pin-label-y": offset?.y ?? "0%",
-  } as CSSProperties;
-}
-
-function getPinClass(region: WorldCity["region"]) {
-  switch (region) {
-    case "north":
-      return "travel-pin travel-pin--north";
-    case "east":
-      return "travel-pin travel-pin--east";
-    case "west":
-      return "travel-pin travel-pin--west";
-    case "south":
-      return "travel-pin travel-pin--south";
-    default:
-      return "travel-pin travel-pin--center";
-  }
+function readRequestedCityId(search: string): WorldCityId | null {
+  const requested = new URLSearchParams(search).get("to");
+  if (requested && worldCities.some((city) => city.id === requested)) return requested as WorldCityId;
+  return null;
 }
 
 function getEncounterRewardText(notice: PersistedTravelState["encounterNotice"]) {
@@ -106,10 +83,12 @@ function getItemLabel(itemId: string) {
 export default function TravelPage() {
   const { player } = usePlayer();
   const { activeAccount, authSource, serverSessionToken } = useAuth();
-  const location = useLocation() as { state?: { redirectedFrom?: string } };
+  const location = useLocation() as { state?: { redirectedFrom?: string }; search: string };
   const [now, setNow] = useState(Date.now());
   const [travelState, setTravelState] = useState<PersistedTravelState>(() => readTravelStateFromPlayer(player));
-  const [selectedCityId, setSelectedCityId] = useState<WorldCityId>(() => getFocusedCityId(readTravelStateFromPlayer(player)));
+  const [selectedCityId, setSelectedCityId] = useState<WorldCityId>(
+    () => readRequestedCityId(location.search) ?? getFocusedCityId(readTravelStateFromPlayer(player)),
+  );
   const [message, setMessage] = useState<string | null>(null);
   const travelStateSyncRef = useRef<PersistedTravelState>(travelState);
   // Tracks the arrivalAt timestamp we've already triggered an immediate
@@ -191,6 +170,13 @@ export default function TravelPage() {
 
     travelStateSyncRef.current = nextTravelState;
   }, [player]);
+
+  // World Map "Depart for..." links land here with ?to=<cityId> so the atlas
+  // can preselect a destination while Travel keeps owning the departure flow.
+  useEffect(() => {
+    const requestedCityId = readRequestedCityId(location.search);
+    if (requestedCityId) setSelectedCityId(requestedCityId);
+  }, [location.search]);
 
   // Client-side ticker for DISPLAY ONLY: it advances `now` once per second so
   // the progress bar / splash countdown animate smoothly. It never flips
