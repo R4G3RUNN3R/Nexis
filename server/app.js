@@ -53,7 +53,10 @@ function mountRoutes(app, prefix) {
 export function createApp() {
   const app = express();
 
-  app.use(express.json());
+  // Portrait uploads send base64 image data through JSON (see profileRoutes.js),
+  // which regularly exceeds Express's 100kb default and was silently rejecting
+  // legitimate uploads with PayloadTooLargeError.
+  app.use(express.json({ limit: "2mb" }));
 
   mountRoutes(app, "/api");
   // The live nginx proxy currently forwards /api/* requests to the backend
