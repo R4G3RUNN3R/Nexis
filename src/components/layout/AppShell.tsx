@@ -29,6 +29,7 @@ const core: Array<[string, string]> = [
   ["Education", "/education"],
   ["Skills", "/skills"],
   ["Adventure", "/adventure"],
+  ["One-Shots", "/one-shots"],
   ["Housing", "/housing"],
 ];
 
@@ -38,6 +39,7 @@ const world: Array<[string, string]> = [
   ["Travel", "/travel"],
   ["World Map", "/world-map"],
   ["Codex", "/codex"],
+  ["Wiki", "/wiki"],
   ["Arena", "/arena"],
   ["City Board", "/city-board"],
   ["Salvage Yard", "/salvage-yard"],

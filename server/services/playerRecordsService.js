@@ -17,6 +17,8 @@ export const RECORD_CATEGORIES = [
   "guild",
   "consortium",
   "admin",
+  "adventure",
+  "chronicle",
   "prestige",
 ];
 

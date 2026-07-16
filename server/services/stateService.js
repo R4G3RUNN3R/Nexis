@@ -103,7 +103,12 @@ function mergeRuntimeState(existingRuntime, payload) {
       progressionEvents: existingPlayer.progressionEvents ?? payloadPlayer.progressionEvents ?? {},
       records: existingPlayer.records ?? payloadPlayer.records ?? {},
       rareManualEligibility: existingPlayer.rareManualEligibility ?? payloadPlayer.rareManualEligibility ?? {},
+      pvpProfile: existingPlayer.pvpProfile ?? payloadPlayer.pvpProfile ?? {},
+      cityDiaries: existingPlayer.cityDiaries ?? payloadPlayer.cityDiaries ?? {},
+      qualities: existingPlayer.qualities ?? payloadPlayer.qualities ?? {},
+      worldEventProfile: existingPlayer.worldEventProfile ?? payloadPlayer.worldEventProfile ?? {},
       portrait: existingPlayer.portrait ?? {},
+      dmosOneShots: existingPlayer.dmosOneShots ?? payloadPlayer.dmosOneShots ?? {},
       // Life path is a one-time server-arbitrated choice (see profileService.js
       // updateOwnLifePath). It must never be overwritten by a generic client sync.
       lifePath: existingPlayer.lifePath ?? {},

@@ -247,6 +247,7 @@ export function buildMutableRuntimeState(user, playerState) {
       progressionEvents: asRecord(player.progressionEvents),
       records: asRecord(player.records),
       rareManualEligibility: asRecord(player.rareManualEligibility),
+      dmosOneShots: asRecord(player.dmosOneShots),
     },
     jobs: asRecord(runtime.jobs),
     education: asRecord(runtime.education),

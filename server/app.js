@@ -20,6 +20,10 @@ import worldMapRoutes from "./routes/worldMapRoutes.js";
 import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import adventureRoutes from "./routes/adventureRoutes.js";
 import playerRecordsRoutes from "./routes/playerRecordsRoutes.js";
+import nexisOneShotRoutes from "./routes/nexisOneShotRoutes.js";
+import pvpRoutes from "./routes/pvpRoutes.js";
+import worldProgressionRoutes from "./routes/worldProgressionRoutes.js";
+import organizationOneShotRoutes from "./routes/organizationOneShotRoutes.js";
 import { DatabaseUnavailableError, HttpError } from "./lib/errors.js";
 
 const ROUTE_MODULES = [
@@ -42,6 +46,10 @@ const ROUTE_MODULES = [
   marketplaceRoutes,
   adventureRoutes,
   playerRecordsRoutes,
+  nexisOneShotRoutes,
+  pvpRoutes,
+  worldProgressionRoutes,
+  organizationOneShotRoutes,
   adminRoutes,
   adminOrganizationRoutes,
 ];

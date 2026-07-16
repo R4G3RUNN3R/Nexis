@@ -4,6 +4,7 @@ import { usePlayer } from "../../state/PlayerContext";
 import { useAuth } from "../../state/AuthContext";
 import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicIds";
 import { PlayerAvatar } from "../common/PlayerAvatar";
+import { resolveDisplayTitle } from "../../lib/titleAccess";
 
 import { isStaffOrAdmin } from "../../lib/adminAccess";
 
@@ -13,6 +14,7 @@ const navLinks: Array<[string, string]> = [
   ["City", "/city"],
   ["Travel", "/travel"],
   ["Codex", "/codex"],
+  ["Wiki", "/wiki"],
   ["Guilds", "/guilds"],
   ["Consortiums", "/consortiums"],
 ];
@@ -49,6 +51,7 @@ function buildSearchIndex() {
     { id: "route-consortiums", label: "Consortiums", hint: "Player companies", to: "/consortiums" },
     { id: "route-city-board", label: "City Board", hint: "Public notices", to: "/city-board" },
     { id: "route-codex", label: "Codex", hint: "Archive and reference", to: "/codex" },
+    { id: "route-wiki", label: "Wiki", hint: "Game manual and systems guide", to: "/wiki" },
   ];
 
   const accounts = readJson<Record<string, { firstName: string; lastName: string; publicId: number }>>("nexis_accounts");
@@ -128,6 +131,11 @@ export function TopBar() {
   });
 
   const portrait = (player as unknown as { portrait?: { imageUrl?: string | null; imageKey?: string | null } | null }).portrait;
+  const displayTitle = resolveDisplayTitle(player.title, displayPublicId);
+  const dmosState = (player as unknown as { dmosOneShots?: { tokens?: { patronBound?: number; sealed?: number }; activeSession?: { status?: string } | null } }).dmosOneShots;
+  const oneShotTokens = Number(dmosState?.tokens?.patronBound ?? 0) + Number(dmosState?.tokens?.sealed ?? 0);
+  const oneShotActive = dmosState?.activeSession?.status === "active";
+  const oneShotReady = oneShotTokens > 0 || oneShotActive;
 
   function handleLogout() {
     setPlayerOpen(false);
@@ -202,6 +210,29 @@ export function TopBar() {
       </div>
 
       <div className="topbar__right">
+        <nav className="topbar__shortcuts" aria-label="Player shortcuts">
+          <NavLink to="/achievements" className="topbar__shortcut" title="Achievements and Legacy">
+            <span>LG</span>
+          </NavLink>
+          <NavLink
+            to="/one-shots"
+            className={`topbar__shortcut${oneShotReady ? " topbar__shortcut--ready" : ""}`}
+            title={oneShotActive ? "DMOS one-shot active" : oneShotTokens > 0 ? "DMOS one-shot token ready" : "Nexis One-Shots"}
+          >
+            <span>OS</span>
+            {oneShotReady ? <i aria-hidden="true" /> : null}
+          </NavLink>
+          <NavLink to={profileRoute} className="topbar__shortcut" title="Chronicle records">
+            <span>RC</span>
+          </NavLink>
+          <NavLink to="/codex" className="topbar__shortcut" title="Codex">
+            <span>CD</span>
+          </NavLink>
+          <NavLink to="/wiki" className="topbar__shortcut" title="Wiki manual">
+            <span>WK</span>
+          </NavLink>
+        </nav>
+
         <div className="topbar__menu-wrap" ref={clockMenuRef}>
           <button
             type="button"
@@ -233,7 +264,7 @@ export function TopBar() {
             onClick={() => setPlayerOpen((value) => !value)}
           >
             <PlayerAvatar name={player.name} lastName={player.lastName} portrait={portrait} size={30} className="player-menu__avatar" />
-            <span className="player-menu__name">P{displayPublicId} ? Lv {player.level}</span>
+            <span className="player-menu__name">P{displayPublicId}{displayTitle ? ` | ${displayTitle}` : ""} | Lv {player.level}</span>
             <span className="player-menu__caret">{playerOpen ? "^" : "v"}</span>
           </button>
 
@@ -243,7 +274,7 @@ export function TopBar() {
                 <PlayerAvatar name={player.name} lastName={player.lastName} portrait={portrait} size={34} className="player-menu__avatar" />
                 <div>
                   <strong>{displayNameWithPublicId}</strong>
-                  <span>Shard: Cay ? Level {player.level}</span>
+                  <span>{displayTitle || "Untitled citizen"} | Level {player.level}</span>
                 </div>
               </div>
               <NavLink to={profileRoute} className="player-menu__item" onClick={() => setPlayerOpen(false)}>

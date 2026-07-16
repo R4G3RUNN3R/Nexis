@@ -37,11 +37,13 @@ import CityPage from "../pages/City";
 import InventoryPage from "../pages/Inventory";
 import CraftingPage from "../pages/Crafting";
 import ArenaPage from "../pages/Arena";
+import OneShotsPage from "../pages/OneShots";
 import CivicJobsV2Page from "../pages/CivicJobsV2";
 import SalvageYardPage from "../pages/SalvageYard";
 import WorldMapPage from "../pages/WorldMap";
 import PropertyOfficePage from "../pages/PropertyOffice";
 import CodexPage from "../pages/Codex";
+import WikiPage from "../pages/Wiki";
 import IconGalleryPage from "../pages/IconGallery";
 import NotFoundPage from "../pages/NotFound";
 
@@ -174,8 +176,10 @@ export default function AppRouter() {
       <Route path="/civic-jobs" element={<RouteGuard><CivicJobsV2Page /></RouteGuard>} />
       <Route path="/arena" element={<RouteGuard><ArenaPage /></RouteGuard>} />
       <Route path="/travel" element={<RouteGuard><TravelPage /></RouteGuard>} />
+      <Route path="/one-shots" element={<RouteGuard><OneShotsPage /></RouteGuard>} />
       <Route path="/world-map" element={<RouteGuard><WorldMapPage /></RouteGuard>} />
       <Route path="/codex" element={<RouteGuard><CodexPage /></RouteGuard>} />
+      <Route path="/wiki" element={<RouteGuard><WikiPage /></RouteGuard>} />
       <Route path="/maps/:mapId" element={<RouteGuard><WorldMapPage /></RouteGuard>} />
       <Route path="/city" element={<RouteGuard><CityPage /></RouteGuard>} />
       <Route path="/city/property-office" element={<RouteGuard><PropertyOfficePage /></RouteGuard>} />

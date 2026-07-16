@@ -277,3 +277,45 @@
 .player-menu__trigger {
   max-width: 170px;
 }
+
+.topbar__shortcuts {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-right: 3px;
+}
+
+.topbar__shortcut {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(205, 220, 233, 0.1);
+  border-radius: 6px;
+  background: rgba(13, 19, 24, 0.92);
+  color: #b9c7d2;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.topbar__shortcut:hover,
+.topbar__shortcut.active,
+.topbar__shortcut--ready {
+  border-color: rgba(201, 177, 122, 0.34);
+  color: #f1e5c5;
+  background: rgba(42, 35, 20, 0.9);
+}
+
+.topbar__shortcut i {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #9aaf67;
+  box-shadow: 0 0 8px rgba(154, 175, 103, 0.75);
+}
