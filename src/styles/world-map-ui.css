@@ -503,3 +503,89 @@
   background: #0d1f1a;
   color: #bce9d7;
 }
+
+/* Excursion grid / map search layer */
+.travel-map-frame .travel-pin,
+.wm-map-frame .wm-pin {
+  display: none;
+}
+
+.excursion-map-grid {
+  position: absolute;
+  inset: 10px;
+  pointer-events: none;
+  z-index: 2;
+  border: 1px solid rgba(216, 194, 120, 0.12);
+}
+
+.excursion-map-grid span,
+.excursion-map-grid i {
+  position: absolute;
+  background: rgba(216, 194, 120, 0.12);
+}
+
+.excursion-map-grid span {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.excursion-map-grid i {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.excursion-map-grid--atlas {
+  inset: 0;
+}
+
+.excursion-map-marker {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #f4e7bc;
+  text-decoration: none;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.excursion-map-marker__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  border: 1px solid #f8df9a;
+  background: #91733a;
+  box-shadow: 0 0 0 3px rgba(216, 194, 120, 0.16), 0 0 12px rgba(248, 223, 154, 0.28);
+}
+
+.excursion-map-marker__label {
+  max-width: 118px;
+  padding: 3px 5px;
+  border: 1px solid rgba(216, 194, 120, 0.35);
+  background: rgba(5, 8, 11, 0.88);
+  color: #f4e7bc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.excursion-map-marker:hover .excursion-map-marker__label {
+  border-color: rgba(248, 223, 154, 0.75);
+  color: #fff3c9;
+}
+
+.excursion-map-marker--low .excursion-map-marker__dot { background: #5f8750; }
+.excursion-map-marker--moderate .excursion-map-marker__dot { background: #9a7b3a; }
+.excursion-map-marker--high .excursion-map-marker__dot { background: #9a583a; }
+.excursion-map-marker--extreme .excursion-map-marker__dot { background: #8c3434; }
+
+@media (max-width: 760px) {
+  .excursion-map-marker__label {
+    max-width: 82px;
+    font-size: 9px;
+  }
+}

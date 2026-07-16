@@ -4,13 +4,13 @@
 // Sub-job cards show stats + Attempt only - no per-job XP bar.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { ITEM_CATALOGUE } from "../data/itemsData";
 import { ItemIcon } from "../components/items/ItemIcon";
-import { getServerAdventureBoard, startServerAdventure, type ServerAdventureBoard, type ServerAdventureEntry } from "../lib/authApi";
+import { getServerAdventureBoard, startServerAdventure, getServerExcursionBoard, startServerExcursion, type ServerAdventureBoard, type ServerAdventureEntry, type ServerExcursionBoard, type ServerExcursionLocation } from "../lib/authApi";
 import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
 import {
@@ -480,6 +480,136 @@ function ServerAdventureBoard({
   );
 }
 
+const EXCURSION_RISK_ORDER: Record<string, number> = { Low: 1, Moderate: 2, High: 3, Extreme: 4 };
+
+function chancePct(value: number) {
+  if (value <= 0) return "0%";
+  const pct = value * 100;
+  if (pct < 0.1) return `${pct.toFixed(2)}%`;
+  if (pct < 1) return `${pct.toFixed(1)}%`;
+  return `${Math.round(pct)}%`;
+}
+
+function hasRewardFocus(location: ServerExcursionLocation, filter: string) {
+  if (filter === "all") return true;
+  const focus = location.rewardFocus.map((entry) => entry.toLowerCase()).join(" ");
+  if (filter === "recipe") return Boolean(location.recipe) || focus.includes("recipe");
+  if (filter === "rare") return focus.includes("rare") || focus.includes("piece") || location.rewards.rareItemChance > 0;
+  if (filter === "manual") return focus.includes("training") || focus.includes("skill") || focus.includes("magic");
+  if (filter === "absolute") return focus.includes("absolute");
+  return focus.includes(filter);
+}
+
+function ExcursionBoard({
+  board,
+  busyLocationId,
+  message,
+  error,
+  onStart,
+}: {
+  board: ServerExcursionBoard | null;
+  busyLocationId: string | null;
+  message: string | null;
+  error: string | null;
+  onStart: (locationId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [risk, setRisk] = useState("all");
+  const [reward, setReward] = useState("all");
+  const [sort, setSort] = useState("nearest");
+
+  const locations = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const list = (board?.locations ?? []).filter((location) => {
+      const haystack = `${location.name} ${location.type} ${location.region} ${location.shortSummary} ${location.rewardFocus.join(" ")}`.toLowerCase();
+      return (!needle || haystack.includes(needle)) && (risk === "all" || location.risk === risk) && hasRewardFocus(location, reward);
+    });
+    return [...list].sort((left, right) => {
+      if (sort === "time") return left.timing.totalMs - right.timing.totalMs;
+      if (sort === "risk") return (EXCURSION_RISK_ORDER[left.risk] ?? 9) - (EXCURSION_RISK_ORDER[right.risk] ?? 9);
+      if (sort === "recipe") return (right.recipe?.grade ?? "").localeCompare(left.recipe?.grade ?? "") || left.name.localeCompare(right.name);
+      if (sort === "name") return left.name.localeCompare(right.name);
+      return left.timing.distanceBoxes - right.timing.distanceBoxes || left.timing.totalMs - right.timing.totalMs;
+    });
+  }, [board, query, risk, reward, sort]);
+
+  return (
+    <ContentPanel title="Map Excursions">
+      <div className="excursion-board">
+        <div className="jobs-overview__brief">
+          Search the world grid for off-route excursions. Each run travels out, spends 1 hour on-site, then returns by the same travel time. Rewards can include recipes, materials, rare item pieces, manuals, magic fragments, and Absolute story fragments.
+        </div>
+        {board?.active ? (
+          <div className="excursion-active">
+            <strong>Excursion in progress</strong>
+            <span>Completes {new Date(board.active.completesAt).toLocaleString()} | total {board.active.timing.totalLabel}</span>
+          </div>
+        ) : null}
+        {message ? <div className="jobs-status-banner jobs-status-banner--success">{message}</div> : null}
+        {error ? <div className="jobs-low-stamina">{error}</div> : null}
+        <div className="excursion-filters">
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search excursion locations..." />
+          <select value={risk} onChange={(event) => setRisk(event.target.value)}>
+            <option value="all">All risks</option>
+            <option value="Low">Low</option>
+            <option value="Moderate">Moderate</option>
+            <option value="High">High</option>
+            <option value="Extreme">Extreme</option>
+          </select>
+          <select value={reward} onChange={(event) => setReward(event.target.value)}>
+            <option value="all">All rewards</option>
+            <option value="recipe">Recipes</option>
+            <option value="materials">Materials</option>
+            <option value="rare">Rare pieces</option>
+            <option value="manual">Manuals / magic</option>
+            <option value="absolute">Absolute fragments</option>
+          </select>
+          <select value={sort} onChange={(event) => setSort(event.target.value)}>
+            <option value="nearest">Nearest</option>
+            <option value="time">Shortest time</option>
+            <option value="risk">Lowest risk</option>
+            <option value="recipe">Recipe grade</option>
+            <option value="name">Name</option>
+          </select>
+        </div>
+        <div className="excursion-summary-row">
+          <span>{locations.length} shown / {board?.locations.length ?? 0} known leads</span>
+          <span>{board?.origin.cityName ?? "Unknown origin"} box {board?.origin.box.x ?? "?"},{board?.origin.box.y ?? "?"}</span>
+          <span>{board?.counters.excursionsCompleted ?? 0} completed</span>
+        </div>
+        <div className="excursion-grid">
+          {locations.map((location) => (
+            <article key={location.id} className={`excursion-card excursion-card--${location.risk.toLowerCase()}`}>
+              <div className="excursion-card__top">
+                <div>
+                  <div className="adventure-card__kicker">{location.region} | box {location.box.x},{location.box.y}</div>
+                  <h3>{location.name}</h3>
+                  <p>{location.shortSummary}</p>
+                </div>
+                <button type="button" disabled={!location.available || Boolean(board?.active) || busyLocationId === location.id} onClick={() => onStart(location.id)}>
+                  {busyLocationId === location.id ? "Starting..." : "Start"}
+                </button>
+              </div>
+              <div className="adventure-card__chips">
+                <span>Risk: {location.risk}</span>
+                <span>Type: {location.type}</span>
+                <span>Total: {location.timing.totalLabel}</span>
+              </div>
+              <div className="adventure-card__hint">Travel: {location.timing.outboundLabel} out | 1h search | {location.timing.returnLabel} back</div>
+              {location.recipe ? <div className="adventure-card__hint">Recipe: {location.recipe.title} ({location.recipe.grade}, {location.recipe.fragmentsRequired} fragments)</div> : null}
+              <div className="adventure-card__hint">Chances: recipe fragment {chancePct(location.rewards.recipeFragmentChance)} | direct recipe {chancePct(location.rewards.recipeDirectChance)} | rare item {chancePct(location.rewards.rareItemChance)} | piece {chancePct(location.rewards.itemPieceChance)}</div>
+              <div className="adventure-card__rewards">
+                {location.rewardFocus.slice(0, 5).map((focus) => <span key={`${location.id}-${focus}`}>{focus}</span>)}
+              </div>
+              {location.lockReason ? <div className="jobs-low-stamina">{location.lockReason}</div> : null}
+            </article>
+          ))}
+          {!locations.length ? <div className="jobs-low-stamina">No excursion leads match those filters.</div> : null}
+        </div>
+      </div>
+    </ContentPanel>
+  );
+}
 export default function JobsPage() {
   const jobs = useJobs();
   const { authSource, serverSessionToken, refreshServerState } = useAuth();
@@ -502,6 +632,10 @@ export default function JobsPage() {
   const [adventureError, setAdventureError] = useState<string | null>(null);
   const [adventureResult, setAdventureResult] = useState<Record<string, unknown> | null>(null);
   const [combatSelections, setCombatSelections] = useState<Record<string, string>>({});
+  const [excursionBoard, setExcursionBoard] = useState<ServerExcursionBoard | null>(null);
+  const [busyExcursionId, setBusyExcursionId] = useState<string | null>(null);
+  const [excursionMessage, setExcursionMessage] = useState<string | null>(null);
+  const [excursionError, setExcursionError] = useState<string | null>(null);
   const selectedCategory =
     jobCategories.find((c) => c.id === selectedCategoryId) ?? jobCategories[0];
 
@@ -533,6 +667,24 @@ export default function JobsPage() {
     return () => { cancelled = true; };
   }, [authSource, serverSessionToken, player.current?.currentCityId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadExcursionBoard() {
+      if (authSource !== "server" || !serverSessionToken) { setExcursionBoard(null); return; }
+      const result = await getServerExcursionBoard(serverSessionToken);
+      if (cancelled) return;
+      if (result.ok) {
+        setExcursionBoard(result.board);
+        setExcursionMessage(result.message ?? null);
+        setExcursionError(null);
+      } else {
+        setExcursionError(result.error);
+      }
+    }
+    void loadExcursionBoard();
+    const timer = window.setInterval(() => void loadExcursionBoard(), 30000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [authSource, serverSessionToken, player.current?.currentCityId]);
   const handleStartAdventure = useCallback(async (adventureId: string) => {
     if (!serverSessionToken) return;
     setBusyAdventureId(adventureId);
@@ -551,6 +703,19 @@ export default function JobsPage() {
     setCombatSelections((current) => ({ ...current, [adventureId]: itemId }));
   }, []);
 
+
+  const handleStartExcursion = useCallback(async (locationId: string) => {
+    if (!serverSessionToken) return;
+    setBusyExcursionId(locationId);
+    setExcursionMessage(null);
+    setExcursionError(null);
+    const result = await startServerExcursion(serverSessionToken, locationId);
+    setBusyExcursionId(null);
+    if (!result.ok) { setExcursionError(result.error); return; }
+    setExcursionBoard(result.board);
+    setExcursionMessage(result.message ?? "Excursion started.");
+    await refreshServerState();
+  }, [refreshServerState, serverSessionToken]);
   const handleAttempt = useCallback(
     (categoryId: string, subJobId: string) => {
       const result = jobs.attemptJob(categoryId, subJobId);
@@ -630,6 +795,22 @@ export default function JobsPage() {
           </div>
         )}
 
+        <AdventureResultPanel result={adventureResult} onDismiss={() => setAdventureResult(null)} />
+        {adventureMessage ? <div className="jobs-status-banner jobs-status-banner--success">{adventureMessage}</div> : null}
+        {adventureError ? <div className="jobs-low-stamina">{adventureError}</div> : null}
+        {adventureBoard ? (
+          <ServerAdventureBoard
+            board={adventureBoard}
+            selectedCategory={adventureCategory}
+            onSelectCategory={setAdventureCategory}
+            busyAdventureId={busyAdventureId}
+            combatSelections={combatSelections}
+            combatItems={combatItems}
+            onCombatItemChange={handleCombatItemChange}
+            onStart={handleStartAdventure}
+          />
+        ) : null}
+        <ExcursionBoard board={excursionBoard} busyLocationId={busyExcursionId} message={excursionMessage} error={excursionError} onStart={handleStartExcursion} />
         <div className="jobs-body">
           <div className="jobs-categories">
             {jobCategories.map((cat) => (

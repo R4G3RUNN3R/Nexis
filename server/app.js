@@ -24,6 +24,7 @@ import nexisOneShotRoutes from "./routes/nexisOneShotRoutes.js";
 import pvpRoutes from "./routes/pvpRoutes.js";
 import worldProgressionRoutes from "./routes/worldProgressionRoutes.js";
 import organizationOneShotRoutes from "./routes/organizationOneShotRoutes.js";
+import excursionRoutes from "./routes/excursionRoutes.js";
 import { DatabaseUnavailableError, HttpError } from "./lib/errors.js";
 
 const ROUTE_MODULES = [
@@ -50,6 +51,7 @@ const ROUTE_MODULES = [
   pvpRoutes,
   worldProgressionRoutes,
   organizationOneShotRoutes,
+  excursionRoutes,
   adminRoutes,
   adminOrganizationRoutes,
 ];

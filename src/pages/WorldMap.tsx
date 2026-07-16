@@ -18,6 +18,7 @@ import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
 import { readTravelStateFromPlayer } from "../lib/travelState";
 import mapImage from "../assets/maps/nexis-world-map-expanded.jpg";
+import { EXCURSION_GRID, excursionMapLocations, getExcursionMarkerStyle } from "../data/excursionMapData";
 import "../styles/world-map-ui.css";
 import "../styles/world-atlas-interactive.css";
 
@@ -617,6 +618,23 @@ function InteractiveWorldAtlas() {
                   );
                 })}
 
+                <div className="excursion-map-grid excursion-map-grid--atlas" aria-hidden>
+                  {Array.from({ length: EXCURSION_GRID.columns - 1 }).map((_, index) => <span key={`atlas-x-${index}`} style={{ left: `${((index + 1) / EXCURSION_GRID.columns) * 100}%` }} />)}
+                  {Array.from({ length: EXCURSION_GRID.rows - 1 }).map((_, index) => <i key={`atlas-y-${index}`} style={{ top: `${((index + 1) / EXCURSION_GRID.rows) * 100}%` }} />)}
+                </div>
+                {excursionMapLocations.map((location) => (
+                  <Link
+                    key={location.id}
+                    to={`/adventure?excursion=${location.id}`}
+                    className={`excursion-map-marker excursion-map-marker--atlas excursion-map-marker--${location.risk.toLowerCase()}`}
+                    style={getExcursionMarkerStyle(location)}
+                    title={`${location.name} | ${location.type} | ${location.risk}`}
+                    aria-label={`Open excursion lead for ${location.name}`}
+                  >
+                    <span className="excursion-map-marker__dot" />
+                    <span className="excursion-map-marker__label">{location.name}</span>
+                  </Link>
+                ))}
                 {revealedSites.map((site) => {
                   const position = getHiddenSitePosition(site.id, site.cityIds);
                   if (!position) return null;

@@ -350,7 +350,69 @@ export const LEGACY_ACHIEVEMENTS = [
     "rewardPoints": 1,
     "chronicleTitle": "Evolution, Not Decoration",
     "chronicleSummary": "Evolved a skill through live use."
+  },
+
+  {
+    "id": "exc-001",
+    "kind": "honor",
+    "category": "Exploration / Discoveries",
+    "name": "First Excursion",
+    "description": "Complete one grid-map excursion.",
+    "metric": "excursions_completed",
+    "target": 1,
+    "rewardPoints": 1,
+    "chronicleTitle": "First Excursion",
+    "chronicleSummary": "Completed a mapped excursion beyond the city route network."
+  },
+  {
+    "id": "exc-002",
+    "kind": "medal",
+    "category": "Exploration / Discoveries",
+    "name": "Excursion Regular",
+    "description": "Complete ten grid-map excursions.",
+    "metric": "excursions_completed",
+    "target": 10,
+    "rewardPoints": 1,
+    "chronicleTitle": "Excursion Regular",
+    "chronicleSummary": "Made off-route exploration part of the permanent record."
+  },
+  {
+    "id": "exc-003",
+    "kind": "honor",
+    "category": "Items / Crafting",
+    "name": "Field Finds",
+    "description": "Find twenty item lines through excursions.",
+    "metric": "excursion_items_found",
+    "target": 20,
+    "rewardPoints": 1,
+    "chronicleTitle": "Field Finds",
+    "chronicleSummary": "Recovered enough excursion loot for the crafting ledgers to care."
+  },
+  {
+    "id": "exc-004",
+    "kind": "honor",
+    "category": "Exploration / Discoveries",
+    "name": "Rare Trail Mark",
+    "description": "Find one rare item or rare item piece through an excursion.",
+    "metric": "excursion_rare_finds",
+    "target": 1,
+    "rewardPoints": 1,
+    "chronicleTitle": "Rare Trail Mark",
+    "chronicleSummary": "Brought back a rare find from an off-route excursion."
+  },
+  {
+    "id": "exc-005",
+    "kind": "honor",
+    "category": "Items / Crafting",
+    "name": "Recipe Unearthed",
+    "description": "Discover one crafting recipe through excursions.",
+    "metric": "recipes_discovered",
+    "target": 1,
+    "rewardPoints": 1,
+    "chronicleTitle": "Recipe Unearthed",
+    "chronicleSummary": "Recovered a usable recipe from field exploration instead of a shop shelf."
   }
+
 ];
 
 export const LEGACY_PERK_CATEGORIES = [

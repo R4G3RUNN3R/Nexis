@@ -512,6 +512,17 @@ export type ServerCraftingRecipe = {
   currentCityId: string;
   canCraft: boolean;
   lockReason: string | null;
+  rarity?: string;
+  discoveryOnly?: boolean;
+  discovery?: {
+    discovered: boolean;
+    fragments: number;
+    requiredFragments: number;
+    status: string;
+    lockReason: string | null;
+  };
+  discoveryHint?: string | null;
+  discoverySources?: string[];
 };
 
 export type ServerSalvageOption = {
@@ -772,6 +783,66 @@ export type ServerAdventureBoard = {
 
 export type ApiAdventureResponse =
   | { ok: true; playerState: ServerPlayerState; board: ServerAdventureBoard; adventure?: ServerAdventureEntry; combat?: Record<string, unknown>; reward?: Record<string, unknown> | null; hiddenSite?: Record<string, unknown> | null; message?: string }
+  | ApiFailure;
+
+
+export type ServerExcursionRewardPreview = {
+  goldRange: [number, number];
+  materialChance: number;
+  knowledgeChance: number;
+  skillFragmentChance: number;
+  magicFragmentChance: number;
+  absoluteFragmentChance: number;
+  itemPieceChance: number;
+  rareItemChance: number;
+  trainingBookChance: number;
+  recipeFragmentChance: number;
+  recipeDirectChance: number;
+  recipeGrade: string;
+  recipeFragmentTarget: number;
+};
+
+export type ServerExcursionLocation = {
+  id: string;
+  name: string;
+  type: string;
+  region: string;
+  box: { x: number; y: number };
+  risk: string;
+  rewardFocus: string[];
+  shortSummary: string;
+  recipe?: { id: string; title: string; grade: string; fragmentsRequired: number } | null;
+  timing: { distanceBoxes: number; outboundMs: number; exploreMs: number; returnMs: number; totalMs: number; outboundLabel: string; exploreLabel: string; returnLabel: string; totalLabel: string };
+  rewards: ServerExcursionRewardPreview;
+  available: boolean;
+  lockReason: string | null;
+};
+
+export type ServerExcursionActive = {
+  id: string;
+  locationId: string;
+  startedAt: number;
+  outboundArrivesAt: number;
+  exploreCompletesAt: number;
+  completesAt: number;
+  timing: ServerExcursionLocation["timing"];
+  status: string;
+};
+
+export type ServerExcursionBoard = {
+  grid: { columns: number; rows: number; boxTravelMs: number; localMinimumTravelMs: number; exploreMs: number };
+  origin: { cityId: string; cityName: string; box: { x: number; y: number } };
+  active: ServerExcursionActive | null;
+  locations: ServerExcursionLocation[];
+  history: Array<Record<string, unknown>>;
+  counters: Record<string, number>;
+  fragments: Record<string, unknown>;
+  message?: string | null;
+  generatedAt: number;
+};
+
+export type ApiExcursionResponse =
+  | { ok: true; playerState: ServerPlayerState; board: ServerExcursionBoard; result?: Record<string, unknown> | null; message?: string | null }
   | ApiFailure;
 
 export type ApiMarketplaceResponse =
@@ -1401,6 +1472,20 @@ export function startServerAdventure(sessionToken: string, adventureId: string, 
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
+
+export function getServerExcursionBoard(sessionToken: string): Promise<ApiExcursionResponse> {
+  return requestJson<Omit<ApiExcursionResponse & { ok: true }, "ok">>("/api/excursions", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function startServerExcursion(sessionToken: string, locationId: string): Promise<ApiExcursionResponse> {
+  return requestJson<Omit<ApiExcursionResponse & { ok: true }, "ok">>(`/api/excursions/${encodeURIComponent(locationId)}/start`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
 export function getServerItemInventory(sessionToken: string): Promise<ApiItemInventoryResponse> {
   return requestJson<Omit<ApiItemInventoryResponse & { ok: true }, "ok">>("/api/items/inventory", {
     method: "GET",

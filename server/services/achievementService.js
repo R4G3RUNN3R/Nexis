@@ -219,6 +219,14 @@ function evaluateAchievementProgress(definition, runtimeState, user, now = Date.
       return countDiscoveredWorldNodes(runtimeState);
     case "hidden_sites_found":
       return countHiddenSites(runtimeState);
+    case "excursions_completed":
+      return asWholeNumber(counters.excursionsCompleted, 0);
+    case "excursion_items_found":
+      return asWholeNumber(counters.excursionItemsFound, 0);
+    case "excursion_rare_finds":
+      return asWholeNumber(counters.excursionRareFinds, 0);
+    case "recipes_discovered":
+      return asWholeNumber(counters.recipesDiscovered, 0);
     case "marketplace_listings_created":
       return asWholeNumber(counters.marketplaceListingsCreated, 0);
     case "marketplace_trades":

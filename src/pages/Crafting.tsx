@@ -39,6 +39,16 @@ function RecipeCard({ recipe, busy, onCraft }: { recipe: ServerCraftingRecipe; b
       </div>
       <div style={{ color: "#b7c3cf", fontSize: 13 }}>{recipe.summary}</div>
       <div style={{ color: "#8293a3", fontSize: 12 }}>{recipe.requirementsText}</div>
+      {recipe.discoveryOnly ? (
+        <div style={{ border: "1px solid rgba(216,194,120,0.22)", background: "rgba(26,18,10,0.42)", padding: 8, display: "grid", gap: 4, fontSize: 12 }}>
+          <strong style={{ color: "#d8c278", textTransform: "uppercase", letterSpacing: "0.05em" }}>{recipe.rarity ?? "rare"} excursion recipe</strong>
+          <span style={{ color: recipe.discovery?.discovered ? "#8ec8a7" : "#d0ad74" }}>
+            {recipe.discovery?.discovered ? "Discovered" : `Undiscovered | fragments ${recipe.discovery?.fragments ?? 0}/${recipe.discovery?.requiredFragments ?? "?"}`}
+          </span>
+          {recipe.discoveryHint ? <span style={{ color: "#aebaca" }}>{recipe.discoveryHint}</span> : null}
+          {recipe.discoverySources?.length ? <span style={{ color: "#8293a3" }}>Sources: {recipe.discoverySources.join(" | ")}</span> : null}
+        </div>
+      ) : null}
       <div style={{ display: "grid", gap: 8 }}>
         <strong style={{ fontSize: 12, color: "#d8c278" }}>Inputs</strong>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{recipe.inputs.map((entry) => <ItemLine key={entry.itemId} entry={entry} />)}</div>

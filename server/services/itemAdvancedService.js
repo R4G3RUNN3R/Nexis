@@ -12,6 +12,7 @@ import { EQUIPMENT_SLOTS, getAllowedEquipSlots, getItemDefinition, getItemDispla
 import { addPlayerRecord } from "./playerRecordsService.js";
 import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
 import { getConsortiumEffectPctForRuntime } from "./consortiumPerkService.js";
+import { getRecipeDiscoveryStatus } from "./excursionService.js";
 
 const LOADOUT_SLOTS = ["1", "2", "3"];
 const MAINTENANCE_DURATION_MS = 6 * 60 * 60 * 1000;
@@ -155,6 +156,8 @@ function getRecipeLocks(runtimeState, recipe) {
   if (currentCityId !== normalizeCityId(recipe.cityId)) reasons.push(`Travel to ${city.name} to craft this recipe.`);
   const standing = getStanding(runtimeState, recipe.cityId);
   if (standing < recipe.minimumStanding) reasons.push(`Requires ${recipe.minimumStanding} ${city.name} standing. Current standing: ${standing}.`);
+  const discovery = getRecipeDiscoveryStatus(runtimeState, recipe);
+  if (recipe.discoveryOnly && !discovery.discovered) reasons.push(discovery.lockReason ?? "Recipe has not been discovered through excursions yet.");
   const completed = new Set(getCompletedCourses(runtimeState));
   const missingCourses = recipe.requiredCourses.filter((courseId) => !completed.has(courseId));
   if (missingCourses.length) reasons.push(`Requires ${missingCourses.join(", ")}.`);
@@ -183,6 +186,11 @@ function serializeRecipe(runtimeState, recipe) {
     currentCityId: getCurrentCityId(runtimeState),
     canCraft: reasons.length === 0,
     lockReason: reasons[0] ?? null,
+    rarity: recipe.rarity ?? "common",
+    discoveryOnly: Boolean(recipe.discoveryOnly),
+    discovery: getRecipeDiscoveryStatus(runtimeState, recipe),
+    discoveryHint: recipe.discoveryHint ?? null,
+    discoverySources: recipe.discoverySources ?? [],
   };
 }
 
