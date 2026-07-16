@@ -150,10 +150,6 @@ function buildProfileResponse(viewerUser, targetUser, playerState, organizationS
       rank: typeof runtimeState.player.rank === "string" && runtimeState.player.rank ? runtimeState.player.rank : null,
       ageLabel: formatAccountAge(targetUser.createdAt),
       createdAt: targetUser.createdAt,
-      life: {
-        current: Number(runtimeState.player.stats?.health ?? 100),
-        max: Number(runtimeState.player.stats?.maxHealth ?? 100),
-      },
       lastAction: buildLastAction(runtimeState),
       status: {
         label: runtimeState.player.condition?.type === "normal" ? "Available" : String(runtimeState.player.condition?.type ?? "Available"),
@@ -184,6 +180,10 @@ function buildProfileResponse(viewerUser, targetUser, playerState, organizationS
           battleStats: runtimeState.player.battleStats,
           inventoryCount: Object.values(runtimeState.player.inventory ?? {}).reduce((sum, value) => sum + Number(value ?? 0), 0),
           inventoryTypes: Object.keys(runtimeState.player.inventory ?? {}).length,
+          life: {
+            current: Number(runtimeState.player.stats?.health ?? 100),
+            max: Number(runtimeState.player.stats?.maxHealth ?? 100),
+          },
         }
       : null,
     moderation: canModerate
@@ -193,6 +193,10 @@ function buildProfileResponse(viewerUser, targetUser, playerState, organizationS
           entityType,
           privilegeRole,
           reservedIdentityName: null,
+          life: {
+            current: Number(runtimeState.player.stats?.health ?? 100),
+            max: Number(runtimeState.player.stats?.maxHealth ?? 100),
+          },
         }
       : null,
   };

@@ -766,7 +766,6 @@ export default function GuildsPage() {
                         <div className="guild-roster__stats">
                           <span>{member.location}</span>
                           <span>{member.status}</span>
-                          <span>{member.life.current} / {member.life.max} life</span>
                         </div>
                       </div>
                     ))}

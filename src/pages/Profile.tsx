@@ -366,10 +366,14 @@ export default function ProfilePage() {
         battleStats: player.battleStats,
         inventoryCount: Object.values(player.inventory ?? {}).reduce((total, value) => total + Number(value ?? 0), 0),
         inventoryTypes: Object.keys(player.inventory ?? {}).length,
+        life: {
+          current: Number(player.stats.health ?? 0),
+          max: Number(player.stats.maxHealth ?? 0),
+        },
       };
     }
     return profile?.selfProfile ?? null;
-  }, [isOwnRoute, player.battleStats, player.gold, player.inventory, player.workingStats, profile?.selfProfile]);
+  }, [isOwnRoute, player.battleStats, player.gold, player.inventory, player.stats.health, player.stats.maxHealth, player.workingStats, profile?.selfProfile]);
 
   async function handlePortraitSelection(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -600,7 +604,9 @@ export default function ProfilePage() {
               </div>
 
               <div className="profile-masthead__aside">
-                <QuickValue label="Life" value={`${publicProfile.life.current} / ${publicProfile.life.max}`} hint="Current vitality" />
+                {viewer.isSelf && selfProfile ? (
+                  <QuickValue label="Life" value={`${selfProfile.life.current} / ${selfProfile.life.max}`} hint="Current vitality" />
+                ) : null}
                 <QuickValue label="Age" value={publicProfile.ageLabel} hint="Recorded service" />
                 <QuickValue label="Presence" value={publicProfile.lastAction.label} hint={publicProfile.lastAction.isOnline ? "Live on shard" : "Recent activity"} />
               </div>
@@ -696,7 +702,9 @@ export default function ProfilePage() {
               <div className="stat-table">
                 <StatRow label="Classification" value={formatEntityLabel(publicProfile.entityType)} />
                 <StatRow label="Standing" value={displayTitle || "Untitled"} />
-                <StatRow label="Life" value={`${publicProfile.life.current} / ${publicProfile.life.max}`} />
+                {viewer.isSelf && selfProfile ? (
+                  <StatRow label="Life" value={`${selfProfile.life.current} / ${selfProfile.life.max}`} />
+                ) : null}
                 <StatRow label="Presence" value={publicProfile.lastAction.isOnline ? "Online" : "Offline"} />
                 <StatRow label="Condition" value={publicProfile.status.condition.reason ?? "No active condition"} />
                 <StatRow label="Recorded At" value={publicProfile.lastAction.lastActionAt ? new Date(publicProfile.lastAction.lastActionAt).toLocaleString("en-GB") : "Unknown"} />

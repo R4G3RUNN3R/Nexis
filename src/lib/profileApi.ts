@@ -19,10 +19,6 @@ export type ProfileResponse = {
     rank: string | null;
     ageLabel: string;
     createdAt: number;
-    life: {
-      current: number;
-      max: number;
-    };
     lastAction: {
       isOnline: boolean;
       lastActionAt: number | null;
@@ -94,6 +90,10 @@ export type ProfileResponse = {
     };
     inventoryCount: number;
     inventoryTypes: number;
+    life: {
+      current: number;
+      max: number;
+    };
   } | null;
   moderation: {
     email: string;

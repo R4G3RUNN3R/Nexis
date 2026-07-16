@@ -393,7 +393,6 @@ const buildGuildState = async (client, organization, viewerInternalId = null) =>
       title: typeof runtime.player.title === "string" && runtime.player.title ? runtime.player.title : null,
       location,
       status,
-      life: { current: Number(runtime.player.stats?.health ?? 100), max: Number(runtime.player.stats?.maxHealth ?? 100) },
       isOnline: false,
       lastAction: typeof currentTravel === "string" && currentTravel ? "In transit" : "Recently active",
       battleTotal,
