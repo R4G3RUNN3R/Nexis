@@ -17,6 +17,8 @@
 .wiki-index {
   position: sticky;
   top: 74px;
+  max-height: calc(100vh - 92px);
+  overflow: auto;
   padding: 10px;
 }
 
@@ -120,6 +122,15 @@
   line-height: 1;
 }
 
+.wiki-content__stats em {
+  display: block;
+  margin-top: 3px;
+  color: #d0ad74;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .wiki-entry-list {
   display: grid;
   gap: 8px;
@@ -162,6 +173,11 @@
   padding: 5px 8px;
   font-size: 12px;
   text-decoration: none;
+}
+
+.wiki-entry__routes a:hover {
+  border-color: rgba(242, 209, 122, 0.82);
+  color: #fff3c7;
 }
 
 .wiki-empty {

@@ -3,6 +3,17 @@ import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { allWikiEntries, wikiSections, type WikiEntry } from "../data/wikiData";
 
+function getEntrySearchText(entry: WikiEntry) {
+  return [
+    entry.title,
+    entry.category,
+    entry.summary,
+    ...(entry.rules ?? []),
+    ...(entry.related ?? []),
+    ...(entry.routes ?? []).flatMap((route) => [route.label, route.to]),
+  ].join(" ").toLowerCase();
+}
+
 function WikiEntryCard({ entry }: { entry: WikiEntry }) {
   return (
     <article className="wiki-entry" id={entry.id}>
@@ -33,7 +44,7 @@ export default function WikiPage() {
   const selectedSection = wikiSections.find((section) => section.id === activeSection) ?? wikiSections[0];
   const entries = useMemo(() => {
     if (normalizedQuery) {
-      return allWikiEntries.filter((entry) => `${entry.title} ${entry.category} ${entry.summary} ${(entry.rules ?? []).join(" ")}`.toLowerCase().includes(normalizedQuery));
+      return allWikiEntries.filter((entry) => getEntrySearchText(entry).includes(normalizedQuery));
     }
     return selectedSection?.entries ?? [];
   }, [normalizedQuery, selectedSection]);
@@ -77,7 +88,8 @@ export default function WikiPage() {
             </div>
             <div className="wiki-content__stats">
               <strong>{allWikiEntries.length}</strong>
-              <span>rules entries</span>
+              <span>entries</span>
+              <em>{wikiSections.length} sections</em>
             </div>
           </div>
 

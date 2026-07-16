@@ -22,6 +22,15 @@ export const wikiSections: WikiSection[] = [
     summary: "Core account flow, command shell, and first useful actions.",
     entries: [
       {
+        id: "page-ownership",
+        category: "Getting Started",
+        title: "Page Ownership",
+        summary: "Nexis pages each own a specific job: Home commands, City local actions, Travel movement, World Map discovery overview, Codex archives, and Wiki mechanics.",
+        routes: [{ label: "Home", to: "/home" }, { label: "City", to: "/city" }, { label: "Travel", to: "/travel" }, { label: "World Map", to: "/world-map" }, { label: "Codex", to: "/codex" }, { label: "Wiki", to: "/wiki" }],
+        rules: ["Do not start travel from World Map.", "Do not turn City into an atlas or profile dump.", "Use Codex for long-form lore and Wiki for rules."],
+        related: ["command-shell", "travel", "world-map"],
+      },
+      {
         id: "command-shell",
         category: "Getting Started",
         title: "Command Shell",
@@ -123,6 +132,15 @@ export const wikiSections: WikiSection[] = [
         routes: [{ label: "Legacy", to: "/achievements" }],
         rules: ["Everything starts at 0 unless earned.", "Legacy spending is permanent.", "Working-stat gain merits do not belong in the merit tree."],
       },
+      {
+        id: "hard-gates",
+        category: "Progression",
+        title: "Hard Gates",
+        summary: "Hard gates are intentional locks that tell the player what is locked, why it is locked, and the exact course, tree, level, or condition that unlocks it.",
+        routes: [{ label: "Education", to: "/education" }, { label: "City", to: "/city" }, { label: "Travel", to: "/travel" }],
+        rules: ["Commerce locked: requires Practical Arithmetic.", "Shadowcraft locked: complete Street Survival.", "Consortium creation locked: requires Civic Fundamentals.", "Efficient travel unavailable: learn World Geography."],
+        related: ["education", "commerce-gate"],
+      },
     ],
   },
   {
@@ -137,6 +155,15 @@ export const wikiSections: WikiSection[] = [
         summary: "City is the local hub: overview, services, people, local contracts, academy access, and district directory.",
         routes: [{ label: "City", to: "/city" }],
         rules: ["City should answer what you can do here now.", "People lists stay compact and privacy-safe.", "Long city lore belongs in Codex."],
+      },
+      {
+        id: "civic-jobs",
+        category: "Realm",
+        title: "Civic Jobs",
+        summary: "Civic Jobs represent city work and appointments that can grant benefits, promotions, civic points, and records while tying the player to local authority.",
+        routes: [{ label: "Civic Jobs", to: "/civic-jobs" }, { label: "City", to: "/city" }],
+        rules: ["Consortium conflicts should warn early and clearly.", "Promotions and benefits should write useful records.", "City identity should affect civic tone."],
+        related: ["city-board", "records"],
       },
       {
         id: "travel",
@@ -169,6 +196,15 @@ export const wikiSections: WikiSection[] = [
         summary: "Codex is the archive for atlas entries, discoveries, records, manuals, history, lore, and long-form reference material.",
         routes: [{ label: "Codex", to: "/codex" }],
         rules: ["Action pages should not carry encyclopedia slabs.", "Discovery-linked entries unlock through play.", "Manuals and records can be referenced from here."],
+      },
+      {
+        id: "wiki",
+        category: "Realm",
+        title: "Wiki",
+        summary: "Wiki is the mechanics manual: concise rules, routes, locks, loops, controls, and system explanations for the whole game.",
+        routes: [{ label: "Wiki", to: "/wiki" }],
+        rules: ["Wiki links to the page where the action happens.", "Codex carries long-form lore and archive entries.", "Search should find systems by title, rules, related names, and route labels."],
+        related: ["codex", "page-ownership"],
       },
     ],
   },
@@ -381,6 +417,64 @@ export const wikiSections: WikiSection[] = [
       },
     ],
   },
+  {
+    id: "home-account-controls",
+    label: "Home and Account Controls",
+    summary: "Home, current activity, quick actions, notifications, avatars, conditions, and account-level control surfaces.",
+    entries: [
+      { id: "home-command-center", category: "Home and Account Controls", title: "Home Command Center", summary: "Home is the compact personal overview for identity, current activity, quick actions, progression snapshot, notifications, assets, and recent records.", routes: [{ label: "Home", to: "/home" }], rules: ["Home should not duplicate the sidebar or profile dump.", "Current Education and Current Academy Study are shown separately.", "Empty states should read like Ready for orders, not broken blank panels."], related: ["readiness-loop", "records"] },
+      { id: "current-activity", category: "Home and Account Controls", title: "Current Activity", summary: "Current Activity shows the live state that actually matters right now: Education, Academy Study, Travel, active contract or adventure, Guild, and Consortium.", routes: [{ label: "Home", to: "/home" }], rules: ["Do not repeat the same state in multiple Home blocks.", "No active academy study, no active caravan, and no active contract are intentional compact states.", "Current activity should link toward the page that resolves it."], related: ["education", "academy", "travel"] },
+      { id: "quick-actions", category: "Home and Account Controls", title: "Quick Actions", summary: "Quick Actions are the short Home links for the destinations players use most: City, Travel, Education, Skills, Inventory, and Adventure.", routes: [{ label: "Home", to: "/home" }, { label: "City", to: "/city" }, { label: "Adventure", to: "/adventure" }], rules: ["Keep the action set compact.", "Quick Actions should not replace the sidebar.", "Each quick action opens the real owner page."], related: ["page-ownership"] },
+      { id: "profile-avatar", category: "Home and Account Controls", title: "Profile and Avatar", summary: "Profile is the public character page, while uploaded portrait images replace initials wherever identity chips, city people cards, rosters, and summary surfaces can use them safely.", routes: [{ label: "Profile", to: "/profile" }], rules: ["Uploaded image is the primary avatar.", "Initials are fallback only.", "Public profile should not leak staff-only data or private state."], related: ["privacy", "public-id"] },
+      { id: "life-paths", category: "Home and Account Controls", title: "Life Paths", summary: "Life Paths describe long-term character identity and suggest progression routes such as study, covert play, adventure, civic work, or trade.", routes: [{ label: "Life Paths", to: "/life-paths" }], rules: ["Life Paths guide without hard class-locking the character.", "Path prompts can point to Education, Skills, City, Adventure, or Shadow actions.", "Path identity stays visible but compact."], related: ["skills", "education"] },
+      { id: "conditions-hospital", category: "Home and Account Controls", title: "Conditions, Hospital, and Jail", summary: "Bad states restrict actions. Hospital and jail surfaces explain the condition, recovery, and what actions remain available.", routes: [{ label: "Hospital", to: "/hospital" }], rules: ["Condition gates must be explicit.", "Restricted pages should redirect or explain the lock.", "Recovery states should show timers or clear next actions."], related: ["resources", "privacy"] },
+      { id: "topbar-shortcuts", category: "Home and Account Controls", title: "Top Bar Shortcuts", summary: "The top bar exposes compact shortcuts for Legacy, One-Shots, Records, Codex, Wiki, clock, player identity, and search.", routes: [{ label: "Wiki", to: "/wiki" }, { label: "One-Shots", to: "/one-shots" }, { label: "Codex", to: "/codex" }], rules: ["Shortcut labels stay short but need useful titles.", "Search should find systems and citizens.", "The top bar should not become a second sidebar."], related: ["command-shell", "quick-actions"] }
+    ],
+  },
+  {
+    id: "economy-property",
+    label: "Economy and Property",
+    summary: "Markets, Shadow, bank, tavern, housing, property office, city demand, and player trade.",
+    entries: [
+      { id: "market", category: "Economy and Property", title: "Markets", summary: "City markets, player listings, and demand hints create legal buying, selling, and trade loops across city identities.", routes: [{ label: "Market", to: "/market" }, { label: "Inventory", to: "/inventory" }], rules: ["Practical Arithmetic gates commerce where required.", "Stock, quantity, price, and value should be explicit.", "City identity affects supply and demand."], related: ["commerce-gate", "player-market"] },
+      { id: "black-market", category: "Economy and Property", title: "Black Market", summary: "Black Market and covert opportunities are tied to Shadow, Street Survival, shady notices, smuggler leads, and underworld gates.", routes: [{ label: "Black Market", to: "/black-market" }, { label: "City", to: "/city" }], rules: ["Shadow is server-authoritative and separate from energy.", "Street Survival unlocks basic shady pathways.", "Underworld notices must be explicit about requirements."], related: ["resources", "education"] },
+      { id: "shadow-resource", category: "Economy and Property", title: "Shadow", summary: "Shadow is the dedicated covert resource for shady city actions, black-market work, smuggling, infiltration, theft-style actions, and Shadowcraft progression.", routes: [{ label: "Home", to: "/home" }, { label: "Black Market", to: "/black-market" }], rules: ["Not everything shady should use energy.", "Not enough Shadow messages must be clear.", "Shadow play should feel distinct from legal commerce."], related: ["black-market", "education-specialist"] },
+      { id: "bank-tavern", category: "Economy and Property", title: "Bank and Tavern", summary: "Bank and Tavern are peripheral economy and social surfaces for money handling, recovery flavor, and future utility without overwhelming the core command pages.", routes: [{ label: "Bank", to: "/bank" }, { label: "Tavern", to: "/tavern" }], rules: ["Peripheral pages should be compact and useful.", "Do not duplicate Home or Profile data.", "Locked or future utility should be shown as clear state, not dead panels."], related: ["market", "home-command-center"] },
+      { id: "housing", category: "Economy and Property", title: "Housing and Comfort", summary: "Housing gives property identity and Comfort. Better properties can affect recovery and the Home assets panel.", routes: [{ label: "Housing", to: "/housing" }], rules: ["Comfort shows current and maximum values clearly.", "Property data should not bloat Home.", "Housing ownership belongs on Housing and Profile contexts."], related: ["resources", "property-office"] },
+      { id: "property-office", category: "Economy and Property", title: "Property Office and Organization Bases", summary: "Property Office handles organization plots, buildings, rooms, upkeep, construction labor, quality, buyback, and base effects for Guilds and Consortiums.", routes: [{ label: "Property Office", to: "/city/property-office" }, { label: "Guilds", to: "/guilds" }, { label: "Consortiums", to: "/consortiums" }], rules: ["Level gates and costs must be explicit.", "Builder reservations need release reasons.", "Base effects should be visible in organization systems."], related: ["guilds", "consortiums"] },
+      { id: "commerce-gate", category: "Economy and Property", title: "Commerce Gate", summary: "Commerce systems can be locked until Practical Arithmetic is completed, and the UI should say so directly.", routes: [{ label: "Education", to: "/education" }, { label: "Market", to: "/market" }], rules: ["Status: Locked.", "Reason: Requires Practical Arithmetic.", "Path: open Education and finish Practical Arithmetic."], related: ["education", "hard-gates"] }
+    ],
+  },
+  {
+    id: "items-discovery-crafting",
+    label: "Items, Excursions, and Crafting",
+    summary: "Inventory controls, equipment roles, armor sets, wardrobe, consumables, salvage, excursions, and discovered recipes.",
+    entries: [
+      { id: "equipment", category: "Items, Excursions, and Crafting", title: "Weapons and Armor", summary: "Weapons are defined by damage, accuracy, damage type, slot, and handedness. Armor is defined by slot, weight class, typed reduction, and set membership.", routes: [{ label: "Inventory", to: "/inventory" }, { label: "Arena", to: "/arena" }], rules: ["Weapons should not primarily grant raw battle-stat bonuses.", "Armor reductions stay readable and capped.", "Slashing, Piercing, Bludgeoning, and Magical are the core damage types."], related: ["combat-basics", "sets-wardrobe"] },
+      { id: "armor-sets", category: "Items, Excursions, and Crafting", title: "Armor Sets", summary: "Nexis Watch, Blackharbor Corsair, Silverbough Warden, Ironhall Bulwark, Highcourt Bastion, and Concordant Aegis sets create readable defensive identities.", routes: [{ label: "Inventory", to: "/inventory" }, { label: "Crafting", to: "/crafting" }], rules: ["Specialist sets beat universal sets against their favored threats.", "Concordant Aegis is broad protection, not the best single-type defense.", "Set bonuses should be visible in item detail."], related: ["equipment", "crafting-discovery"] },
+      { id: "wardrobe", category: "Items, Excursions, and Crafting", title: "Wardrobe and Clothing", summary: "Visual clothing is distinct from combat armor and supports appearance, role identity, prestige, and future outfit depth.", routes: [{ label: "Inventory", to: "/inventory" }, { label: "Profile", to: "/profile" }], rules: ["Visual gear should be clearly marked.", "Combat stats and visual appearance are separate concepts.", "Compact list contexts should show identity without clutter."], related: ["profile-avatar", "titles-badges"] },
+      { id: "consumables", category: "Items, Excursions, and Crafting", title: "Consumables", summary: "Consumables such as bandages, draughts, tonics, chalk, antidotes, and salts provide simple support effects for recovery, combat, travel, or risky actions.", routes: [{ label: "Inventory", to: "/inventory" }, { label: "Adventure", to: "/adventure" }], rules: ["Descriptions say what the item does and when it applies.", "Combat results should show meaningful consumable effects where practical.", "Use feedback must not silently fail."], related: ["combat-basics", "adventures"] },
+      { id: "excursions", category: "Items, Excursions, and Crafting", title: "Map Excursions", summary: "Excursions let players search named map-grid locations after travelling from their city box, spending one hour on site, and returning over the same distance.", routes: [{ label: "Adventure", to: "/adventure" }, { label: "World Map", to: "/world-map" }, { label: "Travel", to: "/travel" }], rules: ["The grid is 16 by 10.", "Travel time is based on grid distance.", "On-site search time is one hour.", "Active travel blocks starting an excursion."], related: ["world-map", "excursion-rewards"] },
+      { id: "excursion-rewards", category: "Items, Excursions, and Crafting", title: "Excursion Rewards", summary: "Excursions can award gold, materials, knowledge, training books, rare item pieces, rare items, skill fragments, magic fragments, Absolute fragments, recipe fragments, or direct recipe discoveries.", routes: [{ label: "Adventure", to: "/adventure" }, { label: "Crafting", to: "/crafting" }, { label: "Inventory", to: "/inventory" }], rules: ["Rare items are very low chance.", "Item pieces are low chance.", "Recipe grades control discovery odds: epic is easier than legendary, legendary easier than mythic.", "Ten skill or magic fragments can become a manual or spellbook line."], related: ["crafting-discovery", "rare-manuals"] },
+      { id: "crafting-discovery", category: "Items, Excursions, and Crafting", title: "Discovered Recipes", summary: "Epic, legendary, and mythic recipes can be uncovered through excursions, hidden sites, travel discoveries, events, and special records.", routes: [{ label: "Crafting", to: "/crafting" }, { label: "Adventure", to: "/adventure" }], rules: ["Discovery-only recipes show discovered state and fragments.", "Higher recipe grades have lower chances but remain obtainable.", "Recipe hints point toward source families without becoming spoilers."], related: ["excursions", "crafting-salvage"] },
+      { id: "salvage", category: "Items, Excursions, and Crafting", title: "Salvage Yard", summary: "Salvage breaks items into sensible materials or components and should never turn an item into itself unless that behavior is explicit and intentional.", routes: [{ label: "Salvage Yard", to: "/salvage-yard" }], rules: ["Outputs should be clear before confirmation.", "Rare or equipped items need stronger warnings.", "Inventory changes should refresh immediately."], related: ["inventory", "crafting-salvage"] }
+    ],
+  },
+  {
+    id: "operations-safety",
+    label: "Operations and Safety",
+    summary: "Combat energy, combat logs, arena, organization bases, records, server authority, inactive systems, and live operations.",
+    entries: [
+      { id: "combat-energy", category: "Operations and Safety", title: "Combat Energy", summary: "Arena NPC fights, PvP duels when they actually begin, travel encounters that become fights, and combat-enabled contracts all cost 25 energy.", routes: [{ label: "Arena", to: "/arena" }, { label: "Travel", to: "/travel" }, { label: "Adventure", to: "/adventure" }], rules: ["Low-energy players are blocked before the fight starts.", "Declined or never-started duels spend no energy.", "Result panels should show energy spent and combat XP gained."], related: ["resources", "duels"] },
+      { id: "combat-logs", category: "Operations and Safety", title: "Combat Logs", summary: "Combat logs show hit or miss, weapon damage type, damage dealt, reduction applied, reduction source where practical, and final damage.", routes: [{ label: "Arena", to: "/arena" }], rules: ["Keep logs readable rather than spreadsheet-heavy.", "Consumable effects should appear when they changed the result.", "Old result blocks should not contradict current sidebar energy."], related: ["equipment", "consumables"] },
+      { id: "arena", category: "Operations and Safety", title: "Arena", summary: "Arena is the focused combat surface for NPC fights, duel flow, combat rewards, and fight results.", routes: [{ label: "Arena", to: "/arena" }], rules: ["Duel input must show success and failure feedback.", "Active states should not offer Activate while already active.", "Arena should center combat, not become panel clutter."], related: ["duels", "combat-energy"] },
+      { id: "organization-bases", category: "Operations and Safety", title: "Organization Bases", summary: "Organization bases use Property Office plots, buildings, rooms, upkeep, construction labor, quality, and base effects to give Guilds and Consortiums physical infrastructure.", routes: [{ label: "Property Office", to: "/city/property-office" }, { label: "Guilds", to: "/guilds" }, { label: "Consortiums", to: "/consortiums" }], rules: ["Guild bases affect quest, dungeon, renown, and operation values.", "Consortium bases affect logistics, route efficiency, launch cost, and loss mitigation.", "Builder reservations need safe release and audit handling."], related: ["guilds", "consortiums"] },
+      { id: "server-authority", category: "Operations and Safety", title: "Server Authority", summary: "Important game state such as player resources, education, academy, inventory, travel, combat, one-shots, organizations, records, achievements, and market actions is validated server-side.", routes: [{ label: "Home", to: "/home" }], rules: ["Frontend state is not the final authority for rewards or costs.", "API routes require sessions where player state changes.", "Build and deployment use the live server as source of truth."], related: ["admin-dossier", "privacy"] },
+      { id: "inactive-systems", category: "Operations and Safety", title: "Inactive Systems", summary: "Some foundations can exist before full UI launch, but mutation routes stay locked if the gameplay loop is not ready.", routes: [{ label: "Wiki", to: "/wiki" }, { label: "Arena", to: "/arena" }], rules: ["PvP bounty writs are inactive unless live operations enables them.", "Inactive systems should not spend gold, grant rewards, or expose private state.", "Wiki copy must not pretend inactive systems are fully playable."], related: ["pvp-foundation", "server-authority"] },
+      { id: "not-found", category: "Operations and Safety", title: "Page Not Found", summary: "Unknown routes use a styled not-found page with shell context and an easy path back to Home instead of a blank screen.", routes: [{ label: "Home", to: "/home" }], rules: ["Bad URLs should return a visible page.", "Navigation should remain understandable.", "This protects players from dead black screens."], related: ["command-shell"] },
+      { id: "live-ops", category: "Operations and Safety", title: "Live Operations", summary: "Live operations covers deployment, service health, route smoke tests, canaries, backups, GitHub sync, and keeping the server repo as source of truth.", routes: [{ label: "Admin", to: "/admin" }], rules: ["Backups are created on the live server before risky changes.", "Builds run on the live server.", "Git status, commit, and push run from the live server repo."], related: ["server-authority"] }
+    ],
+  }
 ];
 
 export const allWikiEntries = wikiSections.flatMap((section) => section.entries);
