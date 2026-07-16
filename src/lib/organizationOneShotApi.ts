@@ -1,5 +1,35 @@
+export type OrganizationOneShotCampaign = {
+  id: string;
+  organizationType: "guild" | "consortium";
+  theme: string;
+  title: string;
+  category: string;
+  summary: string;
+  status: "recruiting" | "completed";
+  signupCount: number;
+  tokenCommittedCount: number;
+  minimumSignups: number;
+  tokenCost: number;
+  tokenRefundChance: number;
+  signups: Array<{ publicId: number; displayName: string; roleKey?: string | null; tokenCommitment?: Record<string, unknown> | null }>;
+  viewerSignedUp: boolean;
+  canResolve: boolean;
+  completedAt: number | null;
+  rewardTarget?: string;
+  rewardPreview: string;
+  reward?: Record<string, unknown>;
+};
+
+export type OrganizationOneShotLegacyRecord = {
+  id?: string;
+  timestamp?: number;
+  title?: string;
+  summary?: string;
+  reward?: Record<string, unknown>;
+};
+
 export type OrganizationOneShotResponse =
-  | { ok: true; organization: Record<string, unknown>; minimumSignups: number; campaigns: unknown[]; legacyRecords: unknown[]; message?: string; legacyRecord?: Record<string, unknown> }
+  | { ok: true; organization: Record<string, unknown>; minimumSignups: number; tokenCost?: number; tokenRefundChance?: number; campaigns: OrganizationOneShotCampaign[]; legacyRecords: OrganizationOneShotLegacyRecord[]; message?: string; legacyRecord?: OrganizationOneShotLegacyRecord }
   | { ok: false; error: string; status: number | null };
 
 async function requestOrganizationOneShot(token: string, path: string, init: RequestInit = {}): Promise<OrganizationOneShotResponse> {
@@ -20,10 +50,12 @@ async function requestOrganizationOneShot(token: string, path: string, init: Req
       ok: true,
       organization: payload.organization as Record<string, unknown>,
       minimumSignups: Number(payload.minimumSignups ?? 5),
-      campaigns: payload.campaigns,
-      legacyRecords: Array.isArray(payload.legacyRecords) ? payload.legacyRecords : [],
+      tokenCost: Number(payload.tokenCost ?? 1),
+      tokenRefundChance: Number(payload.tokenRefundChance ?? 0.0001),
+      campaigns: payload.campaigns as OrganizationOneShotCampaign[],
+      legacyRecords: (Array.isArray(payload.legacyRecords) ? payload.legacyRecords : []) as OrganizationOneShotLegacyRecord[],
       message: typeof payload.message === "string" ? payload.message : undefined,
-      legacyRecord: payload.legacyRecord as Record<string, unknown> | undefined,
+      legacyRecord: payload.legacyRecord as OrganizationOneShotLegacyRecord | undefined,
     };
   } catch {
     return { ok: false, error: "Organization one-shot service unavailable.", status: null };

@@ -23,6 +23,7 @@ import "./styles/public-pages.css";
 import "./styles/ashen-crown-theme.css";
 import "./styles/admin-inline.css";
 import "./styles/one-shots.css";
+import "./styles/organization-one-shots.css";
 import "./styles/wiki.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

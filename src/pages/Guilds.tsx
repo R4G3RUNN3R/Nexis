@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { OrganizationBaseTab } from "../components/organizations/OrganizationBaseTab";
+import { OrganizationOneShotsPanel } from "../components/organizations/OrganizationOneShotsPanel";
 import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
 import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
@@ -664,6 +665,8 @@ export default function GuildsPage() {
                   {assistanceOpportunities.length ? assistanceOpportunities.map((entry) => <article key={String(entry.key)}><strong>{String(entry.label)}</strong><p>{String(entry.summary)} Guild gain: {String(entry.guildReward ?? "reputation and pay")}. Consortium gain: {String(entry.consortiumReward ?? "hazard reduction")}.</p></article>) : <article><strong>No assistance offers</strong><p>Guild assistance offers appear as company routes and city events generate dangerous work.</p></article>}
                 </div>
               </section>
+
+              <OrganizationOneShotsPanel organizationId={board.internalId} organizationName={board.name} organizationType="guild" />
 
               <section className="org-grid-two">
                 <section className="panel org-panel">

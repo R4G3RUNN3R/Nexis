@@ -4,6 +4,7 @@ import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { OrganizationBaseTab } from "../components/organizations/OrganizationBaseTab";
 import { ConsortiumLogisticsBoard } from "../components/organizations/ConsortiumLogisticsBoard";
+import { OrganizationOneShotsPanel } from "../components/organizations/OrganizationOneShotsPanel";
 import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
 import { useEducation } from "../state/EducationContext";
@@ -641,6 +642,8 @@ export default function ConsortiumsPage() {
                           Business Studies now feeds this board through server-calculated modifiers tied to completed study progress.
                         </div>
                       </section>
+
+                      <OrganizationOneShotsPanel organizationId={board.internalId} organizationName={board.name} organizationType="consortium" />
 
                       <section className="org-grid-two">
                         <section className="panel org-panel">
