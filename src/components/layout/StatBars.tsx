@@ -1,5 +1,6 @@
 import { usePlayer } from "../../state/PlayerContext";
 import { AdminBarInlineControls, AdminNerveInlineRow } from "../admin/AdminInlineControls";
+import { ComfortIcon, EnergyIcon, HealthIcon, StaminaIcon, type IconComponent } from "../../assets/icons";
 
 const ENERGY_INTERVAL_MS = 5 * 60 * 1000;
 const HEALTH_INTERVAL_MS = 3 * 60 * 1000;
@@ -12,6 +13,13 @@ const COLORS = {
   stamina: "#4f8ea4",
   comfort: "#c29a52",
 } as const;
+
+const STAT_BAR_ICONS: Record<"energy" | "health" | "stamina" | "comfort", IconComponent> = {
+  energy: EnergyIcon,
+  health: HealthIcon,
+  stamina: StaminaIcon,
+  comfort: ComfortIcon,
+};
 
 function secsUntilNextTick(current: number, intervalMs: number): number {
   const fraction = current - Math.floor(current);
@@ -67,12 +75,16 @@ function StatBar({
   const percent = Math.min(100, (current / max) * 100);
   const countdown = formatCountdown(isFull ? 0 : secsUntilNextTick(current, intervalMs), isFull);
   const title = `Next recovery tick in ${countdown}. Full in ${formatTimeToFull(current, max, intervalMs)}.`;
+  const StatIcon = STAT_BAR_ICONS[stat];
 
   return (
     <div className="sb-row" title={title}>
       <div className="sb-row__copy">
         <div className="sb-row__topline">
           <span className="sb-row__label">
+            <span className="sb-row__icon" style={{ color }} aria-hidden="true">
+              <StatIcon size={12} accent={color} />
+            </span>
             {label}
             <AdminBarInlineControls stat={stat} current={current} max={max} fillActionType={fillActionType} />
           </span>

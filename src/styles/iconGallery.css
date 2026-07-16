@@ -1,0 +1,97 @@
+/* Nexis - Icon Gallery (dev/reference page) */
+
+.icon-gallery {
+  min-height: 100vh;
+  background: #12100c;
+  color: #d8cdb8;
+  padding: 32px 40px 64px;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.icon-gallery__header {
+  margin-bottom: 8px;
+}
+
+.icon-gallery__header h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #f2cf95;
+  margin: 0 0 6px;
+}
+
+.icon-gallery__header p {
+  margin: 0;
+  font-size: 13px;
+  color: #9d9077;
+  max-width: 760px;
+  line-height: 1.5;
+}
+
+.icon-gallery__section {
+  margin-top: 34px;
+}
+
+.icon-gallery__section h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d89a47;
+  border-bottom: 1px solid rgba(216, 154, 71, 0.25);
+  padding-bottom: 8px;
+  margin: 0 0 14px;
+}
+
+.icon-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 10px;
+}
+
+.icon-tile {
+  background: #1a150e;
+  border: 1px solid rgba(216, 154, 71, 0.14);
+  border-radius: 8px;
+  padding: 12px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-tile__sizes {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  min-height: 44px;
+}
+
+.icon-tile__size {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-tile__size small {
+  font-size: 9px;
+  color: #6e6350;
+  letter-spacing: 0.05em;
+}
+
+.icon-tile__name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #cbbfa6;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.icon-tile__key {
+  font-size: 10px;
+  color: #7d7159;
+  font-family: "Consolas", "Menlo", monospace;
+}

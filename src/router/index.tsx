@@ -42,6 +42,7 @@ import SalvageYardPage from "../pages/SalvageYard";
 import WorldMapPage from "../pages/WorldMap";
 import PropertyOfficePage from "../pages/PropertyOffice";
 import CodexPage from "../pages/Codex";
+import IconGalleryPage from "../pages/IconGallery";
 import NotFoundPage from "../pages/NotFound";
 
 function readStoredSessionProfilePublicId() {
@@ -165,6 +166,7 @@ export default function AppRouter() {
       <Route path="/city-board" element={<RouteGuard><CityBoardPage /></RouteGuard>} />
       <Route path="/skills" element={<SkillsPage />} />
       <Route path="/tavern" element={<TavernPage />} />
+      <Route path="/icon-gallery" element={<IconGalleryPage />} />
 
       <Route path="/education" element={<RouteGuard><EducationPage /></RouteGuard>} />
       <Route path="/adventure" element={<RouteGuard><JobsPage /></RouteGuard>} />
