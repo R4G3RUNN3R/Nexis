@@ -36,6 +36,10 @@ function kindLabel(kind: string | undefined) {
   return kind === "medal" ? "Medal" : "Honor";
 }
 
+function isAchieved(achievement: DisplayAchievement) {
+  return achievement.completed || achievement.progress >= achievement.target;
+}
+
 function normalizeFallbackAchievements(): DisplayAchievement[] {
   return achievements.map((achievement) => ({
     ...achievement,
@@ -57,69 +61,69 @@ function AchievementProgress({
       <div className="legacy-progress__bar">
         <span style={{ width: `${pct}%` }} />
       </div>
-      <span className="legacy-progress__text">{pct}%</span>
+      <small className="legacy-progress__meta">
+        {progress.toLocaleString()} / {target.toLocaleString()}
+        <span className="legacy-progress__pct">{pct}%</span>
+      </small>
     </div>
   );
 }
 
-function LegacyRankRing({
-  rank,
-  maxRank,
-}: {
-  rank: number;
-  maxRank: number;
-}) {
+function RankPips({ rank, maxRank }: { rank: number; maxRank: number }) {
   return (
-    <div className="legacy-ring">
-      <div className="legacy-ring__bars">
-        {Array.from({ length: maxRank }).map((_, index) => {
-          const filled = index < rank;
-          return (
-            <span
-              key={index}
-              className={`legacy-ring__bar${filled ? " legacy-ring__bar--filled" : ""}`}
-              style={{ transform: `rotate(${index * (360 / maxRank)}deg) translateY(-46px)` }}
-            />
-          );
-        })}
-      </div>
-    </div>
+    <span className="legacy-pips" aria-label={`Rank ${rank} of ${maxRank}`}>
+      {Array.from({ length: maxRank }).map((_, index) => (
+        <span
+          key={index}
+          className={`legacy-pips__pip${index < rank ? " legacy-pips__pip--filled" : ""}`}
+        />
+      ))}
+    </span>
   );
+}
+
+type PerkAffordState = "maxed" | "affordable" | "locked";
+
+function getPerkAffordState(
+  rank: number,
+  maxRank: number,
+  availablePoints: number,
+): PerkAffordState {
+  if (rank >= maxRank) return "maxed";
+  return availablePoints >= getLegacyRankCost(rank + 1) ? "affordable" : "locked";
 }
 
 function MeritCard({
   perk,
   rank,
   isSelected,
+  affordState,
   onSelect,
 }: {
   perk: LegacyPerk;
   rank: number;
   isSelected: boolean;
+  affordState: PerkAffordState;
   onSelect: () => void;
 }) {
   return (
     <button
       type="button"
-      className={`merit-card${isSelected ? " merit-card--active" : ""}`}
+      className={`merit-card merit-card--${affordState}${isSelected ? " merit-card--active" : ""}`}
       onClick={onSelect}
+      title={`${perk.name} — ${perk.effectSummary}`}
     >
-      <div className="merit-card__icon-wrap">
-        <LegacyRankRing rank={rank} maxRank={perk.maxRank} />
-        <div className="merit-card__icon">{perk.icon}</div>
-      </div>
-
-      <div className="merit-card__content">
-        <div className="merit-card__header">
+      <span className="merit-card__icon">{perk.icon}</span>
+      <span className="merit-card__body">
+        <span className="merit-card__top">
           <span className="merit-card__name">{perk.name}</span>
           <span className="merit-card__rank">
-            {rank}/{perk.maxRank}
+            {affordState === "maxed" ? "MAX" : `${rank}/${perk.maxRank}`}
           </span>
-        </div>
-        <div className="merit-card__description">
-          {perk.effectSummary || `${perk.description} by ${getPerkEffectText(perk.baseEffect, perk.effectUnit, 1)} per rank.`}
-        </div>
-      </div>
+        </span>
+        <span className="merit-card__effect">{perk.effectSummary}</span>
+        <RankPips rank={rank} maxRank={perk.maxRank} />
+      </span>
     </button>
   );
 }
@@ -132,6 +136,7 @@ export default function AchievementsPage() {
   const [selectedLegacyCategory, setSelectedLegacyCategory] =
     useState<LegacyPerkCategory | "All">("All");
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => new Set());
   const [achievementRows, setAchievementRows] = useState<DisplayAchievement[]>(normalizeFallbackAchievements);
   const [categoryRows, setCategoryRows] = useState<string[]>(achievementCategories);
   const [kindRows, setKindRows] = useState<Array<"honor" | "medal">>(["honor", "medal"]);
@@ -196,20 +201,54 @@ export default function AchievementsPage() {
       const matchesCategory =
         selectedAchievementCategory === "All" ||
         achievement.category === selectedAchievementCategory;
-      const completed = achievement.completed || achievement.progress >= achievement.target;
-      const matchesVisibility = hideCompleted ? !completed : true;
+      const matchesVisibility = hideCompleted ? !isAchieved(achievement) : true;
       return matchesKind && matchesCategory && matchesVisibility;
     });
   }, [achievementRows, selectedAchievementCategory, selectedAchievementKind, hideCompleted]);
 
-  const filteredPerks = useMemo(() => {
-    return legacyPerks.filter((perk) => {
-      return selectedLegacyCategory === "All" || perk.category === selectedLegacyCategory;
-    });
-  }, [selectedLegacyCategory]);
+  const groupedAchievements = useMemo(() => {
+    const groups = new Map<string, DisplayAchievement[]>();
+    for (const achievement of filteredAchievements) {
+      const bucket = groups.get(achievement.category);
+      if (bucket) {
+        bucket.push(achievement);
+      } else {
+        groups.set(achievement.category, [achievement]);
+      }
+    }
+    const ordered: Array<{ category: string; rows: DisplayAchievement[] }> = [];
+    for (const category of categoryRows) {
+      const rows = groups.get(category);
+      if (rows) {
+        ordered.push({ category, rows });
+        groups.delete(category);
+      }
+    }
+    for (const [category, rows] of groups) {
+      ordered.push({ category, rows });
+    }
+    return ordered;
+  }, [filteredAchievements, categoryRows]);
+
+  const categoryStats = useMemo(() => {
+    const stats = new Map<string, { total: number; achieved: number }>();
+    for (const achievement of achievementRows) {
+      if (
+        selectedAchievementKind !== "All" &&
+        (achievement.kind ?? "honor") !== selectedAchievementKind
+      ) {
+        continue;
+      }
+      const entry = stats.get(achievement.category) ?? { total: 0, achieved: 0 };
+      entry.total += 1;
+      if (isAchieved(achievement)) entry.achieved += 1;
+      stats.set(achievement.category, entry);
+    }
+    return stats;
+  }, [achievementRows, selectedAchievementKind]);
 
   const fallbackEarned = achievementRows
-    .filter((achievement) => achievement.completed || achievement.progress >= achievement.target)
+    .filter(isAchieved)
     .reduce((sum, achievement) => sum + achievement.rewardPoints, 0);
   const fallbackSpent = Object.entries(perkRanks).reduce((sum, [, rank]) => {
     let local = 0;
@@ -219,20 +258,26 @@ export default function AchievementsPage() {
   const totalPointsEarned = legacyPoints?.totalEarned ?? fallbackEarned;
   const totalPointsSpent = legacyPoints?.totalSpent ?? fallbackSpent;
   const totalPointsAvailable = legacyPoints?.available ?? Math.max(0, fallbackEarned - fallbackSpent);
-  const completedRows = achievementRows.filter(
-    (achievement) => achievement.completed || achievement.progress >= achievement.target,
-  );
+  const completedRows = achievementRows.filter(isAchieved);
   const completedAchievementCount = completedRows.length;
   const completedHonorCount = completedRows.filter((achievement) => (achievement.kind ?? "honor") === "honor").length;
   const completedMedalCount = completedRows.filter((achievement) => achievement.kind === "medal").length;
 
+  const groupedPerks = useMemo(() => {
+    return legacyPerkCategories
+      .filter((category) => selectedLegacyCategory === "All" || category === selectedLegacyCategory)
+      .map((category) => ({
+        category,
+        perks: legacyPerks.filter((perk) => perk.category === category),
+      }))
+      .filter((group) => group.perks.length > 0);
+  }, [selectedLegacyCategory]);
+
   const selectedPerk =
-    filteredPerks.find((perk) => perk.id === selectedPerkId) ??
-    legacyPerks.find((perk) => perk.id === selectedPerkId) ??
-    filteredPerks[0] ??
-    legacyPerks[0];
+    legacyPerks.find((perk) => perk.id === selectedPerkId) ?? legacyPerks[0];
 
   const selectedPerkRank = selectedPerk ? perkRanks[selectedPerk.id] ?? 0 : 0;
+  const selectedPerkMaxed = selectedPerk ? selectedPerkRank >= selectedPerk.maxRank : false;
   const nextRank = selectedPerk ? Math.min(selectedPerk.maxRank, selectedPerkRank + 1) : 0;
   const nextRankCost = selectedPerk ? getLegacyRankCost(nextRank) : 0;
   const canSpend =
@@ -241,6 +286,18 @@ export default function AchievementsPage() {
     !spendingPerkId &&
     selectedPerkRank < (selectedPerk?.maxRank ?? 0) &&
     totalPointsAvailable >= nextRankCost;
+
+  function toggleCategory(category: string) {
+    setCollapsedCategories((previous) => {
+      const next = new Set(previous);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  }
 
   async function handleSpendSelectedPerk() {
     if (!serverSessionToken || !selectedPerk || !canSpend) return;
@@ -256,38 +313,27 @@ export default function AchievementsPage() {
     setLegacyError(result.error);
   }
 
+  let spendStatus: { tone: "ok" | "warn" | "muted"; text: string };
+  if (!serverSessionToken) {
+    spendStatus = { tone: "warn", text: "Log in to spend server-tracked Legacy Points." };
+  } else if (selectedPerkMaxed) {
+    spendStatus = { tone: "muted", text: "All ranks secured. This Legacy is maxed out." };
+  } else if (totalPointsAvailable < nextRankCost) {
+    spendStatus = {
+      tone: "warn",
+      text: `Need ${nextRankCost} LP for rank ${nextRank} — you have ${totalPointsAvailable}.`,
+    };
+  } else {
+    spendStatus = { tone: "ok", text: "Affordable. Spending is permanent." };
+  }
+
   return (
     <AppShell
       title="Achievements & Legacy"
       hint="Achievements grant server-tracked Legacy Points. Legacy ranks cost 1 point for rank 1, 2 for rank 2, and so on."
     >
-      <div className="legacy-summary-grid">
-        <div className="legacy-summary-card">
-          <span className="legacy-summary-card__label">Available Legacy Points</span>
-          <strong className={totalPointsAvailable >= 0 ? "legacy-green" : "legacy-red"}>
-            {totalPointsAvailable >= 0 ? `+${totalPointsAvailable}` : totalPointsAvailable}
-          </strong>
-        </div>
-        <div className="legacy-summary-card">
-          <span className="legacy-summary-card__label">Legacy Points Spent</span>
-          <strong>{totalPointsSpent}</strong>
-        </div>
-        <div className="legacy-summary-card">
-          <span className="legacy-summary-card__label">Legacy Points Earned</span>
-          <strong>{totalPointsEarned}</strong>
-        </div>
-        <div className="legacy-summary-card">
-          <span className="legacy-summary-card__label">Entries Completed</span>
-          <strong>{completedAchievementCount}</strong>
-        </div>
-        <div className="legacy-summary-card">
-          <span className="legacy-summary-card__label">Honors / Medals</span>
-          <strong>{completedHonorCount} / {completedMedalCount}</strong>
-        </div>
-      </div>
-
       {legacyLoading || legacyError ? (
-        <div className={`legacy-selected-panel__warning${legacyError ? "" : " legacy-selected-panel__warning--ok"}`}>
+        <div className={`legacy-banner${legacyError ? "" : " legacy-banner--ok"}`}>
           {legacyError ?? "Syncing Legacy state..."}
         </div>
       ) : null}
@@ -295,6 +341,36 @@ export default function AchievementsPage() {
       <div className="legacy-main-grid">
         <div className="legacy-column">
           <ContentPanel title="Achievements Tracker">
+            <div className="legacy-summary-strip">
+              <span className="legacy-summary-item">
+                <span className="legacy-summary-item__label">Available</span>
+                <strong className={totalPointsAvailable > 0 ? "legacy-green" : totalPointsAvailable < 0 ? "legacy-red" : ""}>
+                  {totalPointsAvailable > 0 ? `+${totalPointsAvailable}` : totalPointsAvailable} LP
+                </strong>
+              </span>
+              <span className="legacy-summary-item">
+                <span className="legacy-summary-item__label">Spent</span>
+                <strong>{totalPointsSpent}</strong>
+              </span>
+              <span className="legacy-summary-item">
+                <span className="legacy-summary-item__label">Earned</span>
+                <strong>{totalPointsEarned}</strong>
+              </span>
+              <span className="legacy-summary-item">
+                <span className="legacy-summary-item__label">Entries</span>
+                <strong>
+                  {completedAchievementCount}
+                  <small> / {achievementRows.length}</small>
+                </strong>
+              </span>
+              <span className="legacy-summary-item">
+                <span className="legacy-summary-item__label">Honors / Medals</span>
+                <strong>
+                  {completedHonorCount} / {completedMedalCount}
+                </strong>
+              </span>
+            </div>
+
             <div className="legacy-toolbar">
               <div className="legacy-kind-filter" aria-label="Achievement type filter">
                 <button
@@ -315,25 +391,20 @@ export default function AchievementsPage() {
                   </button>
                 ))}
               </div>
-              <div className="legacy-filter-group">
-                <button
-                  type="button"
-                  className={`legacy-chip${selectedAchievementCategory === "All" ? " legacy-chip--active" : ""}`}
-                  onClick={() => setSelectedAchievementCategory("All")}
-                >
-                  All
-                </button>
+
+              <select
+                className="legacy-category-select"
+                aria-label="Achievement category filter"
+                value={selectedAchievementCategory}
+                onChange={(event) => setSelectedAchievementCategory(event.target.value)}
+              >
+                <option value="All">All categories</option>
                 {categoryRows.map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    className={`legacy-chip${selectedAchievementCategory === category ? " legacy-chip--active" : ""}`}
-                    onClick={() => setSelectedAchievementCategory(category)}
-                  >
+                  <option key={category} value={category}>
                     {category}
-                  </button>
+                  </option>
                 ))}
-              </div>
+              </select>
 
               <label className="legacy-checkbox">
                 <input
@@ -341,56 +412,73 @@ export default function AchievementsPage() {
                   checked={hideCompleted}
                   onChange={(event) => setHideCompleted(event.target.checked)}
                 />
-                Hide achieved awards
+                Hide achieved
               </label>
             </div>
 
-            <div className="legacy-achievements-table">
-              <div className="legacy-achievements-header">
-                <span>Type</span>
-                <span>Category</span>
-                <span>Entry</span>
-                <span>Progress</span>
-                <span>Reward</span>
-              </div>
-
-              {filteredAchievements.map((achievement) => {
-                const completed = achievement.completed || achievement.progress >= achievement.target;
+            <div className="legacy-achievements-list">
+              {groupedAchievements.map(({ category, rows }) => {
+                const stats = categoryStats.get(category);
+                const collapsed = collapsedCategories.has(category);
                 return (
-                  <div
-                    key={achievement.id}
-                    className={`legacy-achievement-row${completed ? " legacy-achievement-row--complete" : ""}`}
-                  >
-                    <span className="legacy-achievement-kind">{kindLabel(achievement.kind)}</span>
-                    <span>{achievement.category}</span>
-                    <span>
-                      <strong className="legacy-achievement-name">{achievement.name}</strong>
-                      <small>{achievement.description}</small>
-                    </span>
-                    <span>
-                      <AchievementProgress
-                        progress={achievement.progress}
-                        target={achievement.target}
-                      />
-                      <small>
-                        {achievement.progress.toLocaleString()} / {achievement.target.toLocaleString()}
-                      </small>
-                    </span>
-                    <span>
-                      {achievement.rewardPoints} LP
-                    </span>
+                  <div key={category} className="legacy-section">
+                    <button
+                      type="button"
+                      className="legacy-section__header"
+                      onClick={() => toggleCategory(category)}
+                      aria-expanded={!collapsed}
+                    >
+                      <span className={`legacy-section__chevron${collapsed ? " legacy-section__chevron--closed" : ""}`} />
+                      <span className="legacy-section__name">{category}</span>
+                      <span className="legacy-section__count">
+                        {stats ? `${stats.achieved}/${stats.total} achieved` : `${rows.length}`}
+                      </span>
+                    </button>
+
+                    {!collapsed
+                      ? rows.map((achievement) => {
+                          const completed = isAchieved(achievement);
+                          return (
+                            <div
+                              key={achievement.id}
+                              className={`legacy-achievement-row${completed ? " legacy-achievement-row--complete" : ""}`}
+                            >
+                              <span
+                                className={`legacy-achievement-kind${achievement.kind === "medal" ? " legacy-achievement-kind--medal" : ""}`}
+                              >
+                                {kindLabel(achievement.kind)}
+                              </span>
+                              <span className="legacy-achievement-entry">
+                                <strong className="legacy-achievement-name">{achievement.name}</strong>
+                                <small>{achievement.description}</small>
+                              </span>
+                              <AchievementProgress
+                                progress={achievement.progress}
+                                target={achievement.target}
+                              />
+                              <span
+                                className={`legacy-achievement-reward${completed ? " legacy-achievement-reward--earned" : ""}`}
+                                title={`Reward: ${achievement.rewardPoints} Legacy Point${achievement.rewardPoints === 1 ? "" : "s"}`}
+                              >
+                                {completed ? "✓ " : ""}+{achievement.rewardPoints} LP
+                              </span>
+                            </div>
+                          );
+                        })
+                      : null}
                   </div>
                 );
               })}
-              {!filteredAchievements.length ? <div className="legacy-empty-row">No matching Honors or Medals.</div> : null}
+              {!filteredAchievements.length ? (
+                <div className="legacy-empty-row">No matching Honors or Medals.</div>
+              ) : null}
             </div>
           </ContentPanel>
         </div>
 
         <div className="legacy-column">
           <ContentPanel title="Legacy Tree">
-            <div className="legacy-permanent-note">Spending is permanent. Rank 1 costs 1 point, rank 2 costs 2 more, and the costs keep climbing.</div>
-            <div className="legacy-filter-group legacy-filter-group--spaced">
+            <div className="legacy-filter-group">
               <button
                 type="button"
                 className={`legacy-chip${selectedLegacyCategory === "All" ? " legacy-chip--active" : ""}`}
@@ -410,45 +498,39 @@ export default function AchievementsPage() {
               ))}
             </div>
 
-            <div className="legacy-merit-grid">
-              {filteredPerks.map((perk) => (
-                <MeritCard
-                  key={perk.id}
-                  perk={perk}
-                  rank={perkRanks[perk.id] ?? 0}
-                  isSelected={selectedPerk?.id === perk.id}
-                  onSelect={() => setSelectedPerkId(perk.id)}
-                />
-              ))}
-            </div>
-
             {selectedPerk ? (
-              <div className="legacy-selected-panel">
-                <div className="legacy-selected-panel__text">
-                  {selectedPerk.effectSummary || `This upgrade will ${selectedPerk.description.toLowerCase()} by ${getPerkEffectText(selectedPerk.baseEffect, selectedPerk.effectUnit, 1)} per rank.`}<br />
-                  Current rank is {selectedPerkRank}/{selectedPerk.maxRank}. The next upgrade will cost{" "}
-                  {nextRankCost} Legacy Point{nextRankCost === 1 ? "" : "s"}.
+              <div className="legacy-detail">
+                <div className="legacy-detail__head">
+                  <span className="legacy-detail__icon">{selectedPerk.icon}</span>
+                  <span className="legacy-detail__title">
+                    <h3>{selectedPerk.name}</h3>
+                    <span className="legacy-detail__category">{selectedPerk.category}</span>
+                  </span>
+                  <span className="legacy-detail__rank">
+                    <strong>
+                      {selectedPerkRank}
+                      <small>/{selectedPerk.maxRank}</small>
+                    </strong>
+                    <span>rank</span>
+                  </span>
                 </div>
 
-                {!serverSessionToken ? (
-                  <div className="legacy-selected-panel__warning">
-                    Log in to spend server-tracked Legacy Points.
-                  </div>
-                ) : selectedPerkRank >= selectedPerk.maxRank ? (
-                  <div className="legacy-selected-panel__warning legacy-selected-panel__warning--ok">
-                    This Legacy rank is already maxed out.
-                  </div>
-                ) : totalPointsAvailable < nextRankCost ? (
-                  <div className="legacy-selected-panel__warning">
-                    You need {nextRankCost} available Legacy Point{nextRankCost === 1 ? "" : "s"} for this {selectedPerk.name} rank.
-                  </div>
-                ) : (
-                  <div className="legacy-selected-panel__warning legacy-selected-panel__warning--ok">
-                    You can afford this permanent rank.
-                  </div>
-                )}
+                <p className="legacy-detail__effect">
+                  <strong>{selectedPerk.effectSummary || `${getPerkEffectText(selectedPerk.baseEffect, selectedPerk.effectUnit, 1)} per rank.`}</strong>{" "}
+                  {selectedPerk.description}
+                </p>
 
-                <div className="legacy-selected-panel__actions">
+                <div className="legacy-detail__spend">
+                  <RankPips rank={selectedPerkRank} maxRank={selectedPerk.maxRank} />
+                  <span className="legacy-detail__cost">
+                    {selectedPerkMaxed ? (
+                      <>All {selectedPerk.maxRank} ranks secured</>
+                    ) : (
+                      <>
+                        Rank {nextRank} costs <b>{nextRankCost} LP</b> · you have <b>{totalPointsAvailable} LP</b>
+                      </>
+                    )}
+                  </span>
                   <button
                     type="button"
                     className="legacy-spend-button"
@@ -458,8 +540,49 @@ export default function AchievementsPage() {
                     {spendingPerkId === selectedPerk.id ? "Spending..." : "Spend Point"}
                   </button>
                 </div>
+
+                <div className={`legacy-detail__status legacy-detail__status--${spendStatus.tone}`}>
+                  {spendStatus.text}
+                </div>
               </div>
             ) : null}
+
+            <div className="legacy-tree-scroll">
+              {groupedPerks.map(({ category, perks }) => {
+                const spentRanks = perks.reduce((sum, perk) => sum + (perkRanks[perk.id] ?? 0), 0);
+                const maxRanks = perks.reduce((sum, perk) => sum + perk.maxRank, 0);
+                return (
+                  <div key={category} className="legacy-tree-section">
+                    <div className="legacy-tree-section__header">
+                      <span className="legacy-tree-section__name">{category}</span>
+                      <span className="legacy-tree-section__meta">
+                        {spentRanks}/{maxRanks} ranks
+                      </span>
+                    </div>
+                    <div className="legacy-merit-grid">
+                      {perks.map((perk) => (
+                        <MeritCard
+                          key={perk.id}
+                          perk={perk}
+                          rank={perkRanks[perk.id] ?? 0}
+                          isSelected={selectedPerk?.id === perk.id}
+                          affordState={getPerkAffordState(
+                            perkRanks[perk.id] ?? 0,
+                            perk.maxRank,
+                            totalPointsAvailable,
+                          )}
+                          onSelect={() => setSelectedPerkId(perk.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="legacy-permanent-note">
+              Spending is permanent. Rank 1 costs 1 point, rank 2 costs 2 more, and the costs keep climbing.
+            </div>
           </ContentPanel>
         </div>
       </div>
