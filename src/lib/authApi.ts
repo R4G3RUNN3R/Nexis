@@ -120,6 +120,65 @@ type RawMeSuccess = Omit<ApiMeSuccess, "ok">;
 
 export type ApiAuthResponse = ApiAuthSuccess | ApiFailure;
 export type ApiMeResponse = ApiMeSuccess | ApiFailure;
+
+export type ApiGoogleConfigResponse =
+  | { ok: true; configured: boolean; clientId: string | null }
+  | ApiFailure;
+
+type ApiGoogleAuthReturningSuccess = {
+  ok: true;
+  status: "returning";
+  user: ServerAuthUser;
+  playerState: ServerPlayerState;
+  sessionToken: string;
+  sessionExpiresAt: string | null;
+};
+
+type ApiGoogleAuthRegistrationRequiredSuccess = {
+  ok: true;
+  status: "registration_required";
+  pendingToken: string;
+  suggestedFirstName: string;
+  suggestedLastName: string;
+  email: string;
+  expiresAt: string;
+};
+
+export type ApiGoogleAuthResponse =
+  | ApiGoogleAuthReturningSuccess
+  | ApiGoogleAuthRegistrationRequiredSuccess
+  | ApiFailure;
+
+type RawGoogleAuthSuccess =
+  | Omit<ApiGoogleAuthReturningSuccess, "ok">
+  | Omit<ApiGoogleAuthRegistrationRequiredSuccess, "ok">;
+
+type ApiGoogleCompleteRegistrationSuccess = {
+  ok: true;
+  status: "created";
+  user: ServerAuthUser;
+  playerState: ServerPlayerState;
+  sessionToken: string;
+  sessionExpiresAt: string | null;
+};
+
+export type ApiGoogleCompleteRegistrationResponse = ApiGoogleCompleteRegistrationSuccess | ApiFailure;
+type RawGoogleCompleteRegistrationSuccess = Omit<ApiGoogleCompleteRegistrationSuccess, "ok">;
+
+export type ApiGoogleLinkResponse =
+  | { ok: true; linked: true; provider: string; providerEmail: string; linkedAt: number }
+  | ApiFailure;
+
+export type ServerAuthIdentity = {
+  provider: string;
+  providerEmail: string | null;
+  linkedAt: number;
+  lastLoginAt: number | null;
+};
+
+export type ApiAuthIdentitiesResponse =
+  | { ok: true; identities: ServerAuthIdentity[] }
+  | ApiFailure;
 export type ApiStateSyncResponse =
   | {
       ok: true;
@@ -1143,6 +1202,48 @@ export function loginWithServer(data: { email: string; password: string }): Prom
   return requestJson<RawAuthSuccess>("/api/login", {
     method: "POST",
     body: JSON.stringify(data),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getGoogleAuthConfig(): Promise<ApiGoogleConfigResponse> {
+  return requestJson<{ configured: boolean; clientId: string | null }>("/api/auth/google/config", {
+    method: "GET",
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+// Sends the verified-by-Google credential string to our own backend, which
+// re-verifies it server-side before doing anything - this call never carries
+// a name, email, or any other Google profile field the browser could forge.
+export function authenticateWithGoogle(credential: string): Promise<ApiGoogleAuthResponse> {
+  return requestJson<RawGoogleAuthSuccess>("/api/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ credential }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function completeGoogleRegistration(data: {
+  pendingToken: string;
+  firstName: string;
+  lastName: string;
+}): Promise<ApiGoogleCompleteRegistrationResponse> {
+  return requestJson<RawGoogleCompleteRegistrationSuccess>("/api/auth/google/complete-registration", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function linkGoogleAccount(sessionToken: string, credential: string): Promise<ApiGoogleLinkResponse> {
+  return requestJson<{ linked: true; provider: string; providerEmail: string; linkedAt: number }>("/api/auth/google/link", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ credential }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getAuthIdentities(sessionToken: string): Promise<ApiAuthIdentitiesResponse> {
+  return requestJson<{ identities: ServerAuthIdentity[] }>("/api/auth/identities", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

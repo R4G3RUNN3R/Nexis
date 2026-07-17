@@ -1,6 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
+  authenticateWithGoogle,
+  completeGoogleRegistration as completeGoogleRegistrationApi,
   getCurrentServerUser,
+  linkGoogleAccount,
   loginWithServer,
   registerWithServer,
   saveCurrentServerState,
@@ -37,6 +40,18 @@ type AuthState = {
 
 type AuthResult = { ok: true } | { ok: false; error: string };
 
+type GoogleAuthResult =
+  | { ok: true; status: "returning" }
+  | {
+      ok: true;
+      status: "registration_required";
+      pendingToken: string;
+      suggestedFirstName: string;
+      suggestedLastName: string;
+      email: string;
+    }
+  | { ok: false; code: string | null; error: string };
+
 type AuthContextValue = {
   activeAccount: NexisAccount | null;
   isLoggedIn: boolean;
@@ -52,6 +67,13 @@ type AuthContextValue = {
   }) => Promise<AuthResult>;
   login: (email: string, password: string) => Promise<AuthResult>;
   logout: () => void;
+  continueWithGoogle: (credential: string) => Promise<GoogleAuthResult>;
+  completeGoogleRegistration: (data: {
+    pendingToken: string;
+    firstName: string;
+    lastName: string;
+  }) => Promise<AuthResult>;
+  linkGoogle: (credential: string) => Promise<AuthResult>;
   syncServerRuntimeState: (
     runtimeState: CachedRuntimeState,
     options?: { keepalive?: boolean },
@@ -454,6 +476,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(newSession);
   }, []);
 
+  const continueWithGoogle = useCallback(async (credential: string): Promise<GoogleAuthResult> => {
+    const result = await authenticateWithGoogle(credential);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        code: result.code,
+        error: result.unavailable ? "Google sign-in is unavailable right now." : result.error,
+      };
+    }
+
+    if (result.status === "registration_required") {
+      return {
+        ok: true,
+        status: "registration_required",
+        pendingToken: result.pendingToken,
+        suggestedFirstName: result.suggestedFirstName,
+        suggestedLastName: result.suggestedLastName,
+        email: result.email,
+      };
+    }
+
+    const updatedAccounts = upsertMirroredAccount(result.user, null, result.playerState);
+    const nextSession = createServerSessionState(result.user.email, result.sessionToken, result.sessionExpiresAt);
+
+    writeSession(nextSession);
+    setAccounts(updatedAccounts);
+    setSession(nextSession);
+    setServerHydrationVersion((value) => value + 1);
+    return { ok: true, status: "returning" };
+  }, []);
+
+  const completeGoogleRegistration = useCallback(
+    async (data: { pendingToken: string; firstName: string; lastName: string }): Promise<AuthResult> => {
+      const result = await completeGoogleRegistrationApi(data);
+
+      if (!result.ok) {
+        return {
+          ok: false,
+          error: result.unavailable ? "Registration service is unavailable right now." : result.error,
+        };
+      }
+
+      const updatedAccounts = upsertMirroredAccount(result.user, null, result.playerState);
+      const nextSession = createServerSessionState(result.user.email, result.sessionToken, result.sessionExpiresAt);
+
+      writeSession(nextSession);
+      setAccounts(updatedAccounts);
+      setSession(nextSession);
+      setServerHydrationVersion((value) => value + 1);
+      return { ok: true };
+    },
+    [],
+  );
+
+  const linkGoogle = useCallback(
+    async (credential: string): Promise<AuthResult> => {
+      if (!session.serverSessionToken) {
+        return { ok: false, error: "You must be signed in to link a Google account." };
+      }
+
+      const result = await linkGoogleAccount(session.serverSessionToken, credential);
+      if (!result.ok) {
+        return {
+          ok: false,
+          error: result.unavailable ? "Linking service is unavailable right now." : result.error,
+        };
+      }
+
+      return { ok: true };
+    },
+    [session.serverSessionToken],
+  );
+
   const syncServerRuntimeState = useCallback(
     async (
       runtimeState: CachedRuntimeState,
@@ -532,6 +628,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     register,
     login,
     logout,
+    continueWithGoogle,
+    completeGoogleRegistration,
+    linkGoogle,
     syncServerRuntimeState,
     refreshServerState,
   };

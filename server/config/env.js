@@ -21,6 +21,15 @@ export const ORG_BASE_SWEEP_INTERVAL_MS = Math.max(
   Number(process.env.ORG_BASE_SWEEP_INTERVAL_MS || 5 * 60 * 1000),
 );
 
+// Google Identity Services web client ID (not a secret - safe to send to the
+// browser so it can initialize the sign-in SDK). Absent by default: Google
+// auth stays fully optional and every backend entry point must fail safely
+// (controlled config-error response, not a crash) when this is unset.
+export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || null;
+export const GOOGLE_PENDING_REGISTRATION_TTL_MINUTES = Number(
+  process.env.GOOGLE_PENDING_REGISTRATION_TTL_MINUTES || 15,
+);
+
 export const PLAYER_PUBLIC_ID_PREFIX = "P";
 export const PUBLIC_ID_DIGITS = 7;
 export const RESERVED_PLAYER_PUBLIC_ID_COUNT = 20;

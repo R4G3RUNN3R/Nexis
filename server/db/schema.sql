@@ -13,7 +13,13 @@ CREATE TABLE IF NOT EXISTS users (
   last_name TEXT NOT NULL,
   entity_type TEXT NOT NULL DEFAULT 'player',
   privilege_role TEXT NOT NULL DEFAULT 'player',
-  password_hash TEXT NOT NULL,
+  -- Nullable: Google-only accounts (see user_auth_identities) have no
+  -- password at all rather than a fake generated one. Every reader of this
+  -- column was audited before this changed (server/services/authService.js
+  -- registerUser/createMigratedPlayerAccount/loginUser/resetPassword and
+  -- server/repositories/usersRepository.js) - loginUser explicitly rejects
+  -- a null hash with GOOGLE_LOGIN_REQUIRED before ever reaching bcrypt.
+  password_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -24,6 +30,51 @@ ALTER TABLE users
 
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS privilege_role TEXT NOT NULL DEFAULT 'player';
+
+-- Existing live shards created this column as NOT NULL before Google-only
+-- accounts existed. Safe to rerun: a no-op once already dropped.
+ALTER TABLE users
+  ALTER COLUMN password_hash DROP NOT NULL;
+
+-- One row per (provider, external account) a Nexis user has linked. Google
+-- is the only provider today but the shape is provider-generic on purpose.
+-- provider_subject is Google's immutable "sub" claim, never the email -
+-- emails can change on Google's side, sub never does.
+CREATE TABLE IF NOT EXISTS user_auth_identities (
+  id BIGSERIAL PRIMARY KEY,
+  user_internal_id TEXT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  provider_subject TEXT NOT NULL,
+  provider_email TEXT,
+  provider_email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_login_at TIMESTAMPTZ,
+  -- A given external identity can never be linked to more than one Nexis
+  -- account (prevents one Google identity claiming two accounts).
+  UNIQUE (provider, provider_subject),
+  -- A given Nexis account can never acquire two rows for the same provider
+  -- (prevents duplicate/competing Google links on one account).
+  UNIQUE (user_internal_id, provider)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_auth_identities_user
+  ON user_auth_identities(user_internal_id);
+
+-- Short-lived holding record for a brand-new Google sign-up between the
+-- initial verified-credential exchange and the player confirming their
+-- Nexis character's first/last name. provider_subject/provider_email here
+-- come only from a verified Google token (see googleAuthService.js) - never
+-- re-suppliable by the client on the completion step.
+CREATE TABLE IF NOT EXISTS google_pending_registrations (
+  token_hash TEXT PRIMARY KEY,
+  provider_subject TEXT NOT NULL,
+  provider_email TEXT NOT NULL,
+  provider_email_verified BOOLEAN NOT NULL DEFAULT TRUE,
+  suggested_first_name TEXT NOT NULL DEFAULT '',
+  suggested_last_name TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS player_state (
   user_internal_id TEXT PRIMARY KEY REFERENCES users(internal_id) ON DELETE CASCADE,

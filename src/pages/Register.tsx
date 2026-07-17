@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../state/AuthContext";
+import { GoogleAuthButton } from "../components/auth/GoogleAuthButton";
 import "../styles/register.css";
 
 const NAME_MIN = 2;
@@ -372,6 +373,7 @@ export default function RegisterPage({ initialMode = "register" }: AuthPageProps
 
       <div className="register-panel" role="main">
         <div className="register-panel__inner">
+          <GoogleAuthButton redirectTarget={redirectTarget} />
           {mode === "register" ? (
             <RegisterForm onSwitch={goToLogin} redirectTarget={redirectTarget} />
           ) : (
