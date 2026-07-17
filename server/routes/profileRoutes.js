@@ -10,6 +10,7 @@ import {
 import { HttpError } from "../lib/errors.js";
 import { attachOptionalSession } from "../middleware/attachOptionalSession.js";
 import { requireSession } from "../middleware/requireSession.js";
+import { profileUploadRateLimit } from "../middleware/rateLimit.js";
 
 const router = Router();
 const upload = multer({
@@ -42,7 +43,7 @@ function handleProfileImageUpload(req, res, next) {
 router.get("/profiles/:publicId", attachOptionalSession, getProfile);
 router.get("/profile-images/:imageKey", getProfileImage);
 router.get("/me/profile", requireSession, (req, res) => res.redirect(307, `/api/profiles/${req.auth.user.publicId}`));
-router.post("/me/profile-image", requireSession, handleProfileImageUpload, postOwnProfileImage);
+router.post("/me/profile-image", requireSession, profileUploadRateLimit, handleProfileImageUpload, postOwnProfileImage);
 router.post("/me/title", requireSession, postOwnPrestigeTitle);
 router.post("/me/life-path", requireSession, postOwnLifePath);
 

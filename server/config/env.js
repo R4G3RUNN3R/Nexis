@@ -3,6 +3,12 @@ export const DATABASE_URL = process.env.DATABASE_URL || null;
 export const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS || 24 * 14);
 export const PASSWORD_RESET_TTL_MINUTES = Number(process.env.PASSWORD_RESET_TTL_MINUTES || 60);
 export const APP_BASE_URL = process.env.APP_BASE_URL || "http://178.104.1.195";
+export const ALLOWED_ORIGINS = String(
+  process.env.ALLOWED_ORIGINS || "https://nexis.nexus,https://www.nexis.nexus,http://178.104.1.195",
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 export const SMTP_HOST = process.env.SMTP_HOST || null;
 export const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 export const SMTP_USER = process.env.SMTP_USER || null;

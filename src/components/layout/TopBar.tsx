@@ -136,6 +136,15 @@ export function TopBar() {
   const oneShotTokens = Number(dmosState?.tokens?.patronBound ?? 0) + Number(dmosState?.tokens?.sealed ?? 0);
   const oneShotActive = dmosState?.activeSession?.status === "active";
   const oneShotReady = oneShotTokens > 0 || oneShotActive;
+  const guideState = player as unknown as {
+    progressionEvents?: { pending?: unknown[] };
+    legacy?: { points?: { available?: number } };
+    notifications?: { alerts?: unknown[] };
+  };
+  const pendingProgression = Array.isArray(guideState.progressionEvents?.pending) ? guideState.progressionEvents.pending.length : 0;
+  const availableLegacyPoints = Math.max(0, Math.floor(Number(guideState.legacy?.points?.available ?? 0)));
+  const unreadAlertCount = Array.isArray(guideState.notifications?.alerts) ? guideState.notifications.alerts.length : 0;
+  const readinessCount = Math.min(99, pendingProgression + availableLegacyPoints + unreadAlertCount + (oneShotReady ? 1 : 0));
 
   function handleLogout() {
     setPlayerOpen(false);
@@ -213,6 +222,7 @@ export function TopBar() {
         <nav className="topbar__shortcuts" aria-label="Player shortcuts">
           <NavLink to="/achievements" className="topbar__shortcut" title="Achievements and Legacy">
             <span>LG</span>
+            {readinessCount > 0 ? <b className="topbar__shortcut-badge">{readinessCount}</b> : null}
           </NavLink>
           <NavLink
             to="/one-shots"

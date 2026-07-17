@@ -12,115 +12,121 @@ function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-function asWholeNumber(value, fallback = 0) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return fallback;
-  return Math.max(0, Math.floor(numeric));
+const CLIENT_BLOCKED_TOP_LEVEL = new Set([
+  "jobs",
+  "education",
+  "arena",
+  "timers",
+  "guild",
+  "consortium",
+  "travel",
+  "civicEmployment",
+  "legacy",
+]);
+
+const CLIENT_BLOCKED_PLAYER_FIELDS = new Set([
+  "gold",
+  "currencies",
+  "experience",
+  "level",
+  "rank",
+  "stats",
+  "workingStats",
+  "battleStats",
+  "inventory",
+  "equipment",
+  "visualEquipment",
+  "equipmentMaintenance",
+  "equipmentLoadouts",
+  "crafting",
+  "itemBuffs",
+  "itemEnhancements",
+  "property",
+  "current",
+  "condition",
+  "lifePath",
+  "cityContracts",
+  "cityAcademy",
+  "cityStanding",
+  "citySpecials",
+  "skills",
+  "arenaCombat",
+  "duels",
+  "worldLoops",
+  "notifications",
+  "worldDiscovery",
+  "worldEvents",
+  "prestige",
+  "shadow",
+  "progressionEvents",
+  "records",
+  "rareManualEligibility",
+  "dmosOneShots",
+  "pvpProfile",
+  "qualities",
+  "worldEventProfile",
+]);
+
+function sanitizePlainText(value, maxLength = 600) {
+  if (typeof value !== "string") return null;
+  return value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, maxLength);
 }
 
-const RECOVERY_STAT_KEYS = [
-  "energy",
-  "maxEnergy",
-  "stamina",
-  "maxStamina",
-  "health",
-  "maxHealth",
-  "comfort",
-  "maxComfort",
-];
+function sanitizeStringRecord(value, allowedKeys, maxLength = 600) {
+  const record = asRecord(value) ?? {};
+  return Object.fromEntries(
+    allowedKeys
+      .map((key) => [key, sanitizePlainText(record[key], maxLength)])
+      .filter(([, entry]) => entry !== null),
+  );
+}
 
-function readBarRevision(playerRecord) {
-  const counters = asRecord(playerRecord?.counters) ?? {};
-  return asWholeNumber(counters.barRevision, 0);
+function collectBlockedClientFields(payload) {
+  const blocked = [];
+  for (const key of Object.keys(payload)) {
+    if (CLIENT_BLOCKED_TOP_LEVEL.has(key)) blocked.push(key);
+  }
+
+  const player = asRecord(payload.player) ?? {};
+  for (const key of Object.keys(player)) {
+    if (CLIENT_BLOCKED_PLAYER_FIELDS.has(key)) blocked.push(`player.${key}`);
+  }
+
+  return blocked;
+}
+
+function buildAllowedClientPatch(payload) {
+  const payloadPlayer = asRecord(payload.player) ?? {};
+  const patch = {};
+
+  if (Object.prototype.hasOwnProperty.call(payloadPlayer, "bio")) {
+    const bio = sanitizeStringRecord(payloadPlayer.bio, ["bio", "signature", "reservedNote"], 500);
+    if (Object.keys(bio).length) patch.bio = bio;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payloadPlayer, "preferences")) {
+    const preferences = sanitizeStringRecord(payloadPlayer.preferences, ["compactMode", "reducedMotion", "lastHelpTopic"], 80);
+    if (Object.keys(preferences).length) patch.preferences = preferences;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payloadPlayer, "ui")) {
+    const ui = sanitizeStringRecord(payloadPlayer.ui, ["dismissedGuideAt", "lastCommandBriefAt"], 80);
+    if (Object.keys(ui).length) patch.ui = ui;
+  }
+
+  return patch;
 }
 
 function mergeRuntimeState(existingRuntime, payload) {
   const existingPlayer = asRecord(existingRuntime.player) ?? {};
-  const payloadPlayer = asRecord(payload.player) ?? {};
-  const existingCurrent = asRecord(existingPlayer.current) ?? {};
-  const payloadCurrent = asRecord(payloadPlayer.current) ?? {};
-
-  const existingRevision = readBarRevision(existingPlayer);
-  const incomingRevision = readBarRevision(payloadPlayer);
-  const preserveRecoveredBars = existingRevision > incomingRevision;
-
-  const existingStats = asRecord(existingPlayer.stats) ?? {};
-  const payloadStats = asRecord(payloadPlayer.stats) ?? {};
-  const mergedStats = {
-    ...existingStats,
-    ...payloadStats,
-  };
-
-  if (preserveRecoveredBars) {
-    for (const key of RECOVERY_STAT_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(existingStats, key)) {
-        mergedStats[key] = existingStats[key];
-      }
-    }
-  }
-
-  const existingCounters = asRecord(existingPlayer.counters) ?? {};
-  const payloadCounters = asRecord(payloadPlayer.counters) ?? {};
-  const mergedCounters = {
-    ...existingCounters,
-    ...payloadCounters,
-  };
-
-  if (preserveRecoveredBars) {
-    mergedCounters.barRevision = existingRevision;
-  }
+  const allowedPlayerPatch = buildAllowedClientPatch(payload);
 
   return {
     ...existingRuntime,
-    ...payload,
     player: {
       ...existingPlayer,
-      ...payloadPlayer,
-      current: {
-        ...existingCurrent,
-        ...payloadCurrent,
-      },
-      stats: mergedStats,
-      counters: mergedCounters,
-      inventory: existingPlayer.inventory ?? payloadPlayer.inventory ?? {},
-      equipment: existingPlayer.equipment ?? payloadPlayer.equipment ?? {},
-      equipmentMaintenance: existingPlayer.equipmentMaintenance ?? payloadPlayer.equipmentMaintenance ?? {},
-      equipmentLoadouts: existingPlayer.equipmentLoadouts ?? payloadPlayer.equipmentLoadouts ?? {},
-      crafting: existingPlayer.crafting ?? payloadPlayer.crafting ?? {},
-      itemBuffs: existingPlayer.itemBuffs ?? payloadPlayer.itemBuffs ?? {},
-      cityAcademy: existingPlayer.cityAcademy ?? payloadPlayer.cityAcademy ?? {},
-      cityStanding: existingPlayer.cityStanding ?? payloadPlayer.cityStanding ?? {},
-      cityContracts: existingPlayer.cityContracts ?? payloadPlayer.cityContracts ?? {},
-      skills: existingPlayer.skills ?? payloadPlayer.skills ?? {},
-      arenaCombat: existingPlayer.arenaCombat ?? payloadPlayer.arenaCombat ?? {},
-      duels: existingPlayer.duels ?? payloadPlayer.duels ?? {},
-      worldLoops: existingPlayer.worldLoops ?? payloadPlayer.worldLoops ?? {},
-      notifications: existingPlayer.notifications ?? payloadPlayer.notifications ?? {},
-      worldDiscovery: existingPlayer.worldDiscovery ?? payloadPlayer.worldDiscovery ?? {},
-      worldEvents: existingPlayer.worldEvents ?? payloadPlayer.worldEvents ?? {},
-      prestige: existingPlayer.prestige ?? payloadPlayer.prestige ?? {},
-      shadow: existingPlayer.shadow ?? payloadPlayer.shadow ?? {},
-      progressionEvents: existingPlayer.progressionEvents ?? payloadPlayer.progressionEvents ?? {},
-      records: existingPlayer.records ?? payloadPlayer.records ?? {},
-      rareManualEligibility: existingPlayer.rareManualEligibility ?? payloadPlayer.rareManualEligibility ?? {},
-      pvpProfile: existingPlayer.pvpProfile ?? payloadPlayer.pvpProfile ?? {},
-      cityDiaries: existingPlayer.cityDiaries ?? payloadPlayer.cityDiaries ?? {},
-      qualities: existingPlayer.qualities ?? payloadPlayer.qualities ?? {},
-      worldEventProfile: existingPlayer.worldEventProfile ?? payloadPlayer.worldEventProfile ?? {},
-      portrait: existingPlayer.portrait ?? {},
-      dmosOneShots: existingPlayer.dmosOneShots ?? payloadPlayer.dmosOneShots ?? {},
-      // Life path is a one-time server-arbitrated choice (see profileService.js
-      // updateOwnLifePath). It must never be overwritten by a generic client sync.
-      lifePath: existingPlayer.lifePath ?? {},
+      ...allowedPlayerPatch,
     },
-    // These are server-authoritative now. The browser can report state around
-    // them, but it does not get to overwrite them.
-    guild: existingRuntime.guild ?? {},
-    consortium: existingRuntime.consortium ?? {},
-    travel: existingRuntime.travel ?? {},
-    civicEmployment: existingRuntime.civicEmployment ?? {},
-    legacy: existingRuntime.legacy ?? {},
-    education: existingRuntime.education ?? {},
   };
 }
 
@@ -137,6 +143,16 @@ export async function syncRuntimeState(userInternalId, runtimeState) {
     const existingRuntime = user && existingPlayerState
       ? buildMutableRuntimeState(user, existingPlayerState)
       : {};
+
+    const blockedFields = collectBlockedClientFields(payload);
+    if (blockedFields.length) {
+      console.warn("[state-sync] rejected client-owned fields", {
+        userInternalId,
+        fields: blockedFields.slice(0, 30),
+        extraCount: Math.max(0, blockedFields.length - 30),
+      });
+    }
+
     const mergedPayload = mergeRuntimeState(existingRuntime, payload);
     return upsertPlayerRuntimeState(client, userInternalId, mergedPayload);
   });
