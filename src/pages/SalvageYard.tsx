@@ -7,19 +7,13 @@ import {
   repairServerEquipment,
   salvageServerItem,
   type ServerRepairOption,
-  type ServerSalvageOption,
+  type ServerSalvageStatus,
 } from "../lib/authApi";
 import { useAuth } from "../state/AuthContext";
 
-function YieldText({ option }: { option: ServerSalvageOption }) {
-  return (
-    <span>{option.yieldItems.map((entry) => `${entry.item?.displayName ?? entry.itemId} x${entry.quantity}`).join(" | ")}</span>
-  );
-}
-
 export default function SalvageYardPage() {
   const { authSource, serverSessionToken, refreshServerState } = useAuth();
-  const [salvageOptions, setSalvageOptions] = useState<ServerSalvageOption[]>([]);
+  const [salvageStatus, setSalvageStatus] = useState<ServerSalvageStatus | null>(null);
   const [repairOptions, setRepairOptions] = useState<ServerRepairOption[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +21,7 @@ export default function SalvageYardPage() {
 
   async function load() {
     if (authSource !== "server" || !serverSessionToken) {
-      setSalvageOptions([]);
+      setSalvageStatus(null);
       setRepairOptions([]);
       setError("Salvage and repair require a live server session.");
       return;
@@ -38,7 +32,7 @@ export default function SalvageYardPage() {
       setError(result.error);
       return;
     }
-    setSalvageOptions(result.salvageOptions);
+    setSalvageStatus(result.salvageStatus);
     setRepairOptions(result.repairOptions);
     setMessage(result.message ?? null);
   }
@@ -47,20 +41,20 @@ export default function SalvageYardPage() {
     void load();
   }, [authSource, serverSessionToken]);
 
-  async function salvage(itemId: string) {
+  async function salvage() {
     if (!serverSessionToken) return;
-    setBusy(`salvage:${itemId}`);
+    setBusy("salvage");
     setError(null);
     setMessage(null);
-    const result = await salvageServerItem(serverSessionToken, itemId, 1);
+    const result = await salvageServerItem(serverSessionToken);
     setBusy(null);
     if (!result.ok) {
       setError(result.error);
       return;
     }
-    setSalvageOptions(result.salvageOptions);
+    setSalvageStatus(result.salvageStatus);
     setRepairOptions(result.repairOptions);
-    setMessage(result.message ?? "Item salvaged.");
+    setMessage(result.message ?? "Scrap salvaged.");
     await refreshServerState();
   }
 
@@ -75,7 +69,7 @@ export default function SalvageYardPage() {
       setError(result.error);
       return;
     }
-    setSalvageOptions(result.salvageOptions);
+    setSalvageStatus(result.salvageStatus);
     setRepairOptions(result.repairOptions);
     setMessage(result.message ?? "Equipment maintained.");
     await refreshServerState();
@@ -88,19 +82,27 @@ export default function SalvageYardPage() {
       <div className="nexis-grid">
         <div className="nexis-column nexis-column--wide">
           <ContentPanel title="Disassembly Bench">
-            <div style={{ display: "grid", gap: 10 }}>
-              {salvageOptions.length ? salvageOptions.map((option) => (
-                <div key={option.itemId} style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(8,13,18,0.58)", padding: 10, display: "grid", gap: 8 }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
-                    <span style={{ display: "flex", gap: 8, alignItems: "center" }}><ItemIcon item={option.item} /><strong>{option.item?.displayName ?? option.itemId}</strong></span>
-                    <span style={{ color: "#9fb0bf", fontSize: 12 }}>Owned x{option.ownedQuantity}</span>
-                  </div>
-                  <div style={{ color: "#d8c278", fontSize: 13 }}>Yield: <YieldText option={option} /></div>
-                  <button type="button" disabled={Boolean(busy) || !option.canSalvage} onClick={() => salvage(option.itemId)}>
-                    {busy === `salvage:${option.itemId}` ? "Salvaging..." : "Salvage One"}
-                  </button>
-                </div>
-              )) : <div style={{ color: "#9fb0bf" }}>No useful salvage stock in inventory. Contracts, markets, and combat drops will feed this bench.</div>}
+            <div style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(8,13,18,0.58)", padding: 14, display: "grid", gap: 10 }}>
+              <div style={{ color: "#b7c3cf", fontSize: 13 }}>
+                Feed the yard one random piece of salvage-eligible stock from your inventory. You cannot pick which item breaks down or what it yields.
+              </div>
+              <div style={{ color: "#d8c278", fontSize: 13 }}>
+                Possible rewards: {salvageStatus?.rewardCategories.join(", ") ?? "materials, minor gold, rare component chance"}.
+              </div>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ color: "#9fb0bf", fontSize: 12 }}>
+                  Cost: {salvageStatus?.energyCost ?? 5} energy (current: {salvageStatus?.energy ?? "?"})
+                </span>
+                <span style={{ color: "#9fb0bf", fontSize: 12 }}>
+                  Eligible items owned: {salvageStatus?.eligibleCount ?? 0}
+                </span>
+              </div>
+              {salvageStatus && !salvageStatus.canSalvage ? (
+                <div style={{ color: "#d0ad74", fontSize: 12 }}>{salvageStatus.lockReason}</div>
+              ) : null}
+              <button type="button" disabled={Boolean(busy) || !salvageStatus?.canSalvage} onClick={() => salvage()}>
+                {busy === "salvage" ? "Salvaging..." : "Salvage Scrap"}
+              </button>
             </div>
           </ContentPanel>
         </div>

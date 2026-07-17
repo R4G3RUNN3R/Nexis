@@ -514,13 +514,13 @@ export type ServerCraftingRecipe = {
   lockReason: string | null;
 };
 
-export type ServerSalvageOption = {
-  itemId: string;
-  item: ServerItemSummary | null;
-  ownedQuantity: number;
-  yieldItems: ServerCraftingOutput[];
+export type ServerSalvageStatus = {
+  energyCost: number;
+  energy: number;
+  eligibleCount: number;
   canSalvage: boolean;
   lockReason: string | null;
+  rewardCategories: string[];
 };
 
 export type ServerRepairOption = {
@@ -549,7 +549,7 @@ export type ApiCraftingResponse =
       currentCityId: string;
       currentCityName: string;
       recipes: ServerCraftingRecipe[];
-      salvageOptions: ServerSalvageOption[];
+      salvageStatus: ServerSalvageStatus;
       repairOptions: ServerRepairOption[];
       loadouts: ServerLoadout[];
       message?: string | null;
@@ -1478,11 +1478,11 @@ export function craftServerRecipe(sessionToken: string, recipeId: string): Promi
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
-export function salvageServerItem(sessionToken: string, itemId: string, quantity = 1): Promise<ApiCraftingResponse> {
+export function salvageServerItem(sessionToken: string): Promise<ApiCraftingResponse> {
+  // No itemId/quantity: the server picks the eligible item and rolls the reward server-side.
   return requestJson<Omit<ApiCraftingResponse & { ok: true }, "ok">>("/api/items/salvage", {
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
-    body: JSON.stringify({ itemId, quantity }),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
