@@ -845,34 +845,28 @@ export type ApiAdventureResponse =
   | ApiFailure;
 
 
-export type ServerExcursionRewardPreview = {
-  goldRange: [number, number];
-  materialChance: number;
-  knowledgeChance: number;
-  skillFragmentChance: number;
-  magicFragmentChance: number;
-  absoluteFragmentChance: number;
-  itemPieceChance: number;
-  rareItemChance: number;
-  trainingBookChance: number;
-  recipeFragmentChance: number;
-  recipeDirectChance: number;
-  recipeGrade: string;
-  recipeFragmentTarget: number;
-};
 
 export type ServerExcursionLocation = {
   id: string;
   name: string;
   type: string;
-  region: string;
+  regionId: string;
   box: { x: number; y: number };
-  risk: string;
+  xPercent: number;
+  yPercent: number;
+  riskBand: string;
+  summary: string;
   rewardFocus: string[];
-  shortSummary: string;
-  recipe?: { id: string; title: string; grade: string; fragmentsRequired: number } | null;
+  recipeGrade: string | null;
+  recipeId: string | null;
+  recipeFragmentTarget: number | null;
+  recipeStatus: { discovered: boolean; fragments: number; requiredFragments: number; status: string; lockReason: string | null } | null;
+  requiredCourses: string[];
+  tags: string[];
+  cityAffinity: string[];
+  goldRange: [number, number];
   timing: { distanceBoxes: number; outboundMs: number; exploreMs: number; returnMs: number; totalMs: number; outboundLabel: string; exploreLabel: string; returnLabel: string; totalLabel: string };
-  rewards: ServerExcursionRewardPreview;
+  chanceSummary: { recipeFragment: number; directRecipe: number; itemPiece: number; rareItem: number };
   available: boolean;
   lockReason: string | null;
 };
@@ -890,7 +884,9 @@ export type ServerExcursionActive = {
 
 export type ServerExcursionBoard = {
   grid: { columns: number; rows: number; boxTravelMs: number; localMinimumTravelMs: number; exploreMs: number };
-  origin: { cityId: string; cityName: string; box: { x: number; y: number } };
+  currentCityId: string;
+  currentCityName: string;
+  originBox: { x: number; y: number };
   active: ServerExcursionActive | null;
   locations: ServerExcursionLocation[];
   history: Array<Record<string, unknown>>;

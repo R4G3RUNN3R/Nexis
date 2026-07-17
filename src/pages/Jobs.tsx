@@ -493,11 +493,15 @@ function chancePct(value: number) {
 function hasRewardFocus(location: ServerExcursionLocation, filter: string) {
   if (filter === "all") return true;
   const focus = location.rewardFocus.map((entry) => entry.toLowerCase()).join(" ");
-  if (filter === "recipe") return Boolean(location.recipe) || focus.includes("recipe");
-  if (filter === "rare") return focus.includes("rare") || focus.includes("piece") || location.rewards.rareItemChance > 0;
+  if (filter === "recipe") return Boolean(location.recipeId) || focus.includes("recipe");
+  if (filter === "rare") return focus.includes("rare") || focus.includes("piece") || location.chanceSummary.rareItem > 0;
   if (filter === "manual") return focus.includes("training") || focus.includes("skill") || focus.includes("magic");
   if (filter === "absolute") return focus.includes("absolute");
   return focus.includes(filter);
+}
+
+function recipeLabel(recipeId: string) {
+  return recipeId.replace(/-/g, " ");
 }
 
 function ExcursionBoard({
@@ -521,13 +525,13 @@ function ExcursionBoard({
   const locations = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const list = (board?.locations ?? []).filter((location) => {
-      const haystack = `${location.name} ${location.type} ${location.region} ${location.shortSummary} ${location.rewardFocus.join(" ")}`.toLowerCase();
-      return (!needle || haystack.includes(needle)) && (risk === "all" || location.risk === risk) && hasRewardFocus(location, reward);
+      const haystack = `${location.name} ${location.type} ${location.regionId} ${location.summary} ${location.rewardFocus.join(" ")}`.toLowerCase();
+      return (!needle || haystack.includes(needle)) && (risk === "all" || location.riskBand === risk) && hasRewardFocus(location, reward);
     });
     return [...list].sort((left, right) => {
       if (sort === "time") return left.timing.totalMs - right.timing.totalMs;
-      if (sort === "risk") return (EXCURSION_RISK_ORDER[left.risk] ?? 9) - (EXCURSION_RISK_ORDER[right.risk] ?? 9);
-      if (sort === "recipe") return (right.recipe?.grade ?? "").localeCompare(left.recipe?.grade ?? "") || left.name.localeCompare(right.name);
+      if (sort === "risk") return (EXCURSION_RISK_ORDER[left.riskBand] ?? 9) - (EXCURSION_RISK_ORDER[right.riskBand] ?? 9);
+      if (sort === "recipe") return (right.recipeGrade ?? "").localeCompare(left.recipeGrade ?? "") || left.name.localeCompare(right.name);
       if (sort === "name") return left.name.localeCompare(right.name);
       return left.timing.distanceBoxes - right.timing.distanceBoxes || left.timing.totalMs - right.timing.totalMs;
     });
@@ -574,30 +578,35 @@ function ExcursionBoard({
         </div>
         <div className="excursion-summary-row">
           <span>{locations.length} shown / {board?.locations.length ?? 0} known leads</span>
-          <span>{board?.origin.cityName ?? "Unknown origin"} box {board?.origin.box.x ?? "?"},{board?.origin.box.y ?? "?"}</span>
+          <span>{board?.currentCityName ?? "Unknown origin"} box {board?.originBox.x ?? "?"},{board?.originBox.y ?? "?"}</span>
           <span>{board?.counters.excursionsCompleted ?? 0} completed</span>
         </div>
         <div className="excursion-grid">
           {locations.map((location) => (
-            <article key={location.id} className={`excursion-card excursion-card--${location.risk.toLowerCase()}`}>
+            <article key={location.id} className={`excursion-card excursion-card--${location.riskBand.toLowerCase()}`}>
               <div className="excursion-card__top">
                 <div>
-                  <div className="adventure-card__kicker">{location.region} | box {location.box.x},{location.box.y}</div>
+                  <div className="adventure-card__kicker">{location.regionId} | box {location.box.x},{location.box.y}</div>
                   <h3>{location.name}</h3>
-                  <p>{location.shortSummary}</p>
+                  <p>{location.summary}</p>
                 </div>
                 <button type="button" disabled={!location.available || Boolean(board?.active) || busyLocationId === location.id} onClick={() => onStart(location.id)}>
                   {busyLocationId === location.id ? "Starting..." : "Start"}
                 </button>
               </div>
               <div className="adventure-card__chips">
-                <span>Risk: {location.risk}</span>
+                <span>Risk: {location.riskBand}</span>
                 <span>Type: {location.type}</span>
                 <span>Total: {location.timing.totalLabel}</span>
               </div>
               <div className="adventure-card__hint">Travel: {location.timing.outboundLabel} out | 1h search | {location.timing.returnLabel} back</div>
-              {location.recipe ? <div className="adventure-card__hint">Recipe: {location.recipe.title} ({location.recipe.grade}, {location.recipe.fragmentsRequired} fragments)</div> : null}
-              <div className="adventure-card__hint">Chances: recipe fragment {chancePct(location.rewards.recipeFragmentChance)} | direct recipe {chancePct(location.rewards.recipeDirectChance)} | rare item {chancePct(location.rewards.rareItemChance)} | piece {chancePct(location.rewards.itemPieceChance)}</div>
+              {location.recipeId ? (
+                <div className="adventure-card__hint">
+                  Recipe lead: {recipeLabel(location.recipeId)} ({location.recipeGrade ?? "unknown"} tier
+                  {location.recipeStatus ? `, ${location.recipeStatus.fragments}/${location.recipeStatus.requiredFragments} fragments` : ""})
+                </div>
+              ) : null}
+              <div className="adventure-card__hint">Chances: recipe fragment {chancePct(location.chanceSummary.recipeFragment / 100)} | direct recipe {chancePct(location.chanceSummary.directRecipe / 100)} | rare item {chancePct(location.chanceSummary.rareItem / 100)} | piece {chancePct(location.chanceSummary.itemPiece / 100)}</div>
               <div className="adventure-card__rewards">
                 {location.rewardFocus.slice(0, 5).map((focus) => <span key={`${location.id}-${focus}`}>{focus}</span>)}
               </div>
