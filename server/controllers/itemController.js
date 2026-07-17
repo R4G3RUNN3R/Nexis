@@ -104,7 +104,8 @@ export async function craftRecipe(req, res, next) {
 
 export async function salvageItem(req, res, next) {
   try {
-    sendJson(res, await salvageItemForUser(req.auth.user, req.body?.itemId, req.body?.quantity ?? 1));
+    // No itemId/quantity from the client: the server picks the eligible item and rolls the reward.
+    sendJson(res, await salvageItemForUser(req.auth.user));
   } catch (error) {
     next(error);
   }

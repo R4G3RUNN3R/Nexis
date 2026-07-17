@@ -40,6 +40,19 @@ const LOOT_TABLES = {
     // Guaranteed-after-N-attempts pity logic lives in adventureService.js (see pityItemId/pityThreshold).
     { itemId: "worn_caravan_seal", min: 1, max: 1, chance: 0.12 },
   ],
+  // Salvage Yard "Salvage Scrap" reward pool (itemAdvancedService.js). Common materials roll often,
+  // relic-adjacent components are rare. The consumed item is stripped from the result there so a
+  // "no item salvages into itself" guarantee holds even though the pool isn't per-item deterministic.
+  salvage: [
+    { itemId: "scrap_metal", min: 1, max: 3, chance: 0.5 },
+    { itemId: "rough_wood", min: 1, max: 3, chance: 0.5 },
+    { itemId: "empty_vials", min: 1, max: 2, chance: 0.3 },
+    { itemId: "iron_rivets", min: 1, max: 2, chance: 0.3 },
+    { itemId: "arcane_ink", min: 1, max: 1, chance: 0.15 },
+    { itemId: "vial_of_ink", min: 1, max: 1, chance: 0.15 },
+    { itemId: "ward_shard", min: 1, max: 1, chance: 0.06 },
+    { itemId: "ancient_fragment", min: 1, max: 1, chance: 0.02 },
+  ],
 };
 
 function rollInt(randomFn, min, max) {
@@ -66,4 +79,14 @@ export function rollLoot(family, randomFn = Math.random) {
     }
   }
   return drops.slice(0, 3);
+}
+
+// "Minor gold" component of the Salvage Yard reward. Gold isn't a lootable itemId in LOOT_TABLES,
+// so this mirrors rollLoot()'s own chance-then-range-roll shape (same rollInt helper) instead of
+// introducing a different randomization approach for currency.
+const SALVAGE_GOLD_ROLL = { min: 3, max: 14, chance: 0.45 };
+
+export function rollSalvageGold(randomFn = Math.random) {
+  if (randomFn() > SALVAGE_GOLD_ROLL.chance) return 0;
+  return rollInt(randomFn, SALVAGE_GOLD_ROLL.min, SALVAGE_GOLD_ROLL.max);
 }

@@ -9,6 +9,7 @@ import {
 import { getCityDefinition, normalizeCityId } from "../data/cityData.js";
 import { getRecipeDefinition, getRecipeDefinitions } from "../data/recipeData.js";
 import { EQUIPMENT_SLOTS, getAllowedEquipSlots, getItemDefinition, getItemDisplayName, getItemSummary, isEquippable } from "../data/itemData.js";
+import { rollLoot, rollSalvageGold } from "../data/lootData.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
 import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
 import { getConsortiumEffectPctForRuntime } from "./consortiumPerkService.js";
@@ -16,6 +17,11 @@ import { getRecipeDiscoveryStatus } from "./excursionService.js";
 
 const LOADOUT_SLOTS = ["1", "2", "3"];
 const MAINTENANCE_DURATION_MS = 6 * 60 * 60 * 1000;
+
+// Salvage Yard: one button, one random eligible item consumed, one random reward roll. No per-item
+// selection -- see salvageItemForUser() below.
+const SALVAGE_ENERGY_COST = 5;
+const SALVAGE_REWARD_CATEGORIES = ["Salvaged materials", "Minor gold", "Rare component chance"];
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -42,6 +48,13 @@ function ensureInventory(runtimeState) {
   player.inventory = { ...asRecord(player.inventory) };
   runtimeState.player = player;
   return player.inventory;
+}
+
+function ensureStats(runtimeState) {
+  const player = asRecord(runtimeState.player);
+  player.stats = { ...asRecord(player.stats) };
+  runtimeState.player = player;
+  return player.stats;
 }
 
 function ensureEquipment(runtimeState) {
@@ -227,15 +240,36 @@ function getSalvageYield(itemId) {
   return itemId !== "scrap_metal" ? [{ itemId: "scrap_metal", quantity: 1 }] : [];
 }
 
-function serializeSalvageOption(runtimeState, itemId, quantity) {
-  const yieldItems = getSalvageYield(itemId);
+// getSalvageYield() above is kept as the salvage-eligibility oracle: an item is "junk the yard will
+// take" exactly when it would have produced a non-empty deterministic yield under the old system.
+// That's the pool the server now picks randomly from -- the player no longer chooses which member
+// of it gets broken down, and the actual reward is rolled from the shared salvage loot table instead
+// of this function's per-item table (see salvageItemForUser()).
+function isSalvageEligible(itemId) {
+  return getSalvageYield(itemId).length > 0;
+}
+
+function getEligibleSalvageItemIds(runtimeState) {
+  const inventory = asRecord(runtimeState.player?.inventory);
+  return Object.entries(inventory)
+    .filter(([itemId, quantity]) => asNumber(quantity, 0) > 0 && isSalvageEligible(itemId))
+    .map(([itemId]) => itemId);
+}
+
+function serializeSalvageStatus(runtimeState) {
+  const stats = ensureStats(runtimeState);
+  const energy = Math.max(0, Math.floor(asNumber(stats.energy, 0)));
+  const eligibleItemIds = getEligibleSalvageItemIds(runtimeState);
+  const reasons = [];
+  if (energy < SALVAGE_ENERGY_COST) reasons.push(`Requires ${SALVAGE_ENERGY_COST} energy. Current energy: ${energy}.`);
+  if (!eligibleItemIds.length) reasons.push("No salvage-eligible items in inventory.");
   return {
-    itemId,
-    item: getItemSummary(itemId),
-    ownedQuantity: quantity,
-    yieldItems: yieldItems.map((entry) => ({ ...entry, item: getItemSummary(entry.itemId) })),
-    canSalvage: quantity > 0 && yieldItems.length > 0,
-    lockReason: yieldItems.length ? null : "This item is not useful salvage stock.",
+    energyCost: SALVAGE_ENERGY_COST,
+    energy,
+    eligibleCount: eligibleItemIds.length,
+    canSalvage: reasons.length === 0,
+    lockReason: reasons[0] ?? null,
+    rewardCategories: SALVAGE_REWARD_CATEGORIES,
   };
 }
 
@@ -292,13 +326,13 @@ function serializeLoadouts(runtimeState) {
 
 function serializeCraftingPayload(playerState, runtimeState, message = null) {
   const now = Date.now();
-  const inventory = ensureInventory(runtimeState);
+  ensureInventory(runtimeState);
   return {
     playerState,
     currentCityId: getCurrentCityId(runtimeState),
     currentCityName: getCityDefinition(getCurrentCityId(runtimeState)).name,
     recipes: getRecipeDefinitions().map((recipe) => serializeRecipe(runtimeState, recipe)),
-    salvageOptions: Object.entries(inventory).filter(([, quantity]) => asNumber(quantity, 0) > 0).map(([itemId, quantity]) => serializeSalvageOption(runtimeState, itemId, Math.floor(asNumber(quantity, 0)))).filter((entry) => entry.canSalvage),
+    salvageStatus: serializeSalvageStatus(runtimeState),
     repairOptions: EQUIPMENT_SLOTS.map((slot) => serializeRepairOption(runtimeState, slot, now)).filter((entry) => entry.itemId),
     loadouts: serializeLoadouts(runtimeState),
     message,
@@ -335,22 +369,70 @@ export async function craftRecipeForUser(user, recipeId) {
   });
 }
 
-export async function salvageItemForUser(user, itemId, quantityInput = 1) {
+// "Salvage Scrap": one button, 5 energy, no item picker. The server -- not the client -- chooses
+// which eligible inventory item is consumed and rolls the reward, all inside one transaction so
+// energy deduction, item consumption, and the reward grant either all land or all roll back.
+export async function salvageItemForUser(user) {
   return withTransaction(async (client) => {
-    const quantity = Math.max(1, Math.min(25, Math.floor(asNumber(quantityInput, 1))));
     const { runtimeState } = await loadRuntimeState(client, user);
-    const option = serializeSalvageOption(runtimeState, itemId, Math.max(0, Math.floor(asNumber(asRecord(runtimeState.player?.inventory)[itemId], 0))));
-    if (!option.canSalvage) throw new HttpError(409, option.lockReason ?? "Item cannot be salvaged.", "ITEM_SALVAGE_BLOCKED");
-    removeInventory(runtimeState, itemId, quantity);
-    for (const yieldItem of option.yieldItems) addInventory(runtimeState, yieldItem.itemId, yieldItem.quantity * quantity);
+
+    const stats = ensureStats(runtimeState);
+    const energy = Math.max(0, Math.floor(asNumber(stats.energy, 0)));
+    if (energy < SALVAGE_ENERGY_COST) {
+      throw new HttpError(409, `You need ${SALVAGE_ENERGY_COST} energy to salvage scrap. Current energy: ${energy}.`, "SALVAGE_ENERGY_REQUIRED");
+    }
+
+    const eligibleItemIds = getEligibleSalvageItemIds(runtimeState);
+    if (!eligibleItemIds.length) {
+      throw new HttpError(409, "No salvage-eligible items in inventory.", "ITEM_SALVAGE_BLOCKED");
+    }
+    // Random pick from the eligible pool -- the player never chooses which item breaks down.
+    const itemId = eligibleItemIds[Math.floor(Math.random() * eligibleItemIds.length)];
+
+    stats.energy = energy - SALVAGE_ENERGY_COST;
+    removeInventory(runtimeState, itemId, 1);
+
+    // Reward roll reuses the shared rollLoot() weighted-table pattern from lootData.js -- the same
+    // one combatService/adventureService use for NPC and adventure loot -- rather than a bespoke
+    // randomization path. "No item salvages into itself" is preserved by stripping the consumed
+    // item out of the roll and guaranteeing a fallback drop if that empties the result.
+    let rewardItems = rollLoot("salvage", Math.random).filter((drop) => drop.itemId !== itemId);
+    if (!rewardItems.length) {
+      const fallbackId = itemId === "rough_wood" ? "scrap_metal" : "rough_wood";
+      rewardItems = [{ itemId: fallbackId, label: getItemDisplayName(fallbackId), quantity: 1 }];
+    }
+    for (const item of rewardItems) addInventory(runtimeState, item.itemId, item.quantity);
+
+    const goldReward = rollSalvageGold(Math.random);
+    if (goldReward > 0) {
+      const gold = Math.max(0, Math.floor(asNumber(runtimeState.player.gold, 0) + goldReward));
+      runtimeState.player.gold = gold;
+      runtimeState.player.currencies = { ...asRecord(runtimeState.player.currencies), gold };
+    }
+
     const crafting = ensureCrafting(runtimeState);
-    crafting.salvagedCounts[itemId] = Math.max(0, Math.floor(asNumber(crafting.salvagedCounts[itemId], 0))) + quantity;
-    runtimeState.player.counters = { ...asRecord(runtimeState.player.counters), itemsSalvaged: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.itemsSalvaged, 0))) + quantity };
-    addPlayerRecord(runtimeState, { category: "crafting", summary: `Salvaged ${getItemDisplayName(itemId)} x${quantity}.`, detail: { itemId, quantity, yields: option.yieldItems.map((entry) => ({ itemId: entry.itemId, quantity: entry.quantity * quantity })) }, source: "salvage", route: "/crafting", timestamp: Date.now() });
+    crafting.salvagedCounts[itemId] = Math.max(0, Math.floor(asNumber(crafting.salvagedCounts[itemId], 0))) + 1;
+    runtimeState.player.counters = {
+      ...asRecord(runtimeState.player.counters),
+      itemsSalvaged: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.itemsSalvaged, 0))) + 1,
+      salvageEnergySpent: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.salvageEnergySpent, 0))) + SALVAGE_ENERGY_COST,
+    };
+
+    const summary = [
+      rewardItems.map((entry) => `${getItemDisplayName(entry.itemId)} x${entry.quantity}`).join(", "),
+      goldReward > 0 ? `${goldReward} gold` : null,
+    ].filter(Boolean).join(", ");
+    addPlayerRecord(runtimeState, {
+      category: "crafting",
+      summary: `Salvaged ${getItemDisplayName(itemId)} into ${summary}.`,
+      detail: { itemId, rewardItems: rewardItems.map((entry) => ({ itemId: entry.itemId, quantity: entry.quantity })), gold: goldReward, energySpent: SALVAGE_ENERGY_COST },
+      source: "salvage",
+      route: "/crafting",
+      timestamp: Date.now(),
+    });
     evaluateLegacyAchievementsForRuntime(runtimeState, user);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
-    const summary = option.yieldItems.map((entry) => `${entry.item.displayName} x${entry.quantity * quantity}`).join(", ");
-    return serializeCraftingPayload(playerState, buildMutableRuntimeState(user, playerState), `Salvaged ${getItemDisplayName(itemId)} x${quantity} into ${summary}.`);
+    return serializeCraftingPayload(playerState, buildMutableRuntimeState(user, playerState), `Salvaged ${getItemDisplayName(itemId)} into ${summary}.`);
   });
 }
 
