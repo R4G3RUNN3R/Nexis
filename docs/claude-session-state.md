@@ -112,3 +112,21 @@ While my 10 background agents (8-item gameplay brief + 4 Codex-system reviews) w
 
 All 9 of the other in-flight agents independently hit an account-wide Claude API session limit (reset 12:10pm UTC) at almost the same moment this Codex work landed — so "pause all agents" (the user's explicit instruction on discovering this) was already true in practice. Verified `git merge-base`/`git status -sb` show `main` still linear and clean, no divergence from `origin/main`, before and after this analysis.
 
+
+---
+
+## Combined deploy + recovery protocol + Ticket 1 (2026-07-17, later)
+
+**Combined deploy live-verified**: public-ID fix (`270b1f8`) + Google auth (`f48c885`) restarted into production together. Verified against the live site itself, not just tests: sequential public-ID allocation confirmed live, `PUT /api/state` exploit attempt against production left gold untouched, admin endpoint 403s a normal player, Google config endpoint correctly reports unconfigured. Zero auth errors in logs since restart.
+
+**Map/quest blank-page bug (user-reported) — found and fixed (`413abd5`)**: excursion board frontend (Jobs.tsx, ServerExcursionBoard types) was written against an imagined response shape that never matched `excursionService.js`'s real output (`origin.cityName` vs real `currentCityName`/`originBox`, `location.region/risk/shortSummary` vs real `regionId/riskBand/summary`, `location.rewards.*` vs real `chanceSummary.*`, a `location.recipe` object that doesn't exist). Any render of a populated board crashed silently - exactly the reported symptom from clicking a map excursion marker. Fixed both the types and the render logic; reproduced the exact user-reported flow live in a browser before and after.
+
+**Recovery protocol executed**: classified all 30 worktrees/branches without merging any. Six old branches confirmed already on `main`. Four review-agent worktrees (excursion/oneshots/pvp-worldprogression/wiki-topbar) had zero commits except wiki-topbar (`3c5a502`, real, safe, not yet reintegrated - Ticket 10). Five gameplay-brief worktrees (mana/titles/academy-pause/nav-chrome/org-ui-simplify) have substantial real uncommitted work, none reliant on the old permissive `/state` sync (independently confirmed for the three highest-risk ones in the previous session). `nav-chrome-restructure` and `org-ui-simplify` directly overlap Codex's CIEL-tutorial and Organization-One-Shots commits respectively - deep conflicts, not simple merges, when their tickets come up.
+
+**Ticket 1 (PvP fairness / Life-Health privacy) complete** (`3139c55`): recovered an interrupted review agent's unfinished "hydration bug" lead and traced it to root cause - `buildMutableRuntimeState` never hydrated `pvpProfile`/`cityDiaries`/`qualities`/`worldEventProfile`/`excursions`/`lootPity`, so any unrelated gameplay save silently wiped them (player_snapshot is a full-replace column). Fixed at the source. Separately found and fixed a real Life/Health leak: duel results exposed the opponent's true `maxHealth` to both participants, immediately and in persisted history, via `resolveCombat`'s shared NPC/player result shape. Fixed with viewer-aware redaction. Re-verified all previously-fixed Life/Health scoping (profile self/admin-only, guild/consortium rosters, City People listing) is still intact after all subsequent session work. Duel safety properties (consensual, same-city gated, self-challenge blocked, no full-loot, double-resolution-protected under concurrency) verified, all correct, no changes needed there. 21 new automated checks across 2 new canaries.
+
+**Not yet deployed**: both the map fix and Ticket 1 fix are committed and pushed, held for explicit deploy approval per the recovery protocol's standing rule.
+
+**The Absolute**: still on hold pending the required written design review; not started.
+
+Next per the user's specified order: Ticket 2 (Mana persistence/regeneration), using the now-fixed hydration function.
