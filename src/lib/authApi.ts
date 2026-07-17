@@ -1132,7 +1132,6 @@ export function registerWithServer(data: {
   lastName: string;
   email: string;
   password: string;
-  existingPublicId?: number;
 }): Promise<ApiAuthResponse> {
   return requestJson<RawAuthSuccess>("/api/register", {
     method: "POST",

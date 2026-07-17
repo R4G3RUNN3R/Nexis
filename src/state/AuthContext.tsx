@@ -404,12 +404,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localAccount &&
         localAccount.password === password
       ) {
+        // Local-only accounts (pre-server prototype era) never had a
+        // globally-unique publicId - it was assigned per-browser via
+        // localStorage with no server coordination. Migrating one to a real
+        // account must always get a fresh, server-allocated sequential ID;
+        // the old local value is not carried over.
         const migrationResult = await registerWithServer({
           firstName: localAccount.firstName,
           lastName: localAccount.lastName,
           email: localAccount.email,
           password: localAccount.password,
-          existingPublicId: localAccount.publicId,
         });
 
         if (migrationResult.ok) {

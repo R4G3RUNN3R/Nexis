@@ -28,6 +28,7 @@ import {
 import { sendPasswordResetEmail } from "./emailService.js";
 import {
   allocatePlayerPublicId,
+  assertValidMigratedPublicId,
   formatPlayerPublicId,
   reserveMigratedPlayerPublicId,
 } from "./publicIdService.js";
@@ -147,10 +148,6 @@ function validateRegisterInput({ firstName, lastName, email, password }) {
   }
 }
 
-function parseMigratedPublicId(value) {
-  return Number.isInteger(value) ? value : null;
-}
-
 function validateLoginInput({ email, password }) {
   if (!normalizeEmail(email)) {
     throw new HttpError(400, "Email is required.", "EMAIL_REQUIRED");
@@ -160,7 +157,13 @@ function validateLoginInput({ email, password }) {
   }
 }
 
-export async function registerUser({ firstName, lastName, email, password, existingPublicId }) {
+// Public registration DTO — deliberately excludes existingPublicId. Even if a
+// client sends that field (curl, devtools, a custom client), it is never
+// read here, so it cannot influence allocation. Every public account gets
+// the next sequential ID from the allocator; there is no way to request a
+// specific one. See createMigratedPlayerAccount below for the only other
+// (non-HTTP-reachable) way a specific public ID can be assigned.
+export async function registerUser({ firstName, lastName, email, password }) {
   validateRegisterInput({ firstName, lastName, email, password });
   const normalizedEmail = normalizeEmail(email);
   const normalizedFirstName = normalizeName(firstName);
@@ -176,22 +179,7 @@ export async function registerUser({ firstName, lastName, email, password, exist
       );
     }
 
-    const migratedPublicId = parseMigratedPublicId(existingPublicId);
-    if (migratedPublicId !== null) {
-      const existingPublicIdUser = await findUserByPublicId(client, migratedPublicId);
-      if (existingPublicIdUser) {
-        throw new HttpError(
-          409,
-          "That public ID is already in use.",
-          "PUBLIC_ID_CONFLICT",
-        );
-      }
-    }
-
-    const publicId =
-      migratedPublicId !== null
-        ? await reserveMigratedPlayerPublicId(client, migratedPublicId)
-        : await allocatePlayerPublicId(client);
+    const publicId = await allocatePlayerPublicId(client);
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await createUser(client, {
       internalId: makeInternalUserId(),
@@ -219,6 +207,52 @@ export async function registerUser({ firstName, lastName, email, password, exist
       playerState,
       sessionToken: sessionToken.plain,
       sessionExpiresAt: expiresAt.toISOString(),
+    };
+  });
+}
+
+// Internal-only migration path. Not imported by any controller or route —
+// intentionally unreachable from public HTTP. For a future offline
+// migration script or admin tool that needs to recreate an account at a
+// specific legacy public ID. reserveMigratedPlayerPublicId performs its own
+// strict safe-integer/range validation, so even a misused internal caller
+// cannot corrupt the allocator with an unsafe or absurd value.
+export async function createMigratedPlayerAccount({ firstName, lastName, email, password, existingPublicId }) {
+  validateRegisterInput({ firstName, lastName, email, password });
+  assertValidMigratedPublicId(existingPublicId);
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedFirstName = normalizeName(firstName);
+  const normalizedLastName = normalizeName(lastName);
+
+  return withTransaction(async (client) => {
+    const existing = await findAuthUserByEmail(client, normalizedEmail);
+    if (existing) {
+      throw new HttpError(409, "An account with this email already exists.", "ACCOUNT_EXISTS");
+    }
+
+    const existingPublicIdUser = await findUserByPublicId(client, existingPublicId);
+    if (existingPublicIdUser) {
+      throw new HttpError(409, "That public ID is already in use.", "PUBLIC_ID_CONFLICT");
+    }
+
+    const publicId = await reserveMigratedPlayerPublicId(client, existingPublicId);
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await createUser(client, {
+      internalId: makeInternalUserId(),
+      publicId,
+      username: normalizedEmail,
+      email: normalizedEmail,
+      firstName: normalizedFirstName,
+      lastName: normalizedLastName,
+      passwordHash,
+    });
+
+    await createDefaultPlayerState(client, user.internalId);
+    const playerState = await resolvePlayerStateForResponse(client, user, await loadPlayerState(client, user.internalId));
+
+    return {
+      user: mapPublicApiUser(user),
+      playerState,
     };
   });
 }
