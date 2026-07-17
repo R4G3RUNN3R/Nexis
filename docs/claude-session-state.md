@@ -130,3 +130,19 @@ All 9 of the other in-flight agents independently hit an account-wide Claude API
 **The Absolute**: still on hold pending the required written design review; not started.
 
 Next per the user's specified order: Ticket 2 (Mana persistence/regeneration), using the now-fixed hydration function.
+
+---
+
+## Ticket 0 — Close the Pending Release (2026-07-17, deployed)
+
+Deployed `413abd5` (excursion field-mismatch fix) and `3139c55` (PvP fairness: duel Life/Health redaction + runtime-hydration fix), previously committed but undeployed. Live commit determined precisely by comparing `nexis-waitlist.service`'s `ActiveEnterTimestamp` against commit timestamps, not by trusting prior session claims.
+
+**Pre-deploy checks**: `git diff --check` clean, `node --check` on all changed backend files, full `npm run build`, 9 canaries (94+ checks: public-ID allocation, Google auth configured/unconfigured, runtime hydration, PvP fairness, excursion grid, PvP/world/org one-shot scaffold, one-shot catalog, wiki coverage) all pass. One pre-existing broken canary found and recorded, not fixed (out of scope): `server/scripts/canaries/consortium-property-office-canary.mjs` has a doubled path in its own import (`../../server/db/pool.js` resolves to `server/server/db/pool.js`), confirmed via `git log` to predate this session entirely (commit `2adb24d`).
+
+**Deploy**: frontend backed up to `/srv/nexis/frontend/backups/ticket0-pre-deploy-20260717-201835`, fresh build from HEAD `abfc09b` rsynced to `/srv/nexis/frontend/current`, confirmed `index.html`'s referenced hashes (`index-CN1nBIGc.js`, `index-CCayB4bQ.css`) match the files on disk. `nexis-waitlist.service` restarted at 20:21:56 UTC, MainPID confirmed as the actual port-3001 listener.
+
+**Post-deploy verification against https://nexis.nexus itself** (not an isolated instance): direct `/adventure` and query-param routes (valid and invalid excursion IDs) all zero console errors; World Map marker → excursion via a real click, zero errors, real content rendered; excursion started through the browser survived navigating to Home and back (the hydration bug, live); `pvpProfile` safety opt-in and the active excursion both survived a real `/api/me` call on a live production account; a full two-account duel (fresh registrations, real HTTP) confirmed Life/Health redaction correct from both participants in both the immediate accept response and persisted history after a fresh GET (reload). Service and nginx logs clean since restart. `security-state-sync-canary.mjs` run directly against `https://nexis.nexus/api` passed. `HEAD` (`abfc09b`) matches `origin/main` exactly.
+
+**Deferred finding (new)**: the Arena page's duel-accept handler (`ServerCombatBoard.tsx`) receives `result` from `respondServerDuel` but never calls a state setter with it, so the inline "Live Combat" result panel never renders after accepting a duel (only after sparring an NPC). Pre-existing, not caused by this deploy - confirmed the redaction logic itself is correct via direct API verification (the "Recent Duel History" text summary that does render doesn't show health values at all, so this gap doesn't currently expose anything, it just means one UI surface doesn't yet render the correct data it would need to).
+
+**Not deployed / out of scope for Ticket 0**: everything in Tickets 1-15 of the new mega-brief (Adventure blank-screen edge cases beyond the excursion fix, character image, World Map zoom, City redesign, Civic Jobs, one-shot diversification, nav dedup, Settings, rate limiting, route surface cleanup, CI, Google production activation). None of the 30 worktrees touched.
