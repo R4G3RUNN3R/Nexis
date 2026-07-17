@@ -60,6 +60,24 @@ function serializeDuelState(runtimeState) {
   };
 }
 
+// resolveCombat's result.player / result.opponentState carry real health and
+// maxHealth numbers - correct for NPC fights (a monster's HP bar is meant to
+// be visible), but in a duel "opponent" is a real player. Without this,
+// dueling someone reveals their true maxHealth stat to both participants,
+// both immediately and every time either later views their duel history
+// (the same result object is what gets persisted). "player"/"opponentState"
+// are fixed challenger/target roles from resolveCombat's own perspective,
+// not "self/other" from a given viewer's perspective, so which side gets
+// redacted depends on who is about to see this copy of the result.
+function redactOpponentHealth(result, { hidePlayerSide, hideOpponentSide }) {
+  if (!result) return result;
+  return {
+    ...result,
+    player: hidePlayerSide ? { health: null, maxHealth: null } : result.player,
+    opponentState: hideOpponentSide ? { health: null, maxHealth: null } : result.opponentState,
+  };
+}
+
 function buildPlayerOpponent(user, runtimeState) {
   const player = asRecord(runtimeState.player);
   const stats = asRecord(player.stats);
@@ -172,17 +190,16 @@ export async function respondToDuelForUser(user, duelId, payload) {
     };
     const winner = challengerWon ? challenge.challenger : challenge.target;
     const loser = challengerWon ? challenge.target : challenge.challenger;
-    const history = {
-      ...challenge,
-      status: "resolved",
-      acceptedAt: now,
-      resolvedAt: now,
-      winner,
-      loser,
-      result,
-    };
-    challengerDuels.history = [history, ...asArray(challengerDuels.history)].slice(0, 20);
-    targetDuels.history = [history, ...asArray(targetDuels.history)].slice(0, 20);
+    // result.player is always the challenger's health/maxHealth and
+    // result.opponentState is always the target's, regardless of who ends
+    // up viewing this history entry later - each side must only ever see
+    // their own numbers, never the other real player's.
+    const challengerViewResult = redactOpponentHealth(result, { hidePlayerSide: false, hideOpponentSide: true });
+    const targetViewResult = redactOpponentHealth(result, { hidePlayerSide: true, hideOpponentSide: false });
+    const challengerHistoryEntry = { ...challenge, status: "resolved", acceptedAt: now, resolvedAt: now, winner, loser, result: challengerViewResult };
+    const targetHistoryEntry = { ...challenge, status: "resolved", acceptedAt: now, resolvedAt: now, winner, loser, result: targetViewResult };
+    challengerDuels.history = [challengerHistoryEntry, ...asArray(challengerDuels.history)].slice(0, 20);
+    targetDuels.history = [targetHistoryEntry, ...asArray(targetDuels.history)].slice(0, 20);
 
     for (const [runtimeState, didWin] of [[challengerRuntime, challengerWon], [targetRuntime, !challengerWon]]) {
       const player = asRecord(runtimeState.player);
@@ -207,6 +224,10 @@ export async function respondToDuelForUser(user, duelId, payload) {
     await upsertPlayerRuntimeState(client, challengerUser.internalId, challengerRuntime);
     await upsertPlayerRuntimeState(client, user.internalId, targetRuntime);
     const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
-    return { playerState, duels: serializeDuelState(targetRuntime), result, message: `${winner.name} won the duel.` };
+    // user is whoever called this function to accept - the target - so
+    // they get the target-viewpoint result (their own health visible, the
+    // challenger's redacted). The challenger only ever sees their own
+    // viewpoint later via their own duel history.
+    return { playerState, duels: serializeDuelState(targetRuntime), result: targetViewResult, message: `${winner.name} won the duel.` };
   });
 }

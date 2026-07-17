@@ -1070,8 +1070,12 @@ export type ServerCombatResult = {
   opponent: { id: string; name: string; level: number; summary?: string | null };
   winner: "player" | "opponent" | "draw";
   outcome: "victory" | "defeat" | "draw";
-  player: { health: number; maxHealth: number };
-  opponentState: { health: number; maxHealth: number };
+  // Both sides are non-null for NPC combat. In duels, whichever side is the
+  // other real player is redacted server-side (null) - a player's Life/
+  // Health is never shown to anyone but themselves. See duelService.js
+  // redactOpponentHealth.
+  player: { health: number | null; maxHealth: number | null };
+  opponentState: { health: number | null; maxHealth: number | null };
   activeSkills: Array<{ id: string; name: string; masteryTier?: number; totalUses?: number }>;
   passiveSkills: string[];
   log: ServerCombatLogEntry[];

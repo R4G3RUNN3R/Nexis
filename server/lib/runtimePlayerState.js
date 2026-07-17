@@ -250,6 +250,19 @@ export function buildMutableRuntimeState(user, playerState) {
       records: asRecord(player.records),
       rareManualEligibility: asRecord(player.rareManualEligibility),
       dmosOneShots: asRecord(player.dmosOneShots),
+      // These were never hydrated here, so any save built from this
+      // function's output (which is nearly every gameplay write in the
+      // app) silently wiped them back to nothing on the next unrelated
+      // action - player_snapshot is a full-replace column (see
+      // playerStateRepository.js upsertPlayerRuntimeState), not a merge.
+      // Confirmed live: an active excursion didn't survive even the same
+      // request's own post-save re-hydration.
+      pvpProfile: asRecord(player.pvpProfile),
+      cityDiaries: asRecord(player.cityDiaries),
+      qualities: asRecord(player.qualities),
+      worldEventProfile: asRecord(player.worldEventProfile),
+      excursions: asRecord(player.excursions),
+      lootPity: asRecord(player.lootPity),
     },
     jobs: asRecord(runtime.jobs),
     education: asRecord(runtime.education),

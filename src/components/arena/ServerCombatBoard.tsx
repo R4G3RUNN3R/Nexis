@@ -41,7 +41,9 @@ function CombatResultPanel({ result }: { result: ServerCombatResult | null }) {
         <span style={{ color: result.winner === "player" ? "#8ec8a7" : "#d0ad74", fontSize: 12 }}>{result.outcome}</span>
       </div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Snapshot: {resolvedLabel}. Sidebar bars show current live stats; this card records that fight only.</div>
-      <div style={{ color: "#9fb0bf", fontSize: 12 }}>You: {result.player.health}/{result.player.maxHealth} | Opponent: {result.opponentState.health}/{result.opponentState.maxHealth}</div>
+      <div style={{ color: "#9fb0bf", fontSize: 12 }}>
+        You: {result.player.maxHealth != null ? `${result.player.health}/${result.player.maxHealth}` : "hidden"} | Opponent: {result.opponentState.maxHealth != null ? `${result.opponentState.health}/${result.opponentState.maxHealth}` : "another player's Life is private"}
+      </div>
       <div style={{ color: "#d8c278", fontSize: 12 }}>Energy spent in this fight: {result.energySpent ?? 0}{typeof result.energyAfter === "number" ? ` | After this fight: ${result.energyAfter}` : ""}</div>
       <div style={{ color: "#8ec8a7", fontSize: 12 }}>Combat XP: +{result.combatXpGained ?? 0}</div>
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Skills: {result.activeSkills.map((skill) => skill.name).join(" | ") || "Basic pressure"}</div>
