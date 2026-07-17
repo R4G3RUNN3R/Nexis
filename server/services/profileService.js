@@ -1,4 +1,4 @@
-import { access, mkdir, unlink, writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { withTransaction } from "../db/pool.js";
 import { HttpError } from "../lib/errors.js";
@@ -11,8 +11,8 @@ import { upsertPlayerRuntimeState } from "../repositories/playerStateRepository.
 import { resolvePrestigeState, setPrestigeTitle } from "./liveWorldService.js";
 import { getLifePath } from "../data/lifePathsData.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
+import { getProfileImageDir, isProfileImageUploadAvailable } from "../lib/profileImageStorage.js";
 
-const PROFILE_IMAGE_DIR = path.join(process.cwd(), ".data", "profile-images");
 const PROFILE_IMAGE_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function asRecord(value) {
@@ -74,6 +74,24 @@ function readPortrait(runtimeState) {
   };
 }
 
+// Self-view only (see selfProfile below) - checks whether a stored portrait
+// key's file actually exists on disk. Never run for public/staff views: an
+// extra disk access() per profile load is only acceptable on the low-volume
+// self-view path, and there is no legitimate reason another viewer needs to
+// know this account's upload is missing.
+async function checkOwnPortraitFileMissing(runtimeState) {
+  const portrait = asRecord(runtimeState.player.portrait);
+  const imageKey = sanitizeProfileImageKey(portrait.imageKey);
+  if (!imageKey || !isProfileImageUploadAvailable()) return false;
+
+  try {
+    await access(path.join(getProfileImageDir(), imageKey));
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function detectProfileImageExtension(file) {
   const buffer = file?.buffer;
   if (!Buffer.isBuffer(buffer) || buffer.length < 12) {
@@ -124,7 +142,7 @@ function buildLegacyEntries(runtimeState) {
     .slice(0, 24);
 }
 
-function buildProfileResponse(viewerUser, targetUser, playerState, organizationSummary) {
+async function buildProfileResponse(viewerUser, targetUser, playerState, organizationSummary) {
   const runtimeState = buildMutableRuntimeState(targetUser, playerState);
   resolveTravelForRuntimeState(runtimeState);
   const prestige = resolvePrestigeState(runtimeState);
@@ -133,6 +151,7 @@ function buildProfileResponse(viewerUser, targetUser, playerState, organizationS
   const privilegeRole = targetUser.privilegeRole ?? "player";
   const isSelf = Boolean(viewerUser && viewerUser.internalId === targetUser.internalId);
   const canModerate = Boolean(viewerUser && viewerUser.privilegeRole && viewerUser.privilegeRole !== "player");
+  const portraitFileMissing = isSelf ? await checkOwnPortraitFileMissing(runtimeState) : false;
 
   return {
     viewer: {
@@ -184,6 +203,7 @@ function buildProfileResponse(viewerUser, targetUser, playerState, organizationS
             current: Number(runtimeState.player.stats?.health ?? 100),
             max: Number(runtimeState.player.stats?.maxHealth ?? 100),
           },
+          portraitFileMissing,
         }
       : null,
     moderation: canModerate
@@ -220,7 +240,7 @@ export async function getProfileForViewer(viewerUser, publicIdValue) {
     const guild = await findOrganizationForUserByType(client, targetUser.internalId, "guild");
     const consortium = await findOrganizationForUserByType(client, targetUser.internalId, "consortium");
 
-    return buildProfileResponse(viewer, targetUser, playerState, {
+    return await buildProfileResponse(viewer, targetUser, playerState, {
       guild: guild ? { publicId: Number(guild.publicId), name: String(guild.name) } : null,
       consortium: consortium ? { publicId: Number(consortium.publicId), name: String(consortium.name) } : null,
     });
@@ -234,6 +254,10 @@ export async function updateOwnProfileImage(viewerUser, file) {
 
   if (!file) {
     throw new HttpError(400, "Select an image before uploading.", "PROFILE_IMAGE_REQUIRED");
+  }
+
+  if (!isProfileImageUploadAvailable()) {
+    throw new HttpError(503, "Profile image uploads are temporarily unavailable.", "PROFILE_IMAGE_STORAGE_UNAVAILABLE");
   }
 
   const extension = detectProfileImageExtension(file);
@@ -253,10 +277,12 @@ export async function updateOwnProfileImage(viewerUser, file) {
     const runtimeState = buildMutableRuntimeState(user, playerState);
     const previousPortrait = asRecord(runtimeState.player.portrait);
     const previousImageKey = sanitizeProfileImageKey(previousPortrait.imageKey);
+    // internalId + timestamp is server-generated and unguessable enough that
+    // it never needs to be client-supplied - the upload route never accepts
+    // a filename from the request body.
     const imageKey = `${user.internalId}-${Date.now()}${extension}`;
-    const imagePath = path.join(PROFILE_IMAGE_DIR, imageKey);
+    const imagePath = path.join(getProfileImageDir(), imageKey);
 
-    await mkdir(PROFILE_IMAGE_DIR, { recursive: true });
     await writeFile(imagePath, file.buffer);
 
     runtimeState.player.portrait = {
@@ -282,11 +308,14 @@ export async function updateOwnProfileImage(viewerUser, file) {
 
 export async function resolveProfileImagePath(imageKey) {
   const safeKey = sanitizeProfileImageKey(imageKey);
-  if (!safeKey) {
+  if (!safeKey || !isProfileImageUploadAvailable()) {
+    // Same 404 whether the key is malformed, storage never initialized, or
+    // the file is genuinely missing - no need to distinguish those cases to
+    // an arbitrary caller of this public, unauthenticated route.
     throw new HttpError(404, "Profile image not found.", "PROFILE_IMAGE_NOT_FOUND");
   }
 
-  const imagePath = path.join(PROFILE_IMAGE_DIR, safeKey);
+  const imagePath = path.join(getProfileImageDir(), safeKey);
   await access(imagePath).catch(() => {
     throw new HttpError(404, "Profile image not found.", "PROFILE_IMAGE_NOT_FOUND");
   });

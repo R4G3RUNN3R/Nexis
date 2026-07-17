@@ -101,6 +101,7 @@ export default function ProfilePage() {
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [prestigeMessage, setPrestigeMessage] = useState<string | null>(null);
   const [prestigeError, setPrestigeError] = useState<string | null>(null);
+  const [failedPortraitUrl, setFailedPortraitUrl] = useState<string | null>(null);
   const portraitInputRef = useRef<HTMLInputElement | null>(null);
   const [chronicleEntries, setChronicleEntries] = useState<ServerRecordEntry[]>([]);
   const [chronicleTotal, setChronicleTotal] = useState(0);
@@ -370,6 +371,10 @@ export default function ProfilePage() {
           current: Number(player.stats.health ?? 0),
           max: Number(player.stats.maxHealth ?? 0),
         },
+        // Only the server can know this (it checks the file on disk) - use
+        // the fetched profile's value once available, default to false
+        // (nothing to warn about yet) before that first fetch completes.
+        portraitFileMissing: profile?.selfProfile?.portraitFileMissing ?? false,
       };
     }
     return profile?.selfProfile ?? null;
@@ -541,11 +546,12 @@ export default function ProfilePage() {
         <header className="profile-identity-stage">
           <div className="profile-portrait-panel">
             <div className="profile-portrait-frame">
-              {portraitUrl ? (
+              {portraitUrl && portraitUrl !== failedPortraitUrl ? (
                 <img
                   src={portraitUrl}
                   alt={`${publicProfile.name} portrait`}
                   className="profile-portrait-frame__image"
+                  onError={() => setFailedPortraitUrl(portraitUrl)}
                 />
               ) : (
                 <div className="profile-portrait-frame__placeholder" aria-label="Portrait placeholder">
@@ -557,6 +563,11 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+            {viewer.isSelf && selfProfile?.portraitFileMissing ? (
+              <div className="profile-portrait-controls__message profile-portrait-controls__message--error">
+                Your previous profile image is no longer available. Please upload it again.
+              </div>
+            ) : null}
 
             {canEditPortrait ? (
               <div className="profile-portrait-controls">

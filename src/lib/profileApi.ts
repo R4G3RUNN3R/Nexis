@@ -94,6 +94,10 @@ export type ProfileResponse = {
       current: number;
       max: number;
     };
+    // True only when this account has a stored portrait record whose file
+    // is confirmed missing on disk. Self-view only - never sent for public
+    // or staff views of another account.
+    portraitFileMissing: boolean;
   } | null;
   moderation: {
     email: string;

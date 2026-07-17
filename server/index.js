@@ -3,6 +3,7 @@ import { API_PORT, ORG_BASE_SWEEP_ENABLED, ORG_BASE_SWEEP_INTERVAL_MS } from "./
 import { ensureDatabaseSchema } from "./db/migrate.js";
 import { getDatabaseMode } from "./db/pool.js";
 import { runOrganizationBaseLifecycleSweep } from "./services/organizationBaseSafetyService.js";
+import { ensureProfileImageStorageReady } from "./lib/profileImageStorage.js";
 
 const app = createApp();
 
@@ -17,6 +18,17 @@ try {
     `Backend started without persistent database storage: ${
       error instanceof Error ? error.message : "Unknown database error."
     }`,
+  );
+}
+
+try {
+  const profileImageDir = await ensureProfileImageStorageReady();
+  console.log(`Profile image storage ready at ${profileImageDir}`);
+} catch (error) {
+  console.error(
+    `[profile-image-storage] FAILED TO INITIALIZE: ${
+      error instanceof Error ? error.message : "Unknown error."
+    } - profile image uploads are disabled until this is fixed.`,
   );
 }
 

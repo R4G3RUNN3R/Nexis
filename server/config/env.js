@@ -25,6 +25,14 @@ export const ORG_BASE_SWEEP_INTERVAL_MS = Math.max(
 // browser so it can initialize the sign-in SDK). Absent by default: Google
 // auth stays fully optional and every backend entry point must fail safely
 // (controlled config-error response, not a crash) when this is unset.
+// Durable, persistent directory for uploaded profile images - deliberately
+// outside the source checkout and outside .data/ (the disposable pglite test
+// database's directory). See docs/incident-profile-image-data-loss-20260717.md
+// for why this must never live inside the repository: a shared "isolated
+// test cleanup" directory previously deleted real uploads along with
+// disposable test data.
+export const PROFILE_IMAGE_STORAGE_DIR = process.env.PROFILE_IMAGE_STORAGE_DIR || null;
+
 export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || null;
 export const GOOGLE_PENDING_REGISTRATION_TTL_MINUTES = Number(
   process.env.GOOGLE_PENDING_REGISTRATION_TTL_MINUTES || 15,
