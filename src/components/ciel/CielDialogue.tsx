@@ -26,6 +26,11 @@ const quickQuestions: Record<string, string[]> = {
     "Explain my stat bars.",
     "Why does Comfort matter?",
   ],
+  "/home": [
+    "What should I actually do first?",
+    "Start the Home tutorial again.",
+    "Explain my current activity.",
+  ],
   "/inventory": [
     "What do I do with these items?",
     "How do I get more materials?",

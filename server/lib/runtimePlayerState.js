@@ -230,6 +230,8 @@ export function buildMutableRuntimeState(user, playerState) {
       lifePath: normalizeLifePath(player.lifePath),
       portrait: asRecord(player.portrait),
       bio: asRecord(player.bio),
+      preferences: asRecord(player.preferences),
+      ui: asRecord(player.ui),
       counters: asRecord(player.counters),
       cityContracts: asRecord(player.cityContracts),
       cityAcademy: asRecord(player.cityAcademy),

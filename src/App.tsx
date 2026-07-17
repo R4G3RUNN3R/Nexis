@@ -35,11 +35,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace state={{ redirectedFrom: location.pathname }} />;
   }
 
+  const isCielIntro = location.pathname === "/ciel-intro";
+
   return (
     <>
-      <RouteTransitionQuote />
+      {isCielIntro ? null : <RouteTransitionQuote />}
       {children}
-      <Ciel />
+      {isCielIntro ? null : <Ciel />}
     </>
   );
 }

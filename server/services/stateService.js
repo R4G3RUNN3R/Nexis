@@ -81,6 +81,39 @@ function sanitizeStringRecord(value, allowedKeys, maxLength = 600) {
   );
 }
 
+const CIEL_TUTORIAL_STRING_FIELDS = [
+  "introSeenAt",
+  "introCompletedAt",
+  "skippedAt",
+  "spotlightCompletedAt",
+  "spotlightSkippedAt",
+  "lastStepId",
+];
+const CIEL_TUTORIAL_STEPS = new Set(["identity", "orders", "activity", "quick-actions", "readiness", "ciel-feed", "records"]);
+
+function sanitizeCielTutorial(value) {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const tutorial = { version: 1 };
+  for (const key of CIEL_TUTORIAL_STRING_FIELDS) {
+    const cleaned = sanitizePlainText(record[key], 80);
+    if (cleaned) tutorial[key] = cleaned;
+  }
+
+  if (record.spotlightPending === "true" || record.spotlightPending === "false") {
+    tutorial.spotlightPending = record.spotlightPending;
+  }
+
+  if (Array.isArray(record.completedStepIds)) {
+    tutorial.completedStepIds = record.completedStepIds
+      .filter((entry) => typeof entry === "string" && CIEL_TUTORIAL_STEPS.has(entry))
+      .slice(0, 12);
+  }
+
+  return tutorial;
+}
+
 function collectBlockedClientFields(payload) {
   const blocked = [];
   for (const key of Object.keys(payload)) {
@@ -110,7 +143,14 @@ function buildAllowedClientPatch(payload) {
   }
 
   if (Object.prototype.hasOwnProperty.call(payloadPlayer, "ui")) {
-    const ui = sanitizeStringRecord(payloadPlayer.ui, ["dismissedGuideAt", "lastCommandBriefAt"], 80);
+    const payloadUi = asRecord(payloadPlayer.ui) ?? {};
+    const ui = sanitizeStringRecord(payloadUi, ["dismissedGuideAt", "lastCommandBriefAt"], 80);
+    if (Object.prototype.hasOwnProperty.call(payloadUi, "cielTutorial")) {
+      const tutorial = sanitizeCielTutorial(payloadUi.cielTutorial);
+      if (tutorial) {
+        ui.cielTutorial = tutorial;
+      }
+    }
     if (Object.keys(ui).length) patch.ui = ui;
   }
 
@@ -120,13 +160,21 @@ function buildAllowedClientPatch(payload) {
 function mergeRuntimeState(existingRuntime, payload) {
   const existingPlayer = asRecord(existingRuntime.player) ?? {};
   const allowedPlayerPatch = buildAllowedClientPatch(payload);
+  const nextPlayer = {
+    ...existingPlayer,
+    ...allowedPlayerPatch,
+  };
+
+  if (allowedPlayerPatch.ui) {
+    nextPlayer.ui = {
+      ...(asRecord(existingPlayer.ui) ?? {}),
+      ...allowedPlayerPatch.ui,
+    };
+  }
 
   return {
     ...existingRuntime,
-    player: {
-      ...existingPlayer,
-      ...allowedPlayerPatch,
-    },
+    player: nextPlayer,
   };
 }
 

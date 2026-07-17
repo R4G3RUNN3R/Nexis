@@ -45,6 +45,7 @@ import PropertyOfficePage from "../pages/PropertyOffice";
 import CodexPage from "../pages/Codex";
 import WikiPage from "../pages/Wiki";
 import IconGalleryPage from "../pages/IconGallery";
+import CielIntroPage from "../components/ciel/CielIntroPage";
 import NotFoundPage from "../pages/NotFound";
 
 function readStoredSessionProfilePublicId() {
@@ -147,6 +148,7 @@ export default function AppRouter() {
 
       <Route path="/" element={<RootEntry />} />
       <Route path="/home" element={<HomePage />} />
+      <Route path="/ciel-intro" element={<CielIntroPage />} />
       <Route path="/inventory" element={<InventoryPage />} />
       <Route path="/crafting" element={<RouteGuard><CraftingPage /></RouteGuard>} />
       <Route path="/profile" element={<OwnProfileRedirect />} />

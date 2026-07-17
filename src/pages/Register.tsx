@@ -107,7 +107,7 @@ function RegisterForm({ onSwitch, redirectTarget }: { onSwitch: () => void; redi
         return;
       }
 
-      navigate(redirectTarget, { replace: true });
+      navigate("/ciel-intro", { replace: true, state: { afterTutorial: redirectTarget } });
     } finally {
       setIsSubmitting(false);
     }

@@ -10,8 +10,8 @@
 // Treats the player as someone capable of figuring things out — eventually.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 export type CielMessage = {
   id: string;
@@ -179,6 +179,10 @@ function buildReply(input: string, pageTitle?: string): string {
     return "First name, last name. That's it. No class selection — what you become in Nexis is a product of what you do, not what you pick from a menu on day one. Your identity is earned.";
   }
 
+  if (text.includes("home tutorial")) {
+    return "Open Home with the tutorial marker: /home?ciel=spotlight. I will highlight the command surface again, because repetition is cheaper than confusion.";
+  }
+
   // What to do / next steps
   if (text.includes("what should i do") || text.includes("what next") || text.includes("where to start") || text.includes("first")) {
     return "In order of priority: ensure your stats are regenerating, start an education course if you haven't, run jobs to build category levels and gather materials, and invest gold in property when you can afford to upgrade. Everything else builds on those four things.";
@@ -207,6 +211,7 @@ function buildReply(input: string, pageTitle?: string): string {
 
 export function useCiel(options: UseCielOptions = {}) {
   const location = useLocation();
+  const navigate = useNavigate();
   const pathname = location.pathname;
 
   const [isOpen, setIsOpen] = useState(false);
@@ -243,6 +248,8 @@ export function useCiel(options: UseCielOptions = {}) {
     const clean = text.trim();
     if (!clean) return;
 
+    const shouldLaunchHomeTutorial = clean.toLowerCase().includes("home tutorial");
+
     const playerMessage: CielMessage = {
       id: `player-${Date.now()}`,
       role: "player",
@@ -259,7 +266,38 @@ export function useCiel(options: UseCielOptions = {}) {
 
     setMessages((prev) => [...prev, playerMessage, cielReply]);
     setIsOpen(true);
+    if (shouldLaunchHomeTutorial) {
+      window.setTimeout(() => navigate("/home?ciel=spotlight"), 60);
+    }
   };
+
+  useEffect(() => {
+    function handleCielEvent(event: Event) {
+      const detail = (event as CustomEvent<{ type?: string; payload?: unknown }>).detail;
+      const payload = detail && typeof detail.payload === "object" && detail.payload !== null ? detail.payload as Record<string, unknown> : {};
+      const text = typeof payload.text === "string" ? payload.text.trim() : "";
+      const question = typeof payload.question === "string" ? payload.question.trim() : "";
+
+      if (detail?.type === "home-spotlight") {
+        const next: CielMessage = {
+          id: `ciel-event-${Date.now()}`,
+          role: "ciel",
+          text: text || "Tutorial mode active. I will highlight the useful pieces first, because apparently dashboards do not explain themselves yet.",
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, next]);
+        setIsOpen(true);
+        return;
+      }
+
+      if (question) {
+        sendPlayerMessage(question);
+      }
+    }
+
+    window.addEventListener("ciel:ask", handleCielEvent as EventListener);
+    return () => window.removeEventListener("ciel:ask", handleCielEvent as EventListener);
+  }, [options.pageTitle]);
 
   const clearMessages = () => {
     setMessages([

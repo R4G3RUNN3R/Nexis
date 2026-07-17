@@ -67,6 +67,17 @@ const stateAttack = await request("/state", {
       stats: { energy: 999, health: 999, maxHealth: 999 },
       inventory: { forged_item: { quantity: 99 } },
       bio: { bio: "Canary bio survives state allowlist." },
+      ui: {
+        dismissedGuideAt: "2026-07-17T00:00:00.000Z",
+        cielTutorial: {
+          version: 1,
+          introSeenAt: "2026-07-17T00:00:00.000Z",
+          spotlightPending: "true",
+          lastStepId: "orders",
+          completedStepIds: ["identity", "orders", "not-real"],
+          bogus: "blocked",
+        },
+      },
     },
     guild: { publicId: 999 },
     consortium: { publicId: 999 },
@@ -83,6 +94,10 @@ assert(afterPlayer.gold === beforeGold, "client changed server-owned gold", { be
 assert(afterPlayer.level === beforeLevel, "client changed server-owned level", { beforeLevel, afterLevel: afterPlayer.level });
 assert(JSON.stringify(afterPlayer.inventory ?? {}) === beforeInventory, "client changed server-owned inventory", { beforeInventory, afterInventory: afterPlayer.inventory });
 assert(afterPlayer.bio?.bio === "Canary bio survives state allowlist.", "allowed bio field did not persist", afterPlayer.bio);
+assert(afterPlayer.ui?.cielTutorial?.spotlightPending === "true", "CIEL tutorial state did not persist", afterPlayer.ui);
+assert(afterPlayer.ui?.cielTutorial?.completedStepIds?.includes("identity"), "CIEL tutorial completed steps did not persist", afterPlayer.ui);
+assert(!afterPlayer.ui?.cielTutorial?.completedStepIds?.includes("not-real"), "CIEL tutorial accepted invalid step ids", afterPlayer.ui);
+assert(!Object.prototype.hasOwnProperty.call(afterPlayer.ui?.cielTutorial ?? {}, "bogus"), "CIEL tutorial accepted unknown fields", afterPlayer.ui);
 
 const adminProbe = await request("/admin/players", { headers: { Authorization: `Bearer ${token}` } });
 assert(adminProbe.response.status === 403, "normal player could access admin player search", adminProbe.payload);
