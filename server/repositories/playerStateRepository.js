@@ -152,7 +152,16 @@ export async function createDefaultPlayerState(client, userInternalId) {
   );
 }
 
-export async function findPlayerStateByUserInternalId(client, userInternalId) {
+// Ticket A: forUpdate acquires a row lock (SELECT ... FOR UPDATE) before
+// returning the row, so a caller that intends to read-modify-write this
+// player's state can hold the lock across validation and the eventual
+// upsertPlayerRuntimeState call, closing the lost-update race where two
+// concurrent requests both read the same pre-mutation row and the later
+// commit silently discards the earlier one's changes. Defaults to false so
+// every existing read-only call site (get*ForUser handlers, etc.) is
+// unaffected - only call sites that are about to mutate should opt in.
+export async function findPlayerStateByUserInternalId(client, userInternalId, options = {}) {
+  const { forUpdate = false } = options;
   const result = await client.query(
     `
       SELECT
@@ -176,6 +185,7 @@ export async function findPlayerStateByUserInternalId(client, userInternalId) {
         updated_at
       FROM player_state
       WHERE user_internal_id = $1
+      ${forUpdate ? "FOR UPDATE" : ""}
     `,
     [userInternalId],
   );

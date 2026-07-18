@@ -8,6 +8,7 @@ import {
 } from "../repositories/playerStateRepository.js";
 import { findUserByPublicId } from "../repositories/usersRepository.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
+import { orderInternalIds } from "../lib/lockOrdering.js";
 import {
   ARMOR_REDUCTION_CAP,
   DAMAGE_TYPES,
@@ -44,9 +45,14 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-async function loadRuntimeState(client, user) {
+// Ticket A: forUpdate locks the player_state row for this transaction.
+// Every mutating function below passes forUpdate: true so two concurrent
+// requests against the same inventory (equip, wear, destroy, send, use)
+// cannot both read the same pre-mutation snapshot and silently clobber
+// each other on commit.
+async function loadRuntimeState(client, user, { forUpdate = false } = {}) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) };
 }
@@ -84,13 +90,13 @@ function ensureInventory(runtimeState) {
   return player.inventory;
 }
 
-function addInventory(runtimeState, itemId, quantity = 1) {
+export function addInventory(runtimeState, itemId, quantity = 1) {
   const inventory = ensureInventory(runtimeState);
   const amount = Math.max(1, Math.floor(asNumber(quantity, 1)));
   inventory[itemId] = Math.max(0, Math.floor(asNumber(inventory[itemId], 0) + amount));
 }
 
-function removeInventory(runtimeState, itemId, quantity = 1) {
+export function removeInventory(runtimeState, itemId, quantity = 1) {
   const inventory = ensureInventory(runtimeState);
   const amount = Math.max(1, Math.floor(asNumber(quantity, 1)));
   const owned = Math.max(0, Math.floor(asNumber(inventory[itemId], 0)));
@@ -263,7 +269,7 @@ export async function getItemInventoryForUser(user) {
 
 export async function equipItemForUser(user, itemId, requestedSlot = null) {
   return withTransaction(async (client) => {
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const item = getItemDefinition(itemId);
     if (!item) throw new HttpError(404, "Item not found.", "ITEM_NOT_FOUND");
     if (!isEquippable(itemId)) throw new HttpError(409, `${item.displayName} cannot be equipped.`, "ITEM_NOT_EQUIPPABLE");
@@ -281,7 +287,7 @@ export async function equipItemForUser(user, itemId, requestedSlot = null) {
 export async function unequipItemForUser(user, slot) {
   return withTransaction(async (client) => {
     if (!EQUIPMENT_SLOTS.includes(slot)) throw new HttpError(400, "Equipment slot is invalid.", "ITEM_SLOT_INVALID");
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const equipment = ensureEquipmentState(runtimeState);
     const itemId = equipment[slot];
     if (!itemId) throw new HttpError(409, "That slot is already empty.", "ITEM_SLOT_EMPTY");
@@ -305,7 +311,7 @@ function normalizeVisualSlot(itemId, requestedSlot) {
 
 export async function wearItemForUser(user, itemId, requestedSlot = null) {
   return withTransaction(async (client) => {
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const item = getItemDefinition(itemId);
     if (!item) throw new HttpError(404, "Item not found.", "ITEM_NOT_FOUND");
     if (!isWearable(itemId)) throw new HttpError(409, `${item.displayName} cannot be worn.`, "ITEM_NOT_WEARABLE");
@@ -323,7 +329,7 @@ export async function wearItemForUser(user, itemId, requestedSlot = null) {
 export async function removeWornItemForUser(user, slot) {
   return withTransaction(async (client) => {
     if (!VISUAL_EQUIPMENT_SLOTS.includes(slot)) throw new HttpError(400, "Clothing slot is invalid.", "ITEM_VISUAL_SLOT_INVALID");
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const visualEquipment = ensureVisualEquipmentState(runtimeState);
     const itemId = visualEquipment[slot];
     if (!itemId) throw new HttpError(409, "That clothing slot is already empty.", "ITEM_VISUAL_SLOT_EMPTY");
@@ -338,7 +344,7 @@ export async function removeWornItemForUser(user, slot) {
 export async function destroyItemForUser(user, itemId, quantityInput = 1, confirmation = false) {
   return withTransaction(async (client) => {
     const quantity = Math.max(1, Math.min(99, Math.floor(asNumber(quantityInput, 1))));
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const item = getItemDefinition(itemId);
     if (!item) throw new HttpError(404, "Item not found.", "ITEM_NOT_FOUND");
     if (confirmation !== true && confirmation !== itemId) throw new HttpError(400, `Confirm destruction of ${item.displayName}.`, "ITEM_DESTROY_CONFIRMATION_REQUIRED");
@@ -361,8 +367,16 @@ export async function sendItemForUser(user, itemId, targetPublicIdInput, quantit
     if (targetPublicId === user.publicId) throw new HttpError(409, "You cannot send an item to yourself.", "ITEM_SEND_SELF");
     const targetUser = await findUserByPublicId(client, targetPublicId);
     if (!targetUser) throw new HttpError(404, "Recipient not found.", "ITEM_SEND_TARGET_NOT_FOUND");
-    const { runtimeState: senderState } = await loadRuntimeState(client, user);
-    const { runtimeState: targetState } = await loadRuntimeState(client, targetUser);
+    // Ticket A: lock sender and target in canonical order - two players
+    // sending items to each other at the same moment (A->B and B->A) would
+    // otherwise be able to deadlock on reversed lock-acquisition order.
+    const [firstId, secondId] = orderInternalIds(user.internalId, targetUser.internalId);
+    const firstUser = firstId === user.internalId ? user : targetUser;
+    const secondUser = firstId === user.internalId ? targetUser : user;
+    const { runtimeState: firstState } = await loadRuntimeState(client, firstUser, { forUpdate: true });
+    const { runtimeState: secondState } = await loadRuntimeState(client, secondUser, { forUpdate: true });
+    const senderState = firstId === user.internalId ? firstState : secondState;
+    const targetState = firstId === user.internalId ? secondState : firstState;
     removeInventory(senderState, itemId, quantity);
     addInventory(targetState, itemId, quantity);
     const now = Date.now();
@@ -377,7 +391,7 @@ export async function sendItemForUser(user, itemId, targetPublicIdInput, quantit
 export async function useItemForUser(user, itemId, quantityInput = 1) {
   return withTransaction(async (client) => {
     const quantity = Math.max(1, Math.min(10, Math.floor(asNumber(quantityInput, 1))));
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const item = getItemDefinition(itemId);
     if (!item) throw new HttpError(404, "Item not found.", "ITEM_NOT_FOUND");
     if (!isUsable(itemId)) throw new HttpError(409, `${item.displayName} is not directly usable.`, "ITEM_NOT_USABLE");

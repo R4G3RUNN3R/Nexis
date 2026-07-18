@@ -153,9 +153,9 @@ function buildChronicleRun(runtimeState, user, now = Date.now()) {
   };
 }
 
-async function loadRuntimeState(client, user) {
+async function loadRuntimeState(client, user, { forUpdate = false } = {}) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate });
   if (!playerState) {
     throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   }
@@ -270,7 +270,7 @@ export async function setDonorTierForUser(actorUser, targetUser, payload) {
     if (!actorUser?.privilegeRole || actorUser.privilegeRole === "player") {
       throw new HttpError(403, "Only staff can modify donor tiers.", "DONOR_TIER_FORBIDDEN");
     }
-    const { runtimeState } = await loadRuntimeState(client, targetUser);
+    const { runtimeState } = await loadRuntimeState(client, targetUser, { forUpdate: true });
     const donorTierKey = String(payload?.donorTier ?? "").trim();
     const donorTier = getDonorTierDefinition(donorTierKey);
     if (donorTier.key !== donorTierKey) {
@@ -287,7 +287,7 @@ export async function setDonorTierForUser(actorUser, targetUser, payload) {
 
 export async function openMonthlyChronicleForUser(user) {
   return withTransaction(async (client) => {
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const legacy = normalizeLegacyState(runtimeState);
     const donorTier = getDonorTierDefinition(legacy.donorTier);
     if (!donorTier.chronicleEligible) {
@@ -312,7 +312,7 @@ export async function openMonthlyChronicleForUser(user) {
 
 export async function submitChronicleChoiceForUser(user, payload) {
   return withTransaction(async (client) => {
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const legacy = normalizeLegacyState(runtimeState);
     if (!legacy.activeRun) {
       throw new HttpError(409, "No active Chronicle run exists.", "CHRONICLE_RUN_MISSING");

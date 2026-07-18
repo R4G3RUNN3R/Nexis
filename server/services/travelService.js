@@ -523,9 +523,19 @@ export function resolveTravelForRuntimeState(runtimeState, now = Date.now()) {
   return { changed: false, travelState: current };
 }
 
+// Ticket A: this helper is called from all four travel endpoints,
+// including the two "get" endpoints - because it always evaluates and
+// potentially settles a due arrival (resolveTravelForRuntimeState) and
+// writes if so, every call site is a potential write, not just the
+// explicit start/cancel actions. Locked unconditionally rather than
+// caller-optional: two concurrent page loads/polls around arrivalAt could
+// otherwise both read the same pre-arrival snapshot, both settle cargo and
+// credit bonus gold independently, and whichever upsert commits last would
+// silently discard the other's math (or a concurrent unrelated action's
+// commit in between).
 async function loadRuntimeState(client, user) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate: true });
   if (!playerState) {
     throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   }

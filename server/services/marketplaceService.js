@@ -10,6 +10,7 @@ import { getCityDemandProfile } from "./liveWorldService.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
 import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
 import { hasCompletedCourse } from "./educationService.js";
+import { orderInternalIds } from "../lib/lockOrdering.js";
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asNumber(value, fallback = 0) { const numeric = Number(value); return Number.isFinite(numeric) ? numeric : fallback; }
@@ -18,7 +19,11 @@ function getInventory(runtimeState) { const player = asRecord(runtimeState.playe
 function addInventory(runtimeState, itemId, quantity) { const inventory = getInventory(runtimeState); inventory[itemId] = Math.max(0, Math.floor(asNumber(inventory[itemId], 0) + quantity)); }
 function removeInventory(runtimeState, itemId, quantity) { const inventory = getInventory(runtimeState); const owned = Math.max(0, Math.floor(asNumber(inventory[itemId], 0))); if (owned < quantity) throw new HttpError(409, `You only have ${owned} ${getItemDisplayName(itemId)}.`, "MARKETPLACE_ITEM_INSUFFICIENT"); const next = owned - quantity; if (next > 0) inventory[itemId] = next; else delete inventory[itemId]; }
 function applyGold(runtimeState, amount) { const player = runtimeState.player; const next = Math.max(0, Math.floor(asNumber(player.gold, 0) + amount)); player.gold = next; player.currencies = { ...asRecord(player.currencies), gold: next }; }
-async function loadRuntimeState(client, user) { await createDefaultPlayerState(client, user.internalId); const playerState = await findPlayerStateByUserInternalId(client, user.internalId); if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND"); return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) }; }
+// Ticket A: forUpdate locks the player_state row for the duration of this
+// transaction. Every mutating function below passes forUpdate: true;
+// read-only endpoints (marketplace browsing) do not, so they never hold an
+// unnecessary lock.
+async function loadRuntimeState(client, user, { forUpdate = false } = {}) { await createDefaultPlayerState(client, user.internalId); const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate }); if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND"); return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) }; }
 function currentCityId(runtimeState) { const travel = asRecord(runtimeState.travel); const current = asRecord(runtimeState.player?.current); return normalizeCityId(travel.currentCityId ?? current.currentCityId ?? "nexis"); }
 
 function serializeListing(listing, viewerUser = null) {
@@ -135,7 +140,7 @@ export async function createMarketplaceListingForUser(user, payload = {}) {
     const quantity = Math.max(1, Math.min(99, Math.floor(asNumber(payload.quantity, 1))));
     const unitPrice = Math.max(1, Math.min(999999, Math.floor(asNumber(payload.unitPrice, item.valueSell ?? 1))));
     const cityId = normalizeCityId(payload.cityId, "nexis");
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     // Education hard-gate: Practical Arithmetic -> commerce. Listing an item is a sell action, so it
     // is gated same as buying; browsing the marketplace/price guide (getMarketplaceForUser) is not.
     if (!hasCompletedCourse(runtimeState, "practical-arithmetic")) throw new HttpError(403, "Practical Arithmetic is required before you can trade.", "EDUCATION_LOCKED");
@@ -156,14 +161,24 @@ export async function buyMarketplaceListingForUser(user, listingIdInput) {
     const listing = await findMarketplaceListingById(client, listingId, { forUpdate: true });
     if (!listing || listing.status !== "active" || (listing.expiresAt && listing.expiresAt <= Date.now())) throw new HttpError(404, "Marketplace listing unavailable.", "MARKETPLACE_LISTING_UNAVAILABLE");
     if (listing.sellerInternalId === user.internalId) throw new HttpError(409, "You cannot buy your own listing.", "MARKETPLACE_SELF_BUY");
-    const { runtimeState: buyerState } = await loadRuntimeState(client, user);
+    const sellerUser = await findUserByInternalId(client, listing.sellerInternalId);
+    if (!sellerUser) throw new HttpError(404, "Seller unavailable.", "MARKETPLACE_SELLER_MISSING");
+    // Ticket A: lock buyer and seller rows in a canonical (internalId-sorted)
+    // order rather than always buyer-then-seller - two purchases between the
+    // same two players in opposite directions at the same time would
+    // otherwise be able to deadlock (Tx1 holds buyer, wants seller; Tx2
+    // holds seller, wants buyer, from the reverse trade).
+    const [firstId, secondId] = orderInternalIds(user.internalId, sellerUser.internalId);
+    const firstUser = firstId === user.internalId ? user : sellerUser;
+    const secondUser = firstId === user.internalId ? sellerUser : user;
+    const { runtimeState: firstState } = await loadRuntimeState(client, firstUser, { forUpdate: true });
+    const { runtimeState: secondState } = await loadRuntimeState(client, secondUser, { forUpdate: true });
+    const buyerState = firstId === user.internalId ? firstState : secondState;
+    const sellerState = firstId === user.internalId ? secondState : firstState;
     // Education hard-gate: Practical Arithmetic -> commerce (buy side).
     if (!hasCompletedCourse(buyerState, "practical-arithmetic")) throw new HttpError(403, "Practical Arithmetic is required before you can trade.", "EDUCATION_LOCKED");
     const totalPrice = listing.quantity * listing.unitPrice;
     if (asNumber(buyerState.player.gold, 0) < totalPrice) throw new HttpError(409, `Requires ${totalPrice} gold.`, "MARKETPLACE_GOLD_INSUFFICIENT");
-    const sellerUser = await findUserByInternalId(client, listing.sellerInternalId);
-    if (!sellerUser) throw new HttpError(404, "Seller unavailable.", "MARKETPLACE_SELLER_MISSING");
-    const { runtimeState: sellerState } = await loadRuntimeState(client, sellerUser);
     applyGold(buyerState, -totalPrice);
     addInventory(buyerState, listing.itemId, listing.quantity);
     buyerState.player.counters = { ...asRecord(buyerState.player.counters), marketplacePurchases: Math.max(0, Math.floor(asNumber(buyerState.player.counters?.marketplacePurchases, 0) + 1)) };
@@ -189,7 +204,7 @@ export async function cancelMarketplaceListingForUser(user, listingIdInput) {
     const listing = await findMarketplaceListingById(client, listingId, { forUpdate: true });
     if (!listing || listing.status !== "active") throw new HttpError(404, "Marketplace listing unavailable.", "MARKETPLACE_LISTING_UNAVAILABLE");
     if (listing.sellerInternalId !== user.internalId) throw new HttpError(403, "Only the seller can cancel this listing.", "MARKETPLACE_NOT_SELLER");
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     addInventory(runtimeState, listing.itemId, listing.quantity);
     addPlayerRecord(runtimeState, { category: "marketplace", summary: `Cancelled marketplace listing: ${getItemDisplayName(listing.itemId)} x${listing.quantity}.`, detail: { listingId, itemId: listing.itemId, quantity: listing.quantity }, source: "marketplace", route: "/market", timestamp: Date.now() });
     const cancelled = await updateMarketplaceListingStatus(client, listing.id, "cancelled", { cancelledAt: Date.now() });

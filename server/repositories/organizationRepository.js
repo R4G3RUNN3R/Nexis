@@ -116,6 +116,20 @@ export async function findOrganizationByInternalId(client, organizationInternalI
   return hydrateOrganization(client, result.rows[0]);
 }
 
+// Ticket A: shared lock-then-read helper, matching the established pattern
+// already used independently in organizationBaseSafetyService.js/
+// organizationBaseConstructionService.js/organizationBaseRoomService.js/
+// organizationBaseAuctionService.js (a lightweight SELECT ... FOR UPDATE
+// against just the organizations row, followed by the full hydrated read).
+// New code should call this instead of hand-rolling another copy; the
+// existing per-file copies are left as-is since they already work
+// correctly and touching them isn't necessary to close any known risk.
+export async function lockOrganizationForUpdate(client, organizationInternalId) {
+  const lock = await client.query(`SELECT internal_id FROM organizations WHERE internal_id = $1 FOR UPDATE`, [organizationInternalId]);
+  if (!lock.rows.length) return null;
+  return findOrganizationByInternalId(client, organizationInternalId);
+}
+
 export async function findOrganizationByPublicId(client, publicId) {
   const result = await client.query(`SELECT * FROM organizations WHERE public_id = $1 LIMIT 1`, [publicId]);
   return hydrateOrganization(client, result.rows[0]);

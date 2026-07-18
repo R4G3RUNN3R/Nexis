@@ -36,9 +36,9 @@ function asNumber(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
-async function loadRuntimeState(client, user) {
+async function loadRuntimeState(client, user, { forUpdate = false } = {}) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) };
 }
@@ -348,7 +348,7 @@ export async function getCraftingForUser(user) {
 
 export async function craftRecipeForUser(user, recipeId) {
   return withTransaction(async (client) => {
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const recipe = getRecipeDefinition(recipeId);
     if (!recipe) throw new HttpError(404, "Recipe not found.", "CRAFTING_RECIPE_NOT_FOUND");
     const serialized = serializeRecipe(runtimeState, recipe);
@@ -374,7 +374,7 @@ export async function craftRecipeForUser(user, recipeId) {
 // energy deduction, item consumption, and the reward grant either all land or all roll back.
 export async function salvageItemForUser(user) {
   return withTransaction(async (client) => {
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
 
     const stats = ensureStats(runtimeState);
     const energy = Math.max(0, Math.floor(asNumber(stats.energy, 0)));
@@ -439,7 +439,7 @@ export async function salvageItemForUser(user) {
 export async function repairEquipmentForUser(user, slot) {
   return withTransaction(async (client) => {
     if (!EQUIPMENT_SLOTS.includes(slot)) throw new HttpError(400, "Equipment slot is invalid.", "ITEM_SLOT_INVALID");
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const option = serializeRepairOption(runtimeState, slot);
     if (!option.canRepair) throw new HttpError(409, option.lockReason ?? "Equipment cannot be repaired.", "ITEM_REPAIR_BLOCKED");
     const costItem = option.cost.items[0];
@@ -474,7 +474,7 @@ export async function getLoadoutsForUser(user) {
 export async function saveLoadoutForUser(user, slotInput, labelInput = null) {
   return withTransaction(async (client) => {
     const slot = normalizeLoadoutSlot(slotInput);
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const loadouts = ensureLoadouts(runtimeState);
     const equipment = ensureEquipment(runtimeState);
     loadouts.presets[slot] = {
@@ -492,7 +492,7 @@ export async function saveLoadoutForUser(user, slotInput, labelInput = null) {
 export async function equipLoadoutForUser(user, slotInput) {
   return withTransaction(async (client) => {
     const slot = normalizeLoadoutSlot(slotInput);
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const loadouts = ensureLoadouts(runtimeState);
     const preset = loadouts.presets[slot];
     if (!preset?.savedAt) throw new HttpError(409, "Save gear to this loadout before equipping it.", "LOADOUT_EMPTY");

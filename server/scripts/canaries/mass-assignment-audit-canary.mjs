@@ -15,8 +15,14 @@
 //   node server/scripts/canaries/mass-assignment-audit-canary.mjs
 //
 import assert from "node:assert/strict";
+import { resolveCanaryBaseUrl } from "./lib/canarySafety.js";
 
-const BASE = process.env.NEXIS_CANARY_BASE_URL || "http://127.0.0.1:8790";
+// Ticket A Phase A5: the :8790 default was previously an unenforced
+// convention (a comment, not a runtime check) - nothing stopped
+// NEXIS_CANARY_BASE_URL from being pointed at production by mistake. Now
+// backed by the shared guard in lib/canarySafety.js, which still allows the
+// same :8790 local-instance default but refuses port 3001 / nexis.nexus.
+const BASE = resolveCanaryBaseUrl({ requireExplicit: false, defaultUrl: "http://127.0.0.1:8790" });
 
 let checks = 0;
 function check(label, condition) {

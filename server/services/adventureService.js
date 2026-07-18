@@ -52,9 +52,9 @@ function getPityStatus(runtimeState, adventure) {
   };
 }
 
-async function loadRuntimeState(client, user) {
+async function loadRuntimeState(client, user, { forUpdate = false } = {}) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) };
 }
@@ -204,7 +204,7 @@ export async function startAdventureForUser(user, adventureId, payload = {}) {
   return withTransaction(async (client) => {
     const adventure = getAdventureDefinition(String(adventureId ?? ""));
     if (!adventure) throw new HttpError(404, "Adventure unavailable.", "ADVENTURE_NOT_FOUND");
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const state = availability(runtimeState, adventure);
     if (!state.available) throw new HttpError(409, state.lockReason, "ADVENTURE_LOCKED");
     const now = Date.now();

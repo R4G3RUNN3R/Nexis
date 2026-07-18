@@ -30,7 +30,10 @@ function chance(random, pct) { return random() < pct; }
 
 async function loadRuntimeState(client, user) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  // Ticket A: locked unconditionally -- getExcursionBoardForUser can write via
+  // resolveDue() below even on a "get" call, so there is no genuinely
+  // read-only caller to spare from the lock.
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate: true });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) };
 }

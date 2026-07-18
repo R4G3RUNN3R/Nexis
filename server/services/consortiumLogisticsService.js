@@ -10,6 +10,7 @@ import {
   findOrganizationByInternalId,
   findOrganizationByPublicId,
   insertOrganizationLog,
+  lockOrganizationForUpdate,
   updateOrganizationDetails,
 } from "../repositories/organizationRepository.js";
 import {
@@ -614,7 +615,7 @@ export async function buildConsortiumLogisticsBoard(client, organization, viewer
 
 export async function getConsortiumLogisticsBoardForUser(user, organizationInternalId) {
   return withTransaction(async (client) => {
-    let organization = ensureConsortium(await findOrganizationByInternalId(client, organizationInternalId));
+    let organization = ensureConsortium(await lockOrganizationForUpdate(client, organizationInternalId));
     ensureMember(organization, user.internalId);
     organization = await resolveDueOperations(client, organization);
     return {
@@ -625,7 +626,7 @@ export async function getConsortiumLogisticsBoardForUser(user, organizationInter
 
 export async function createConsortiumLogisticsOperationForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    let organization = ensureConsortium(await findOrganizationByInternalId(client, organizationInternalId));
+    let organization = ensureConsortium(await lockOrganizationForUpdate(client, organizationInternalId));
     organization = await resolveDueOperations(client, organization);
     const member = ensureMember(organization, user.internalId);
     ensurePermission(organization, member, "manage_contracts");
@@ -713,7 +714,7 @@ export async function createConsortiumLogisticsOperationForUser(user, organizati
 
 export async function assignConsortiumLogisticsWorkerForUser(user, organizationInternalId, operationInternalId, payload) {
   return withTransaction(async (client) => {
-    let organization = ensureConsortium(await findOrganizationByInternalId(client, organizationInternalId));
+    let organization = ensureConsortium(await lockOrganizationForUpdate(client, organizationInternalId));
     organization = await resolveDueOperations(client, organization);
     const member = ensureMember(organization, user.internalId);
     ensurePermission(organization, member, "manage_contracts");
@@ -783,7 +784,7 @@ export async function assignConsortiumLogisticsWorkerForUser(user, organizationI
 
 export async function setConsortiumLogisticsEscortForUser(user, organizationInternalId, operationInternalId, payload) {
   return withTransaction(async (client) => {
-    let organization = ensureConsortium(await findOrganizationByInternalId(client, organizationInternalId));
+    let organization = ensureConsortium(await lockOrganizationForUpdate(client, organizationInternalId));
     organization = await resolveDueOperations(client, organization);
     const member = ensureMember(organization, user.internalId);
     ensurePermission(organization, member, "manage_contracts");

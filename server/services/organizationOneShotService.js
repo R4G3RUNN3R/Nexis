@@ -3,7 +3,8 @@ import { HttpError } from "../lib/errors.js";
 import { buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
 import { createDefaultPlayerState, findPlayerStateByUserInternalId, upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
 import { findUserByPublicId } from "../repositories/usersRepository.js";
-import { findOrganizationByInternalId, findOrganizationByPublicId, insertOrganizationLog, updateOrganizationDetails } from "../repositories/organizationRepository.js";
+import { findOrganizationByInternalId, findOrganizationByPublicId, insertOrganizationLog, lockOrganizationForUpdate, updateOrganizationDetails } from "../repositories/organizationRepository.js";
+import { recordOneShotCompletion } from "../repositories/oneShotCompletionRepository.js";
 import {
   ORGANIZATION_ONE_SHOT_MIN_SIGNUPS,
   ORGANIZATION_ONE_SHOT_TOKEN_COST,
@@ -33,9 +34,20 @@ async function findOrganization(client, organizationId) {
   return findOrganizationByInternalId(client, normalized.internalId);
 }
 
-async function loadRuntimeState(client, user) {
+// Ticket A: resolves the organization by public/internal ID (unlocked, just to
+// discover the internal ID), then re-reads it under FOR UPDATE. Mirrors the
+// preliminary-read-then-lock pattern used in duelService.js's
+// respondToDuelForUser, since the caller only has a public-facing ID here.
+async function lockOrganization(client, organizationId) {
+  const preliminary = await findOrganization(client, organizationId);
+  if (!preliminary) return null;
+  return lockOrganizationForUpdate(client, preliminary.internalId);
+}
+
+async function loadRuntimeState(client, user, options = {}) {
+  const { forUpdate = false } = options;
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) };
 }
@@ -259,7 +271,10 @@ export async function getOrganizationOneShotBoardForUser(user, organizationId) {
 
 export async function signUpOrganizationOneShotForUser(user, organizationId, campaignId) {
   return withTransaction(async (client) => {
-    let organization = await findOrganization(client, organizationId);
+    // Ticket A: lock the organization row first (consistently org-then-player
+    // across both signup and resolve), so two concurrent signups against the
+    // same organization can never both read the same stale signup list.
+    let organization = await lockOrganization(client, organizationId);
     if (!organization) throw new HttpError(404, "Organization not found.", "ORGANIZATION_NOT_FOUND");
     const membership = assertMember(organization, user);
     const campaign = getOrganizationOneShotCampaign(campaignId);
@@ -271,7 +286,7 @@ export async function signUpOrganizationOneShotForUser(user, organizationId, cam
     const existingSignup = campaignState.signups.find((signup) => Number(signup.publicId) === Number(user.publicId)) ?? null;
     let tokenWasCommitted = false;
     if (!existingSignup || !hasTokenCommitment(existingSignup)) {
-      const { runtimeState } = await loadRuntimeState(client, user);
+      const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
       const now = Date.now();
       const tokenCommitment = consumeOrganizationOneShotToken(runtimeState, user, now);
       if (existingSignup) {
@@ -304,7 +319,7 @@ async function refundParticipantTokens(client, campaignState, now) {
     if (!tokenCommitment || tokenCommitment.refundedAt || !shouldRefundOrganizationOneShotToken()) continue;
     const participant = await findUserByPublicId(client, signup.publicId);
     if (!participant) continue;
-    const { runtimeState } = await loadRuntimeState(client, participant);
+    const { runtimeState } = await loadRuntimeState(client, participant, { forUpdate: true });
     const refund = refundOrganizationOneShotToken(runtimeState, tokenCommitment, now);
     if (!refund) continue;
     signup.tokenCommitment = { ...tokenCommitment, refundedAt: now };
@@ -316,7 +331,10 @@ async function refundParticipantTokens(client, campaignState, now) {
 
 export async function resolveOrganizationOneShotForUser(user, organizationId, campaignId) {
   return withTransaction(async (client) => {
-    let organization = await findOrganization(client, organizationId);
+    // Ticket A: lock the organization row before the "already completed"/
+    // threshold checks, so two concurrent resolve attempts can't both read
+    // an unlocked campaignState and both pay out the treasury reward.
+    let organization = await lockOrganization(client, organizationId);
     if (!organization) throw new HttpError(404, "Organization not found.", "ORGANIZATION_NOT_FOUND");
     const membership = assertMember(organization, user);
     if (!canManageOneShots(organization, membership)) throw new HttpError(403, "Only organization leadership can resolve a group one-shot.", "ORGANIZATION_ONE_SHOT_LEADER_REQUIRED");
@@ -329,6 +347,20 @@ export async function resolveOrganizationOneShotForUser(user, organizationId, ca
     if (!canResolveOrganizationOneShot(campaignState, minimumSignups)) {
       throw new HttpError(409, `At least ${minimumSignups} members must commit one token each before this group one-shot can resolve.`, "ORGANIZATION_ONE_SHOT_SIGNUPS_REQUIRED");
     }
+
+    // Ticket A: DB-level idempotency backstop layered on top of the row
+    // lock above. sessionId is a stable business key (org + campaign), not
+    // a client-supplied value, so retried/duplicated resolve requests for
+    // the same campaign fail safely via the unique constraint instead of
+    // silently double-paying the treasury.
+    await recordOneShotCompletion(client, {
+      userInternalId: user.internalId,
+      organizationInternalId: organization.internalId,
+      campaignId: campaign.id,
+      sessionId: `org_one_shot_${organization.internalId}_${campaign.id}`,
+      outcomeKey: "resolved",
+      metadata: { resolvedByPublicId: user.publicId },
+    });
 
     const now = Date.now();
     const reward = asRecord(campaign.reward);

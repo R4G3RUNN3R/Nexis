@@ -17,9 +17,9 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
-async function loadRuntimeState(client, user) {
+async function loadRuntimeState(client, user, { forUpdate = false } = {}) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) };
 }
@@ -49,7 +49,7 @@ export async function getArenaCombatForUser(user) {
 
 export async function sparArenaOpponentForUser(user, opponentId, combatItemId = null) {
   return withTransaction(async (client) => {
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const opponent = getNpcOpponent(opponentId);
     if (!opponent) throw new HttpError(404, "Arena opponent unavailable.", "ARENA_OPPONENT_NOT_FOUND");
     const now = Date.now();

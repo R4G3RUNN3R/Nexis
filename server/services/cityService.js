@@ -260,7 +260,9 @@ function touchContractProgress(runtimeState, now = Date.now()) {
 
 async function loadRuntimeState(client, user) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  // Ticket A: locked unconditionally -- travel/contract-progress ticking below
+  // can write even from "get" callers, matching travelService.js.
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate: true });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
 
   const runtimeState = buildMutableRuntimeState(user, playerState);

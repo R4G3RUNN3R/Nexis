@@ -68,7 +68,11 @@ function applyPolicy(runtimeState, authoritativeConsortiumMembership = null) {
 
 async function loadRuntimeState(client, user) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  // Ticket A: locked unconditionally (not caller-optional) because this helper can itself
+  // write via upsertPlayerRuntimeState below when policyState.changed -- there is no
+  // genuinely read-only caller to spare from the lock, matching travelService.js/
+  // nexisOneShotService.js's shared-helper reasoning.
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate: true });
   if (!playerState) {
     throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   }

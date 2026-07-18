@@ -10,6 +10,7 @@ import { getItemDisplayName } from "../data/itemData.js";
 import { addPlayerExperience } from "./progressionService.js";
 import { addPlayerRecord, queueProgressionEvent } from "./playerRecordsService.js";
 import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
+import { recordOneShotCompletion } from "../repositories/oneShotCompletionRepository.js";
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asArray(value) { return Array.isArray(value) ? value : []; }
@@ -17,9 +18,17 @@ function asNumber(value, fallback = 0) { const numeric = Number(value); return N
 function asWholeNumber(value, fallback = 0) { return Math.max(0, Math.floor(asNumber(value, fallback))); }
 function cleanId(value) { return String(value ?? "entry").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "entry"; }
 
+// Ticket A: locked unconditionally - every exported function in this file
+// ends in an upsertPlayerRuntimeState call (even getOneShotHubForUser, to
+// persist token/session normalization), so there is no genuinely read-only
+// caller to spare from the lock. Two concurrent completion attempts for
+// the same session (double-click, retried request, two tabs) previously
+// both read the same "activeSession.status === 'active'" snapshot before
+// either committed; now the second blocks on the row lock and re-reads a
+// state where the first request's write has already landed.
 async function loadRuntimeState(client, user) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate: true });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) };
 }
@@ -411,6 +420,20 @@ export async function advanceOneShotForUser(user, sessionId, payload = {}) {
     const now = Date.now();
 
     if (choice.conclusion) {
+      // Ticket A: database-enforced completion ledger, in addition to (not
+      // instead of) the row lock acquired above. The row lock is the
+      // primary defense - a genuine concurrent retry of this same session
+      // blocks until the first request commits, then re-reads and hits
+      // the "session.status !== active" check above before ever reaching
+      // here. This insert is the backstop: it throws ONE_SHOT_ALREADY_COMPLETED
+      // (409) rather than silently granting a second reward if that
+      // primary defense is ever bypassed by a bug elsewhere.
+      await recordOneShotCompletion(client, {
+        userInternalId: user.internalId,
+        campaignId: session.campaignId,
+        sessionId: session.id,
+        outcomeKey: typeof choice.conclusion.outcome === "string" && choice.conclusion.outcome.trim() ? choice.conclusion.outcome.trim().slice(0, 120) : "completed",
+      });
       const { completed, reward } = completeSession(runtimeState, user, session, choice, choice.conclusion, now);
       evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
       const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);

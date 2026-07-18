@@ -8,6 +8,7 @@ import {
 } from "../repositories/playerStateRepository.js";
 import { findUserByPublicId } from "../repositories/usersRepository.js";
 import { assertCanStartRealFight, getCombatXpAward, grantCombatXp, resolveCombat, spendCombatEnergy } from "./combatService.js";
+import { orderInternalIds } from "../lib/lockOrdering.js";
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -44,9 +45,9 @@ function ensureDuelState(runtimeState) {
   return player.duels;
 }
 
-async function loadRuntimeState(client, user) {
+async function loadRuntimeState(client, user, { forUpdate = false } = {}) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) };
 }
@@ -113,8 +114,17 @@ export async function challengeDuelForUser(user, payload) {
     const targetUser = await findUserByPublicId(client, targetPublicId);
     if (!targetUser) throw new HttpError(404, "Target player not found.", "DUEL_TARGET_NOT_FOUND");
 
-    const { runtimeState: challengerRuntime } = await loadRuntimeState(client, user);
-    const { runtimeState: targetRuntime } = await loadRuntimeState(client, targetUser);
+    // Ticket A: canonical lock order (not always challenger-then-target) -
+    // two reciprocal challenges fired at the same moment (A challenges B,
+    // B challenges A) would otherwise each lock themselves first and then
+    // want the other, a textbook deadlock.
+    const [firstId, secondId] = orderInternalIds(user.internalId, targetUser.internalId);
+    const firstUser = firstId === user.internalId ? user : targetUser;
+    const secondUser = firstId === user.internalId ? targetUser : user;
+    const { runtimeState: firstState } = await loadRuntimeState(client, firstUser, { forUpdate: true });
+    const { runtimeState: secondState } = await loadRuntimeState(client, secondUser, { forUpdate: true });
+    const challengerRuntime = firstId === user.internalId ? firstState : secondState;
+    const targetRuntime = firstId === user.internalId ? secondState : firstState;
     const challengerCity = currentCityId(challengerRuntime);
     const targetCity = currentCityId(targetRuntime);
     if (challengerCity !== targetCity) throw new HttpError(409, "Duels are currently same-city only.", "DUEL_CITY_MISMATCH");
@@ -141,14 +151,44 @@ export async function challengeDuelForUser(user, payload) {
 export async function respondToDuelForUser(user, duelId, payload) {
   return withTransaction(async (client) => {
     const action = payload?.action === "decline" ? "decline" : "accept";
-    const { runtimeState: targetRuntime } = await loadRuntimeState(client, user);
+
+    // Ticket A: respondToDuelForUser previously read the target's row
+    // (unlocked), found the challenger's identity, then read the
+    // challenger's row (also unlocked, always target-then-challenger) -
+    // two concurrent accepts of the same challenge could both pass the
+    // "challenge.id exists" check before either committed, both resolve
+    // combat, both write, with only the timing of pglite/Postgres
+    // scheduling deciding which of two different fight outcomes survived
+    // (see pvp-fairness-canary.mjs's own re-assessment: its "at most one
+    // succeeds" pass was a scheduling artifact, not a code-enforced
+    // guarantee). Fixed with a preliminary unlocked peek to discover the
+    // challenger's identity (needed before we know what to lock), then
+    // both rows locked in canonical order, then a re-check that the
+    // challenge still exists in the freshly-locked (not the stale
+    // preliminary) target state before doing anything else - a second,
+    // truly concurrent accept blocks on the lock, then on waking sees the
+    // challenge already gone and 404s correctly instead of racing ahead
+    // with stale data.
+    const preliminary = await findPlayerStateByUserInternalId(client, user.internalId);
+    if (!preliminary) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
+    const preliminaryDuels = asRecord(asRecord(buildMutableRuntimeState(user, preliminary).player).duels);
+    const preliminaryChallenge = asRecord((preliminaryDuels.incoming ?? {})[duelId]);
+    if (!preliminaryChallenge.id) throw new HttpError(404, "Duel challenge not found.", "DUEL_NOT_FOUND");
+    const challengerPublicId = Math.floor(asNumber(preliminaryChallenge.challenger?.publicId, 0));
+    const challengerUser = await findUserByPublicId(client, challengerPublicId);
+    if (!challengerUser) throw new HttpError(404, "Challenger not found.", "DUEL_CHALLENGER_NOT_FOUND");
+
+    const [firstId, secondId] = orderInternalIds(user.internalId, challengerUser.internalId);
+    const firstUser = firstId === user.internalId ? user : challengerUser;
+    const secondUser = firstId === user.internalId ? challengerUser : user;
+    const { runtimeState: firstState } = await loadRuntimeState(client, firstUser, { forUpdate: true });
+    const { runtimeState: secondState } = await loadRuntimeState(client, secondUser, { forUpdate: true });
+    const targetRuntime = firstId === user.internalId ? firstState : secondState;
+    const challengerRuntime = firstId === user.internalId ? secondState : firstState;
+
     const targetDuels = ensureDuelState(targetRuntime);
     const challenge = asRecord(targetDuels.incoming[duelId]);
     if (!challenge.id) throw new HttpError(404, "Duel challenge not found.", "DUEL_NOT_FOUND");
-    const challengerPublicId = Math.floor(asNumber(challenge.challenger?.publicId, 0));
-    const challengerUser = await findUserByPublicId(client, challengerPublicId);
-    if (!challengerUser) throw new HttpError(404, "Challenger not found.", "DUEL_CHALLENGER_NOT_FOUND");
-    const { runtimeState: challengerRuntime } = await loadRuntimeState(client, challengerUser);
     const challengerDuels = ensureDuelState(challengerRuntime);
     const now = Date.now();
 

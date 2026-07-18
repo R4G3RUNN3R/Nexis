@@ -3,6 +3,7 @@ import { HttpError } from "../lib/errors.js";
 import { buildMutableRuntimeState } from "../lib/runtimePlayerState.js";
 import { createDefaultPlayerState, findPlayerStateByUserInternalId, upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
 import { findUserByPublicId } from "../repositories/usersRepository.js";
+import { orderInternalIds } from "../lib/lockOrdering.js";
 import { PVP_CORE_VERSION, PVP_MODES, PVP_NOTORIETY_TIERS, PVP_SAFETY_RULES, PVP_SEASON_TEMPLATE, getNotorietyTier } from "../data/pvpData.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
 
@@ -13,9 +14,9 @@ function asWholeNumber(value, fallback = 0) { return Math.max(0, Math.floor(asNu
 function asBoolean(value) { return value === true; }
 function displayName(user) { return `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.username || `P${user.publicId}`; }
 
-async function loadRuntimeState(client, user) {
+async function loadRuntimeState(client, user, { forUpdate = false } = {}) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) };
 }
@@ -92,7 +93,7 @@ export async function getPvpHubForUser(user) {
 
 export async function updatePvpSafetyForUser(user, payload = {}) {
   return withTransaction(async (client) => {
-    const { runtimeState } = await loadRuntimeState(client, user);
+    const { runtimeState } = await loadRuntimeState(client, user, { forUpdate: true });
     const pvp = ensurePvpProfile(runtimeState);
     // Read exactly the 4 named safety fields from the client payload - never
     // spread the payload itself into an object. An omitted field keeps its
@@ -135,8 +136,16 @@ export async function issueBountyWritForUser(user, payload = {}) {
     const targetUser = await findUserByPublicId(client, targetPublicId);
     if (!targetUser) throw new HttpError(404, "Target player not found.", "BOUNTY_TARGET_NOT_FOUND");
 
-    const { runtimeState: issuerRuntime } = await loadRuntimeState(client, user);
-    const { runtimeState: targetRuntime } = await loadRuntimeState(client, targetUser);
+    // Ticket A: canonical lock order (lowest internal ID first), matching
+    // duelService.js/marketplaceService.js/itemService.js -- two players
+    // filing bounty writs against each other simultaneously must not be
+    // able to lock in reversed order, which would deadlock.
+    const [firstId] = orderInternalIds(user.internalId, targetUser.internalId);
+    const [firstUser, secondUser] = firstId === user.internalId ? [user, targetUser] : [targetUser, user];
+    const { runtimeState: firstRuntime } = await loadRuntimeState(client, firstUser, { forUpdate: true });
+    const { runtimeState: secondRuntime } = await loadRuntimeState(client, secondUser, { forUpdate: true });
+    const issuerRuntime = firstUser.internalId === user.internalId ? firstRuntime : secondRuntime;
+    const targetRuntime = firstUser.internalId === user.internalId ? secondRuntime : firstRuntime;
     const issuerPvp = ensurePvpProfile(issuerRuntime);
     const targetPvp = ensurePvpProfile(targetRuntime);
     const targetTier = getNotorietyTier(asWholeNumber(targetPvp.notoriety.score, 0));

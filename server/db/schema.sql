@@ -365,3 +365,63 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_listings_active
 
 CREATE INDEX IF NOT EXISTS idx_marketplace_listings_seller
   ON marketplace_listings (seller_internal_id, status, created_at DESC);
+
+-- Ticket A: periodic entitlement consumption ledger (e.g. "one eligible
+-- personal one-shot completion per donor entitlement period"). A real row
+-- with a unique constraint, not a JSONB flag inside player_state - a
+-- duplicate consumption attempt is rejected by the database itself even
+-- under genuine concurrent requests, since player_state's own JSONB
+-- columns are blind-overwritten on every write (see Ticket A audit) and
+-- cannot be trusted alone to enforce "at most once per period".
+-- period_key is caller-computed and opaque here (e.g. "2026-07" for a
+-- calendar-month period) - this table doesn't need to know what a period
+-- means, only that (user, entitlement, period) can happen at most once.
+CREATE TABLE IF NOT EXISTS player_entitlement_consumptions (
+  id BIGSERIAL PRIMARY KEY,
+  user_internal_id TEXT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
+  entitlement_key TEXT NOT NULL,
+  period_key TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  consumed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  UNIQUE (user_internal_id, entitlement_key, period_key),
+  UNIQUE (session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_entitlement_consumptions_user
+  ON player_entitlement_consumptions (user_internal_id, entitlement_key);
+
+-- Ticket A: one-shot completion ledger, personal and organization/group.
+-- Real rows with unique constraints instead of a JSONB array inside
+-- player_state.legacy_state/organizations.metadata, so a concurrent or
+-- retried completion request cannot grant a reward twice - the database
+-- rejects the second attempt outright rather than relying on an
+-- application-level check against a blindly-overwritten blob.
+-- organization_internal_id is NULL for personal one-shots. Two partial
+-- unique indexes (not one multi-column UNIQUE) because Postgres treats
+-- NULL as distinct from NULL in a UNIQUE constraint - a plain
+-- UNIQUE(user_internal_id, campaign_id, organization_internal_id) would
+-- never actually block two personal completions of the same campaign,
+-- since both rows would have organization_internal_id = NULL.
+CREATE TABLE IF NOT EXISTS one_shot_completions (
+  id BIGSERIAL PRIMARY KEY,
+  user_internal_id TEXT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
+  organization_internal_id TEXT NULL REFERENCES organizations(internal_id) ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  outcome_key TEXT NOT NULL,
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  UNIQUE (session_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_one_shot_completions_personal
+  ON one_shot_completions (user_internal_id, campaign_id)
+  WHERE organization_internal_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_one_shot_completions_org
+  ON one_shot_completions (organization_internal_id, campaign_id)
+  WHERE organization_internal_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_one_shot_completions_user
+  ON one_shot_completions (user_internal_id, completed_at DESC);

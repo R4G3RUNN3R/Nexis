@@ -333,7 +333,9 @@ function applyReward(runtimeState, reward, now) {
 
 async function loadRuntimeState(client, user) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  // Ticket A: locked unconditionally -- resolveTravelForRuntimeState() below can trigger
+  // an upsert even from "get" callers (arrival settlement), matching travelService.js.
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate: true });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
 
   const runtimeState = buildMutableRuntimeState(user, playerState);

@@ -1,4 +1,10 @@
-const API_BASE = process.env.NEXIS_CANARY_BASE_URL ?? "http://127.0.0.1:3001/api";
+import { resolveCanaryBaseUrl } from "./lib/canarySafety.js";
+
+// Ticket A Phase A5: no built-in default. This used to fall back straight to
+// the live production port (127.0.0.1:3001), so simply running this script
+// with no environment configured would register a real account against
+// production. See lib/canarySafety.js for the guard.
+const API_BASE = resolveCanaryBaseUrl();
 const PASSWORD = `legacy-canary-${Date.now()}`;
 const EMAIL = `canary.legacy.${Date.now()}@nexis.local`;
 

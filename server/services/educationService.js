@@ -192,7 +192,9 @@ function serializeEducation(runtimeState, user, now = Date.now()) {
 
 async function loadRuntimeState(client, user) {
   await createDefaultPlayerState(client, user.internalId);
-  const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+  // Ticket A: locked unconditionally -- every caller including
+  // getEducationForUser ends in an upsertPlayerRuntimeState below.
+  const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate: true });
   if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND");
   return buildMutableRuntimeState(user, playerState);
 }

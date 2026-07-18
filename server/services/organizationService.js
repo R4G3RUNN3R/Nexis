@@ -11,6 +11,7 @@ import {
   findOrganizationForUserByType,
   insertOrganizationLog,
   listOrganizationsByType,
+  lockOrganizationForUpdate,
   removeOrganizationMember,
   replaceOrganizationRoles,
   updateOrganizationDetails,
@@ -80,7 +81,10 @@ const buildConsortiumRoles = (template) => [
 ];
 const ensureMember = (organization, userInternalId) => { const member = organization.members.find((entry) => entry.userInternalId === userInternalId); if (!member) throw new HttpError(403, "You are not part of this organization.", `${String(organization.type ?? "organization").toUpperCase()}_MEMBERSHIP_REQUIRED`); return member; };
 const ensurePermission = (organization, member, permission) => { const role = organization.roles.find((entry) => entry.roleKey === member.roleKey); if (!role || !role.permissions.includes(permission)) throw new HttpError(403, "You do not have permission for that organization action.", `${String(organization.type ?? "organization").toUpperCase()}_PERMISSION_DENIED`); };
-const getRuntimeForUser = async (client, user) => { await createDefaultPlayerState(client, user.internalId); const playerState = await findPlayerStateByUserInternalId(client, user.internalId); if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND"); return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) }; };
+// Ticket A: forUpdate defaults to false so display-only reads (e.g. inside
+// refreshConsortiumView) stay unlocked; every call site that feeds an
+// upsertPlayerRuntimeState passes { forUpdate: true } explicitly below.
+const getRuntimeForUser = async (client, user, { forUpdate = false } = {}) => { await createDefaultPlayerState(client, user.internalId); const playerState = await findPlayerStateByUserInternalId(client, user.internalId, { forUpdate }); if (!playerState) throw new HttpError(404, "Player state unavailable.", "PLAYER_STATE_NOT_FOUND"); return { playerState, runtimeState: buildMutableRuntimeState(user, playerState) }; };
 const sameUtcDay = (left, right) => { if (!left || !right) return false; const l = new Date(left); const r = new Date(right); return l.getUTCFullYear() === r.getUTCFullYear() && l.getUTCMonth() === r.getUTCMonth() && l.getUTCDate() === r.getUTCDate(); };
 const buildPassiveSummary = (template) => template.rewards.filter((entry) => entry.mode === "passive").map((entry) => entry.displayName).join(", ");
 const getConsortiumStore = (runtimeState) => { const consortiumStore = asRecord(runtimeState.consortium); return { ...consortiumStore, progressByType: asRecord(consortiumStore.progressByType), activeEffectsByType: asRecord(consortiumStore.activeEffectsByType), membership: asRecord(consortiumStore.membership) }; };
@@ -975,7 +979,7 @@ export async function createOrganizationForUser(user, payload) {
   const type = String(payload?.type ?? ""); if (type !== "guild" && type !== "consortium") throw new HttpError(400, "Organization type must be guild or consortium.", "ORG_TYPE_REQUIRED");
   return withTransaction(async (client) => {
     const existing = await findOrganizationForUserByType(client, user.internalId, type); if (existing) throw new HttpError(409, `You already operate a ${type}.`, "ORG_ALREADY_EXISTS");
-    const { runtimeState } = await getRuntimeForUser(client, user); const name = normalizeName(payload?.name, type === "guild" ? "Guild name" : "Consortium name"); const template = type === "consortium" ? getConsortiumTypeDefinition(payload?.consortiumTypeKey) : null; if (type === "consortium" && !template) throw new HttpError(400, "Valid consortium type is required.", "CONSORTIUM_TYPE_REQUIRED");
+    const { runtimeState } = await getRuntimeForUser(client, user, { forUpdate: true }); const name = normalizeName(payload?.name, type === "guild" ? "Guild name" : "Consortium name"); const template = type === "consortium" ? getConsortiumTypeDefinition(payload?.consortiumTypeKey) : null; if (type === "consortium" && !template) throw new HttpError(400, "Valid consortium type is required.", "CONSORTIUM_TYPE_REQUIRED");
     // Education hard-gate: Civic Fundamentals -> consortium founding only. Guild founding shares this
     // function but is intentionally NOT gated here -- the design doc's gate is specific to consortiums.
     if (type === "consortium" && !hasCompletedCourse(runtimeState, "civic-fundamentals")) throw new HttpError(403, "Civic Fundamentals is required before founding a consortium.", "EDUCATION_LOCKED");
@@ -992,7 +996,7 @@ export async function createOrganizationForUser(user, payload) {
 
 export async function addOrganizationMemberForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND");
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_members");
     const targetUser = await findUserByPublicId(client, normalizePublicId(payload?.publicId)); if (!targetUser) throw new HttpError(404, "Target citizen record unavailable.", "TARGET_USER_NOT_FOUND"); if (targetUser.internalId === user.internalId) throw new HttpError(400, "You are already the director.", "CONSORTIUM_MEMBER_INVALID");
     if (await findOrganizationForUserByType(client, targetUser.internalId, "consortium")) throw new HttpError(409, "That citizen already belongs to a consortium.", "CONSORTIUM_MEMBER_EXISTS");
@@ -1003,7 +1007,7 @@ export async function addOrganizationMemberForUser(user, organizationInternalId,
 
 export async function applyToConsortiumForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); if (await findOrganizationForUserByType(client, user.internalId, "consortium")) throw new HttpError(409, "You already belong to a consortium.", "CONSORTIUM_MEMBER_EXISTS");
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); if (await findOrganizationForUserByType(client, user.internalId, "consortium")) throw new HttpError(409, "You already belong to a consortium.", "CONSORTIUM_MEMBER_EXISTS");
     const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); if (metadata.management.applications.some((entry) => entry.applicantInternalId === user.internalId)) throw new HttpError(409, "You already have a pending application with this consortium.", "CONSORTIUM_APPLICATION_EXISTS");
     const { playerState } = await getRuntimeForUser(client, user); metadata.management.applications.unshift({ applicantInternalId: user.internalId, applicantPublicId: user.publicId, applicantName: founderDisplayName(user), note: sanitizeApplicationNote(payload?.note), submittedAt: Date.now(), workingStats: normalizeWorkingStats(playerState.workingStats) });
     await updateOrganizationDetails(client, organization.internalId, { metadata }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_application_submitted", summary: { applicantPublicId: user.publicId } });
@@ -1013,11 +1017,11 @@ export async function applyToConsortiumForUser(user, organizationInternalId, pay
 
 export async function reviewConsortiumApplicationForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_members");
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_members");
     const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); const applicantPublicId = normalizePublicId(payload?.applicantPublicId); const decision = String(payload?.decision ?? "").toLowerCase(); const application = metadata.management.applications.find((entry) => Number(entry.applicantPublicId) === applicantPublicId); if (!application) throw new HttpError(404, "Application record unavailable.", "CONSORTIUM_APPLICATION_NOT_FOUND");
     metadata.management.applications = metadata.management.applications.filter((entry) => Number(entry.applicantPublicId) !== applicantPublicId);
     let updated = organization;
-    if (decision === "accept") { const targetUser = await findUserByPublicId(client, applicantPublicId); if (!targetUser) throw new HttpError(404, "Applicant record unavailable.", "TARGET_USER_NOT_FOUND"); if (await findOrganizationForUserByType(client, targetUser.internalId, "consortium")) throw new HttpError(409, "Applicant already joined another consortium.", "CONSORTIUM_MEMBER_EXISTS"); const employeeRole = organization.roles.find((entry) => entry.roleKey === "employee") ?? organization.roles[organization.roles.length - 1]; await addOrganizationMember(client, organization.internalId, { userInternalId: targetUser.internalId, userPublicId: targetUser.publicId, displayName: founderDisplayName(targetUser), roleKey: employeeRole.roleKey }); updated = await findOrganizationByInternalId(client, organization.internalId); const derived = await buildConsortiumState(client, { ...updated, metadata: { ...updated.metadata, ...metadata } }, user.internalId); updated = await persistConsortiumMetadata(client, updated, derived); const { runtimeState } = await getRuntimeForUser(client, targetUser); syncMembershipSummary(runtimeState, updated, template, derived.stars, employeeRole.roleKey); await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_application_accepted", summary: { applicantPublicId } }); }
+    if (decision === "accept") { const targetUser = await findUserByPublicId(client, applicantPublicId); if (!targetUser) throw new HttpError(404, "Applicant record unavailable.", "TARGET_USER_NOT_FOUND"); if (await findOrganizationForUserByType(client, targetUser.internalId, "consortium")) throw new HttpError(409, "Applicant already joined another consortium.", "CONSORTIUM_MEMBER_EXISTS"); const employeeRole = organization.roles.find((entry) => entry.roleKey === "employee") ?? organization.roles[organization.roles.length - 1]; await addOrganizationMember(client, organization.internalId, { userInternalId: targetUser.internalId, userPublicId: targetUser.publicId, displayName: founderDisplayName(targetUser), roleKey: employeeRole.roleKey }); updated = await findOrganizationByInternalId(client, organization.internalId); const derived = await buildConsortiumState(client, { ...updated, metadata: { ...updated.metadata, ...metadata } }, user.internalId); updated = await persistConsortiumMetadata(client, updated, derived); const { runtimeState } = await getRuntimeForUser(client, targetUser, { forUpdate: true }); syncMembershipSummary(runtimeState, updated, template, derived.stars, employeeRole.roleKey); await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_application_accepted", summary: { applicantPublicId } }); }
     else { updated = await updateOrganizationDetails(client, organization.internalId, { metadata }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_application_rejected", summary: { applicantPublicId } }); }
     return refreshConsortiumView(client, user, updated);
   });
@@ -1025,17 +1029,17 @@ export async function reviewConsortiumApplicationForUser(user, organizationInter
 
 export async function assignConsortiumPositionForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_members"); const targetPublicId = normalizePublicId(payload?.publicId); const positionKey = String(payload?.positionKey ?? "").trim(); const targetMember = organization.members.find((entry) => entry.publicId === targetPublicId); if (!targetMember) throw new HttpError(404, "Employee record unavailable.", "CONSORTIUM_MEMBER_NOT_FOUND"); if (targetMember.roleKey === "director" && positionKey !== "director") throw new HttpError(400, "The director slot is fixed for now.", "CONSORTIUM_POSITION_DIRECTOR_LOCKED"); if (!getConsortiumPositionDefinition(organization.consortiumTypeKey, positionKey)) throw new HttpError(400, "Position is invalid for this consortium type.", "CONSORTIUM_POSITION_INVALID"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); metadata.management.positions[targetMember.userInternalId] = positionKey; const updated = await persistConsortiumMetadata(client, organization, await buildConsortiumState(client, { ...organization, metadata: { ...organization.metadata, ...metadata } }, user.internalId)); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_position_assigned", summary: { targetPublicId, positionKey } }); return refreshConsortiumView(client, user, updated); });
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_members"); const targetPublicId = normalizePublicId(payload?.publicId); const positionKey = String(payload?.positionKey ?? "").trim(); const targetMember = organization.members.find((entry) => entry.publicId === targetPublicId); if (!targetMember) throw new HttpError(404, "Employee record unavailable.", "CONSORTIUM_MEMBER_NOT_FOUND"); if (targetMember.roleKey === "director" && positionKey !== "director") throw new HttpError(400, "The director slot is fixed for now.", "CONSORTIUM_POSITION_DIRECTOR_LOCKED"); if (!getConsortiumPositionDefinition(organization.consortiumTypeKey, positionKey)) throw new HttpError(400, "Position is invalid for this consortium type.", "CONSORTIUM_POSITION_INVALID"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); metadata.management.positions[targetMember.userInternalId] = positionKey; const updated = await persistConsortiumMetadata(client, organization, await buildConsortiumState(client, { ...organization, metadata: { ...organization.metadata, ...metadata } }, user.internalId)); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_position_assigned", summary: { targetPublicId, positionKey } }); return refreshConsortiumView(client, user, updated); });
 }
 
 export async function removeConsortiumMemberForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_members"); const targetPublicId = normalizePublicId(payload?.publicId); const targetMember = organization.members.find((entry) => entry.publicId === targetPublicId); if (!targetMember || targetMember.roleKey === "director") throw new HttpError(400, "Only non-director employees can be removed in this pass.", "CONSORTIUM_MEMBER_REMOVE_INVALID"); await removeOrganizationMember(client, organization.internalId, targetMember.userInternalId); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); delete metadata.management.positions[targetMember.userInternalId]; const updated = await persistConsortiumMetadata(client, await findOrganizationByInternalId(client, organization.internalId), await buildConsortiumState(client, { ...(await findOrganizationByInternalId(client, organization.internalId)), metadata: { ...organization.metadata, ...metadata } }, user.internalId)); const targetUser = await findUserByPublicId(client, targetPublicId); if (targetUser) { const { runtimeState } = await getRuntimeForUser(client, targetUser); clearMembershipSummary(runtimeState); await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState); } await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_member_removed", summary: { targetPublicId } }); return refreshConsortiumView(client, user, updated); });
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_members"); const targetPublicId = normalizePublicId(payload?.publicId); const targetMember = organization.members.find((entry) => entry.publicId === targetPublicId); if (!targetMember || targetMember.roleKey === "director") throw new HttpError(400, "Only non-director employees can be removed in this pass.", "CONSORTIUM_MEMBER_REMOVE_INVALID"); await removeOrganizationMember(client, organization.internalId, targetMember.userInternalId); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); delete metadata.management.positions[targetMember.userInternalId]; const updated = await persistConsortiumMetadata(client, await findOrganizationByInternalId(client, organization.internalId), await buildConsortiumState(client, { ...(await findOrganizationByInternalId(client, organization.internalId)), metadata: { ...organization.metadata, ...metadata } }, user.internalId)); const targetUser = await findUserByPublicId(client, targetPublicId); if (targetUser) { const { runtimeState } = await getRuntimeForUser(client, targetUser, { forUpdate: true }); clearMembershipSummary(runtimeState); await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState); } await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_member_removed", summary: { targetPublicId } }); return refreshConsortiumView(client, user, updated); });
 }
 
 export async function depositConsortiumTreasuryForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_treasury"); const amount = asInt(payload?.gold); if (amount <= 0) throw new HttpError(400, "Deposit amount must be greater than zero.", "CONSORTIUM_TREASURY_AMOUNT_INVALID"); const { runtimeState } = await getRuntimeForUser(client, user); if (Number(runtimeState.player.gold ?? 0) < amount) throw new HttpError(400, "Not enough gold for that treasury deposit.", "CONSORTIUM_TREASURY_FUNDS_REQUIRED"); runtimeState.player.gold -= amount; runtimeState.player.currencies = { ...runtimeState.player.currencies, gold: runtimeState.player.gold }; const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_treasury"); const amount = asInt(payload?.gold); if (amount <= 0) throw new HttpError(400, "Deposit amount must be greater than zero.", "CONSORTIUM_TREASURY_AMOUNT_INVALID"); const { runtimeState } = await getRuntimeForUser(client, user, { forUpdate: true }); if (Number(runtimeState.player.gold ?? 0) < amount) throw new HttpError(400, "Not enough gold for that treasury deposit.", "CONSORTIUM_TREASURY_FUNDS_REQUIRED"); runtimeState.player.gold -= amount; runtimeState.player.currencies = { ...runtimeState.player.currencies, gold: runtimeState.player.gold }; const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     // Banking Consortium Treasury Discipline passive: interest is a function of *this* deposit's
     // amount only (never replayed, never derived from stored state), so crediting it inside the same
     // withTransaction block as the deposit itself cannot be used to double-spend or drain the treasury.
@@ -1048,22 +1052,22 @@ export async function depositConsortiumTreasuryForUser(user, organizationInterna
 
 export async function runConsortiumOutreachForUser(user, organizationInternalId) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "recruit_members"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); const treasury = normalizeTreasury(organization.treasury); if (treasury.gold < 2500) throw new HttpError(400, "Treasury needs at least 2,500 gold for outreach.", "CONSORTIUM_OUTREACH_FUNDS_REQUIRED"); if (metadata.management.outreach.lastRunAt && Date.now() - metadata.management.outreach.lastRunAt < 6 * MS_HOUR) throw new HttpError(409, "Outreach is already running. Let the posters dry first.", "CONSORTIUM_OUTREACH_COOLDOWN"); metadata.management.outreach = { level: Math.min(6, asInt(metadata.management.outreach.level) + 1), campaignsLaunched: asInt(metadata.management.outreach.campaignsLaunched) + 1, lastRunAt: Date.now() }; const updated = await persistConsortiumMetadata(client, organization, await buildConsortiumState(client, { ...organization, treasury: { ...treasury, gold: treasury.gold - 2500 }, metadata: { ...organization.metadata, ...metadata } }, user.internalId), { treasury: { gold: treasury.gold - 2500 }, statusText: "Outreach campaign underway" }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_outreach_launched", summary: { goldSpent: 2500, outreachLevel: metadata.management.outreach.level } }); return refreshConsortiumView(client, user, updated); });
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "recruit_members"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); const treasury = normalizeTreasury(organization.treasury); if (treasury.gold < 2500) throw new HttpError(400, "Treasury needs at least 2,500 gold for outreach.", "CONSORTIUM_OUTREACH_FUNDS_REQUIRED"); if (metadata.management.outreach.lastRunAt && Date.now() - metadata.management.outreach.lastRunAt < 6 * MS_HOUR) throw new HttpError(409, "Outreach is already running. Let the posters dry first.", "CONSORTIUM_OUTREACH_COOLDOWN"); metadata.management.outreach = { level: Math.min(6, asInt(metadata.management.outreach.level) + 1), campaignsLaunched: asInt(metadata.management.outreach.campaignsLaunched) + 1, lastRunAt: Date.now() }; const updated = await persistConsortiumMetadata(client, organization, await buildConsortiumState(client, { ...organization, treasury: { ...treasury, gold: treasury.gold - 2500 }, metadata: { ...organization.metadata, ...metadata } }, user.internalId), { treasury: { gold: treasury.gold - 2500 }, statusText: "Outreach campaign underway" }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_outreach_launched", summary: { goldSpent: 2500, outreachLevel: metadata.management.outreach.level } }); return refreshConsortiumView(client, user, updated); });
 }
 
 export async function claimDailyConsortiumPointsForUser(user, organizationInternalId) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const member = ensureMember(organization, user.internalId); const { runtimeState } = await getRuntimeForUser(client, user); const derived = await buildConsortiumState(client, organization, user.internalId); const progressEntry = getProgressEntry(runtimeState, template.key, organization.internalId); if (sameUtcDay(progressEntry.lastClaimedAt, Date.now())) throw new HttpError(409, "Daily Consortium Points already claimed today.", "CONSORTIUM_POINTS_ALREADY_CLAIMED"); const dailyGain = derived.viewerDetails?.dailyCpGain ?? getDailyConsortiumPointsForStars(derived.stars); const updatedProgress = { ...progressEntry, organizationInternalId: organization.internalId, points: progressEntry.points + dailyGain, totalEarned: progressEntry.totalEarned + dailyGain, lastClaimedAt: Date.now() }; setProgressEntry(runtimeState, template.key, updatedProgress); syncMembershipSummary(runtimeState, organization, template, derived.stars, member.roleKey); const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_points_claimed", summary: { consortiumTypeKey: template.key, stars: derived.stars, dailyGain, pointsAfter: updatedProgress.points } }); return { ...(await refreshConsortiumView(client, user, organization)), playerState, grant: dailyGain }; });
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const member = ensureMember(organization, user.internalId); const { runtimeState } = await getRuntimeForUser(client, user, { forUpdate: true }); const derived = await buildConsortiumState(client, organization, user.internalId); const progressEntry = getProgressEntry(runtimeState, template.key, organization.internalId); if (sameUtcDay(progressEntry.lastClaimedAt, Date.now())) throw new HttpError(409, "Daily Consortium Points already claimed today.", "CONSORTIUM_POINTS_ALREADY_CLAIMED"); const dailyGain = derived.viewerDetails?.dailyCpGain ?? getDailyConsortiumPointsForStars(derived.stars); const updatedProgress = { ...progressEntry, organizationInternalId: organization.internalId, points: progressEntry.points + dailyGain, totalEarned: progressEntry.totalEarned + dailyGain, lastClaimedAt: Date.now() }; setProgressEntry(runtimeState, template.key, updatedProgress); syncMembershipSummary(runtimeState, organization, template, derived.stars, member.roleKey); const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_points_claimed", summary: { consortiumTypeKey: template.key, stars: derived.stars, dailyGain, pointsAfter: updatedProgress.points } }); return { ...(await refreshConsortiumView(client, user, organization)), playerState, grant: dailyGain }; });
 }
 
 export async function redeemConsortiumRewardForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const reward = getRewardByKey(template.key, String(payload?.rewardKey ?? "").trim()); if (!reward || reward.mode !== "active") throw new HttpError(400, "That consortium reward cannot be redeemed.", "CONSORTIUM_REWARD_INVALID"); const member = ensureMember(organization, user.internalId); const { runtimeState } = await getRuntimeForUser(client, user); const derived = await buildConsortiumState(client, organization, user.internalId); if (derived.stars < reward.starTier) throw new HttpError(400, `This reward unlocks at ${reward.starTier} stars.`, "CONSORTIUM_REWARD_LOCKED"); const progressEntry = getProgressEntry(runtimeState, template.key, organization.internalId); const cost = Number(reward.pointCost ?? 0); if (progressEntry.points < cost) throw new HttpError(400, `You need ${cost - progressEntry.points} more Consortium Points.`, "CONSORTIUM_POINTS_REQUIRED"); const rewardResult = await applyRewardEffect({ client, organization, template, reward, runtimeState }); setProgressEntry(runtimeState, template.key, { ...progressEntry, organizationInternalId: organization.internalId, points: progressEntry.points - cost, totalSpent: progressEntry.totalSpent + cost }); syncMembershipSummary(runtimeState, organization, template, derived.stars, member.roleKey); const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState); const updatedOrganization = rewardResult.treasury ? await updateOrganizationDetails(client, organization.internalId, { treasury: rewardResult.treasury }) : organization; await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_reward_redeemed", summary: { consortiumTypeKey: template.key, rewardKey: reward.rewardKey, rewardName: reward.displayName, pointCost: cost, result: rewardResult.summary, grantedItem: rewardResult.grantedItem ?? null } }); return { ...(await refreshConsortiumView(client, user, updatedOrganization)), playerState, rewardResult }; });
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const reward = getRewardByKey(template.key, String(payload?.rewardKey ?? "").trim()); if (!reward || reward.mode !== "active") throw new HttpError(400, "That consortium reward cannot be redeemed.", "CONSORTIUM_REWARD_INVALID"); const member = ensureMember(organization, user.internalId); const { runtimeState } = await getRuntimeForUser(client, user, { forUpdate: true }); const derived = await buildConsortiumState(client, organization, user.internalId); if (derived.stars < reward.starTier) throw new HttpError(400, `This reward unlocks at ${reward.starTier} stars.`, "CONSORTIUM_REWARD_LOCKED"); const progressEntry = getProgressEntry(runtimeState, template.key, organization.internalId); const cost = Number(reward.pointCost ?? 0); if (progressEntry.points < cost) throw new HttpError(400, `You need ${cost - progressEntry.points} more Consortium Points.`, "CONSORTIUM_POINTS_REQUIRED"); const rewardResult = await applyRewardEffect({ client, organization, template, reward, runtimeState }); setProgressEntry(runtimeState, template.key, { ...progressEntry, organizationInternalId: organization.internalId, points: progressEntry.points - cost, totalSpent: progressEntry.totalSpent + cost }); syncMembershipSummary(runtimeState, organization, template, derived.stars, member.roleKey); const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState); const updatedOrganization = rewardResult.treasury ? await updateOrganizationDetails(client, organization.internalId, { treasury: rewardResult.treasury }) : organization; await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_reward_redeemed", summary: { consortiumTypeKey: template.key, rewardKey: reward.rewardKey, rewardName: reward.displayName, pointCost: cost, result: rewardResult.summary, grantedItem: rewardResult.grantedItem ?? null } }); return { ...(await refreshConsortiumView(client, user, updatedOrganization)), playerState, rewardResult }; });
 }
 
 export async function planGuildQuestForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1089,7 +1093,7 @@ export async function planGuildQuestForUser(user, organizationInternalId, payloa
 
 export async function assignGuildQuestMemberForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1120,7 +1124,7 @@ export async function assignGuildQuestMemberForUser(user, organizationInternalId
 
 export async function cancelGuildQuestForUser(user, organizationInternalId) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1137,7 +1141,7 @@ export async function cancelGuildQuestForUser(user, organizationInternalId) {
 
 export async function replanGuildQuestForUser(user, organizationInternalId) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1176,7 +1180,7 @@ export async function replanGuildQuestForUser(user, organizationInternalId) {
 
 export async function initiateGuildQuestForUser(user, organizationInternalId) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1240,7 +1244,7 @@ export async function initiateGuildQuestForUser(user, organizationInternalId) {
     for (const member of participants) {
       const targetUser = await findUserByPublicId(client, member.publicId);
       if (!targetUser) continue;
-      const { runtimeState } = await getRuntimeForUser(client, targetUser);
+      const { runtimeState } = await getRuntimeForUser(client, targetUser, { forUpdate: true });
       runtimeState.player.gold = Number(runtimeState.player.gold ?? 0) + memberGoldGain;
       runtimeState.player.currencies = { ...(runtimeState.player.currencies ?? {}), gold: runtimeState.player.gold };
       if (specializationEffects.medicalRecoveryReductionPct > 0) applyRecoveryReductionPct(runtimeState, specializationEffects.medicalRecoveryReductionPct);
@@ -1290,7 +1294,7 @@ export async function initiateGuildQuestForUser(user, organizationInternalId) {
 
 export async function updateGuildSettingsForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1316,7 +1320,7 @@ export async function updateGuildSettingsForUser(user, organizationInternalId, p
 
 export async function recruitGuildMemberForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "recruit_members");
@@ -1327,7 +1331,7 @@ export async function recruitGuildMemberForUser(user, organizationInternalId, pa
     if (await findOrganizationForUserByType(client, targetUser.internalId, "guild")) throw new HttpError(409, "That citizen already belongs to a guild.", "GUILD_MEMBER_EXISTS");
     const memberRole = organization.roles.find((entry) => entry.roleKey === "member") ?? organization.roles[organization.roles.length - 1];
     await addOrganizationMember(client, organization.internalId, { userInternalId: targetUser.internalId, userPublicId: targetUser.publicId, displayName: founderDisplayName(targetUser), roleKey: memberRole.roleKey });
-    const { runtimeState } = await getRuntimeForUser(client, targetUser);
+    const { runtimeState } = await getRuntimeForUser(client, targetUser, { forUpdate: true });
     syncGuildMembershipSummary(runtimeState, organization, memberRole.roleKey);
     await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState);
     const metadata = normalizeGuildMetadata(await findOrganizationByInternalId(client, organization.internalId));
@@ -1351,7 +1355,7 @@ export async function recruitGuildMemberForUser(user, organizationInternalId, pa
 // ensurePermission() throws a 403.
 export async function unlockGuildSkillForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1382,7 +1386,7 @@ export async function unlockGuildSkillForUser(user, organizationInternalId, payl
 // was never learned before, its point cost is charged on top. Leader/officer only (declare_operations).
 export async function swapGuildSkillForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1423,7 +1427,7 @@ export async function swapGuildSkillForUser(user, organizationInternalId, payloa
 // initiateGuildQuestForUser()/launchGuildDungeonForUser()).
 export async function triggerGuildRallyForUser(user, organizationInternalId) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1444,14 +1448,14 @@ export async function triggerGuildRallyForUser(user, organizationInternalId) {
 
 export async function depositGuildArmoryForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     if (!["guildmaster", "officer", "member"].includes(actorMember.roleKey)) throw new HttpError(403, "Only guild members may use the armory.", "GUILD_ARMORY_PERMISSION_DENIED");
     const itemId = String(payload?.itemId ?? "").trim();
     const quantity = asInt(payload?.quantity);
     if (!itemId || quantity <= 0) throw new HttpError(400, "Item and quantity are required.", "GUILD_ARMORY_ITEM_REQUIRED");
-    const { runtimeState } = await getRuntimeForUser(client, user);
+    const { runtimeState } = await getRuntimeForUser(client, user, { forUpdate: true });
     const currentQty = asInt(runtimeState.player.inventory?.[itemId]);
     if (currentQty < quantity) throw new HttpError(400, "You do not have enough of that item to deposit.", "GUILD_ARMORY_FUNDS_REQUIRED");
     runtimeState.player.inventory = { ...(runtimeState.player.inventory ?? {}), [itemId]: currentQty - quantity };
@@ -1469,7 +1473,7 @@ export async function depositGuildArmoryForUser(user, organizationInternalId, pa
 
 export async function withdrawGuildArmoryForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "manage_treasury");
@@ -1482,7 +1486,7 @@ export async function withdrawGuildArmoryForUser(user, organizationInternalId, p
     metadata.guild.armory.items[itemId] = storedQty - quantity;
     if (metadata.guild.armory.items[itemId] <= 0) delete metadata.guild.armory.items[itemId];
     const updated = await updateOrganizationDetails(client, organization.internalId, { metadata });
-    const { runtimeState } = await getRuntimeForUser(client, user);
+    const { runtimeState } = await getRuntimeForUser(client, user, { forUpdate: true });
     runtimeState.player.inventory = { ...(runtimeState.player.inventory ?? {}), [itemId]: asInt(runtimeState.player.inventory?.[itemId]) + quantity };
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_armory_withdraw", summary: { itemId, quantity } });
@@ -1492,7 +1496,7 @@ export async function withdrawGuildArmoryForUser(user, organizationInternalId, p
 
 export async function launchGuildDungeonForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
     if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
     const actorMember = ensureMember(organization, user.internalId);
     ensurePermission(organization, actorMember, "declare_operations");
@@ -1531,7 +1535,7 @@ export async function launchGuildDungeonForUser(user, organizationInternalId, pa
       for (const member of organization.members) {
         const targetUser = await findUserByPublicId(client, member.publicId);
         if (!targetUser) continue;
-        const { runtimeState } = await getRuntimeForUser(client, targetUser);
+        const { runtimeState } = await getRuntimeForUser(client, targetUser, { forUpdate: true });
         if (applyRecoveryReductionPct(runtimeState, specializationEffects.medicalRecoveryReductionPct)) {
           await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState);
         }
