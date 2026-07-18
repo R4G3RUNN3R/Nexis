@@ -425,3 +425,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_one_shot_completions_org
 
 CREATE INDEX IF NOT EXISTS idx_one_shot_completions_user
   ON one_shot_completions (user_internal_id, completed_at DESC);
+
+-- Admin hotfix: idempotency ledger for staff-granted personal one-shot
+-- tokens (tradeable and donor). idempotency_key is client-generated once
+-- per confirmed grant attempt and resent on retry - a repeated submission
+-- with the same key returns the original result instead of granting
+-- again. operation_id is always server-generated, the permanent
+-- identifier for the grant regardless of how the client tracked retries.
+-- token_type is 'tradeable' | 'donor', matching the existing
+-- dmosOneShots.tokens.sealed / .patronBound counters in player_state -
+-- this table records grants, it does not hold a parallel balance.
+CREATE TABLE IF NOT EXISTS admin_one_shot_token_grants (
+  id BIGSERIAL PRIMARY KEY,
+  operation_id TEXT NOT NULL UNIQUE,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  actor_internal_id TEXT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
+  actor_public_id BIGINT NOT NULL,
+  target_internal_id TEXT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
+  target_public_id BIGINT NOT NULL,
+  token_type TEXT NOT NULL,
+  quantity INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  before_balance INTEGER NOT NULL,
+  after_balance INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_one_shot_token_grants_target
+  ON admin_one_shot_token_grants (target_internal_id, created_at DESC);

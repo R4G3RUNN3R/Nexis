@@ -422,6 +422,14 @@ export function buildAdminPlayerPayload(user, playerState) {
         until: typeof player.condition?.until === "number" ? player.condition.until : null,
         reason: typeof player.condition?.reason === "string" ? player.condition.reason : null,
       },
+      // Admin hotfix: same dmosOneShots.tokens.{sealed,patronBound} counters
+      // grantOneShotTokenForUser() writes - exposed here so the Admin Panel
+      // can display current balances without parsing the loosely-typed
+      // dossier blob.
+      oneShotTokens: {
+        tradeable: Number(player.dmosOneShots?.tokens?.sealed ?? 0),
+        donor: Number(player.dmosOneShots?.tokens?.patronBound ?? 0),
+      },
     },
     dossier,
   };

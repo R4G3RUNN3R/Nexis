@@ -5,11 +5,14 @@ import { ContentPanel } from "../components/layout/ContentPanel";
 import {
   getAdminAuditLog,
   getAdminPlayerDetails,
+  postAdminOneShotTokenGrant,
   postAdminPlayerAction,
   reassignOrganizationLeadership,
   searchAdminPlayers,
   type AdminActionSuccess,
   type AdminAuditLogEntry,
+  type AdminOneShotTokenGrantResult,
+  type AdminOneShotTokenType,
   type AdminOrganizationLeadershipResult,
   type AdminPlayerSummary,
   type AdminPlayerTarget,
@@ -54,6 +57,12 @@ type AdminTabKey = (typeof ADMIN_TABS)[number]["key"];
 
 const ADMIN_CURRENCY_CAP = 100_000_000;
 const ADMIN_ITEM_QUANTITY_CAP = 10_000;
+const ADMIN_ONE_SHOT_TOKEN_GRANT_CAP = 20;
+
+const ONE_SHOT_TOKEN_TYPE_LABELS: Record<AdminOneShotTokenType, string> = {
+  tradeable: "Tradeable",
+  donor: "Donor",
+};
 
 function findWholeNumberRangeError(value: number, label: string, min: number, max: number) {
   if (!Number.isInteger(value)) return `${label} must be a whole number.`;
@@ -124,6 +133,13 @@ export default function AdminPage() {
   const [currencyAdjustKey, setCurrencyAdjustKey] = useState<(typeof CURRENCY_OPTIONS)[number]>("gold");
   const [currencyAdjustDelta, setCurrencyAdjustDelta] = useState(100);
   const [xpGrant, setXpGrant] = useState(50);
+
+  // Phase 4: one-shot token grants (tradeable/donor)
+  const [tokenGrantType, setTokenGrantType] = useState<AdminOneShotTokenType>("tradeable");
+  const [tokenGrantQuantity, setTokenGrantQuantity] = useState(1);
+  const [tokenGrantBusy, setTokenGrantBusy] = useState(false);
+  const [tokenGrantMessage, setTokenGrantMessage] = useState<string | null>(null);
+  const [tokenGrantConfirmKey, setTokenGrantConfirmKey] = useState<string | null>(null);
 
   // Overview / account
   const [jobValue, setJobValue] = useState("");
@@ -232,9 +248,12 @@ export default function AdminPage() {
     return <Navigate to="/home" replace />;
   }
 
-  async function loadTarget(internalId: string) {
+  // Admin hotfix: targetPublicId, not internalId - the server resolves the
+  // public ID to the authoritative internal user itself. See
+  // server/lib/adminTargetResolution.js.
+  async function loadTarget(targetPublicId: string) {
     if (!serverSessionToken) return;
-    const result = await getAdminPlayerDetails(serverSessionToken, internalId);
+    const result = await getAdminPlayerDetails(serverSessionToken, targetPublicId);
     if ("ok" in result && result.ok === false) {
       setMessage(result.error);
       return;
@@ -262,7 +281,7 @@ export default function AdminPage() {
       setMessage(inventoryQuantityValidationError);
       return;
     }
-    const result = await postAdminPlayerAction(serverSessionToken, selected.user.internalId, { actionType, reason, ...payload });
+    const result = await postAdminPlayerAction(serverSessionToken, String(selected.user.publicId), { actionType, reason, ...payload });
     if ("ok" in result && result.ok === false) {
       setMessage(result.error);
       return;
@@ -270,7 +289,10 @@ export default function AdminPage() {
     const response = result as AdminActionSuccess;
     setSelected(response.target);
     setMessage(`Admin action complete: ${response.audit.actionType}.`);
-    if (activeAccount && selected.user.internalId === activeAccount.internalPlayerId) {
+    // Admin hotfix: was comparing the real internal ID to activeAccount's
+    // synthetic placeholder ID (always false) - compare public IDs instead,
+    // which are both real.
+    if (activeAccount && selected.user.publicId === activeAccount.publicId) {
       mergeServerStateIntoCache({
         email: activeAccount.email,
         user: {
@@ -282,6 +304,52 @@ export default function AdminPage() {
         playerState: response.playerState,
       });
       window.dispatchEvent(new CustomEvent("nexis:player-refresh"));
+    }
+  }
+
+  // Phase 4: two-step confirm. First click generates a stable idempotency
+  // key and shows a summary; the SAME key is resent if "Confirm" is
+  // clicked again (e.g. after a network hiccup), so a retry can never
+  // grant twice - the server returns the original result instead.
+  function beginTokenGrant() {
+    if (!selected) return;
+    setTokenGrantMessage(null);
+    setTokenGrantConfirmKey(crypto.randomUUID());
+  }
+
+  function cancelTokenGrant() {
+    setTokenGrantConfirmKey(null);
+  }
+
+  async function confirmTokenGrant() {
+    if (!serverSessionToken || !selected || !tokenGrantConfirmKey) return;
+    if (!reason.trim()) {
+      setTokenGrantMessage("A reason is required for token grants.");
+      return;
+    }
+    setTokenGrantBusy(true);
+    setTokenGrantMessage(null);
+    try {
+      const result = await postAdminOneShotTokenGrant(serverSessionToken, String(selected.user.publicId), {
+        tokenType: tokenGrantType,
+        quantity: tokenGrantQuantity,
+        reason,
+        idempotencyKey: tokenGrantConfirmKey,
+      });
+      if ("ok" in result && result.ok === false) {
+        setTokenGrantMessage(result.error);
+        return;
+      }
+      const success = result as AdminOneShotTokenGrantResult;
+      if (success.target) setSelected(success.target);
+      setTokenGrantMessage(
+        `${success.grant.replay ? "Already recorded" : "Granted"}: ${success.grant.quantity} ${ONE_SHOT_TOKEN_TYPE_LABELS[success.grant.tokenType].toLowerCase()} token(s). Balance ${success.grant.before} -> ${success.grant.after}. Operation ${success.grant.operationId}.`,
+      );
+      setTokenGrantConfirmKey(null);
+    } catch {
+      setTokenGrantMessage("Token grant failed. See console for details.");
+    } finally {
+      setTokenGrantBusy(false);
     }
   }
 
@@ -343,7 +411,7 @@ export default function AdminPage() {
             {results.length ? (
               <div style={{ display: "grid", gap: 8 }}>
                 {results.map((result) => (
-                  <button key={result.internalId} type="button" onClick={() => loadTarget(result.internalId)} style={{ textAlign: "left" }}>
+                  <button key={result.internalId} type="button" onClick={() => loadTarget(String(result.publicId))} style={{ textAlign: "left" }}>
                     {result.displayName} [P{String(result.publicId).padStart(7, "0")}] | {result.entityType} | {result.privilegeRole}
                   </button>
                 ))}
@@ -492,6 +560,48 @@ export default function AdminPage() {
                         <button type="button" onClick={() => runAction("adjustCurrency", { currency: currencyAdjustKey, delta: currencyAdjustDelta })}>+ Add</button>
                         <button type="button" onClick={() => runAction("adjustCurrency", { currency: currencyAdjustKey, delta: -currencyAdjustDelta })}>- Subtract</button>
                       </div>
+
+                      <SectionTitle>Personal One-Shot Tokens</SectionTitle>
+                      <div style={{ fontSize: 13, color: "#9fb0bf" }}>
+                        Tradeable and donor tokens are tracked separately and never affect donor tier or monthly entitlement history.
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+                        <div>Tradeable balance: <strong>{selected.player.oneShotTokens.tradeable}</strong></div>
+                        <div>Donor balance: <strong>{selected.player.oneShotTokens.donor}</strong></div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <select value={tokenGrantType} onChange={(event) => { setTokenGrantType(event.target.value as AdminOneShotTokenType); setTokenGrantConfirmKey(null); }}>
+                          <option value="tradeable">Tradeable</option>
+                          <option value="donor">Donor</option>
+                        </select>
+                        <input
+                          type="number"
+                          value={tokenGrantQuantity}
+                          min={1}
+                          max={ADMIN_ONE_SHOT_TOKEN_GRANT_CAP}
+                          onChange={(event) => { setTokenGrantQuantity(Number(event.target.value)); setTokenGrantConfirmKey(null); }}
+                          style={{ width: 100 }}
+                        />
+                        {tokenGrantConfirmKey ? (
+                          <>
+                            <span style={{ color: "#d8c278" }}>
+                              Confirm: grant {tokenGrantQuantity} {ONE_SHOT_TOKEN_TYPE_LABELS[tokenGrantType].toLowerCase()} token(s) to P{String(selected.user.publicId).padStart(7, "0")}?
+                              Balance {selected.player.oneShotTokens[tokenGrantType]} -&gt; {selected.player.oneShotTokens[tokenGrantType] + tokenGrantQuantity}.
+                            </span>
+                            <button type="button" onClick={confirmTokenGrant} disabled={tokenGrantBusy}>Confirm Grant</button>
+                            <button type="button" onClick={cancelTokenGrant} disabled={tokenGrantBusy}>Cancel</button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={beginTokenGrant}
+                            disabled={tokenGrantQuantity < 1 || tokenGrantQuantity > ADMIN_ONE_SHOT_TOKEN_GRANT_CAP || !Number.isInteger(tokenGrantQuantity)}
+                          >
+                            Add {ONE_SHOT_TOKEN_TYPE_LABELS[tokenGrantType]} One-Shot Token{tokenGrantQuantity === 1 ? "" : "s"}
+                          </button>
+                        )}
+                      </div>
+                      {tokenGrantMessage ? <div style={{ fontSize: 13 }}>{tokenGrantMessage}</div> : null}
                     </>
                   ) : (
                     <div style={{ color: "#d98f8f", fontSize: 13 }}>Setting exact resource/currency values is administrator-only.</div>

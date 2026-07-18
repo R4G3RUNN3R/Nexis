@@ -19,7 +19,6 @@
 import { useState } from "react";
 import { useAdminMode } from "../../state/AdminModeContext";
 import { useAuth } from "../../state/AuthContext";
-import { usePlayer } from "../../state/PlayerContext";
 import { postAdminPlayerAction } from "../../lib/adminApi";
 
 const RESOURCE_STAT_LABELS: Record<string, string> = {
@@ -54,14 +53,22 @@ function promptWholeNumber(message: string, defaultValue = ""): number | null {
 
 /**
  * Shared hook for firing an admin action against the current admin's own
- * internalId (the "quick action" controls apply to the account you're
+ * account (the "quick action" controls apply to the account you're
  * currently logged in as — arbitrary-target moderation stays in the full
  * Admin Panel at /admin). Handles busy state, reason prompting, error
  * surfacing, and resyncing PlayerContext's cached state after success.
+ *
+ * Admin hotfix: targets by activeAccount.publicId, not player.internalId.
+ * player.internalId (PlayerContext) is populated from the login/register
+ * response's synthetic "plr_<publicId>" placeholder (see
+ * authService.js's mapPublicApiUser), never the real database internal_id
+ * - submitting it as an admin-action target always produced "Target
+ * player not found." activeAccount.publicId is the real, already-correct
+ * public ID, and the server resolves it to the authoritative internal
+ * user itself (see adminTargetResolution.js).
  */
 function useAdminActionRunner() {
-  const { serverSessionToken, refreshServerState } = useAuth();
-  const { player } = usePlayer();
+  const { serverSessionToken, activeAccount, refreshServerState } = useAuth();
   const [busyActionKey, setBusyActionKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,14 +78,14 @@ function useAdminActionRunner() {
     actionLabel: string,
     extraPayload: Record<string, unknown> = {},
   ) {
-    if (!serverSessionToken || !player.internalId) return;
+    if (!serverSessionToken || !activeAccount?.publicId) return;
     const reason = promptReason(actionLabel);
     if (reason === null) return;
 
     setError(null);
     setBusyActionKey(actionKey);
     try {
-      const result = await postAdminPlayerAction(serverSessionToken, player.internalId, {
+      const result = await postAdminPlayerAction(serverSessionToken, String(activeAccount.publicId), {
         actionType,
         reason,
         ...extraPayload,

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { withTransaction } from "../db/pool.js";
 import { HttpError } from "../lib/errors.js";
 import { assertAdministrator, assertStaffOrAdmin, isAdministrator } from "../lib/adminAccess.js";
@@ -18,6 +19,24 @@ import {
   searchUsers,
   updateUserPrivilegeRole,
 } from "../repositories/usersRepository.js";
+import { resolveAdminTargetUser } from "../lib/adminTargetResolution.js";
+import { findGrantByIdempotencyKey, recordTokenGrant } from "../repositories/adminOneShotTokenGrantRepository.js";
+
+// Admin hotfix: reuses the existing dmosOneShots.tokens.{sealed,patronBound}
+// counters (server/services/nexisOneShotService.js /
+// organizationOneShotService.js) rather than inventing a parallel balance -
+// "sealed" is the tradeable token (matches the game's existing pattern of
+// "Sealed X" tradeable goods), "patronBound" is the non-tradeable,
+// donor-sourced token ("bound" = soulbound/account-bound in this game's
+// terminology, never tradeable). Both are pure counters inside
+// player_state's JSONB, already consumed by consumeToken()/
+// consumeOrganizationOneShotToken() - this ticket only adds a way to
+// increment them; it does not touch consumption logic.
+const ONE_SHOT_TOKEN_TYPES = {
+  tradeable: "sealed",
+  donor: "patronBound",
+};
+const MAX_ONE_SHOT_TOKEN_GRANT_QUANTITY = 20;
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -78,9 +97,14 @@ function requireReason(reason) {
   return trimmed;
 }
 
-async function loadTarget(client, targetInternalId) {
-  const user = await findUserByInternalId(client, targetInternalId);
-  if (!user) throw new HttpError(404, "Target player not found.", "TARGET_NOT_FOUND");
+// Admin hotfix: targetPublicId is the ONLY identifier this ever accepts
+// for admin mutations - resolved to the authoritative internal user via
+// resolveAdminTargetUser (server-side lookup), never trusting a
+// client-submitted internal-shaped ID. See adminTargetResolution.js for
+// why - AdminInlineControls.tsx used to submit a synthetic client-facing
+// placeholder that no database row could ever match.
+async function loadTarget(client, targetPublicId) {
+  const user = await resolveAdminTargetUser(client, targetPublicId);
   await createDefaultPlayerState(client, user.internalId);
   const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
   if (!playerState) throw new HttpError(404, "Target player state not found.", "TARGET_STATE_NOT_FOUND");
@@ -613,10 +637,10 @@ export async function searchAdminPlayers(actorUser, queryText) {
   });
 }
 
-export async function getAdminPlayer(actorUser, targetInternalId) {
+export async function getAdminPlayer(actorUser, targetPublicId) {
   assertStaffOrAdmin(actorUser);
   return withTransaction(async (client) => {
-    const target = await loadTarget(client, targetInternalId);
+    const target = await loadTarget(client, targetPublicId);
     return buildAdminPlayerPayload(target.user, target.playerState);
   });
 }
@@ -631,13 +655,13 @@ export async function getAdminAuditLog(actorUser, { targetInternalId = null, lim
   return withTransaction(async (client) => listAdminAuditLogs(client, { targetInternalId, limit }));
 }
 
-export async function performAdminAction(actorUser, targetInternalId, actionType, payload) {
+export async function performAdminAction(actorUser, targetPublicId, actionType, payload) {
   assertStaffOrAdmin(actorUser);
   const reason = requireReason(payload?.reason);
 
   return withTransaction(async (client) => {
     const actor = await resolveActorIdentity(client, actorUser);
-    const target = await loadTarget(client, targetInternalId);
+    const target = await loadTarget(client, targetPublicId);
     const policy = assertAdminActionAllowed(actor, actionType);
 
     if (actionType === "setAccountPrivilegeRole") {
@@ -697,6 +721,127 @@ export async function performAdminAction(actorUser, targetInternalId, actionType
       target: buildAdminPlayerPayload(target.user, updatedPlayerState),
       playerState: updatedPlayerState,
       audit: { actionType, reason, beforeSummary, afterSummary },
+    };
+  });
+}
+
+// Admin hotfix, Phase 4: staff-granted personal one-shot tokens
+// (tradeable = dmosOneShots.tokens.sealed, donor = .patronBound). Requires
+// full administrator (same tier as every other value-granting action -
+// setCurrencies, adjustCurrency, addInventoryItem). Does not touch
+// legacy.donorTier, player_entitlement_consumptions, or any monthly
+// entitlement state - these tokens are a separate, persistent bonus
+// balance, exactly like the existing tokens they extend.
+export async function grantOneShotTokenForUser(actorUser, targetPublicId, payload) {
+  assertStaffOrAdmin(actorUser);
+  if (!isAdministrator(actorUser)) {
+    throw new HttpError(403, "Administrator access required.", "ADMIN_REQUIRED");
+  }
+  const reason = requireReason(payload?.reason);
+  const tokenType = String(payload?.tokenType ?? "").trim();
+  const tokenField = ONE_SHOT_TOKEN_TYPES[tokenType];
+  if (!tokenField) {
+    throw new HttpError(400, "Token type must be \"tradeable\" or \"donor\".", "ADMIN_TOKEN_TYPE_INVALID");
+  }
+  const quantity = requireAdminWholeNumber(payload?.quantity, {
+    fieldName: "Token quantity",
+    min: 1,
+    max: MAX_ONE_SHOT_TOKEN_GRANT_QUANTITY,
+    code: "ADMIN_TOKEN_QUANTITY_INVALID",
+  });
+  const idempotencyKey = String(payload?.idempotencyKey ?? "").trim();
+  if (!idempotencyKey) {
+    throw new HttpError(400, "An idempotency key is required for token grants.", "ADMIN_IDEMPOTENCY_KEY_REQUIRED");
+  }
+
+  return withTransaction(async (client) => {
+    const actor = await resolveActorIdentity(client, actorUser);
+
+    // Idempotent replay: an identical resubmission (dropped response,
+    // browser retry, double-click) returns the ORIGINAL recorded result
+    // instead of granting a second time. A genuinely concurrent duplicate
+    // submission that races past this check is still caught below by the
+    // idempotency_key UNIQUE constraint, which fails the whole transaction
+    // safely (see adminOneShotTokenGrantRepository.js).
+    const existingGrant = await findGrantByIdempotencyKey(client, idempotencyKey);
+    if (existingGrant) {
+      const existingTarget = await findUserByInternalId(client, existingGrant.targetInternalId);
+      const existingPlayerState = existingTarget ? await findPlayerStateByUserInternalId(client, existingTarget.internalId) : null;
+      return {
+        target: existingTarget && existingPlayerState ? buildAdminPlayerPayload(existingTarget, existingPlayerState) : null,
+        grant: {
+          operationId: existingGrant.operationId,
+          tokenType: existingGrant.tokenType,
+          quantity: existingGrant.quantity,
+          before: existingGrant.beforeBalance,
+          after: existingGrant.afterBalance,
+          reason: existingGrant.reason,
+          replay: true,
+        },
+      };
+    }
+
+    const target = await resolveAdminTargetUser(client, targetPublicId);
+    await createDefaultPlayerState(client, target.internalId);
+    // Ticket A locking architecture: lock before reading, so a concurrent
+    // grant (or any other concurrent mutation of this player's row) can't
+    // race a lost update against this read-modify-write - no full-row
+    // stale overwrite, an atomic increment against the locked snapshot.
+    const lockedPlayerState = await findPlayerStateByUserInternalId(client, target.internalId, { forUpdate: true });
+    if (!lockedPlayerState) throw new HttpError(404, "Target player state not found.", "TARGET_STATE_NOT_FOUND");
+    const runtimeState = buildMutableRuntimeState(target, lockedPlayerState);
+
+    const currentDmos = asRecord(runtimeState.player.dmosOneShots);
+    const currentTokens = asRecord(currentDmos.tokens);
+    const before = asWholeNumber(currentTokens[tokenField], 0);
+    const after = before + quantity;
+    runtimeState.player.dmosOneShots = {
+      ...currentDmos,
+      tokens: {
+        patronBound: asWholeNumber(currentTokens.patronBound, 0),
+        sealed: asWholeNumber(currentTokens.sealed, 0),
+        lifetimeSpent: asWholeNumber(currentTokens.lifetimeSpent, 0),
+        [tokenField]: after,
+      },
+    };
+    addPlayerRecord(runtimeState, {
+      category: "admin",
+      summary: `Admin granted ${quantity} ${tokenType} one-shot token${quantity === 1 ? "" : "s"}.`,
+      detail: { tokenType, quantity, before, after, actorPublicId: actor.publicId },
+      source: "admin-dossier",
+      route: "/admin",
+    });
+
+    const updatedPlayerState = await upsertPlayerRuntimeState(client, target.internalId, runtimeState);
+    const operationId = crypto.randomUUID();
+
+    await recordTokenGrant(client, {
+      operationId,
+      idempotencyKey,
+      actorInternalId: actor.internalId,
+      actorPublicId: actor.publicId,
+      targetInternalId: target.internalId,
+      targetPublicId: target.publicId,
+      tokenType,
+      quantity,
+      reason,
+      beforeBalance: before,
+      afterBalance: after,
+    });
+
+    await insertAdminAuditLog(client, {
+      actor,
+      target,
+      actionType: "grantOneShotToken",
+      reason,
+      beforeSummary: { tokenType, balance: before, category: "sensitive economy/progression action", actorRole: actor.privilegeRole, operationId },
+      afterSummary: { tokenType, balance: after, quantity, category: "sensitive economy/progression action", actorRole: actor.privilegeRole, operationId },
+    });
+
+    return {
+      target: buildAdminPlayerPayload(target, updatedPlayerState),
+      playerState: updatedPlayerState,
+      grant: { operationId, tokenType, quantity, before, after, reason, replay: false },
     };
   });
 }

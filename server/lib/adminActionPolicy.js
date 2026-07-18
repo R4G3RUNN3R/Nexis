@@ -172,6 +172,15 @@ export const ADMIN_ACTION_POLICIES = {
     minimumRole: "admin",
     label: "Clear Contract State",
   },
+  // Admin hotfix: documented here for consistency (label/category lookup),
+  // but served by its own dedicated endpoint/service function
+  // (grantOneShotTokenForUser), not performAdminAction's generic
+  // dispatch - see adminController.js's postAdminOneShotTokenGrant.
+  grantOneShotToken: {
+    category: "sensitive economy/progression action",
+    minimumRole: "admin",
+    label: "Grant One-Shot Token",
+  },
 };
 
 export function getAdminActionPolicy(actionType) {

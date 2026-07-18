@@ -40,6 +40,7 @@ export type AdminPlayerTarget = {
     itemEnhancements: Record<string, string[]>;
     currentJob: string | null;
     condition: { type: string; until: number | null; reason: string | null };
+    oneShotTokens: { tradeable: number; donor: number };
   };
 };
 
@@ -106,12 +107,50 @@ export function searchAdminPlayers(token: string, query: string) {
   return requestJson<{ results: AdminPlayerSummary[] }>(`/api/admin/players?q=${encodeURIComponent(query)}`, token);
 }
 
-export function getAdminPlayerDetails(token: string, internalId: string) {
-  return requestJson<{ target: AdminPlayerTarget }>(`/api/admin/players/${internalId}`, token);
+// Admin hotfix: targetPublicId, not an internal ID - the server resolves
+// the public ID to the authoritative internal user itself (see
+// server/lib/adminTargetResolution.js). Never submit anything derived from
+// PlayerContext's player.internalId here; it is a client-facing
+// placeholder, not a real internal ID.
+export function getAdminPlayerDetails(token: string, targetPublicId: string) {
+  return requestJson<{ target: AdminPlayerTarget }>(`/api/admin/players/${encodeURIComponent(targetPublicId)}`, token);
 }
 
-export function postAdminPlayerAction(token: string, internalId: string, payload: Record<string, unknown>) {
-  return requestJson<AdminActionSuccess>(`/api/admin/players/${internalId}/actions`, token, {
+export function postAdminPlayerAction(token: string, targetPublicId: string, payload: Record<string, unknown>) {
+  return requestJson<AdminActionSuccess>(`/api/admin/players/${encodeURIComponent(targetPublicId)}/actions`, token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type AdminOneShotTokenType = "tradeable" | "donor";
+
+export type AdminOneShotTokenGrantResult = {
+  target: AdminPlayerTarget | null;
+  grant: {
+    operationId: string;
+    tokenType: AdminOneShotTokenType;
+    quantity: number;
+    before: number;
+    after: number;
+    reason: string;
+    replay: boolean;
+  };
+};
+
+/**
+ * Phase 4: grants tradeable ("sealed") or donor ("patronBound") personal
+ * one-shot tokens. idempotencyKey should be generated once per confirmed
+ * grant attempt (crypto.randomUUID()) and reused verbatim on any retry of
+ * that same attempt - the server returns the original result instead of
+ * granting again for a repeated key.
+ */
+export function postAdminOneShotTokenGrant(
+  token: string,
+  targetPublicId: string,
+  payload: { tokenType: AdminOneShotTokenType; quantity: number; reason: string; idempotencyKey: string },
+) {
+  return requestJson<AdminOneShotTokenGrantResult>(`/api/admin/players/${encodeURIComponent(targetPublicId)}/one-shot-tokens`, token, {
     method: "POST",
     body: JSON.stringify(payload),
   });
