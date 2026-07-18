@@ -17,15 +17,26 @@ The live server remains the source of truth during production repair work.
 
 ## Routing Contract
 
-Nginx intentionally splits the static public landing pages from the React app shell.
+**Corrected 2026-07-18 (Ticket 3 deploy) - the paragraph below previously
+described an intended split that was checked against two months of deploy
+backups and never actually existed in production.** Nginx's catch-all
+(`location /`) and the literal `/` route both serve `index.html`, not
+`app.html`, for everything except the exact `/app.html` path - so
+`index.html` is the real primary entry point today, not a distinct public
+landing page. In every historical backup checked (back to mid-May),
+`index.html` has always been a full copy of the Vite SPA build, identical
+in shape to `app.html`.
 
-- `/` serves the public landing page at `index.html`.
-- `/welcome`, `/login`, and `/register` are direct public/static entries where configured.
+**Until this is deliberately redesigned, deploy the same build output to
+both `index.html` and `app.html`** so the fresh bundle is reachable from
+the real entry point. Deploying only to `app.html` (the old instruction)
+leaves most real traffic - anything landing on `/` or a deep link -
+running a stale bundle. See
+`docs/incident-profile-image-data-loss-20260717.md` ("Deployment and live
+verification") for how this was discovered.
+
 - `/api/` proxies to the Node backend on `127.0.0.1:3001`.
-- Application routes fall back to `/app.html`.
-
-Do not deploy Vite's `dist/index.html` over `/srv/nexis/frontend/current/index.html`.
-Deploy it to `/srv/nexis/frontend/current/app.html` instead.
+- Everything else falls back to `index.html` (in practice, the app shell).
 
 ## Inspect Live State
 
@@ -70,16 +81,19 @@ Only restart the service when backend source or runtime configuration changed.
 cd /srv/nexis/source/NexisGame
 npm run build
 cp -a dist/index.html /srv/nexis/frontend/current/app.html
+cp -a dist/index.html /srv/nexis/frontend/current/index.html
 mkdir -p /srv/nexis/frontend/current/assets
 cp -a dist/assets/. /srv/nexis/frontend/current/assets/
 ```
 
-Then verify:
+Then verify both entry points reference the new build (see Routing Contract above for why both matter):
 
 ```bash
 curl -I https://nexis.nexus/
 curl -I https://nexis.nexus/app.html
 curl -I https://nexis.nexus/assets/
+diff <(curl -s https://nexis.nexus/ | grep -o 'assets/index-[a-zA-Z0-9_-]*\.js') \
+     <(curl -s https://nexis.nexus/app.html | grep -o 'assets/index-[a-zA-Z0-9_-]*\.js')
 ```
 
 ## Rollback

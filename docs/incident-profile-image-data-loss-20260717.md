@@ -2,7 +2,7 @@
 
 **Discovery time:** 2026-07-17, during Ticket 3 (Character Image Regression) investigation, before any code was modified.
 
-**Status:** Acknowledged, contained. Root cause fixed in this ticket's deploy. Lost file content is not recoverable.
+**Status:** Contained and deployed to production 2026-07-18. Root cause fixed and live-verified. Lost file content is not recoverable.
 
 ## Root cause
 
@@ -72,3 +72,60 @@ The database record for P1000000 (`imageKey`, `mimeType`, `updatedAt`) was **not
 6. Added a self-only notice for the affected account explaining the image needs to be re-uploaded.
 
 See the accompanying ticket commit and `docs/claude-session-state.md` for full implementation detail.
+
+## Deployment and live verification (2026-07-18)
+
+Deployed to production as commit `e636a4c` (backend restart + frontend rebuild).
+Pre-deploy backup: `/srv/nexis/backups/ticket3-deploy-20260718-080927` (source,
+deployed frontend, systemd/env config, empty durable directory snapshot,
+profile-image DB record snapshot).
+
+Confirmed at deploy time:
+
+- `PROFILE_IMAGE_STORAGE_DIR=/srv/nexis/shared/profile-images` is set only in
+  `/srv/nexis/shared/config/backend.env` (loaded via the pre-existing
+  `10-env.conf` drop-in) - no unit file changed, so `daemon-reload` was not
+  required.
+- The durable directory exists, is owned `nexis:nexis`, mode `750`, and the
+  `nexis` user can create and read files there.
+- `.data/` contains only the disposable `pglite` test database - no
+  `profile-images` subdirectory exists there anymore.
+- The running service process's actual environment (`/proc/<pid>/environ`)
+  has `PROFILE_IMAGE_STORAGE_DIR` set to the durable path, and its own
+  startup log confirms `Profile image storage ready at
+  /srv/nexis/shared/profile-images`.
+
+**Unrelated deployment-infrastructure finding surfaced during this deploy**
+(pre-existing, not caused by this ticket - recorded as a Deferred Finding in
+the Ticket 3 final report): nginx's catch-all route (`location /`) and the
+literal `/` route both serve `/srv/nexis/frontend/current/index.html`, not
+`app.html`, for any request that isn't the exact `/app.html` path - meaning
+`index.html` (not `app.html`) is the real primary entry point for direct
+navigation and deep links in production today. This contradicts this
+runbook's own "Routing Contract" section below, which describes a genuine
+separate public-landing-page/app-shell split that was checked against two
+months of historical deploy backups and never actually existed - `index.html`
+has always been a full copy of the Vite SPA build. Following the
+documented "deploy only to app.html" procedure literally on 2026-07-18 would
+have left this fix unreachable from the real entry point, so both files were
+updated identically for this deploy (restoring the two-months-standing
+pattern of keeping them in sync). This routing/documentation mismatch is
+out of scope for Ticket 3 and is flagged for separate follow-up.
+
+Live verification performed against `https://nexis.nexus` itself (not an
+isolated instance), using two fresh throwaway test accounts (`Alice
+TicketThreeTest` / P1000170 and `Bob TicketThreeTest` / P1000171) plus
+direct inspection of Hennet Uthellien / P1000000's real, live profile page.
+Full results are in the Ticket 3 final report. Summary: valid upload,
+invalid MIME, invalid magic bytes, oversized upload, and path traversal are
+all correctly rejected; replacement upload cache-busting works; uploads
+persist through hard reload and a real logout/login cycle; another account
+cannot replace a different account's image even with crafted extra request
+parameters; the public/API responses never expose the storage directory
+path or internal account IDs; and the missing-file fallback plus the
+self-only "please re-upload" notice render correctly on all four required
+surfaces (left identity panel, top-right identity control, account
+dropdown, Profile page) with zero broken-image icons and no repeated
+network requests. Hennet's database record (`imageKey`,
+`usr_d8c9acdb-8fc6-45b4-bc5b-0e3df6d6c10c-1778932228571.jpg`) remains
+exactly as it was - untouched, not deleted, not auto-replaced.
