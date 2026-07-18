@@ -98,12 +98,29 @@ diff <(curl -s https://nexis.nexus/ | grep -o 'assets/index-[a-zA-Z0-9_-]*\.js')
 
 ## Rollback
 
-Use the most recent known-good backup under `/srv/nexis/backups`.
+**Source rollback** (`/srv/nexis/source/NexisGame`) should use `git revert` for a
+specific bad commit, or targeted restoration of the exact changed files from a
+backup - **not** a broad `rsync -a --delete` against the whole source
+repository. The source tree is a git working copy; wholesale-deleting and
+replacing it can destroy `.git` state, uncommitted work, or unrelated later
+changes that a scoped revert or file-level restore would leave untouched.
+
+```bash
+cd /srv/nexis/source/NexisGame
+git revert <bad-commit-sha>          # preferred: reverts just that change
+# or, for a narrow file-level restore instead of a full revert:
+git checkout <known-good-sha> -- path/to/file.js
+```
+
+Only fall back to restoring from a full backup snapshot (below) if the bad
+change was never committed, or git history itself is unusable.
+
+Use the most recent known-good backup under `/srv/nexis/backups` for
+non-source assets (built frontend, nginx config) or as a last resort:
 
 ```bash
 backup="/srv/nexis/backups/<backup-name>"
 systemctl stop nexis-waitlist.service
-rsync -a --delete "$backup/source/" /srv/nexis/source/NexisGame/
 rsync -a --delete "$backup/frontend-current/" /srv/nexis/frontend/current/
 cp -a "$backup/nginx-nexis" /etc/nginx/sites-enabled/nexis
 nginx -t

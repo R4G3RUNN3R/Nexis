@@ -122,10 +122,45 @@ all correctly rejected; replacement upload cache-busting works; uploads
 persist through hard reload and a real logout/login cycle; another account
 cannot replace a different account's image even with crafted extra request
 parameters; the public/API responses never expose the storage directory
-path or internal account IDs; and the missing-file fallback plus the
-self-only "please re-upload" notice render correctly on all four required
-surfaces (left identity panel, top-right identity control, account
-dropdown, Profile page) with zero broken-image icons and no repeated
-network requests. Hennet's database record (`imageKey`,
+path or internal account IDs; and the missing-file fallback renders
+correctly with zero broken-image icons and no repeated network requests.
+**Hennet's public fallback was verified directly** on her real, live
+profile page. **The authenticated self-only missing-image notice could not
+be verified on Hennet's own account directly** (her login credentials were
+never available to this session) **and was instead verified using a
+structurally equivalent test account** (Bob, placed into the identical
+"record exists, file missing" state) across all four required surfaces
+(left identity panel, top-right identity control, account dropdown,
+Profile page). Hennet's database record (`imageKey`,
 `usr_d8c9acdb-8fc6-45b4-bc5b-0e3df6d6c10c-1778932228571.jpg`) remains
 exactly as it was - untouched, not deleted, not auto-replaced.
+
+## Test account cleanup (2026-07-18)
+
+The two production test accounts used for the deploy's live verification -
+Alice TicketThreeTest (P1000170) and Bob TicketThreeTest (P1000171) - were
+removed after Ticket 3 was accepted as complete, once a full relationship
+audit confirmed neither had any interaction with a real player or shared
+production object (no marketplace listings, no organization membership or
+founding, no duels, no admin-log references, no mentions inside any other
+account's `player_snapshot`). Backup taken first at
+`/srv/nexis/backups/ticket3-testacct-cleanup-20260718-084159` (account
+rows, player_state, sessions, profile-image metadata, the 4 physical test
+image files with checksums, and the pre-cleanup allocator values).
+
+Removed: both accounts' sessions, `player_state` rows, and `users` rows
+(cascade-deleted `player_state`/`auth_sessions` via the existing FK
+constraints once `users` was deleted; every other FK to `users` on these
+two accounts was already confirmed at zero rows beforehand). Removed:
+Alice's 4 exact test image files under `/srv/nexis/shared/profile-images`,
+deleted individually by validated absolute path (existence, regular-file,
+and realpath match checked per file) - no wildcard, no `rm -rf`. Bob's
+file had already been deleted during Ticket 3's own verification.
+
+The public-ID allocator (`public_id_allocators`, `entity_type = 'player'`)
+was never written to directly and was not reduced; it advanced only
+through normal registration (once for a same-session cleanup-verification
+probe account, also removed afterward). P1000170 and P1000171 can never be
+reissued, since the allocator only ever moves forward. Hennet's portrait
+metadata was re-confirmed byte-for-byte unchanged after cleanup, and she
+remains the only account in the database with any profile-image record.
