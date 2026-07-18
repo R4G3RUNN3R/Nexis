@@ -471,6 +471,56 @@
   font-size: 12px;
 }
 
+.edu-overview-strip {
+  display: flex;
+  gap: 1px;
+  border: 1px solid #22302a;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.edu-overview-strip__block {
+  flex: 1;
+  padding: 9px 12px;
+  background: #0d1210;
+}
+
+.edu-overview-strip__label {
+  color: #d8c78b;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.edu-overview-strip__value {
+  margin-top: 4px;
+  color: #d4ddd6;
+  font-size: 13px;
+}
+
+.edu-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.edu-history-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.edu-history-list__time {
+  color: #8f9a94;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .edu-category-card__state-row {
   display: flex;
   justify-content: space-between;

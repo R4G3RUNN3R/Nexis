@@ -34,15 +34,7 @@ import {
   listConsortiumTypes,
 } from "../data/consortiumTypes.js";
 import { getOrganizationBaseEffectsForOrg } from "./organizationBaseEffectService.js";
-import { getCompletedCourseIds } from "./educationService.js";
-
-// Education hard-gate: mirrors the hasCompletedCourse(runtimeState, courseId) helper used by
-// travelService.js (world-geography -> travel), built on the shared getCompletedCourseIds export
-// from educationService.js (also used by worldMapService.js/cityBoardService.js/liveWorldService.js)
-// so completion is read from the single normalized education state rather than re-derived here.
-function hasCompletedCourse(runtimeState, courseId) {
-  return getCompletedCourseIds(runtimeState).includes(courseId);
-}
+import { hasCompletedCourse } from "./educationService.js";
 
 const FIRST_ORGANIZATION_PUBLIC_ID = PLAYER_PUBLIC_ID_BASE + RESERVED_PLAYER_PUBLIC_ID_COUNT;
 const normalizeOrganizationPublicId = (value, type = null) => {

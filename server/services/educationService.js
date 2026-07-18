@@ -62,6 +62,22 @@ export function getCompletedCourseIds(runtimeState) {
   return ensureEducationState(runtimeState).completedCourses;
 }
 
+// Canonical course-identity checks (Ticket 6). Every prerequisite/eligibility
+// check in the codebase - academy access, market/black-market gates, guild
+// founding, travel, etc. - should read completion through these two
+// functions rather than re-deriving its own completedCourses/completed
+// union, so there is exactly one place that decides what "completed" means.
+// An id with no matching course (typo, removed course, wrong branch) is
+// simply never in the completed set, so it fails closed by construction.
+export function hasCompletedCourse(runtimeState, courseId) {
+  return getCompletedCourseIds(runtimeState).includes(courseId);
+}
+
+export function getMissingCourses(runtimeState, requiredCourses) {
+  const completed = new Set(getCompletedCourseIds(runtimeState));
+  return (requiredCourses ?? []).filter((courseId) => !completed.has(courseId));
+}
+
 function missingPrereqs(course, completedCourses) {
   const completed = new Set(completedCourses);
   return (course.prerequisites ?? []).filter((courseId) => !completed.has(courseId));

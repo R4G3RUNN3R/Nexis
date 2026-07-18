@@ -9,14 +9,7 @@ import { createMarketplaceListing, expireOldMarketplaceListings, findMarketplace
 import { getCityDemandProfile } from "./liveWorldService.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
 import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
-import { getCompletedCourseIds } from "./educationService.js";
-
-// Education hard-gate: mirrors the hasCompletedCourse(runtimeState, courseId) helper used by
-// travelService.js (world-geography -> travel), built on the shared getCompletedCourseIds export
-// from educationService.js (also used by worldMapService.js/cityBoardService.js/liveWorldService.js).
-function hasCompletedCourse(runtimeState, courseId) {
-  return getCompletedCourseIds(runtimeState).includes(courseId);
-}
+import { hasCompletedCourse } from "./educationService.js";
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asNumber(value, fallback = 0) { const numeric = Number(value); return Number.isFinite(numeric) ? numeric : fallback; }

@@ -43,9 +43,18 @@ export default function AcademiesPage() {
   );
 
   return (
-    <AppShell title="Academies" hint="Academies are city and region commitments: requirements first, study second, rewards after the work is actually done.">
+    <AppShell title="Academies" hint="A design overview of the wider academy framework - for the real, live requirements at your current city, use that city's own Academy section.">
       <div className="academies-grid">
         <div className="academies-column academies-column--left">
+          <ContentPanel title="What This Page Is" defaultOpen={false}>
+            <p style={{ margin: 0, color: "#b7c3cf", fontSize: 13 }}>
+              This page describes the broader academy design vision by region - it is reference and planning content, not a live progress tracker, and it does not check your account.
+            </p>
+            <p style={{ margin: "8px 0 0", color: "#b7c3cf", fontSize: 13 }}>
+              For the real, currently-playable academies at a specific city - their exact names, requirements, and your own completion status - open that city's Academy section from the City page.
+            </p>
+          </ContentPanel>
+
           <ContentPanel title="Academy Rules">
             <ul className="academy-rule-list">
               {academySystemRules.map((rule) => (

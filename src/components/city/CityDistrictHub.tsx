@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { getCityDistricts } from "../../data/cityDistricts";
 import { getCityHubContent, type CityService } from "../../data/cityHubData";
 import { getCityAcademyDetail, getCityLocalContracts } from "../../data/cityLoopData";
+import { educationCourseMap } from "../../data/educationData";
 import { type WorldCity } from "../../data/worldMapData";
 import { getProfileRoute } from "../../lib/publicIds";
 import { getCodexEntryIdForCity, getCodexEntryRoute } from "../../data/codexData";
@@ -33,6 +34,12 @@ import { usePlayer } from "../../state/PlayerContext";
 function shortText(value: string, max = 110) {
   const trimmed = String(value || "").trim();
   return trimmed.length > max ? `${trimmed.slice(0, max - 3).trim()}...` : trimmed;
+}
+
+// Course requirements arrive from the server as canonical ids (e.g. "practical-arithmetic") -
+// never render those raw to a player; always resolve to the real course name.
+function courseLabel(courseId: string): string {
+  return educationCourseMap[courseId]?.name ?? courseId;
 }
 
 function ServiceLink({ service }: { service: CityService }) {
@@ -372,8 +379,8 @@ function AcademyPanel({
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}><strong>{index + 1}. {stage.title}</strong><span style={{ color: stage.status === "completed" ? "#8ec8a7" : stage.status === "locked" ? "#d0ad74" : "#d8c278", fontSize: 12 }}>{stage.status}</span></div>
                 <div style={{ color: "#b7c3cf", fontSize: 13 }}>{stage.summary}</div>
                 <div style={{ color: "#9fb0bf", fontSize: 12 }}>Standing required: {stage.requiredStanding} | Reward standing: +{stage.standingReward}</div>
-                {stage.requiredCourses.length ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Courses: {stage.requiredCourses.join(" | ")}</div> : null}
-                {stage.missingCourses.length ? <div style={{ color: "#d0ad74", fontSize: 12 }}>Missing: {stage.missingCourses.join(" | ")}</div> : null}
+                {stage.requiredCourses.length ? <div style={{ color: "#9fb0bf", fontSize: 12 }}>Courses: {stage.requiredCourses.map(courseLabel).join(" | ")}</div> : null}
+                {stage.missingCourses.length ? <div style={{ color: "#d0ad74", fontSize: 12 }}>Missing: {stage.missingCourses.map(courseLabel).join(" | ")}</div> : null}
                 {stage.lockReason && stage.status !== "available" ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{stage.lockReason}</div> : null}
               </div>
             ))}
@@ -388,7 +395,7 @@ function AcademyPanel({
 }
 
 export default function CityDistrictHub({ city }: { city: WorldCity }) {
-  const { authSource, serverSessionToken, refreshServerState } = useAuth();
+  const { authSource, serverHydrationVersion, serverSessionToken, refreshServerState } = useAuth();
   const { player } = usePlayer();
   const cityRhythm = (player as unknown as { worldLoops?: { cityRhythm?: { rhythm?: { title?: string; summary?: string }; update?: { title?: string; summary?: string }; threat?: { title?: string; severity?: number | string; summary?: string }; boss?: { title?: string; name?: string; status?: string; reward?: string } } } }).worldLoops?.cityRhythm;
   const location = useLocation();
@@ -534,7 +541,10 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     return () => {
       cancelled = true;
     };
-  }, [authSource, city.id, serverSessionToken]);
+    // serverHydrationVersion is bumped by completeCourse()/EducationContext after every course
+    // completion (see refreshServerState in AuthContext) - without it, this panel could keep
+    // showing pre-completion missingCourses/lockReason until the component remounts.
+  }, [authSource, city.id, serverHydrationVersion, serverSessionToken]);
 
   async function runContractAction(contractId: string, action: "accept" | "complete" | "claim" | "refresh") {
     if (!serverSessionToken) return;
@@ -595,16 +605,31 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
     await refreshServerState();
   }
 
+  const academyEntries = academies.length ? academies : academy ? [academy] : [];
+  // hub.services.academy/hub.academy are static per-city placeholder content (Ticket 6: this is
+  // what previously kept showing "Requires Practical Arithmetic" for Ironhall forever, even after
+  // a player completed it). Once the real per-academy data has loaded, derive the summary status
+  // from it instead - the same server evaluator the AcademyPanel entries below already use. The
+  // static hub.services.academy is only kept as a fallback for the not-yet-loaded/signed-out case.
+  const academyAccessible = academyEntries.some((entry) => entry.isCompleted || entry.canStart || !entry.lockReason);
+  const academyService: CityService = academyEntries.length
+    ? {
+        label: hub.services.academy.label,
+        route: hub.services.academy.route,
+        summary: hub.services.academy.summary,
+        status: academyAccessible ? "open" : "locked",
+        lockReason: academyAccessible ? undefined : academyEntries.find((entry) => entry.lockReason)?.lockReason ?? hub.services.academy.lockReason,
+      }
+    : hub.services.academy;
   const serviceCards = [
     hub.services.market,
     hub.services.travel,
     hub.services.guild,
     hub.services.consortium,
-    hub.services.academy,
+    academyService,
     hub.services.blackMarket,
     hub.services.citySpecial,
   ];
-  const academyEntries = academies.length ? academies : academy ? [academy] : [];
   const cityCodexRoute = getCodexEntryRoute(getCodexEntryIdForCity(city.id));
   const visibleContracts = showAllContracts ? contracts : contracts.slice(0, 3);
   const fallbackContracts = showAllContracts ? localContracts : localContracts.slice(0, 3);
@@ -707,9 +732,9 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
           )) : (
             <AcademyPanel academy={null} fallbackName={hub.academy.name} fallbackFocus={hub.academy.focus} now={now} busy={Boolean(busyAction?.startsWith("academy:"))} expanded onToggle={() => undefined} onAction={runAcademyAction} />
           )}
-          <ServiceLink service={hub.services.academy} />
+          <ServiceLink service={academyService} />
           {!academy && academyDetail.lockReason ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academyDetail.lockReason}</div> : null}
-          {hub.academy.unlockCourse ? <div style={{ fontSize: 12, color: "#d0ad74" }}>Unlock path: {hub.academy.unlockCourse}</div> : null}
+          {!academy && hub.academy.unlockCourse ? <div style={{ fontSize: 12, color: "#d0ad74" }}>Unlock path: {hub.academy.unlockCourse}</div> : null}
         </div>
       </HubSection>
 

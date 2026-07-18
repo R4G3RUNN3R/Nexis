@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { getCodexEntryRoute } from "../data/codexData";
+import { getCityHubContent } from "../data/cityHubData";
 import {
   educationCategories,
   educationCourseMap,
@@ -13,7 +14,57 @@ import {
   getCategoryProgress,
   useEducation,
 } from "../state/EducationContext";
+import { getServerCityAcademy, type ServerCityAcademy } from "../lib/authApi";
+import { useAuth } from "../state/AuthContext";
+import { usePlayer } from "../state/PlayerContext";
+import { readTravelStateFromPlayer } from "../lib/travelState";
 import "../styles/education-ui.css";
+
+const TOTAL_COURSE_COUNT = educationCategories.reduce((sum, category) => sum + category.courses.length, 0);
+
+function formatRelativeTime(timestampMs: number): string {
+  const diffMs = Date.now() - timestampMs;
+  if (!Number.isFinite(diffMs) || diffMs < 0) return "recently";
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+// Live per-academy eligibility for the player's current city, from the same server evaluator
+// the City page's Academy panel uses (Ticket 6) - this page never derives its own lock logic,
+// it only reads what the backend already computed.
+function useCurrentCityAcademySummary() {
+  const { player } = usePlayer();
+  const { authSource, serverHydrationVersion, serverSessionToken } = useAuth();
+  const currentCityId = readTravelStateFromPlayer(player).currentCityId;
+  const [academies, setAcademies] = useState<ServerCityAcademy[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (authSource !== "server" || !serverSessionToken || !currentCityId) {
+      setAcademies(null);
+      return;
+    }
+    (async () => {
+      const result = await getServerCityAcademy(serverSessionToken, currentCityId);
+      if (cancelled) return;
+      if (!result.ok) {
+        setAcademies(null);
+        return;
+      }
+      setAcademies(result.academies ?? (result.academy ? [result.academy] : []));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSource, currentCityId, serverHydrationVersion, serverSessionToken]);
+
+  return { cityId: currentCityId, academies };
+}
 
 function buildCategoryTree(categoryId: string) {
   const category = educationCategories.find((item) => item.id === categoryId);
@@ -258,7 +309,10 @@ export default function Education() {
       : selectedMissingPrerequisites.length
         ? "locked"
         : "available";
-  const selectedLockReason = selectedMissingPrerequisites.length
+  // Gated on selectedStatus === "locked", not just selectedMissingPrerequisites.length: a course
+  // already marked completed must never show a "missing prerequisite" reason underneath its own
+  // "Completed" banner, even if its prerequisite chain data looks incomplete for some other reason.
+  const selectedLockReason = selectedStatus === "locked"
     ? `Missing required education: ${selectedMissingPrerequisites.map((courseId) => educationCourseMap[courseId]?.name ?? courseId).join(", ")}.`
     : null;
 
@@ -283,6 +337,18 @@ export default function Education() {
 
   const bannerSubtitle = education.activeCourse ? formatRemaining(bannerRemainingMs) : "No active course";
 
+  const completedCount = education.completedCourses.length;
+  const { cityId: currentCityId, academies: currentCityAcademies } = useCurrentCityAcademySummary();
+  const currentCityName = getCityHubContent(currentCityId).displayName;
+  const openAcademyCount = currentCityAcademies?.filter((entry) => entry.isCompleted || entry.canStart || !entry.lockReason).length ?? null;
+  const academySummaryText = currentCityAcademies === null
+    ? "Sign in to check academy access."
+    : `${openAcademyCount} of ${currentCityAcademies.length} open in ${currentCityName}`;
+  const recentHistory = [...education.history]
+    .filter((entry) => typeof entry.completedAt === "number")
+    .sort((left, right) => (right.completedAt as number) - (left.completedAt as number))
+    .slice(0, 6);
+
   return (
     <AppShell title="Education" hint="Education is organized into categories, course chains, prerequisites, and system unlocks.">
       <div className="education-page">
@@ -303,6 +369,19 @@ export default function Education() {
             >
               Leave Course
             </button>
+          </div>
+        </div>
+
+        <div className="edu-overview-strip">
+          <div className="edu-overview-strip__block">
+            <div className="edu-overview-strip__label">Courses complete</div>
+            <div className="edu-overview-strip__value">{completedCount} / {TOTAL_COURSE_COUNT}</div>
+          </div>
+          <div className="edu-overview-strip__block">
+            <div className="edu-overview-strip__label">Academy access</div>
+            <div className="edu-overview-strip__value">
+              <Link className="inline-route-link" to="/city#academy">{academySummaryText}</Link>
+            </div>
           </div>
         </div>
 
@@ -388,7 +467,7 @@ export default function Education() {
                 <div className={`edu-lock-banner edu-lock-banner--${selectedStatus}`}>
                   <strong>Status: {formatEducationKey(selectedStatus)}</strong>
                   {selectedLockReason ? <span>Reason: {selectedLockReason}</span> : <span>{selectedStatus === "completed" ? "This requirement is complete." : selectedStatus === "current" ? "This course is in progress." : "Available to start."}</span>}
-                  {selectedMissingPrerequisites.length ? (
+                  {selectedStatus === "locked" && selectedMissingPrerequisites.length ? (
                     <div className="edu-lock-banner__paths">
                       Unlock path:
                       {selectedMissingPrerequisites.map((courseId) => {
@@ -503,6 +582,21 @@ export default function Education() {
                   <div className="edu-passive-strip__label">System unlocks</div>
                   <div className="edu-passive-strip__value">
                     {education.systemUnlocks.length ? education.systemUnlocks.map(formatEducationKey).join(" | ") : "None yet"}
+                  </div>
+                </div>
+                <div className="edu-passive-strip__block">
+                  <div className="edu-passive-strip__label">Recent completions</div>
+                  <div className="edu-passive-strip__value">
+                    {recentHistory.length ? (
+                      <ul className="edu-history-list">
+                        {recentHistory.map((entry) => (
+                          <li key={String(entry.id ?? entry.courseId)}>
+                            {String(entry.title ?? educationCourseMap[String(entry.courseId)]?.name ?? entry.courseId)}
+                            <span className="edu-history-list__time">{formatRelativeTime(entry.completedAt as number)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : "None yet"}
                   </div>
                 </div>
               </div>

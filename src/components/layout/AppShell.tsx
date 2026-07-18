@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { ReactNode, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { TopBar } from "./TopBar";
 import { PlayerAvatar } from "../common/PlayerAvatar";
 import { usePlayer } from "../../state/PlayerContext";
@@ -12,7 +12,7 @@ import { isStaffOrAdmin } from "../../lib/adminAccess";
 import { AdminModeToggle, AdminGoldInlineControls, AdminConditionInlineControls } from "../admin/AdminInlineControls";
 import { cielLoadingQuotes } from "../../data/cielPageCopy";
 import { getCityHubContent } from "../../data/cityHubData";
-import { acknowledgeProgressionEvent, type ServerProgressionEvent } from "../../lib/authApi";
+import { acknowledgeProgressionEvent, getServerCityAcademy, type ServerProgressionEvent } from "../../lib/authApi";
 
 type AppShellProps = {
   title?: string;
@@ -82,7 +82,12 @@ function formatGold(amount: number): string {
   return amount.toLocaleString("en-US") + " gp";
 }
 
-function buildCityLocalLinks(cityId: string | null | undefined): Array<[string, string]> {
+// academyOpen is a live per-player value fetched from the same server evaluator the City page's
+// Academy panel uses (see AppShell's academy-status effect below) - null while it hasn't loaded
+// yet (or the player is signed out), in which case the static per-city placeholder is used only
+// as a display fallback, never as the authority (Ticket 6: this static value used to be shown
+// forever regardless of real course completion).
+function buildCityLocalLinks(cityId: string | null | undefined, academyOpen: boolean | null): Array<[string, string]> {
   const hub = getCityHubContent(cityId);
   const links: Array<[string, string]> = [
     [hub.services.market.label, hub.services.market.route ?? "/market"],
@@ -93,11 +98,12 @@ function buildCityLocalLinks(cityId: string | null | undefined): Array<[string, 
     links.push(["Black Market", hub.services.blackMarket.route]);
   }
 
+  const isAcademyOpen = academyOpen ?? hub.services.academy.status === "open";
   links.push(
     ["City Special", "/city#special"],
     ["Crafting", "/crafting"],
     ["Salvage Yard", "/salvage-yard"],
-    [hub.services.academy.status === "open" ? "Academy" : "Academy (Locked)", "/city#academy"],
+    [isAcademyOpen ? "Academy" : "Academy (Locked)", "/city#academy"],
     ["Travel", "/travel"],
     ["Consortium", "/consortiums"],
     ["Guild", "/guilds"],
@@ -163,8 +169,9 @@ function ProgressionEventPanel({
 
 export function AppShell({ title, hint, children }: AppShellProps) {
   const { player, now, isHospitalized, hospitalRemainingLabel, isJailed, jailRemainingLabel } = usePlayer();
-  const { activeAccount, logout, authSource, serverSessionToken, refreshServerState } = useAuth();
+  const { activeAccount, logout, authSource, serverHydrationVersion, serverSessionToken, refreshServerState } = useAuth();
   const [acknowledgingEventId, setAcknowledgingEventId] = useState<string | null>(null);
+  const [sidebarAcademyOpen, setSidebarAcademyOpen] = useState<boolean | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const travelState = readTravelStateFromPlayer(player);
@@ -178,6 +185,29 @@ export function AppShell({ title, hint, children }: AppShellProps) {
     logout();
     navigate("/login", { replace: true });
   }
+
+  const sidebarNormalizedCityId = getCityHubContent(travelState.currentCityId).cityId;
+  const sidebarAcademyCityId = !isTraveling && sidebarNormalizedCityId !== "nexis" ? sidebarNormalizedCityId : null;
+  useEffect(() => {
+    let cancelled = false;
+    if (!sidebarAcademyCityId || authSource !== "server" || !serverSessionToken) {
+      setSidebarAcademyOpen(null);
+      return;
+    }
+    (async () => {
+      const result = await getServerCityAcademy(serverSessionToken, sidebarAcademyCityId);
+      if (cancelled) return;
+      if (!result.ok) {
+        setSidebarAcademyOpen(null);
+        return;
+      }
+      const entries = result.academies ?? (result.academy ? [result.academy] : []);
+      setSidebarAcademyOpen(entries.some((entry) => entry.isCompleted || entry.canStart || !entry.lockReason));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sidebarAcademyCityId, authSource, serverSessionToken, serverHydrationVersion]);
 
   let conditionLabel = "Normal";
   let conditionClass = "player-condition";
@@ -228,7 +258,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const visibleFactions = hiddenRoutes ? factions.filter(([, route]) => !hiddenRoutes.has(route)) : factions;
   const currentCityHub = getCityHubContent(travelState.currentCityId);
   const useCityLocalSidebar = !isTraveling && currentCityHub.cityId !== "nexis";
-  const visibleCityLocal = buildCityLocalLinks(currentCityHub.cityId).filter(([, route]) => !hiddenRoutes?.has(route.split("#")[0]));
+  const visibleCityLocal = buildCityLocalLinks(currentCityHub.cityId, sidebarAcademyOpen).filter(([, route]) => !hiddenRoutes?.has(route.split("#")[0]));
   const adminLinks = canAccessAdmin ? ([["Admin Panel", "/admin"]] as Array<[string, string]>) : [];
   const onProfileSurface =
     location.pathname === profileRoute ||

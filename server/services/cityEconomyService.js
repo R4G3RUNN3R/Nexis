@@ -21,6 +21,7 @@ import { getItemDefinition, getItemDisplayName, getItemSummary } from "../data/i
 import { getCourseLabel } from "../data/educationData.js";
 import { ensureShadowState, getCityDemandProfile, spendShadow } from "./liveWorldService.js";
 import { getConsortiumEffectPctForRuntime } from "./consortiumPerkService.js";
+import { getCompletedCourseIds, getMissingCourses } from "./educationService.js";
 
 const MAX_PURCHASE_QUANTITY = 99;
 const CITY_STANDING_TIERS = [
@@ -124,20 +125,6 @@ function addCityStanding(runtimeState, cityId, amount, now) {
   return next;
 }
 
-function getCompletedCourses(runtimeState) {
-  const education = asRecord(runtimeState.education);
-  const completedCourses = asArray(education.completedCourses).filter((entry) => typeof entry === "string");
-  const legacyCompleted = Object.entries(asRecord(education.completed))
-    .filter(([, value]) => value === true || asRecord(value).completed === true)
-    .map(([courseId]) => courseId);
-  return Array.from(new Set([...completedCourses, ...legacyCompleted]));
-}
-
-function getMissingCourses(runtimeState, requiredCourses = []) {
-  const completed = new Set(getCompletedCourses(runtimeState));
-  return requiredCourses.filter((courseId) => !completed.has(courseId));
-}
-
 function describeCourseList(courseIds) {
   return courseIds.map((courseId) => getCourseLabel(courseId)).join(", ");
 }
@@ -215,7 +202,7 @@ function removeItems(player, itemId, quantity) {
 // and vice versa. Both a Merchant Consortium (scope "all") and a Luxury Artisan Consortium (scope
 // "Luxury goods") can be active on the same sale; their percentages simply add.
 function getLegalSellBonusPercent(runtimeState, good = null) {
-  const completed = new Set(getCompletedCourses(runtimeState));
+  const completed = new Set(getCompletedCourseIds(runtimeState));
   let bonus = 0;
   if (completed.has("practical-arithmetic")) bonus += 5;
   if (completed.has("commerce-1") || completed.has("trade-1")) bonus += 3;

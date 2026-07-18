@@ -10,6 +10,7 @@ import { getCityDefinition, getCityOccupancyCandidates, isValidCityId, normalize
 import { getAcademyById, getCityAcademies, getCityAcademy, getCityContract, getCityContracts } from "../data/cityLoopData.js";
 import { resolveTravelForRuntimeState } from "./travelService.js";
 import { resolveNpcCombatWithRewards } from "./combatService.js";
+import { getMissingCourses } from "./educationService.js";
 
 const CITY_STANDING_TIERS = [
   { value: 0, label: "New Arrival" },
@@ -176,20 +177,6 @@ function setContractRecord(runtimeState, contractId, record) {
 
 function getContractStatus(record) {
   return record.status === "active" || record.status === "completed" || record.status === "claimed" ? record.status : "available";
-}
-
-function getCompletedCourses(runtimeState) {
-  const education = asRecord(runtimeState.education);
-  const completedCourses = asArray(education.completedCourses).filter((entry) => typeof entry === "string");
-  const legacyCompleted = Object.entries(asRecord(education.completed))
-    .filter(([, value]) => value === true || asRecord(value).completed === true)
-    .map(([courseId]) => courseId);
-  return Array.from(new Set([...completedCourses, ...legacyCompleted]));
-}
-
-function getMissingCourses(runtimeState, requiredCourses) {
-  const completed = new Set(getCompletedCourses(runtimeState));
-  return requiredCourses.filter((courseId) => !completed.has(courseId));
 }
 
 function getStamina(runtimeState) {
