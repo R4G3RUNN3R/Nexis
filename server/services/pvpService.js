@@ -94,7 +94,18 @@ export async function updatePvpSafetyForUser(user, payload = {}) {
   return withTransaction(async (client) => {
     const { runtimeState } = await loadRuntimeState(client, user);
     const pvp = ensurePvpProfile(runtimeState);
-    pvp.safety = normalizeSafety({ ...pvp.safety, ...asRecord(payload.safety ?? payload) });
+    // Read exactly the 4 named safety fields from the client payload - never
+    // spread the payload itself into an object. An omitted field keeps its
+    // existing value (partial update); anything else the client sends is
+    // never looked at, so this can't be widened into mass assignment later
+    // just by someone touching normalizeSafety(). (Ticket 5 hardening.)
+    const incomingSafety = asRecord(payload.safety ?? payload);
+    pvp.safety = normalizeSafety({
+      sparringOptIn: incomingSafety.sparringOptIn ?? pvp.safety.sparringOptIn,
+      rankedOptIn: incomingSafety.rankedOptIn ?? pvp.safety.rankedOptIn,
+      bountyEligible: incomingSafety.bountyEligible ?? pvp.safety.bountyEligible,
+      caravanRiskOptIn: incomingSafety.caravanRiskOptIn ?? pvp.safety.caravanRiskOptIn,
+    });
     pvp.lastUpdatedAt = Date.now();
     addPlayerRecord(runtimeState, {
       category: "combat",

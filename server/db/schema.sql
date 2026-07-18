@@ -209,6 +209,21 @@ CREATE TABLE IF NOT EXISTS organization_members (
 CREATE INDEX IF NOT EXISTS idx_organization_members_user
   ON organization_members (user_internal_id);
 
+-- Ticket 5 hardening: role_key was previously unconstrained TEXT, relying
+-- entirely on every write path using only server-computed values from the
+-- fixed guild/consortium role set (verified true for every caller at audit
+-- time). This makes that invariant DB-enforced too. Idempotent because
+-- schema.sql re-runs on every startup - re-adding an existing constraint
+-- would otherwise error.
+DO $$
+BEGIN
+  ALTER TABLE organization_members
+    ADD CONSTRAINT organization_members_role_key_check
+    CHECK (role_key IN ('guildmaster', 'officer', 'member', 'director', 'specialist', 'employee'));
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS organization_logs (
   id BIGSERIAL PRIMARY KEY,
   organization_internal_id TEXT NOT NULL REFERENCES organizations(internal_id) ON DELETE CASCADE,
