@@ -81,7 +81,7 @@ function filterListing(listing, filters) {
 }
 
 function sortListings(listings, sort) {
-  const rarityRank = { common: 1, uncommon: 2, rare: 3, legendary: 4 };
+  const rarityRank = { common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5, mythic: 6 };
   return listings.slice().sort((left, right) => {
     if (sort === "price_desc") return right.unitPrice - left.unitPrice || right.createdAt - left.createdAt;
     if (sort === "newest") return right.createdAt - left.createdAt;

@@ -1,23 +1,23 @@
 import crypto from "node:crypto";
-import { query, closePool } from "../../server/db/pool.js";
-import { HttpError } from "../../server/lib/errors.js";
+import { query, closePool } from "../../db/pool.js";
+import { HttpError } from "../../lib/errors.js";
 import {
   acquireOrganizationBaseForUser,
   getOrganizationBaseOwnershipForUser,
   sellbackOrganizationPlotForUser,
-} from "../../server/services/organizationBaseOwnershipService.js";
+} from "../../services/organizationBaseOwnershipService.js";
 import {
   cancelOrganizationMainBuildForUser,
   startOrganizationMainBuildForUser,
-} from "../../server/services/organizationBaseConstructionService.js";
+} from "../../services/organizationBaseConstructionService.js";
 import {
   cancelOrganizationRoomBuildForUser,
   removeOrganizationBaseRoomForUser,
   startOrganizationRoomBuildForUser,
-} from "../../server/services/organizationBaseRoomService.js";
-import { runOrganizationBaseLifecycleSweep } from "../../server/services/organizationBaseSafetyService.js";
-import { getConsortiumLogisticsBoardForUser } from "../../server/services/consortiumLogisticsService.js";
-import { getMyOrganization } from "../../server/services/organizationService.js";
+} from "../../services/organizationBaseRoomService.js";
+import { runOrganizationBaseLifecycleSweep } from "../../services/organizationBaseSafetyService.js";
+import { getConsortiumLogisticsBoardForUser } from "../../services/consortiumLogisticsService.js";
+import { getMyOrganization } from "../../services/organizationService.js";
 
 const CANARY = {
   leaderEmail: "canary.consortium.leader@nexis.local",

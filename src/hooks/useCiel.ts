@@ -26,6 +26,13 @@ type UseCielOptions = {
 
 // ─── Page explanations — CIEL voice ──────────────────────────────────────────
 
+function titleFromPath(pathname: string): string {
+  if (pathname.startsWith("/profile/")) return "Profile";
+  if (pathname.startsWith("/guilds/")) return "Guilds";
+  if (pathname.startsWith("/consortiums/")) return "Consortiums";
+  return pathname.replace(/^\//, "").replace(/-/g, " ") || "Home";
+}
+
 function buildPageExplanation(pageTitle?: string): string {
   const title = (pageTitle ?? "").toLowerCase();
 
@@ -34,7 +41,7 @@ function buildPageExplanation(pageTitle?: string): string {
   }
 
   if (title.includes("inventory")) {
-    return "Everything you've gathered from jobs ends up here. Raw materials, herbs, ore, leather — none of it is useless, some of it is more useful than you currently understand. Professions will eventually tell you what to do with it. Until then: keep working, keep collecting.";
+    return "Inventory is where equipment, clothing, consumables, materials, recipes, manuals, and marketable goods stop being theory. Equipped and worn rows are highlighted. Expand an item before you do anything dramatic with it.";
   }
 
   if (title.includes("education")) {
@@ -42,7 +49,7 @@ function buildPageExplanation(pageTitle?: string): string {
   }
 
   if (title.includes("jobs")) {
-    return "Jobs aren't just gold. Each category has a level bar — 1 to 100 — and every task you complete feeds it. Your category level determines how well you perform, how much you earn, and whether a critical failure puts you in the hospital. Stamina is the cost. No stamina, no work. It's not complicated.";
+    return "Adventure work covers contracts, expeditions, hidden-site runs, and fights that make your gear choices matter. Risk, damage type, rewards, and readiness all matter. Shocking, I know.";
   }
 
   if (title.includes("hospital")) {
@@ -50,7 +57,7 @@ function buildPageExplanation(pageTitle?: string): string {
   }
 
   if (title.includes("travel")) {
-    return "Five cities. Each with its own academy, culture, and access rules. You can't just teleport — travel takes time and eventually, risk. Nexis is the center. Aethermoor is north, Torvhal east, Embervale south, Westmarch west. The map tells you where things are. I tell you what they mean.";
+    return "Travel owns movement. Nexis City, Blackharbor, Silverbough, Ironhall, and Highcourt each have their own routes, risks, academies, markets, and board notices. World Map is for atlas and discovery; Travel is where you actually depart.";
   }
 
   if (title.includes("housing")) {
@@ -58,11 +65,35 @@ function buildPageExplanation(pageTitle?: string): string {
   }
 
   if (title.includes("academy") || title.includes("academies")) {
-    return "Four academies, each tied to a city. One active at a time. Switching costs 50,000 gold and a 30-day wait. Nexis Professions is always active — it's not directional, it's practical. Choose based on what you want to become. The system doesn't forgive indecision, but it also doesn't punish curiosity.";
+    return "Academy Study is separate from Education. Education unlocks civic, trade, travel, and covert systems; Academy Study develops city-linked specializations. You may run both at once. Try not to confuse the two just because both involve reading.";
   }
 
   if (title.includes("guild")) {
-    return "Guilds and Consortiums are collective structures — shared resources, shared interests, and the inevitable politics that follows. The mechanics aren't wired yet. Come back when you have something to offer.";
+    return "Guilds are faction operations: members, armory, expeditions, dungeon runs, and shared legacy. Consortiums are companies: treasury, logistics, trade, espionage, and route work. Similar buttons, different ambitions.";
+  }
+
+  if (title.includes("consortium")) {
+    return "Consortiums are companies: treasury, employees, logistics, trade routes, sabotage, and profit. Their one-shots pay the company legacy and treasury, not your personal Chronicle. Capitalism, but with more daggers.";
+  }
+
+  if (title.includes("one-shot")) {
+    return "Nexis One-Shots are fixed-choice DMOS-backed chronicles. Personal runs record to your Chronicle. Guild and Consortium runs consume one token per participant and record to the organization legacy.";
+  }
+
+  if (title.includes("world map")) {
+    return "World Map is the atlas and excursion layer. Search the grid, inspect distance, travel out, spend time on-site, then return. Recipes, fragments, materials, gold, and discovery records can all come from that loop.";
+  }
+
+  if (title.includes("codex")) {
+    return "Codex holds long-form records, atlas notes, discoveries, manuals, and reference material. Action pages stay short because someone had to protect you from encyclopedia furniture.";
+  }
+
+  if (title.includes("wiki")) {
+    return "Wiki is the practical manual for Nexis systems: progression, gates, travel, items, organizations, and what all these charmingly dense panels are trying to tell you.";
+  }
+
+  if (title.includes("legacy") || title.includes("achievement")) {
+    return "Achievements award Legacy Points once. The Legacy tree spends those points permanently. No free refund button, because consequences are one of the core game loops.";
   }
 
   if (title.includes("profile")) {
@@ -74,11 +105,11 @@ function buildPageExplanation(pageTitle?: string): string {
   }
 
   if (title.includes("life path")) {
-    return "Life Paths represent who you're becoming beyond combat and jobs. They're long-term identity frameworks. Not available yet. But they will be, and when they are, your decisions will have already mattered.";
+    return "Life Paths are active identity tracks. They point you toward roles like Rogue, Scholar, Mercantile operator, civic servant, or combat specialist, then connect that identity to actions and records.";
   }
 
   if (title.includes("market")) {
-    return "The market is where materials become value and value becomes opportunity. If you're here without inventory or gold, you're just browsing.";
+    return "Markets convert inventory into leverage. City markets care about local demand, the player market cares about listings and buyers, and the black market cares whether you learned enough Street Survival to be worth the risk.";
   }
 
   if (title.includes("bank")) {
@@ -129,7 +160,7 @@ function buildReply(input: string, pageTitle?: string): string {
   }
 
   if (text.includes("gold")) {
-    return "Gold accumulates from successful jobs. Check the sidebar — it's there now. Spend it on property, academy switches, or save it. There's no interest mechanic yet, so it just sits there judging you.";
+    return "Gold comes from jobs, contracts, market sales, one-shots, and organization activity. Spend it on equipment, property, study, trade, and the occasional decision that looks wise only in retrospect.";
   }
 
   // Education
@@ -139,7 +170,7 @@ function buildReply(input: string, pageTitle?: string): string {
 
   // Jobs
   if (text.includes("job") || text.includes("work")) {
-    return "Each job category has a shared XP bar. Level 1 to 100. Sub-jobs within a category all feed the same bar. Your category level affects success rates, gold multipliers, and chain bonuses. Higher level means better outcomes. That's how it works.";
+    return "Adventure jobs and expeditions build XP, records, item flow, and achievements. Some are simple work. Some are fights. Some are mistakes with better branding.";
   }
 
   if (text.includes("chain")) {
@@ -152,16 +183,16 @@ function buildReply(input: string, pageTitle?: string): string {
 
   // Travel / cities
   if (text.includes("travel") || text.includes("city") || text.includes("cities")) {
-    return "Five cities: Nexis in the center, Aethermoor to the north, Torvhal east, Embervale south, Westmarch west. Each has a distinct academy and culture. Travel isn't instant — routes take time, and eventually there will be risk involved. Plan ahead.";
+    return "Five cities anchor the realm: Nexis City, Blackharbor, Silverbough, Ironhall, and Highcourt. Travel takes time, can trigger discoveries, and supports route and cargo context. Plan ahead, or donate your afternoon to poor logistics.";
   }
 
   if (text.includes("academy") || text.includes("academics")) {
-    return "Four directional academies, one always active. Professions is always available on top of that. You can switch academies, but it costs 50,000 gold and locks you out for 30 days. Think before you commit. Or don't — it's your gold.";
+    return "City academies develop specialized study lines, while Education runs as the broader account backbone. The two systems can run together. That is intentional, not a scheduling accident.";
   }
 
   // Inventory
   if (text.includes("inventory") || text.includes("item") || text.includes("material") || text.includes("drop")) {
-    return "Items drop from successful jobs. They go to your inventory automatically. Professions will eventually consume them — crafting systems, equipment, consumables. For now, gather and be patient. Or impatient. Doesn't change the mechanic.";
+    return "Items come from contracts, excursions, discoveries, crafting, markets, one-shots, and rewards. Recipes and fragments matter. Expand item rows before selling or destroying anything rare, unless regret is your preferred tutorial.";
   }
 
   // Hospital
@@ -185,7 +216,7 @@ function buildReply(input: string, pageTitle?: string): string {
 
   // What to do / next steps
   if (text.includes("what should i do") || text.includes("what next") || text.includes("where to start") || text.includes("first")) {
-    return "In order of priority: ensure your stats are regenerating, start an education course if you haven't, run jobs to build category levels and gather materials, and invest gold in property when you can afford to upgrade. Everything else builds on those four things.";
+    return "Start with readiness: spend energy and stamina, keep Health safe, begin Education, choose or review a Life Path, then run contracts or excursions that match your gear. If you have Legacy Points, spend them carefully. Permanent means permanent, astonishingly.";
   }
 
   // Spirits
@@ -225,8 +256,8 @@ export function useCiel(options: UseCielOptions = {}) {
   ]);
 
   const pageExplanation = useMemo(
-    () => buildPageExplanation(options.pageTitle),
-    [options.pageTitle]
+    () => buildPageExplanation(options.pageTitle ?? titleFromPath(pathname)),
+    [options.pageTitle, pathname]
   );
 
   const openCiel  = () => setIsOpen(true);

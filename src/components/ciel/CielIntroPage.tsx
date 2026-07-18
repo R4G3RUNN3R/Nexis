@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { cielIntroSteps } from "../../data/cielTutorialData";
 import { nowIso, readCielTutorialState, updateCielTutorialState } from "../../lib/cielTutorialState";
 import { useAuth } from "../../state/AuthContext";
@@ -10,9 +10,14 @@ export default function CielIntroPage() {
   const { activeAccount } = useAuth();
   const { player } = usePlayer();
   const navigate = useNavigate();
+  const location = useLocation();
   const [index, setIndex] = useState(0);
   const tutorial = readCielTutorialState(player);
   const step = cielIntroSteps[index] ?? cielIntroSteps[0];
+  const state = location.state && typeof location.state === "object" ? location.state as { afterTutorial?: unknown } : {};
+  const requestedAfterTutorial = typeof state.afterTutorial === "string" && state.afterTutorial.startsWith("/") ? state.afterTutorial : "/home";
+  const afterTutorial = requestedAfterTutorial.startsWith("/login") || requestedAfterTutorial.startsWith("/register") ? "/home" : requestedAfterTutorial;
+  const spotlightDestination = afterTutorial === "/home" || afterTutorial.startsWith("/home?") ? "/home?ciel=spotlight" : afterTutorial;
 
   useEffect(() => {
     if (!activeAccount?.email || tutorial.introSeenAt || tutorial.skippedAt || tutorial.introCompletedAt) return;
@@ -30,7 +35,7 @@ export default function CielIntroPage() {
       spotlightPending: "false",
       lastStepId: step.id,
     });
-    navigate("/home", { replace: true });
+    navigate(afterTutorial, { replace: true });
   }
 
   function nextStep() {
@@ -45,7 +50,7 @@ export default function CielIntroPage() {
       spotlightPending: "true",
       lastStepId: "home-spotlight-start",
     });
-    navigate("/home?ciel=spotlight", { replace: true });
+    navigate(spotlightDestination, { replace: true });
   }
 
   return (

@@ -20,7 +20,8 @@ import { readTravelStateFromPlayer } from "../lib/travelState";
 import { useMapZoomPan } from "../hooks/useMapZoomPan";
 import { MapZoomControls } from "../components/worldmap/MapZoomControls";
 import mapImage from "../assets/maps/nexis-world-map-expanded.jpg";
-import { EXCURSION_GRID, excursionMapLocations, getExcursionMarkerStyle } from "../data/excursionMapData";
+import { EXCURSION_GRID, excursionMapLocations, type ExcursionMapLocation } from "../data/excursionMapData";
+import { getServerExcursionBoard, type ServerExcursionBoard, type ServerExcursionGrid, type ServerExcursionLocation } from "../lib/excursionApi";
 import "../styles/world-map-ui.css";
 import "../styles/world-atlas-interactive.css";
 import "../styles/map-zoom-controls.css";
@@ -95,6 +96,43 @@ function shortLine(value: unknown, fallback = "Archive note available.") {
   const text = readString(value, fallback).trim();
   if (text.length <= 110) return text;
   return `${text.slice(0, 107).trim()}...`;
+}
+
+type WorldMapExcursionLocation = (ServerExcursionLocation | ExcursionMapLocation) & {
+  available?: boolean;
+  lockReason?: string | null;
+  timing?: ServerExcursionLocation["timing"];
+  chanceSummary?: ServerExcursionLocation["chanceSummary"];
+};
+
+function getExcursionRisk(location: WorldMapExcursionLocation) {
+  return readString((location as ServerExcursionLocation).riskBand ?? (location as ExcursionMapLocation).risk, "Moderate");
+}
+
+function getWorldMapExcursionMarkerStyle(location: WorldMapExcursionLocation, grid: ServerExcursionGrid) {
+  const xPercent = Number((location as ServerExcursionLocation).xPercent);
+  const yPercent = Number((location as ServerExcursionLocation).yPercent);
+  if (Number.isFinite(xPercent) && Number.isFinite(yPercent)) {
+    return { left: `${xPercent}%`, top: `${yPercent}%` };
+  }
+  const box = location.box;
+  const columns = Math.max(1, Number(grid.columns) || EXCURSION_GRID.columns);
+  const rows = Math.max(1, Number(grid.rows) || EXCURSION_GRID.rows);
+  return {
+    left: `${(((box?.x ?? 0) + 0.5) / columns) * 100}%`,
+    top: `${(((box?.y ?? 0) + 0.5) / rows) * 100}%`,
+  };
+}
+
+function buildExcursionMarkerTitle(location: WorldMapExcursionLocation) {
+  const risk = getExcursionRisk(location);
+  const timing = (location as ServerExcursionLocation).timing;
+  const chanceSummary = (location as ServerExcursionLocation).chanceSummary;
+  const parts = [location.name, location.type, risk];
+  if (timing?.totalLabel) parts.push(`total ${timing.totalLabel}`);
+  if (chanceSummary?.rareItem !== undefined) parts.push(`rare ${chanceSummary.rareItem}%`);
+  if (location.available === false && location.lockReason) parts.push(location.lockReason);
+  return parts.filter(Boolean).join(" | ");
 }
 
 function normalizeTriState(value: unknown): "discovered" | "rumored" | "locked" {
@@ -194,6 +232,7 @@ function InteractiveWorldAtlas() {
   const { authSource, serverSessionToken } = useAuth();
   const { player } = usePlayer();
   const [atlas, setAtlas] = useState<ServerWorldAtlas | null>(null);
+  const [excursionBoard, setExcursionBoard] = useState<ServerExcursionBoard | null>(null);
   const [selection, setSelection] = useState<AtlasSelection>(null);
   const [recordsOpen, setRecordsOpen] = useState(false);
   const zoomPan = useMapZoomPan();
@@ -215,11 +254,30 @@ function InteractiveWorldAtlas() {
     };
   }, [authSource, serverSessionToken]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadExcursionBoard() {
+      if (authSource !== "server" || !serverSessionToken) {
+        setExcursionBoard(null);
+        return;
+      }
+      const result = await getServerExcursionBoard(serverSessionToken);
+      if (cancelled) return;
+      setExcursionBoard(result.ok ? result.board : null);
+    }
+    void loadExcursionBoard();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSource, serverSessionToken]);
+
   const fallbackCurrentCityId = readTravelStateFromPlayer(player).currentCityId;
   const cities = useMemo(() => parseCities(atlas, fallbackCurrentCityId), [atlas, fallbackCurrentCityId]);
   const regions = useMemo(() => parseRegions(atlas), [atlas]);
   const sites = useMemo(() => parseSites(atlas), [atlas]);
   const discoveries = useMemo(() => parseDiscoveries(atlas), [atlas]);
+  const excursionGrid = excursionBoard?.grid ?? EXCURSION_GRID;
+  const worldMapExcursions = useMemo<WorldMapExcursionLocation[]>(() => (excursionBoard?.locations?.length ? excursionBoard.locations : excursionMapLocations), [excursionBoard]);
 
   const cityById = useMemo(() => new Map(cities.map((city) => [city.id, city])), [cities]);
   const regionById = useMemo(() => new Map(regions.map((region) => [region.id, region])), [regions]);
@@ -627,22 +685,26 @@ function InteractiveWorldAtlas() {
                 })}
 
                 <div className="excursion-map-grid excursion-map-grid--atlas" aria-hidden>
-                  {Array.from({ length: EXCURSION_GRID.columns - 1 }).map((_, index) => <span key={`atlas-x-${index}`} style={{ left: `${((index + 1) / EXCURSION_GRID.columns) * 100}%` }} />)}
-                  {Array.from({ length: EXCURSION_GRID.rows - 1 }).map((_, index) => <i key={`atlas-y-${index}`} style={{ top: `${((index + 1) / EXCURSION_GRID.rows) * 100}%` }} />)}
+                  {Array.from({ length: Math.max(0, excursionGrid.columns - 1) }).map((_, index) => <span key={`atlas-x-${index}`} style={{ left: `${((index + 1) / excursionGrid.columns) * 100}%` }} />)}
+                  {Array.from({ length: Math.max(0, excursionGrid.rows - 1) }).map((_, index) => <i key={`atlas-y-${index}`} style={{ top: `${((index + 1) / excursionGrid.rows) * 100}%` }} />)}
                 </div>
-                {excursionMapLocations.map((location) => (
-                  <Link
-                    key={location.id}
-                    to={`/adventure?excursion=${location.id}`}
-                    className={`excursion-map-marker excursion-map-marker--atlas excursion-map-marker--${location.risk.toLowerCase()}`}
-                    style={getExcursionMarkerStyle(location)}
-                    title={`${location.name} | ${location.type} | ${location.risk}`}
-                    aria-label={`Open excursion lead for ${location.name}`}
-                  >
-                    <span className="excursion-map-marker__dot" />
-                    <span className="excursion-map-marker__label">{location.name}</span>
-                  </Link>
-                ))}
+                {worldMapExcursions.map((location) => {
+                  const risk = getExcursionRisk(location);
+                  const locked = location.available === false;
+                  return (
+                    <Link
+                      key={location.id}
+                      to={`/adventure?excursion=${location.id}`}
+                      className={`excursion-map-marker excursion-map-marker--atlas excursion-map-marker--${risk.toLowerCase()}${locked ? " excursion-map-marker--locked" : ""}`}
+                      style={getWorldMapExcursionMarkerStyle(location, excursionGrid)}
+                      title={buildExcursionMarkerTitle(location)}
+                      aria-label={`Open excursion lead for ${location.name}`}
+                    >
+                      <span className="excursion-map-marker__dot">{locked ? "!" : ""}</span>
+                      <span className="excursion-map-marker__label">{location.name}</span>
+                    </Link>
+                  );
+                })}
                 {revealedSites.map((site) => {
                   const position = getHiddenSitePosition(site.id, site.cityIds);
                   if (!position) return null;

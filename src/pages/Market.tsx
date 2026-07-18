@@ -323,7 +323,9 @@ export default function MarketPage() {
                   <option value="common">Common</option>
                   <option value="uncommon">Uncommon</option>
                   <option value="rare">Rare</option>
+                  <option value="epic">Epic</option>
                   <option value="legendary">Legendary</option>
+                  <option value="mythic">Mythic</option>
                 </select>
                 <select value={listingSource} onChange={(event) => setListingSource(event.target.value)}>
                   <option value="all">All sources</option>

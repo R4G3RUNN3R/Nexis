@@ -616,6 +616,7 @@ export async function sellCityMarketItemForUser(user, cityId, itemId, quantityIn
     const context = getEconomyContext(runtimeState, profile.cityId);
     const offer = serializeLegalSellOffer(good, runtimeState, context, quantity);
     if (!offer.canSell) throw new HttpError(409, offer.lockReason ?? "This item cannot be sold here right now.", "CITY_MARKET_SELL_BLOCKED");
+    const now = Date.now();
     removeItems(runtimeState.player, itemId, quantity);
     applyGold(runtimeState, asNumber(runtimeState.player.gold, 0) + offer.totalPrice);
     runtimeState.player.counters = {

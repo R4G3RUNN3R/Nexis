@@ -73,14 +73,52 @@ const quickQuestions: Record<string, string[]> = {
   ],
   "/guilds": [
     "What are guilds for?",
-    "How do I found one?",
+    "How do guild one-shots work?",
+    "What should guilds do next?",
   ],
   "/consortiums": [
     "What are consortiums for?",
-    "How do I found one?",
+    "How do company one-shots work?",
+    "What improves company gains?",
+  ],
+  "/one-shots": [
+    "How do one-shots work?",
+    "What do tokens do?",
+    "Can I replay a chronicle?",
+  ],
+  "/life-paths": [
+    "What is a Life Path?",
+    "Can I change direction?",
+    "Which path fits my build?",
+  ],
+  "/achievements": [
+    "What are Legacy Points?",
+    "Can I refund merits?",
+    "What should I spend first?",
+  ],
+  "/city-board": [
+    "What is worth checking here?",
+    "Why are some notices locked?",
+    "Where do contracts live?",
+  ],
+  "/world-map": [
+    "How do excursions work?",
+    "What can I discover?",
+    "Why are some sites unknown?",
+  ],
+  "/codex": [
+    "What belongs in Codex?",
+    "How do discoveries unlock entries?",
+    "Where are records kept?",
+  ],
+  "/wiki": [
+    "What should I read first?",
+    "Explain progression systems.",
+    "Where are hard gates listed?",
   ],
   "/profile": [
     "What does my profile show?",
+    "What are records and chronicles?",
     "What is a Life Path?",
   ],
 };

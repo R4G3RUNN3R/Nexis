@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, useLocation } from "react-router-dom";
 import AppRouter from "./router";
 import { AuthProvider, useAuth } from "./state/AuthContext";
-import { PlayerProvider } from "./state/PlayerContext";
+import { PlayerProvider, usePlayer } from "./state/PlayerContext";
 import { AdminModeProvider } from "./state/AdminModeContext";
 import { EducationProvider } from "./state/EducationContext";
 import { TimerProvider } from "./state/TimerContext";
@@ -10,6 +10,7 @@ import { ArenaProvider } from "./state/ArenaContext";
 import { BackendStateBridge } from "./components/state/BackendStateBridge";
 import Ciel from "./components/ciel/Ciel";
 import RouteTransitionQuote from "./components/layout/RouteTransitionQuote";
+import { shouldShowCielIntro } from "./lib/cielTutorialState";
 
 const PUBLIC_PATHS = new Set([
   "/",
@@ -24,7 +25,8 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn } = useAuth();
+  const { activeAccount, isLoggedIn } = useAuth();
+  const { player } = usePlayer();
   const location = useLocation();
 
   if (PUBLIC_PATHS.has(location.pathname)) {
@@ -36,6 +38,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   const isCielIntro = location.pathname === "/ciel-intro";
+  const accountCreatedAt = activeAccount?.createdAt;
+  const createdAtMs = typeof accountCreatedAt === "number"
+    ? accountCreatedAt
+    : typeof accountCreatedAt === "string"
+      ? Date.parse(accountCreatedAt)
+      : NaN;
+  const freshAccount = Number.isFinite(createdAtMs) && Date.now() - createdAtMs < 24 * 60 * 60 * 1000;
+  const explicitlyRequestedIntro = new URLSearchParams(location.search).get("ciel") === "intro";
+
+  if (!isCielIntro && shouldShowCielIntro(player) && (freshAccount || explicitlyRequestedIntro)) {
+    const afterTutorial = `${location.pathname}${location.search}${location.hash}` || "/home";
+    return <Navigate to="/ciel-intro" replace state={{ afterTutorial }} />;
+  }
 
   return (
     <>

@@ -15,7 +15,8 @@ type OrganizationOneShotsPanelProps = {
 };
 
 type StatusFilter = "all" | "open" | "signed" | "ready" | "completed";
-type SortMode = "recommended" | "signups" | "reward" | "category" | "title";
+type SizeFilter = "all" | "1" | "2" | "3" | "5" | "10" | "15" | "20";
+type SortMode = "recommended" | "signups" | "reward" | "partySize" | "category" | "title";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -60,11 +61,11 @@ export function OrganizationOneShotsPanel({ organizationId, organizationName, or
   const { authSource, serverSessionToken, serverHydrationVersion, refreshServerState } = useAuth();
   const [campaigns, setCampaigns] = useState<OrganizationOneShotCampaign[]>([]);
   const [legacyRecords, setLegacyRecords] = useState<OrganizationOneShotLegacyRecord[]>([]);
-  const [minimumSignups, setMinimumSignups] = useState(5);
   const [tokenCost, setTokenCost] = useState(1);
   const [refundChance, setRefundChance] = useState(0.0001);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sizeFilter, setSizeFilter] = useState<SizeFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("recommended");
   const [searchTerm, setSearchTerm] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -98,7 +99,6 @@ export function OrganizationOneShotsPanel({ organizationId, organizationName, or
       }
       setCampaigns(result.campaigns.filter((campaign) => campaign.organizationType === organizationType));
       setLegacyRecords(result.legacyRecords);
-      setMinimumSignups(result.minimumSignups);
       setTokenCost(result.tokenCost ?? 1);
       setRefundChance(result.tokenRefundChance ?? 0.0001);
       if (result.message) setMessage(result.message);
@@ -108,6 +108,13 @@ export function OrganizationOneShotsPanel({ organizationId, organizationName, or
   }, [authSource, organizationId, organizationType, serverHydrationVersion, serverSessionToken]);
 
   const categories = useMemo(() => Array.from(new Set(campaigns.map((campaign) => campaign.category).filter(Boolean))).sort(), [campaigns]);
+  const sizeOptions = useMemo(() => Array.from(new Set(campaigns.map((campaign) => campaign.minimumSignups))).filter((size) => Number.isFinite(size)).sort((a, b) => a - b), [campaigns]);
+  const sizeSummary = useMemo(() => {
+    if (!sizeOptions.length) return "group runs";
+    const smallest = sizeOptions[0];
+    const largest = sizeOptions[sizeOptions.length - 1];
+    return smallest === largest ? `${smallest}-member runs` : `${smallest}-${largest} member runs`;
+  }, [sizeOptions]);
 
   const filteredCampaigns = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -118,20 +125,22 @@ export function OrganizationOneShotsPanel({ organizationId, organizationName, or
         || (statusFilter === "ready" && campaign.canResolve)
         || (statusFilter === "completed" && campaign.status === "completed");
       const categoryMatches = categoryFilter === "all" || campaign.category === categoryFilter;
+      const sizeMatches = sizeFilter === "all" || campaign.minimumSignups === Number(sizeFilter);
       const searchMatches = !normalizedSearch
         || `${campaign.title} ${campaign.category} ${campaign.theme} ${campaign.summary} ${campaign.rewardPreview}`.toLowerCase().includes(normalizedSearch);
-      return statusMatches && categoryMatches && searchMatches;
+      return statusMatches && categoryMatches && sizeMatches && searchMatches;
     });
     return filtered.sort((a, b) => {
       if (sortMode === "signups") return (b.tokenCommittedCount - a.tokenCommittedCount) || a.title.localeCompare(b.title);
       if (sortMode === "reward") return rewardScore(b) - rewardScore(a) || a.title.localeCompare(b.title);
+      if (sortMode === "partySize") return (a.minimumSignups - b.minimumSignups) || a.title.localeCompare(b.title);
       if (sortMode === "category") return a.category.localeCompare(b.category) || a.title.localeCompare(b.title);
       if (sortMode === "title") return a.title.localeCompare(b.title);
       const aPriority = (a.status === "completed" ? 0 : 4) + (a.canResolve ? 3 : 0) + (a.viewerSignedUp ? 1 : 0);
       const bPriority = (b.status === "completed" ? 0 : 4) + (b.canResolve ? 3 : 0) + (b.viewerSignedUp ? 1 : 0);
       return bPriority - aPriority || (b.tokenCommittedCount - a.tokenCommittedCount) || a.title.localeCompare(b.title);
     });
-  }, [campaigns, categoryFilter, searchTerm, sortMode, statusFilter]);
+  }, [campaigns, categoryFilter, searchTerm, sizeFilter, sortMode, statusFilter]);
 
   async function reloadFrom(result: Awaited<ReturnType<typeof signUpOrganizationOneShot>>) {
     if (!result.ok) {
@@ -140,7 +149,6 @@ export function OrganizationOneShotsPanel({ organizationId, organizationName, or
     }
     setCampaigns(result.campaigns.filter((campaign) => campaign.organizationType === organizationType));
     setLegacyRecords(result.legacyRecords);
-    setMinimumSignups(result.minimumSignups);
     setTokenCost(result.tokenCost ?? tokenCost);
     setRefundChance(result.tokenRefundChance ?? refundChance);
     setMessage(result.message ?? "One-shot board updated.");
@@ -177,7 +185,7 @@ export function OrganizationOneShotsPanel({ organizationId, organizationName, or
       </div>
       <div className="organization-one-shots__rules">
         <strong>{boardRole}</strong>
-        <span>{minimumSignups} members required | {tokenCost} token each | {formatPercent(refundChance)} token refund chance on completion.</span>
+        <span>{sizeSummary} | {tokenCost} token each | {formatPercent(refundChance)} token refund chance on completion.</span>
       </div>
       {message ? <div className="organization-one-shots__notice">{message}</div> : null}
       {error ? <div className="organization-one-shots__notice organization-one-shots__notice--error">{error}</div> : null}
@@ -200,11 +208,19 @@ export function OrganizationOneShotsPanel({ organizationId, organizationName, or
           </select>
         </label>
         <label>
+          <span>Party size</span>
+          <select value={sizeFilter} onChange={(event) => setSizeFilter(event.target.value as SizeFilter)}>
+            <option value="all">All sizes</option>
+            {sizeOptions.map((size) => <option key={size} value={String(size)}>{size} token{size === 1 ? "" : "s"}</option>)}
+          </select>
+        </label>
+        <label>
           <span>Sort</span>
           <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
             <option value="recommended">Recommended</option>
             <option value="signups">Most signups</option>
             <option value="reward">Highest reward</option>
+            <option value="partySize">Party size</option>
             <option value="category">Category</option>
             <option value="title">Title</option>
           </select>
@@ -232,6 +248,7 @@ export function OrganizationOneShotsPanel({ organizationId, organizationName, or
               <p>{campaign.summary}</p>
               <div className="organization-one-shot-card__meta">
                 <span>{themeLabel(campaign)}</span>
+                <span>Party size {campaign.minimumSignups}</span>
                 <span>{progressLabel}</span>
                 <span>{campaign.rewardPreview}</span>
               </div>
@@ -246,7 +263,7 @@ export function OrganizationOneShotsPanel({ organizationId, organizationName, or
                 <button type="button" className="org-button" disabled={complete || signed || busy} onClick={() => void handleSignup(campaign.id)}>
                   {signed ? "Token committed" : busy ? "Working..." : "Commit token"}
                 </button>
-                <button type="button" className="org-button org-button--ghost" disabled={complete || !campaign.canResolve || busy} onClick={() => void handleResolve(campaign.id)} title={campaign.canResolve ? "Resolve this organization one-shot." : `${minimumSignups} token-backed signups required.`}>
+                <button type="button" className="org-button org-button--ghost" disabled={complete || !campaign.canResolve || busy} onClick={() => void handleResolve(campaign.id)} title={campaign.canResolve ? "Resolve this organization one-shot." : `${campaign.minimumSignups} token-backed signup${campaign.minimumSignups === 1 ? "" : "s"} required.`}>
                   Resolve run
                 </button>
               </div>

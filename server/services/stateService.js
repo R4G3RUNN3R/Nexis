@@ -12,7 +12,17 @@ function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-const CLIENT_BLOCKED_TOP_LEVEL = new Set([
+// These two sets are DIAGNOSTIC ONLY - they feed the console.warn in
+// collectBlockedClientFields below and enforce nothing by themselves. The
+// real security boundary is buildAllowedClientPatch(): it builds `patch`
+// field-by-field from a fixed allowlist (currently bio/preferences/ui only),
+// so anything absent from these sets is *already* excluded from the merge,
+// not "unblocked". Do not add a new sensitive field here expecting it to be
+// protected - protection means keeping it out of buildAllowedClientPatch,
+// full stop. (Ticket 5 audit, 2026-07-18: this ambiguity was flagged as a
+// maintainability trap, not an active vulnerability - buildAllowedClientPatch
+// was independently confirmed to allowlist correctly.)
+const DIAGNOSTIC_BLOCKED_TOP_LEVEL_FIELDS = new Set([
   "jobs",
   "education",
   "arena",
@@ -24,7 +34,7 @@ const CLIENT_BLOCKED_TOP_LEVEL = new Set([
   "legacy",
 ]);
 
-const CLIENT_BLOCKED_PLAYER_FIELDS = new Set([
+const DIAGNOSTIC_BLOCKED_PLAYER_FIELDS = new Set([
   "gold",
   "currencies",
   "experience",
@@ -117,12 +127,12 @@ function sanitizeCielTutorial(value) {
 function collectBlockedClientFields(payload) {
   const blocked = [];
   for (const key of Object.keys(payload)) {
-    if (CLIENT_BLOCKED_TOP_LEVEL.has(key)) blocked.push(key);
+    if (DIAGNOSTIC_BLOCKED_TOP_LEVEL_FIELDS.has(key)) blocked.push(key);
   }
 
   const player = asRecord(payload.player) ?? {};
   for (const key of Object.keys(player)) {
-    if (CLIENT_BLOCKED_PLAYER_FIELDS.has(key)) blocked.push(`player.${key}`);
+    if (DIAGNOSTIC_BLOCKED_PLAYER_FIELDS.has(key)) blocked.push(`player.${key}`);
   }
 
   return blocked;
