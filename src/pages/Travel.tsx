@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { worldCities, worldRoutes, type WorldCityId } from "../data/worldMapData";
 import { getPinClass, getPinStyle } from "../lib/mapPins";
@@ -24,7 +24,6 @@ import {
 } from "../lib/travelState";
 import { TravelSplash } from "../components/travel/TravelSplash";
 import mapImage from "../assets/maps/nexis-world-map-expanded.jpg";
-import { EXCURSION_GRID, excursionMapLocations, getExcursionMarkerStyle } from "../data/excursionMapData";
 import "../styles/world-map-ui.css";
 import "../styles/travel-splash.css";
 
@@ -378,23 +377,6 @@ export default function TravelPage() {
               style={{ left: `${selectedCity.xPercent}%`, top: `${selectedCity.yPercent}%` }}
               aria-hidden
             />
-            <div className="excursion-map-grid" aria-hidden>
-              {Array.from({ length: EXCURSION_GRID.columns - 1 }).map((_, index) => <span key={`x-${index}`} style={{ left: `${((index + 1) / EXCURSION_GRID.columns) * 100}%` }} />)}
-              {Array.from({ length: EXCURSION_GRID.rows - 1 }).map((_, index) => <i key={`y-${index}`} style={{ top: `${((index + 1) / EXCURSION_GRID.rows) * 100}%` }} />)}
-            </div>
-            {excursionMapLocations.map((location) => (
-              <Link
-                key={location.id}
-                to={`/adventure?excursion=${location.id}`}
-                className={`excursion-map-marker excursion-map-marker--${location.risk.toLowerCase()}`}
-                style={getExcursionMarkerStyle(location)}
-                title={`${location.name} | ${location.risk} | ${location.rewardFocus.join(", ")}`}
-                aria-label={`Open adventure search for ${location.name}`}
-              >
-                <span className="excursion-map-marker__dot" />
-                <span className="excursion-map-marker__label">{location.name}</span>
-              </Link>
-            ))}
             {worldCities.map((city) => {
               const isSelected = selectedCityId === city.id;
               const isCurrent = travelState.currentCityId === city.id;
@@ -419,7 +401,7 @@ export default function TravelPage() {
           <div className="travel-destination-registry">
             <div className="travel-subsection__title">Destination Selector</div>
             <div className="travel-destination-registry__hint">
-              Choose where to go here. World Map is an atlas; Travel owns departure.
+              Choose where to go here. World Map is the atlas for excursion leads and discovery; Travel owns departure.
             </div>
             <div className="travel-destination-list">
               {worldCities.map((city) => {

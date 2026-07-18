@@ -17,10 +17,13 @@ import { getServerWorldAtlas, type ServerWorldAtlas } from "../lib/authApi";
 import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
 import { readTravelStateFromPlayer } from "../lib/travelState";
+import { useMapZoomPan } from "../hooks/useMapZoomPan";
+import { MapZoomControls } from "../components/worldmap/MapZoomControls";
 import mapImage from "../assets/maps/nexis-world-map-expanded.jpg";
 import { EXCURSION_GRID, excursionMapLocations, getExcursionMarkerStyle } from "../data/excursionMapData";
 import "../styles/world-map-ui.css";
 import "../styles/world-atlas-interactive.css";
+import "../styles/map-zoom-controls.css";
 
 type AtlasRecordData = Record<string, unknown>;
 
@@ -193,6 +196,7 @@ function InteractiveWorldAtlas() {
   const [atlas, setAtlas] = useState<ServerWorldAtlas | null>(null);
   const [selection, setSelection] = useState<AtlasSelection>(null);
   const [recordsOpen, setRecordsOpen] = useState(false);
+  const zoomPan = useMapZoomPan();
 
   useEffect(() => {
     let cancelled = false;
@@ -545,9 +549,13 @@ function InteractiveWorldAtlas() {
               <h2 className="wm-map-panel__title">The Lands of Nexis</h2>
               <span className="wm-map-panel__hint">Select a marker for its atlas entry</span>
             </div>
-            <div className="wm-map-scroll">
-              <div className="wm-map-frame">
-                <img src={mapImage} alt="The world map of Nexis" className="wm-map-image" />
+            <div
+              ref={zoomPan.viewportRef}
+              className={`wm-map-viewport${zoomPan.isDragging ? " wm-map-viewport--dragging" : ""}`}
+              {...zoomPan.pointerHandlers}
+            >
+              <div ref={zoomPan.contentRef} className="wm-map-frame" style={{ transform: zoomPan.cssTransform }}>
+                <img src={mapImage} alt="The world map of Nexis" className="wm-map-image" draggable={false} />
                 <svg className="wm-routes" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
                   {worldRoutes.map((route) => {
                     const from = nodePointFor(route.from);
@@ -674,6 +682,15 @@ function InteractiveWorldAtlas() {
                   );
                 })}
               </div>
+              <MapZoomControls
+                scale={zoomPan.scale}
+                canZoomIn={zoomPan.canZoomIn}
+                canZoomOut={zoomPan.canZoomOut}
+                onZoomIn={zoomPan.zoomIn}
+                onZoomOut={zoomPan.zoomOut}
+                onReset={zoomPan.reset}
+                onFitToView={zoomPan.fitToView}
+              />
             </div>
             <div className="wm-legend">
               <span className="wm-legend__item"><span className="wm-legend__swatch wm-legend__swatch--discovered" /> Discovered city</span>

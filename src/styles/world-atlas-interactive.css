@@ -49,14 +49,10 @@
   text-transform: uppercase;
 }
 
-.wm-map-scroll {
-  overflow-x: auto;
-}
-
-.wm-map-frame {
-  position: relative;
-  min-width: 640px;
-}
+/* .wm-map-frame's own position/sizing now lives in map-zoom-controls.css
+   (.wm-map-viewport .wm-map-frame), since it must sit inside the fixed-size
+   zoom/pan viewport. This rule only carries the properties independent of
+   that: the image treatment underneath the frame's markers/overlay. */
 
 .wm-map-image {
   display: block;
@@ -64,6 +60,8 @@
   height: auto;
   background: #0b0908;
   filter: saturate(0.82) brightness(0.9);
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .wm-map-frame::after {

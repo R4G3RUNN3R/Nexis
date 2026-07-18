@@ -4,8 +4,8 @@
 // Sub-job cards show stats + Attempt only - no per-job XP bar.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { ITEM_CATALOGUE } from "../data/itemsData";
@@ -510,17 +510,20 @@ function ExcursionBoard({
   message,
   error,
   onStart,
+  highlightLocationId,
 }: {
   board: ServerExcursionBoard | null;
   busyLocationId: string | null;
   message: string | null;
   error: string | null;
   onStart: (locationId: string) => void;
+  highlightLocationId: string | null;
 }) {
   const [query, setQuery] = useState("");
   const [risk, setRisk] = useState("all");
   const [reward, setReward] = useState("all");
   const [sort, setSort] = useState("nearest");
+  const scrolledForRef = useRef<string | null>(null);
 
   const locations = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -537,12 +540,36 @@ function ExcursionBoard({
     });
   }, [board, query, risk, reward, sort]);
 
+  // World Map excursion markers link here as /adventure?excursion=<id>. Once
+  // the board has actually loaded, scroll the matching card into view and
+  // highlight it - a valid link should land on the intended excursion, not
+  // just dump the player on the general board. Runs once per highlighted id
+  // (not on every board refresh) so it doesn't yank the page around during
+  // the board's periodic 30s poll.
+  useEffect(() => {
+    if (!highlightLocationId || !board) return;
+    if (scrolledForRef.current === highlightLocationId) return;
+    const target = document.getElementById(`excursion-card-${highlightLocationId}`);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      scrolledForRef.current = highlightLocationId;
+    }
+  }, [board, highlightLocationId]);
+
+  const highlightKnown = Boolean(highlightLocationId && board?.locations.some((location) => location.id === highlightLocationId));
+  const highlightMissing = Boolean(highlightLocationId && board && !highlightKnown);
+
   return (
     <ContentPanel title="Map Excursions">
       <div className="excursion-board">
         <div className="jobs-overview__brief">
           Search the world grid for off-route excursions. Each run travels out, spends 1 hour on-site, then returns by the same travel time. Rewards can include recipes, materials, rare item pieces, manuals, magic fragments, and Absolute story fragments.
         </div>
+        {highlightMissing ? (
+          <div className="jobs-low-stamina">
+            The excursion lead flagged from the map is not currently available. It may have been resolved, moved out of range, or requires a discovery you haven't made yet.
+          </div>
+        ) : null}
         {board?.active ? (
           <div className="excursion-active">
             <strong>Excursion in progress</strong>
@@ -583,7 +610,11 @@ function ExcursionBoard({
         </div>
         <div className="excursion-grid">
           {locations.map((location) => (
-            <article key={location.id} className={`excursion-card excursion-card--${location.riskBand.toLowerCase()}`}>
+            <article
+              key={location.id}
+              id={`excursion-card-${location.id}`}
+              className={`excursion-card excursion-card--${location.riskBand.toLowerCase()}${location.id === highlightLocationId ? " excursion-card--highlighted" : ""}`}
+            >
               <div className="excursion-card__top">
                 <div>
                   <div className="adventure-card__kicker">{location.regionId} | box {location.box.x},{location.box.y}</div>
@@ -621,6 +652,11 @@ function ExcursionBoard({
 }
 export default function JobsPage() {
   const jobs = useJobs();
+  const location = useLocation();
+  const highlightExcursionId = useMemo(
+    () => new URLSearchParams(location.search).get("excursion"),
+    [location.search],
+  );
   const { authSource, serverSessionToken, refreshServerState } = useAuth();
   const {
     player,
@@ -819,7 +855,7 @@ export default function JobsPage() {
             onStart={handleStartAdventure}
           />
         ) : null}
-        <ExcursionBoard board={excursionBoard} busyLocationId={busyExcursionId} message={excursionMessage} error={excursionError} onStart={handleStartExcursion} />
+        <ExcursionBoard board={excursionBoard} busyLocationId={busyExcursionId} message={excursionMessage} error={excursionError} onStart={handleStartExcursion} highlightLocationId={highlightExcursionId} />
         <div className="jobs-body">
           <div className="jobs-categories">
             {jobCategories.map((cat) => (

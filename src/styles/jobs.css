@@ -861,6 +861,13 @@
 .excursion-card--high { border-left: 3px solid #c06b45; }
 .excursion-card--extreme { border-left: 3px solid #b54949; }
 
+/* Landed here via a World Map excursion marker link (?excursion=<id>). */
+.excursion-card--highlighted {
+  outline: 2px solid #f6d7a3;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(246, 215, 163, 0.08);
+}
+
 .excursion-card__top {
   display: grid;
   grid-template-columns: 1fr auto;

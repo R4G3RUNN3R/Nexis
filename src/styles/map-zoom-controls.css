@@ -1,0 +1,130 @@
+/* ── Map zoom/pan viewport + controls ───────────────────────────────────────
+   Compact, dark, amber-on-near-black to match the existing Ashen Crown atlas
+   palette. Controls sit in a fixed corner of the map panel so they never
+   drift over markers during pan/zoom, and never grow large enough to hide
+   content beneath them. */
+
+.wm-map-viewport {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  height: 560px;
+  border-radius: 0 0 12px 12px;
+}
+
+.wm-map-viewport--dragging {
+  cursor: grabbing;
+}
+
+.wm-map-viewport .wm-map-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 640px;
+  width: 100%;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.wm-map-viewport--dragging .wm-map-frame {
+  transition: none;
+}
+
+.wm-map-viewport:not(.wm-map-viewport--dragging) .wm-map-frame {
+  transition: transform 140ms ease-out;
+}
+
+.map-zoom-controls {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 10px;
+  border: 1px solid rgba(216, 154, 71, 0.28);
+  background: rgba(11, 9, 8, 0.82);
+  backdrop-filter: blur(3px);
+}
+
+.map-zoom-controls__btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(216, 154, 71, 0.3);
+  background: linear-gradient(180deg, #241811 0%, #17110d 100%);
+  color: #f6d7a3;
+  font-family: Georgia, serif;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.map-zoom-controls__btn--wide {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0 9px;
+}
+
+.map-zoom-controls__btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #33210f 0%, #1e150e 100%);
+  border-color: rgba(216, 154, 71, 0.55);
+}
+
+.map-zoom-controls__btn:focus-visible {
+  outline: 2px solid #f6d7a3;
+  outline-offset: 1px;
+}
+
+.map-zoom-controls__btn:active:not(:disabled) {
+  background: rgba(216, 154, 71, 0.22);
+}
+
+.map-zoom-controls__btn:disabled {
+  color: #6a5b48;
+  border-color: rgba(216, 154, 71, 0.12);
+  cursor: default;
+}
+
+.map-zoom-controls__level {
+  min-width: 38px;
+  text-align: center;
+  color: #baa27e;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+@media (max-width: 1240px) {
+  .wm-map-viewport {
+    height: 420px;
+  }
+}
+
+@media (max-width: 720px) {
+  .wm-map-viewport {
+    height: 320px;
+  }
+
+  .map-zoom-controls {
+    right: 6px;
+    bottom: 6px;
+    gap: 3px;
+    padding: 4px;
+  }
+
+  .map-zoom-controls__btn {
+    min-width: 27px;
+    height: 27px;
+    font-size: 13px;
+  }
+
+  .map-zoom-controls__level {
+    display: none;
+  }
+}
