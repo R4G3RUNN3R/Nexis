@@ -55,8 +55,8 @@ function promptWholeNumber(message: string, defaultValue = ""): number | null {
  * Shared hook for firing an admin action against the current admin's own
  * account (the "quick action" controls apply to the account you're
  * currently logged in as — arbitrary-target moderation stays in the full
- * Admin Panel at /admin). Handles busy state, reason prompting, error
- * surfacing, and resyncing PlayerContext's cached state after success.
+ * Admin Panel at /admin). Handles busy state, reason prompting, success and
+ * error surfacing, and resyncing PlayerContext's cached state after success.
  *
  * Admin hotfix: targets by activeAccount.publicId, not player.internalId.
  * player.internalId (PlayerContext) is populated from the login/register
@@ -71,6 +71,7 @@ function useAdminActionRunner() {
   const { serverSessionToken, activeAccount, refreshServerState } = useAuth();
   const [busyActionKey, setBusyActionKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   async function run(
     actionKey: string,
@@ -83,6 +84,7 @@ function useAdminActionRunner() {
     if (reason === null) return;
 
     setError(null);
+    setSuccess(null);
     setBusyActionKey(actionKey);
     try {
       const result = await postAdminPlayerAction(serverSessionToken, String(activeAccount.publicId), {
@@ -95,6 +97,11 @@ function useAdminActionRunner() {
         return;
       }
       await refreshServerState();
+      // A request succeeding server-side is not the same as the caller
+      // knowing that - the busy state clearing is not itself confirmation.
+      // Only setError() existed before, so a successful quick action gave
+      // no visible signal at all beyond a spinner ending.
+      setSuccess(`${actionLabel} succeeded.`);
     } catch {
       setError("Admin action failed. See console for details.");
     } finally {
@@ -102,12 +109,17 @@ function useAdminActionRunner() {
     }
   }
 
-  return { run, busyActionKey, error };
+  return { run, busyActionKey, error, success };
 }
 
 function AdminInlineError({ error }: { error: string | null }) {
   if (!error) return null;
   return <span className="admin-inline__error">{error}</span>;
+}
+
+function AdminInlineSuccess({ success }: { success: string | null }) {
+  if (!success) return null;
+  return <span className="admin-inline__success">{success}</span>;
 }
 
 /** Fill / Set / Reduce controls for a single recovery-bar stat. */
@@ -124,7 +136,7 @@ export function AdminBarInlineControls({
   fillActionType?: string;
 }) {
   const { adminModeEnabled } = useAdminMode();
-  const { run, busyActionKey, error } = useAdminActionRunner();
+  const { run, busyActionKey, error, success } = useAdminActionRunner();
   if (!adminModeEnabled) return null;
 
   const label = RESOURCE_STAT_LABELS[stat] ?? stat;
@@ -168,6 +180,7 @@ export function AdminBarInlineControls({
         Reduce
       </button>
       <AdminInlineError error={error} />
+      <AdminInlineSuccess success={success} />
     </span>
   );
 }
@@ -191,7 +204,7 @@ export function AdminNerveInlineRow({ current, max }: { current: number; max: nu
 /** Add / Subtract / Set controls for gold. */
 export function AdminGoldInlineControls({ gold }: { gold: number }) {
   const { adminModeEnabled } = useAdminMode();
-  const { run, busyActionKey, error } = useAdminActionRunner();
+  const { run, busyActionKey, error, success } = useAdminActionRunner();
   if (!adminModeEnabled) return null;
 
   const busy = busyActionKey !== null;
@@ -238,6 +251,7 @@ export function AdminGoldInlineControls({ gold }: { gold: number }) {
         Set
       </button>
       <AdminInlineError error={error} />
+      <AdminInlineSuccess success={success} />
     </span>
   );
 }
@@ -251,7 +265,7 @@ export function AdminConditionInlineControls({
   isTraveling: boolean;
 }) {
   const { adminModeEnabled } = useAdminMode();
-  const { run, busyActionKey, error } = useAdminActionRunner();
+  const { run, busyActionKey, error, success } = useAdminActionRunner();
   if (!adminModeEnabled) return null;
   if (conditionType === "normal" && !isTraveling) return null;
 
@@ -284,6 +298,7 @@ export function AdminConditionInlineControls({
         </button>
       ) : null}
       <AdminInlineError error={error} />
+      <AdminInlineSuccess success={success} />
     </span>
   );
 }

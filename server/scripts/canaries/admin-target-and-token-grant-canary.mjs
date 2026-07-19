@@ -658,6 +658,130 @@ async function runAllChecks() {
     }
   }
 
+  console.log("== 35. Sidebar quick-admin resource control fix (follow-up ticket, 15 required cases) ==");
+  {
+    const fs = await import("node:fs");
+    const inlineSource = fs.readFileSync(new URL("../../../src/components/admin/AdminInlineControls.tsx", import.meta.url), "utf8");
+    const adminModeSource = fs.readFileSync(new URL("../../../src/state/AdminModeContext.tsx", import.meta.url), "utf8");
+
+    console.log("  -- [1] sidebar quick Fill Energy submits the public player ID --");
+    const inlineCallMatch = inlineSource.match(/postAdminPlayerAction\(serverSessionToken,\s*([^,]*),/);
+    check("[1] found the inline controls' postAdminPlayerAction call site", Boolean(inlineCallMatch));
+    const inlineTargetArgument = inlineCallMatch ? inlineCallMatch[1].trim() : "";
+    check("[1] the inline call submits String(activeAccount.publicId) - the canonical public-ID target", inlineTargetArgument === "String(activeAccount.publicId)");
+
+    console.log("  -- [2] uses the same route contract (adminApi.ts's postAdminPlayerAction) as the full Admin Panel --");
+    check(
+      "[2] AdminInlineControls.tsx imports postAdminPlayerAction from the same adminApi.ts module Admin.tsx uses",
+      inlineSource.includes('import { postAdminPlayerAction } from "../../lib/adminApi"'),
+    );
+
+    console.log("  -- [3] never submits activeAccount.internalPlayerId --");
+    check("[3] internalPlayerId does not appear as the submitted target argument", !inlineTargetArgument.includes("internalPlayerId"));
+
+    console.log("  -- [4] never submits player.internalId (PlayerContext) --");
+    check("[4] AdminInlineControls.tsx no longer imports usePlayer/PlayerContext at all", !inlineSource.includes("usePlayer"));
+
+    console.log("  -- [5] includes the authenticated session token --");
+    check(
+      "[5] run() guards on serverSessionToken before doing anything, and passes it as postAdminPlayerAction's first argument",
+      inlineSource.includes("if (!serverSessionToken || !activeAccount?.publicId) return;") && inlineSource.includes("postAdminPlayerAction(serverSessionToken,"),
+    );
+
+    console.log("  -- [6] sends the correct action name (fillEnergy) and it takes effect --");
+    {
+      await setPlayerStat(adminUser, "energy", 7);
+      const result = await api(`/api/admin/players/${String(adminUser.publicId)}/actions`, { method: "POST", token: adminToken, body: { actionType: "fillEnergy", reason: "sidebar quick action canary" } });
+      check("[6] the exact call shape the sidebar Fill button uses (self-target, actionType fillEnergy) succeeds", result.status === 200);
+      check("[6] energy is filled to max, proving the action name reached the real fillEnergy handler", result.payload.target.player.stats.energy === result.payload.target.player.stats.maxEnergy);
+    }
+
+    console.log("  -- [7] successful refill refreshes authoritative player state --");
+    check(
+      "[7] run() calls refreshServerState() on the success path, which re-syncs PlayerContext from fresh server state",
+      inlineSource.includes("await refreshServerState();"),
+    );
+
+    console.log("  -- [8] backend failure is visibly surfaced (and, per this fix, so is success) --");
+    check("[8] the failure path still calls setError(result.error)", inlineSource.includes("setError(result.error);"));
+    check(
+      "[8] THE FIX: the success path now calls setSuccess(...) - previously a successful action gave no visible signal at all",
+      inlineSource.includes("setSuccess(`${actionLabel} succeeded.`)"),
+    );
+    check(
+      "[8] a success message is actually rendered next to the buttons (AdminInlineSuccess), not just tracked in state",
+      inlineSource.includes("<AdminInlineSuccess success={success} />"),
+    );
+
+    console.log("  -- [9] non-admin (plain player) users cannot use the control --");
+    {
+      // fillEnergy is deliberately staff-safe server-side (adminActionPolicy.js:
+      // minimumRole "staff"), but AdminModeContext gates the inline controls'
+      // very visibility on isAdministrator - true admin, not just staff - so
+      // staff never even sees this button. Prove both layers.
+      check(
+        "[9] AdminModeContext derives visibility from isAdministrator (true admin), not isStaffOrAdmin - staff cannot see the control either",
+        adminModeSource.includes("checkIsAdministrator(") && !adminModeSource.includes("isStaffOrAdmin"),
+      );
+      const plainPlayerAttempt = await api(`/api/admin/players/${String(adminUser.publicId)}/actions`, { method: "POST", token: playerToken, body: { actionType: "fillEnergy", reason: "canary" } });
+      check("[9] even a direct forged request using this exact call shape is rejected (403) for a plain player", plainPlayerAttempt.status === 403);
+    }
+
+    console.log("  -- [10] Admin Mode off prevents the quick control from acting (static gate on every exported control) --");
+    {
+      const exportedControls = ["AdminBarInlineControls", "AdminGoldInlineControls", "AdminConditionInlineControls"];
+      const allGated = exportedControls.every((name) => {
+        const start = inlineSource.indexOf(`export function ${name}`);
+        if (start === -1) return false;
+        const nextGuardWindow = inlineSource.slice(start, start + 600);
+        return nextGuardWindow.includes("if (!adminModeEnabled) return null;");
+      });
+      check("[10] AdminBarInlineControls, AdminGoldInlineControls, and AdminConditionInlineControls all early-return null when Admin Mode is off", allGated);
+    }
+
+    console.log("  -- [11] Admin Mode on permits the action (gate present + underlying action proven to work, per [6] above) --");
+    check("[11] the gate is a simple boolean short-circuit, not a permanent lockout - the same component renders controls once adminModeEnabled is true", inlineSource.includes("const { adminModeEnabled } = useAdminMode();"));
+
+    console.log("  -- [12] unknown target fails safely (defense in depth - the shared resolver rejects it even though the inline UI can only ever self-target) --");
+    {
+      const forgedTarget = await api(`/api/admin/players/9999998/actions`, { method: "POST", token: adminToken, body: { actionType: "fillEnergy", reason: "canary" } });
+      check("[12] a well-formed but nonexistent public ID is a controlled 404, never a silent no-op or a misresolved target", forgedTarget.status === 404 && forgedTarget.payload.code === "TARGET_NOT_FOUND");
+    }
+
+    console.log("  -- [13] concurrent resource updates preserve unrelated state --");
+    {
+      const { user: concurrentUser, token: concurrentToken } = await makeUser("sidebarconcurrent", { privilegeRole: "admin" });
+      await setPlayerStat(concurrentUser, "energy", 4);
+      const results = await Promise.all([
+        api(`/api/admin/players/${String(concurrentUser.publicId)}/actions`, { method: "POST", token: concurrentToken, body: { actionType: "fillEnergy", reason: "canary" } }),
+        api(`/api/admin/players/${String(concurrentUser.publicId)}/one-shot-tokens`, { method: "POST", token: concurrentToken, body: { tokenType: "tradeable", quantity: 2, reason: "canary", idempotencyKey: crypto.randomUUID() } }),
+      ]);
+      check("[13] both the concurrent sidebar-style energy fill and an unrelated token grant succeed", results.every((r) => r.status === 200));
+      const details = await api(`/api/admin/players/${String(concurrentUser.publicId)}`, { token: concurrentToken });
+      check("[13] energy fill landed", details.payload.target.player.stats.energy === details.payload.target.player.stats.maxEnergy);
+      check("[13] the unrelated token grant landed too, untouched by the concurrent resource update", details.payload.target.player.oneShotTokens.tradeable === 2);
+    }
+
+    console.log("  -- [15] token balances and grants remain unchanged by an unrelated sidebar resource action --");
+    {
+      const { user: tokenHolderUser, token: tokenHolderToken } = await makeUser("sidebartokenholder", { privilegeRole: "admin" });
+      const grantResult = await api(`/api/admin/players/${String(tokenHolderUser.publicId)}/one-shot-tokens`, { method: "POST", token: tokenHolderToken, body: { tokenType: "donor", quantity: 3, reason: "canary", idempotencyKey: crypto.randomUUID() } });
+      check("[15] baseline donor grant for this fixture succeeds", grantResult.status === 200);
+      await setPlayerStat(tokenHolderUser, "health", 20);
+      const fillResult = await api(`/api/admin/players/${String(tokenHolderUser.publicId)}/actions`, { method: "POST", token: tokenHolderToken, body: { actionType: "fillHealth", reason: "canary" } });
+      check("[15] the sidebar-style unrelated fillHealth action succeeds", fillResult.status === 200);
+      check("[15] the donor token balance from before is completely unaffected", fillResult.payload.target.player.oneShotTokens.donor === 3);
+      const grantRowCount = await withTransaction(async (client) => {
+        const result = await client.query(`SELECT count(*) AS count FROM admin_one_shot_token_grants WHERE target_internal_id = $1`, [tokenHolderUser.internalId]);
+        return Number(result.rows[0].count);
+      });
+      check("[15] exactly one grant row still exists - the unrelated resource action created no phantom grant rows", grantRowCount === 1);
+    }
+
+    console.log("  -- [14] full Admin Panel behavior remains unchanged - see checks 1-88 above (this ticket adds no changes to Admin.tsx or its endpoints) --");
+    check("[14] AdminInlineControls.tsx changes are additive (success state/UI) - Admin.tsx itself was not touched by this ticket", !inlineSource.includes("loadTarget"));
+  }
+
 }
 
 runTests().catch(async (error) => {

@@ -79,6 +79,13 @@
   margin-left: 4px;
 }
 
+.admin-inline__success {
+  color: #8fd6a0;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
 .admin-inline-row {
   display: flex;
   align-items: center;
