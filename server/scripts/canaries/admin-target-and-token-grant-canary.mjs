@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { createApp } from "../../app.js";
 import { ensureDatabaseSchema } from "../../db/migrate.js";
-import { withTransaction } from "../../db/pool.js";
+import { withTransaction, closePool } from "../../db/pool.js";
 import { registerUser } from "../../services/authService.js";
 import { findUserByPublicId } from "../../repositories/usersRepository.js";
 import { startOneShotForUser, advanceOneShotForUser } from "../../services/nexisOneShotService.js";
@@ -107,6 +107,29 @@ async function runTests() {
   const server = app.listen(PORT);
   await new Promise((resolve) => server.once("listening", resolve));
 
+  try {
+    await runAllChecks();
+  } finally {
+    // Cleanup must run on every exit path - a mid-test throw must not leak
+    // the HTTP listener or the underlying pglite/pool connection. Previously
+    // this only ran after a fully successful pass, so any thrown error (or,
+    // separately, a slow/lock-contended on-disk pglite directory reused
+    // across many prior canary runs from this same repo checkout) left the
+    // process with an open handle and nothing forcing it to exit.
+    await new Promise((resolve) => server.close(resolve));
+    await closePool();
+  }
+
+  console.log(`\n${checks - failures}/${checks} checks passed.`);
+  if (failures > 0) console.log(`${failures} FAILED.`);
+  // Exit explicitly with the real result rather than relying on the event
+  // loop draining naturally - guarantees termination regardless of any
+  // handle a dependency might still be holding, while still preserving 0 on
+  // a full pass and 1 on any failure.
+  process.exit(failures > 0 ? 1 : 0);
+}
+
+async function runAllChecks() {
   const { token: adminToken, user: adminUser } = await makeUser("admin", { privilegeRole: "admin" });
   const { token: staffToken } = await makeUser("staffonly", { privilegeRole: "staff" });
   const { token: playerToken } = await makeUser("plainplayer");
@@ -555,13 +578,94 @@ async function runTests() {
     check("Chronicle/one-shot history array survives an unrelated admin action untouched", entriesMatch);
   }
 
-  console.log(`\n${checks - failures}/${checks} checks passed.`);
-  if (failures > 0) console.log(`${failures} FAILED.`);
-  await server.close();
-  if (failures > 0) process.exit(1);
+  console.log("== 34. \"Select Self\" target-identity fix (follow-up ticket, 8 required cases) ==");
+  {
+    const fs = await import("node:fs");
+    const adminPageSource = fs.readFileSync(new URL("../../../src/pages/Admin.tsx", import.meta.url), "utf8");
+    const adminInlineSource = fs.readFileSync(new URL("../../../src/components/admin/AdminInlineControls.tsx", import.meta.url), "utf8");
+
+    console.log("  -- [1] Select Self submits the canonical public player ID --");
+    const selectSelfMatch = adminPageSource.match(/onClick=\{\(\) => activeAccount && loadTarget\((.*?)\)\}>Select Self</);
+    check("[1] Select Self's onClick handler is present", Boolean(selectSelfMatch));
+    const selectSelfArgument = selectSelfMatch ? selectSelfMatch[1] : "";
+    check("[1] Select Self submits String(activeAccount.publicId) - the same canonical public-ID target every other admin call uses", selectSelfArgument === "String(activeAccount.publicId)");
+
+    console.log("  -- [2] Select Self never submits activeAccount.internalPlayerId --");
+    check("[2] the synthetic-placeholder-producing internalPlayerId no longer appears in Select Self's handler", !selectSelfArgument.includes("internalPlayerId"));
+
+    console.log("  -- [3] Search selection and Select Self use the identical target format --");
+    check(
+      "[3] the search-result button (loadTarget(String(result.publicId))) and Select Self (loadTarget(String(activeAccount.publicId))) both submit String(<...>.publicId)",
+      adminPageSource.includes("loadTarget(String(result.publicId))") && selectSelfArgument === "String(activeAccount.publicId)",
+    );
+
+    console.log("  -- [6] no admin-target call site in the Admin Panel UI submits an internal identifier --");
+    const targetCallSites = [
+      ...[...adminPageSource.matchAll(/loadTarget\(([^)]*)\)/g)].map((m) => m[1]),
+      ...[...adminPageSource.matchAll(/postAdminPlayerAction\(serverSessionToken,\s*([^,]*),/g)].map((m) => m[1]),
+      ...[...adminPageSource.matchAll(/postAdminOneShotTokenGrant\(serverSessionToken,\s*([^,]*),/g)].map((m) => m[1]),
+    ];
+    check("[6] found admin-target call sites to audit in Admin.tsx", targetCallSites.length >= 3);
+    check(
+      "[6] none of Admin.tsx's admin-target call sites submit .internalId or internalPlayerId - public ID only",
+      targetCallSites.length > 0 && !targetCallSites.some((arg) => arg.includes(".internalId") || arg.includes("internalPlayerId")),
+    );
+    const inlineCallSites = [...adminInlineSource.matchAll(/postAdminPlayerAction\(serverSessionToken,\s*([^,]*),/g)].map((m) => m[1]);
+    check("[6] found the AdminInlineControls.tsx admin-target call site", inlineCallSites.length > 0);
+    check(
+      "[6] AdminInlineControls.tsx's admin-target call site also submits no internal identifier",
+      inlineCallSites.length > 0 && !inlineCallSites.some((arg) => arg.includes(".internalId") || arg.includes("internalPlayerId")),
+    );
+    // selected.user.internalId IS legitimately read elsewhere in Admin.tsx (the
+    // Admin Logs tab's targetInternalId query param) - that value was already
+    // authoritatively resolved server-side and returned to this same
+    // authorized session, so it is a read-only audit-log filter, not a
+    // client-synthesized target-resolution submission. Confirm it's the only
+    // other .internalId usage left in the file, so this exception stays scoped.
+    const allInternalIdUsages = [...adminPageSource.matchAll(/selected\?\.user\.internalId|selected\.user\.internalId/g)];
+    check(
+      "[6] the only other selected.user.internalId usage in Admin.tsx is the read-only audit-log scope filter, not a mutation target",
+      allInternalIdUsages.length === 2 && adminPageSource.includes("targetInternalId: scope === \"target\" ? selected?.user.internalId ?? null : null"),
+    );
+
+    console.log("  -- [4] resource actions work after Select Self (self-targeting via public ID) --");
+    {
+      await setPlayerStat(adminUser, "energy", 3);
+      const selfDetails = await api(`/api/admin/players/${String(adminUser.publicId)}`, { token: adminToken });
+      check("[4] self-target resolves via public ID exactly as Select Self now submits it", selfDetails.status === 200 && selfDetails.payload.target.user.internalId === adminUser.internalId);
+      const selfFill = await api(`/api/admin/players/${String(adminUser.publicId)}/actions`, { method: "POST", token: adminToken, body: { actionType: "fillEnergy", reason: "select-self canary" } });
+      check("[4] fillEnergy succeeds when an admin targets their own public ID (the Select Self flow)", selfFill.status === 200 && selfFill.payload.target.player.stats.energy === selfFill.payload.target.player.stats.maxEnergy);
+    }
+
+    console.log("  -- [5] token controls work after Select Self (self-targeting via public ID) --");
+    {
+      const before = await api(`/api/admin/players/${String(adminUser.publicId)}`, { token: adminToken });
+      const selfGrant = await api(`/api/admin/players/${String(adminUser.publicId)}/one-shot-tokens`, { method: "POST", token: adminToken, body: { tokenType: "tradeable", quantity: 1, reason: "select-self canary", idempotencyKey: crypto.randomUUID() } });
+      check("[5] token grant succeeds when an admin targets their own public ID (the Select Self flow)", selfGrant.status === 200 && selfGrant.payload.grant.after === before.payload.target.player.oneShotTokens.tradeable + 1);
+    }
+
+    console.log("  -- [7] the exact synthetic plr_<publicId> placeholder shape (the original bug's fingerprint) is still rejected --");
+    {
+      const synthetic = `plr_${String(adminUser.publicId).padStart(6, "0")}`;
+      const result = await api(`/api/admin/players/${encodeURIComponent(synthetic)}`, { token: adminToken });
+      check("[7] plr_<publicId> is still rejected as malformed by the backend resolver, independent of any frontend fix", result.status === 400 && result.payload.code === "ADMIN_TARGET_INVALID");
+    }
+
+    console.log("  -- [8] non-admin users remain rejected on the self-target-shaped request too --");
+    {
+      const plainSelfDetails = await api(`/api/admin/players/${targetPublicId}`, { token: playerToken });
+      check("[8] a plain player token is rejected (403) resolving any target, including a self-shaped public-ID request", plainSelfDetails.status === 403);
+    }
+  }
+
 }
 
-runTests().catch((error) => {
+runTests().catch(async (error) => {
   console.error("CANARY FAILED:", error);
+  // runTests()'s own try/finally already closed the server and pool before
+  // this handler runs (the throw only reaches here after that finally
+  // completes) - closePool() a second time is a documented no-op guard for
+  // safety, not a required second cleanup.
+  await closePool().catch(() => {});
   process.exit(1);
 });

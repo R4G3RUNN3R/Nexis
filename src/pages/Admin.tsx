@@ -406,7 +406,7 @@ export default function AdminPage() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or public ID" style={{ flex: 1, minWidth: 240 }} />
               <button type="button" onClick={runSearch}>Search</button>
-              <button type="button" onClick={() => activeAccount && loadTarget(activeAccount.internalPlayerId)}>Select Self</button>
+              <button type="button" onClick={() => activeAccount && loadTarget(String(activeAccount.publicId))}>Select Self</button>
             </div>
             {results.length ? (
               <div style={{ display: "grid", gap: 8 }}>
