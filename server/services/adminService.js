@@ -725,6 +725,52 @@ export async function performAdminAction(actorUser, targetPublicId, actionType, 
   });
 }
 
+// Admin hotfix follow-up: the recorded operation's identity fields, as the
+// SERVER computed them - never trust the browser to decide whether a
+// resubmitted request is an identical replay or a conflicting reuse of the
+// same idempotency key. Reason is included: two grants that differ only in
+// their stated reason are, by this contract, different requests.
+function buildGrantRequestIdentity({ actorInternalId, targetInternalId, tokenType, quantity, reason }) {
+  return { actorInternalId, targetInternalId, tokenType, quantity, reason };
+}
+
+function grantIdentityMatches(existingGrant, requestIdentity) {
+  return existingGrant.actorInternalId === requestIdentity.actorInternalId
+    && existingGrant.targetInternalId === requestIdentity.targetInternalId
+    && existingGrant.tokenType === requestIdentity.tokenType
+    && existingGrant.quantity === requestIdentity.quantity
+    && existingGrant.reason === requestIdentity.reason;
+}
+
+// Given a grant row already recorded under this idempotency key, either
+// return its result as a replay (every identity field matches the current
+// request) or fail the whole request with a controlled 409 - never
+// silently reuse an earlier operation's result for a request that differs
+// in any authoritative field.
+async function replayOrRejectExistingGrant(client, existingGrant, requestIdentity) {
+  if (!grantIdentityMatches(existingGrant, requestIdentity)) {
+    throw new HttpError(
+      409,
+      "This idempotency key was already used for a different request (different actor, target, token type, quantity, or reason).",
+      "IDEMPOTENCY_KEY_CONFLICT",
+    );
+  }
+  const existingTarget = await findUserByInternalId(client, existingGrant.targetInternalId);
+  const existingPlayerState = existingTarget ? await findPlayerStateByUserInternalId(client, existingTarget.internalId) : null;
+  return {
+    target: existingTarget && existingPlayerState ? buildAdminPlayerPayload(existingTarget, existingPlayerState) : null,
+    grant: {
+      operationId: existingGrant.operationId,
+      tokenType: existingGrant.tokenType,
+      quantity: existingGrant.quantity,
+      before: existingGrant.beforeBalance,
+      after: existingGrant.afterBalance,
+      reason: existingGrant.reason,
+      replay: true,
+    },
+  };
+}
+
 // Admin hotfix, Phase 4: staff-granted personal one-shot tokens
 // (tradeable = dmosOneShots.tokens.sealed, donor = .patronBound). Requires
 // full administrator (same tier as every other value-granting action -
@@ -754,94 +800,133 @@ export async function grantOneShotTokenForUser(actorUser, targetPublicId, payloa
     throw new HttpError(400, "An idempotency key is required for token grants.", "ADMIN_IDEMPOTENCY_KEY_REQUIRED");
   }
 
-  return withTransaction(async (client) => {
-    const actor = await resolveActorIdentity(client, actorUser);
+  try {
+    return await withTransaction(async (client) => {
+      const actor = await resolveActorIdentity(client, actorUser);
+      const target = await resolveAdminTargetUser(client, targetPublicId);
+      const requestIdentity = buildGrantRequestIdentity({
+        actorInternalId: actor.internalId,
+        targetInternalId: target.internalId,
+        tokenType,
+        quantity,
+        reason,
+      });
 
-    // Idempotent replay: an identical resubmission (dropped response,
-    // browser retry, double-click) returns the ORIGINAL recorded result
-    // instead of granting a second time. A genuinely concurrent duplicate
-    // submission that races past this check is still caught below by the
-    // idempotency_key UNIQUE constraint, which fails the whole transaction
-    // safely (see adminOneShotTokenGrantRepository.js).
-    const existingGrant = await findGrantByIdempotencyKey(client, idempotencyKey);
-    if (existingGrant) {
-      const existingTarget = await findUserByInternalId(client, existingGrant.targetInternalId);
-      const existingPlayerState = existingTarget ? await findPlayerStateByUserInternalId(client, existingTarget.internalId) : null;
-      return {
-        target: existingTarget && existingPlayerState ? buildAdminPlayerPayload(existingTarget, existingPlayerState) : null,
-        grant: {
-          operationId: existingGrant.operationId,
-          tokenType: existingGrant.tokenType,
-          quantity: existingGrant.quantity,
-          before: existingGrant.beforeBalance,
-          after: existingGrant.afterBalance,
-          reason: existingGrant.reason,
-          replay: true,
+      // Sequential replay/conflict check: an identical resubmission
+      // (dropped response, browser retry, double-click) returns the
+      // ORIGINAL recorded result with replay:true and applies no
+      // additional grant. Reuse of the same key with ANY different
+      // authoritative field (actor, target, token type, quantity, or
+      // reason) is rejected with a controlled 409
+      // IDEMPOTENCY_KEY_CONFLICT - never silently applied to the earlier
+      // operation. This decision is made entirely server-side from
+      // resolved identifiers, never from anything the browser asserts.
+      const existingGrant = await findGrantByIdempotencyKey(client, idempotencyKey);
+      if (existingGrant) {
+        return replayOrRejectExistingGrant(client, existingGrant, requestIdentity);
+      }
+
+      await createDefaultPlayerState(client, target.internalId);
+      // Ticket A locking architecture: lock before reading, so a concurrent
+      // grant (or any other concurrent mutation of this player's row) can't
+      // race a lost update against this read-modify-write - no full-row
+      // stale overwrite, an atomic increment against the locked snapshot.
+      const lockedPlayerState = await findPlayerStateByUserInternalId(client, target.internalId, { forUpdate: true });
+      if (!lockedPlayerState) throw new HttpError(404, "Target player state not found.", "TARGET_STATE_NOT_FOUND");
+      const runtimeState = buildMutableRuntimeState(target, lockedPlayerState);
+
+      const currentDmos = asRecord(runtimeState.player.dmosOneShots);
+      const currentTokens = asRecord(currentDmos.tokens);
+      const before = asWholeNumber(currentTokens[tokenField], 0);
+      const after = before + quantity;
+      runtimeState.player.dmosOneShots = {
+        ...currentDmos,
+        tokens: {
+          patronBound: asWholeNumber(currentTokens.patronBound, 0),
+          sealed: asWholeNumber(currentTokens.sealed, 0),
+          lifetimeSpent: asWholeNumber(currentTokens.lifetimeSpent, 0),
+          [tokenField]: after,
         },
       };
+      addPlayerRecord(runtimeState, {
+        category: "admin",
+        summary: `Admin granted ${quantity} ${tokenType} one-shot token${quantity === 1 ? "" : "s"}.`,
+        detail: { tokenType, quantity, before, after, actorPublicId: actor.publicId },
+        source: "admin-dossier",
+        route: "/admin",
+      });
+
+      const updatedPlayerState = await upsertPlayerRuntimeState(client, target.internalId, runtimeState);
+      const operationId = crypto.randomUUID();
+
+      // Ticket A idempotency architecture: the UNIQUE constraint on
+      // idempotency_key is the real safety boundary, not this function's
+      // own pre-check above - two genuinely concurrent requests with the
+      // same key can both pass the pre-check (neither has committed yet)
+      // and both reach here. Only one INSERT can succeed; the other's
+      // failure aborts its whole transaction (including the balance
+      // increment just above), and is recovered below, outside this
+      // transaction, since Postgres forbids further queries once a
+      // transaction has errored.
+      await recordTokenGrant(client, {
+        operationId,
+        idempotencyKey,
+        actorInternalId: actor.internalId,
+        actorPublicId: actor.publicId,
+        targetInternalId: target.internalId,
+        targetPublicId: target.publicId,
+        tokenType,
+        quantity,
+        reason,
+        beforeBalance: before,
+        afterBalance: after,
+      });
+
+      await insertAdminAuditLog(client, {
+        actor,
+        target,
+        actionType: "grantOneShotToken",
+        reason,
+        beforeSummary: { tokenType, balance: before, category: "sensitive economy/progression action", actorRole: actor.privilegeRole, operationId },
+        afterSummary: { tokenType, balance: after, quantity, category: "sensitive economy/progression action", actorRole: actor.privilegeRole, operationId },
+      });
+
+      return {
+        target: buildAdminPlayerPayload(target, updatedPlayerState),
+        playerState: updatedPlayerState,
+        grant: { operationId, tokenType, quantity, before, after, reason, replay: false },
+      };
+    });
+  } catch (error) {
+    if (error instanceof HttpError && error.code === "ADMIN_TOKEN_GRANT_ALREADY_SUBMITTED") {
+      // A genuinely concurrent duplicate lost the race for the
+      // idempotency_key UNIQUE constraint. The transaction that threw
+      // this has already been rolled back in full - no balance change, no
+      // audit log from the losing side. Re-resolve identity and the
+      // winning row in a FRESH transaction (this one is unusable - a
+      // failed transaction cannot run further queries) and apply the
+      // exact same replay-or-reject decision as the sequential path.
+      return withTransaction(async (client) => {
+        const actor = await resolveActorIdentity(client, actorUser);
+        const target = await resolveAdminTargetUser(client, targetPublicId);
+        const requestIdentity = buildGrantRequestIdentity({
+          actorInternalId: actor.internalId,
+          targetInternalId: target.internalId,
+          tokenType,
+          quantity,
+          reason,
+        });
+        const existingGrant = await findGrantByIdempotencyKey(client, idempotencyKey);
+        if (!existingGrant) {
+          // The winner's row should exist by now (it committed before
+          // this transaction's INSERT could fail against it) - if it
+          // genuinely doesn't, surface the original error rather than
+          // guessing.
+          throw error;
+        }
+        return replayOrRejectExistingGrant(client, existingGrant, requestIdentity);
+      });
     }
-
-    const target = await resolveAdminTargetUser(client, targetPublicId);
-    await createDefaultPlayerState(client, target.internalId);
-    // Ticket A locking architecture: lock before reading, so a concurrent
-    // grant (or any other concurrent mutation of this player's row) can't
-    // race a lost update against this read-modify-write - no full-row
-    // stale overwrite, an atomic increment against the locked snapshot.
-    const lockedPlayerState = await findPlayerStateByUserInternalId(client, target.internalId, { forUpdate: true });
-    if (!lockedPlayerState) throw new HttpError(404, "Target player state not found.", "TARGET_STATE_NOT_FOUND");
-    const runtimeState = buildMutableRuntimeState(target, lockedPlayerState);
-
-    const currentDmos = asRecord(runtimeState.player.dmosOneShots);
-    const currentTokens = asRecord(currentDmos.tokens);
-    const before = asWholeNumber(currentTokens[tokenField], 0);
-    const after = before + quantity;
-    runtimeState.player.dmosOneShots = {
-      ...currentDmos,
-      tokens: {
-        patronBound: asWholeNumber(currentTokens.patronBound, 0),
-        sealed: asWholeNumber(currentTokens.sealed, 0),
-        lifetimeSpent: asWholeNumber(currentTokens.lifetimeSpent, 0),
-        [tokenField]: after,
-      },
-    };
-    addPlayerRecord(runtimeState, {
-      category: "admin",
-      summary: `Admin granted ${quantity} ${tokenType} one-shot token${quantity === 1 ? "" : "s"}.`,
-      detail: { tokenType, quantity, before, after, actorPublicId: actor.publicId },
-      source: "admin-dossier",
-      route: "/admin",
-    });
-
-    const updatedPlayerState = await upsertPlayerRuntimeState(client, target.internalId, runtimeState);
-    const operationId = crypto.randomUUID();
-
-    await recordTokenGrant(client, {
-      operationId,
-      idempotencyKey,
-      actorInternalId: actor.internalId,
-      actorPublicId: actor.publicId,
-      targetInternalId: target.internalId,
-      targetPublicId: target.publicId,
-      tokenType,
-      quantity,
-      reason,
-      beforeBalance: before,
-      afterBalance: after,
-    });
-
-    await insertAdminAuditLog(client, {
-      actor,
-      target,
-      actionType: "grantOneShotToken",
-      reason,
-      beforeSummary: { tokenType, balance: before, category: "sensitive economy/progression action", actorRole: actor.privilegeRole, operationId },
-      afterSummary: { tokenType, balance: after, quantity, category: "sensitive economy/progression action", actorRole: actor.privilegeRole, operationId },
-    });
-
-    return {
-      target: buildAdminPlayerPayload(target, updatedPlayerState),
-      playerState: updatedPlayerState,
-      grant: { operationId, tokenType, quantity, before, after, reason, replay: false },
-    };
-  });
+    throw error;
+  }
 }

@@ -26,9 +26,12 @@ function mapRow(row) {
 // mirroring Ticket A's one_shot_completions / player_entitlement_consumptions
 // pattern - a real row with a unique constraint on idempotencyKey, not an
 // application-level check against something that can be blindly
-// overwritten. A repeated submission with the same idempotencyKey (a
-// dropped-response retry, a double-click) returns the ORIGINAL recorded
-// result instead of granting a second time.
+// overwritten. The caller (adminService.js's grantOneShotTokenForUser) is
+// responsible for deciding replay vs. conflict: this function only finds
+// the recorded row, it never assumes a matching key means a matching
+// request - two requests can share a key and still differ in actor,
+// target, token type, quantity, or reason, which must be rejected rather
+// than silently replayed.
 export async function findGrantByIdempotencyKey(client, idempotencyKey) {
   const result = await client.query(
     `SELECT * FROM admin_one_shot_token_grants WHERE idempotency_key = $1`,
@@ -78,6 +81,12 @@ export async function recordTokenGrant(client, {
     return mapRow(result.rows[0]);
   } catch (error) {
     if (isUniqueViolation(error)) {
+      // Internal signal only - a genuinely concurrent request already won
+      // the race for this idempotencyKey (this transaction is now
+      // unusable and will be rolled back by withTransaction). The caller
+      // catches this specific code and re-resolves replay-vs-conflict in
+      // a fresh transaction against the winner's row; it is never
+      // returned to the client as-is.
       throw new HttpError(409, "This token grant has already been submitted.", "ADMIN_TOKEN_GRANT_ALREADY_SUBMITTED");
     }
     throw error;

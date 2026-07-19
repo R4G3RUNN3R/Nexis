@@ -302,22 +302,149 @@ async function runTests() {
 
   console.log("== 26. Duplicate retry does not grant twice ==");
   {
+    // Follow-up correction items 1-2: identical retry returns the
+    // original result and applies no additional grant.
     const key = crypto.randomUUID();
     const first = await api(`/api/admin/players/${targetPublicId}/one-shot-tokens`, { method: "POST", token: adminToken, body: { tokenType: "tradeable", quantity: 3, reason: "canary", idempotencyKey: key } });
     const retry = await api(`/api/admin/players/${targetPublicId}/one-shot-tokens`, { method: "POST", token: adminToken, body: { tokenType: "tradeable", quantity: 3, reason: "canary", idempotencyKey: key } });
-    check("first grant succeeds", first.status === 200 && first.payload.grant.replay === false);
-    check("identical retry returns the same operationId, replay=true", retry.status === 200 && retry.payload.grant.operationId === first.payload.grant.operationId && retry.payload.grant.replay === true);
-    check("retry did not increase the balance further", retry.payload.grant.after === first.payload.grant.after);
+    check("[1] first grant succeeds", first.status === 200 && first.payload.grant.replay === false);
+    check("[1] identical retry returns the same operationId, replay=true", retry.status === 200 && retry.payload.grant.operationId === first.payload.grant.operationId && retry.payload.grant.replay === true);
+    check("[2] retry did not increase the balance further", retry.payload.grant.after === first.payload.grant.after);
   }
 
-  console.log("== 27. Conflicting idempotency reuse fails safely ==");
+  console.log("== 27. Idempotency conflict correction (follow-up ticket, 11 required cases) ==");
   {
-    // Same idempotencyKey as check 26's key, but different parameters -
-    // must NOT silently apply the new quantity to the old operation.
-    const key = crypto.randomUUID();
-    await api(`/api/admin/players/${targetPublicId}/one-shot-tokens`, { method: "POST", token: adminToken, body: { tokenType: "tradeable", quantity: 2, reason: "first", idempotencyKey: key } });
-    const conflicting = await api(`/api/admin/players/${targetPublicId}/one-shot-tokens`, { method: "POST", token: adminToken, body: { tokenType: "donor", quantity: 9, reason: "conflicting", idempotencyKey: key } });
-    check("conflicting reuse returns the ORIGINAL (tradeable, qty 2) result, not the new params", conflicting.status === 200 && conflicting.payload.grant.tokenType === "tradeable" && conflicting.payload.grant.quantity === 2);
+    // Reusable fixture: one admin, one target, one baseline grant to
+    // conflict against. Every sub-case below reuses conflictKey with
+    // exactly one field changed from this baseline, per the ticket's
+    // explicit "do not compare only the target or quantity" instruction.
+    const { user: conflictTarget } = await makeUser("conflicttarget");
+    const conflictTargetPublicId = String(conflictTarget.publicId);
+    const { token: secondAdminToken, user: secondAdminUser } = await makeUser("secondadmin", { privilegeRole: "admin" });
+    const conflictKey = crypto.randomUUID();
+    const baseline = { tokenType: "tradeable", quantity: 2, reason: "baseline reason" };
+
+    const baselineResult = await api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, {
+      method: "POST", token: adminToken, body: { ...baseline, idempotencyKey: conflictKey },
+    });
+    check("baseline grant succeeds", baselineResult.status === 200 && baselineResult.payload.grant.replay === false);
+    const baselineOperationId = baselineResult.payload.grant.operationId;
+    const balanceAfterBaseline = baselineResult.payload.grant.after;
+
+    console.log("  -- [3] same key, different quantity --");
+    {
+      const conflicting = await api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, {
+        method: "POST", token: adminToken, body: { ...baseline, quantity: 5, idempotencyKey: conflictKey },
+      });
+      check("[3] different quantity with the same key returns 409 IDEMPOTENCY_KEY_CONFLICT", conflicting.status === 409 && conflicting.payload.code === "IDEMPOTENCY_KEY_CONFLICT");
+    }
+
+    console.log("  -- [4] same key, different token type --");
+    {
+      const conflicting = await api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, {
+        method: "POST", token: adminToken, body: { ...baseline, tokenType: "donor", idempotencyKey: conflictKey },
+      });
+      check("[4] different token type with the same key returns 409 IDEMPOTENCY_KEY_CONFLICT", conflicting.status === 409 && conflicting.payload.code === "IDEMPOTENCY_KEY_CONFLICT");
+    }
+
+    console.log("  -- [5] same key, different target --");
+    {
+      const { user: otherTarget } = await makeUser("otherconflicttarget");
+      const conflicting = await api(`/api/admin/players/${String(otherTarget.publicId)}/one-shot-tokens`, {
+        method: "POST", token: adminToken, body: { ...baseline, idempotencyKey: conflictKey },
+      });
+      check("[5] different target with the same key returns 409 IDEMPOTENCY_KEY_CONFLICT", conflicting.status === 409 && conflicting.payload.code === "IDEMPOTENCY_KEY_CONFLICT");
+    }
+
+    console.log("  -- [6] same key, different actor --");
+    {
+      const conflicting = await api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, {
+        method: "POST", token: secondAdminToken, body: { ...baseline, idempotencyKey: conflictKey },
+      });
+      check("[6] different staff actor with the same key returns 409 IDEMPOTENCY_KEY_CONFLICT", conflicting.status === 409 && conflicting.payload.code === "IDEMPOTENCY_KEY_CONFLICT");
+    }
+
+    console.log("  -- [7] same key, different normalized reason --");
+    {
+      const conflicting = await api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, {
+        method: "POST", token: adminToken, body: { ...baseline, reason: "a completely different reason", idempotencyKey: conflictKey },
+      });
+      check("[7] different reason with the same key returns 409 IDEMPOTENCY_KEY_CONFLICT", conflicting.status === 409 && conflicting.payload.code === "IDEMPOTENCY_KEY_CONFLICT");
+      // Whitespace-only differences ARE the same normalized reason -
+      // requireReason() trims before storing/comparing - so this must
+      // replay, not conflict.
+      const whitespaceVariant = await api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, {
+        method: "POST", token: adminToken, body: { ...baseline, reason: `  ${baseline.reason}  `, idempotencyKey: conflictKey },
+      });
+      check("[7] a reason differing only by surrounding whitespace still replays (normalized comparison)", whitespaceVariant.status === 200 && whitespaceVariant.payload.grant.replay === true);
+    }
+
+    console.log("  -- identical retry after all the conflicts above still replays cleanly --");
+    {
+      const stillReplays = await api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, {
+        method: "POST", token: adminToken, body: { ...baseline, idempotencyKey: conflictKey },
+      });
+      check("baseline key still replays the original operation after every conflicting attempt", stillReplays.status === 200 && stillReplays.payload.grant.operationId === baselineOperationId && stillReplays.payload.grant.replay === true);
+    }
+
+    console.log("  -- [11] conflicts left the balance unchanged beyond the original grant --");
+    {
+      const details = await api(`/api/admin/players/${conflictTargetPublicId}`, { token: adminToken });
+      check("[11] tradeable balance reflects ONLY the baseline grant, none of the 4 rejected conflicts", details.payload.target.player.oneShotTokens.tradeable === balanceAfterBaseline);
+      check("[11] donor balance is untouched (the token-type conflict never applied)", details.payload.target.player.oneShotTokens.donor === 0);
+    }
+
+    console.log("  -- [10] conflicts created no additional admin audit entries --");
+    {
+      const grantRows = await withTransaction(async (client) => {
+        const result = await client.query(`SELECT count(*) AS count FROM admin_one_shot_token_grants WHERE target_internal_id = $1`, [conflictTarget.internalId]);
+        return Number(result.rows[0].count);
+      });
+      check("[10] exactly one admin_one_shot_token_grants row exists for this target (no row created by any conflict)", grantRows === 1);
+      const auditLog = await api(`/api/admin/audit-logs?targetInternalId=${encodeURIComponent(conflictTarget.internalId)}&limit=20`, { token: adminToken });
+      const grantEntries = auditLog.payload.entries.filter((entry) => entry.actionType === "grantOneShotToken");
+      check("[10] exactly one admin_action_logs grantOneShotToken entry exists (conflicts never reach the audit-insert step)", grantEntries.length === 1);
+    }
+
+    console.log("  -- [8] concurrent IDENTICAL requests create exactly one grant --");
+    {
+      const raceKey = crypto.randomUUID();
+      const identicalPayload = { tokenType: "tradeable", quantity: 4, reason: "race identical", idempotencyKey: raceKey };
+      const results = await Promise.all([
+        api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, { method: "POST", token: adminToken, body: identicalPayload }),
+        api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, { method: "POST", token: adminToken, body: identicalPayload }),
+      ]);
+      check("[8] both concurrent identical requests succeed (one create, one replay)", results.every((r) => r.status === 200));
+      const operationIds = new Set(results.map((r) => r.payload.grant.operationId));
+      check("[8] both requests report the SAME operationId - only one grant was created", operationIds.size === 1);
+      check("[8] exactly one of the two reports replay:false (the winner)", results.filter((r) => r.payload.grant.replay === false).length === 1);
+      const rowCount = await withTransaction(async (client) => {
+        const result = await client.query(`SELECT count(*) AS count FROM admin_one_shot_token_grants WHERE idempotency_key = $1`, [raceKey]);
+        return Number(result.rows[0].count);
+      });
+      check("[8] exactly one admin_one_shot_token_grants row exists for the race key", rowCount === 1);
+    }
+
+    console.log("  -- [9] concurrent CONFLICTING requests create one grant and one 409 conflict --");
+    {
+      const raceKey2 = crypto.randomUUID();
+      const balanceBeforeRace = (await api(`/api/admin/players/${conflictTargetPublicId}`, { token: adminToken })).payload.target.player.oneShotTokens.tradeable;
+      const results = await Promise.all([
+        api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, { method: "POST", token: adminToken, body: { tokenType: "tradeable", quantity: 6, reason: "race a", idempotencyKey: raceKey2 } }),
+        api(`/api/admin/players/${conflictTargetPublicId}/one-shot-tokens`, { method: "POST", token: adminToken, body: { tokenType: "tradeable", quantity: 9, reason: "race b (conflicting quantity)", idempotencyKey: raceKey2 } }),
+      ]);
+      const succeeded = results.filter((r) => r.status === 200);
+      const conflicted = results.filter((r) => r.status === 409);
+      check("[9] exactly one of the two concurrent conflicting requests succeeds", succeeded.length === 1);
+      check("[9] exactly one of the two concurrent conflicting requests gets 409 IDEMPOTENCY_KEY_CONFLICT", conflicted.length === 1 && conflicted[0].payload.code === "IDEMPOTENCY_KEY_CONFLICT");
+      const rowCount = await withTransaction(async (client) => {
+        const result = await client.query(`SELECT count(*) AS count FROM admin_one_shot_token_grants WHERE idempotency_key = $1`, [raceKey2]);
+        return Number(result.rows[0].count);
+      });
+      check("[9] exactly one admin_one_shot_token_grants row exists for the race key (no partial/duplicate row)", rowCount === 1);
+      const balanceAfterRace = (await api(`/api/admin/players/${conflictTargetPublicId}`, { token: adminToken })).payload.target.player.oneShotTokens.tradeable;
+      check("[9] final balance reflects exactly ONE of the two quantities (6 or 9), never both, never neither", balanceAfterRace === balanceBeforeRace + 6 || balanceAfterRace === balanceBeforeRace + 9);
+    }
   }
 
   console.log("== 28. Concurrent grants produce the correct final balance ==");
