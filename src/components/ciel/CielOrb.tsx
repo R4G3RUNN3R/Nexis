@@ -1,65 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-
-type OrbPosition = {
-  x: number;
-  y: number;
-};
-
 type Props = {
-  position: OrbPosition;
-  onMove: (position: OrbPosition) => void;
+  open: boolean;
   onClick: () => void;
   title?: string;
 };
 
-export default function CielOrb({ position, onMove, onClick, title = "CIEL" }: Props) {
-  const [dragging, setDragging] = useState(false);
-  const [movedDuringDrag, setMovedDuringDrag] = useState(false);
-  const offsetRef = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
-      if (!dragging) return;
-
-      setMovedDuringDrag(true);
-
-      const nextX = Math.max(20, Math.min(window.innerWidth - 72, event.clientX - offsetRef.current.x));
-      const nextY = Math.max(20, Math.min(window.innerHeight - 72, event.clientY - offsetRef.current.y));
-
-      onMove({ x: nextX, y: nextY });
-    };
-
-    const handleUp = () => {
-      setDragging(false);
-      window.setTimeout(() => setMovedDuringDrag(false), 0);
-    };
-
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-    };
-  }, [dragging, onMove]);
-
+// CIEL used to be a free-draggable orb positioned by JS on mount, which let
+// it drift on top of page content (see the Legacy Tree / Home overlap in the
+// UI audit). It's now docked to a fixed viewport corner via CSS
+// (.ciel-orb-anchor in ciel.css) so it can never land on top of a card - the
+// shell also reserves bottom padding around the dock (see nexis-theme.css)
+// so nothing renders underneath it.
+export default function CielOrb({ open, onClick, title = "CIEL" }: Props) {
   return (
     <button
       type="button"
-      className={`ciel-orb-anchor${dragging ? " ciel-orb-anchor--dragging" : ""}`}
-      style={{ left: position.x, top: position.y }}
-      onMouseDown={(event) => {
-        setDragging(true);
-        offsetRef.current = {
-          x: event.clientX - position.x,
-          y: event.clientY - position.y,
-        };
-      }}
-      onClick={() => {
-        if (!movedDuringDrag) onClick();
-      }}
+      className={`ciel-orb-anchor${open ? " ciel-orb-anchor--open" : ""}`}
+      onClick={onClick}
       title={title}
-      aria-label={title}
+      aria-label={open ? `${title} (close)` : `${title} (open)`}
+      aria-expanded={open}
     >
       <span className="ciel-orb-shell">
         <span className="ciel-orb-core" />

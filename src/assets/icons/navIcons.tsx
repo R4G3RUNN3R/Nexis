@@ -269,6 +269,32 @@ export function ConsortiumsIcon({ accent = ICON_ACCENT, ...props }: IconProps) {
   );
 }
 
+/** Wiki - an open reference book. */
+export function WikiIcon({ accent = ICON_ACCENT, ...props }: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 6.4 C10.4 5 7.6 4.6 4.8 5 V18.2 C7.6 17.8 10.4 18.2 12 19.6 C13.6 18.2 16.4 17.8 19.2 18.2 V5 C16.4 4.6 13.6 5 12 6.4 Z" />
+      <path d="M12 6.4 V19.6" strokeWidth={1.1} />
+      <path d="M6.8 8.6 H10 M6.8 11.2 H10 M14 8.6 H17.2 M14 11.2 H17.2" strokeWidth={1.1} />
+      <circle cx="12" cy="6.4" r="1" fill={accent} stroke="none" />
+    </IconBase>
+  );
+}
+
+/** One-Shots - a single die mid-roll. */
+export function OneShotsIcon({ accent = ICON_ACCENT, ...props }: IconProps) {
+  return (
+    <IconBase {...props}>
+      <rect x="5.6" y="5.6" width="12.8" height="12.8" rx="2.4" transform="rotate(-8 12 12)" />
+      <circle cx="9.6" cy="9.4" r="1" fill={accent} stroke="none" />
+      <circle cx="14.6" cy="10.8" r="1" fill={accent} stroke="none" />
+      <circle cx="9" cy="14.4" r="1" fill={accent} stroke="none" />
+      <circle cx="14" cy="15.8" r="1" fill={accent} stroke="none" />
+      <circle cx="11.8" cy="12.6" r="1" fill={accent} stroke="none" />
+    </IconBase>
+  );
+}
+
 /** Admin - the warden's master key. */
 export function AdminIcon({ accent = ICON_ACCENT, ...props }: IconProps) {
   return (
@@ -303,5 +329,7 @@ export const NAV_ICONS: Record<string, IconComponent> = {
   hospital: HospitalIcon,
   guilds: GuildsIcon,
   consortiums: ConsortiumsIcon,
+  wiki: WikiIcon,
+  "one-shots": OneShotsIcon,
   admin: AdminIcon,
 };

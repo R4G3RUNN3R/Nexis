@@ -5,7 +5,7 @@ import { PlayerAvatar } from "../common/PlayerAvatar";
 import { usePlayer } from "../../state/PlayerContext";
 import { useAuth } from "../../state/AuthContext";
 import { StatBars } from "./StatBars";
-import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicIds";
+import { formatPlayerNameWithPublicId } from "../../lib/publicIds";
 import { resolveDisplayTitle } from "../../lib/titleAccess";
 import { getCityName, getTravelProgress, readTravelStateFromPlayer } from "../../lib/travelState";
 import { isStaffOrAdmin } from "../../lib/adminAccess";
@@ -13,6 +13,7 @@ import { AdminModeToggle, AdminGoldInlineControls, AdminConditionInlineControls 
 import { cielLoadingQuotes } from "../../data/cielPageCopy";
 import { getCityHubContent } from "../../data/cityHubData";
 import { acknowledgeProgressionEvent, getServerCityAcademy, type ServerProgressionEvent } from "../../lib/authApi";
+import { NAV_ICONS } from "../../assets/icons";
 
 type AppShellProps = {
   title?: string;
@@ -20,36 +21,38 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-const core: Array<[string, string]> = [
-  ["Home", "/home"],
-  ["Profile", "/profile"],
+// Home, Profile, Travel, World Map, Codex, Wiki, City, Guilds, and
+// Consortiums live in the top bar (see TopBar.tsx) as the primary,
+// always-visible nav. The sidebar below only holds destinations that AREN'T
+// already reachable from the top bar, grouped into three refined sections.
+
+const character: Array<[string, string]> = [
   ["Life Paths", "/life-paths"],
   ["Inventory", "/inventory"],
   ["Crafting", "/crafting"],
   ["Education", "/education"],
   ["Skills", "/skills"],
-  ["Adventure", "/adventure"],
   ["One-Shots", "/one-shots"],
   ["Housing", "/housing"],
 ];
 
-const world: Array<[string, string]> = [
-  ["City", "/city"],
-  ["Civic Jobs", "/civic-jobs"],
-  ["Travel", "/travel"],
-  ["World Map", "/world-map"],
-  ["Codex", "/codex"],
-  ["Wiki", "/wiki"],
+const realm: Array<[string, string]> = [
   ["Arena", "/arena"],
-  ["City Board", "/city-board"],
   ["Salvage Yard", "/salvage-yard"],
   ["Hospital", "/hospital"],
 ];
 
-const factions: Array<[string, string]> = [
-  ["Guilds", "/guilds"],
-  ["Consortiums", "/consortiums"],
+const orders: Array<[string, string]> = [
+  ["Civic Jobs", "/civic-jobs"],
+  ["Adventure", "/adventure"],
+  ["City Board", "/city-board"],
 ];
+
+/** Resolves the nav icon for a sidebar link from its route (strips hash/query). */
+function iconForRoute(route: string) {
+  const key = route.split("#")[0].split("?")[0].replace(/^\//, "");
+  return NAV_ICONS[key];
+}
 
 const HOSPITAL_HIDDEN = new Set(["/education", "/crafting", "/salvage-yard", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
 const JAIL_HIDDEN = new Set(["/education", "/crafting", "/salvage-yard", "/adventure", "/arena", "/travel", "/city", "/civic-jobs"]);
@@ -62,17 +65,23 @@ function SidebarSection({ title, links }: { title: string; links: Array<[string,
     <div className="sidebar-section">
       <div className="sidebar-section__title">{title}</div>
       <div className="sidebar-section__links">
-        {links.map(([label, to]) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === "/home"}
-            className={({ isActive }) => `sidebar-link${isActive ? " sidebar-link--active" : ""}`}
-          >
-            <span>{label}</span>
-            <span className="sidebar-link__arrow">{">"}</span>
-          </NavLink>
-        ))}
+        {links.map(([label, to]) => {
+          const Icon = iconForRoute(to);
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === "/home"}
+              className={({ isActive }) => `sidebar-link${isActive ? " sidebar-link--active" : ""}`}
+            >
+              <span className="sidebar-link__label">
+                {Icon ? <Icon size={16} /> : null}
+                <span>{label}</span>
+              </span>
+              <span className="sidebar-link__arrow">{">"}</span>
+            </NavLink>
+          );
+        })}
       </div>
     </div>
   );
@@ -104,10 +113,10 @@ function buildCityLocalLinks(cityId: string | null | undefined, academyOpen: boo
     ["Crafting", "/crafting"],
     ["Salvage Yard", "/salvage-yard"],
     [isAcademyOpen ? "Academy" : "Academy (Locked)", "/city#academy"],
-    ["Travel", "/travel"],
-    ["Consortium", "/consortiums"],
-    ["Guild", "/guilds"],
   );
+
+  // Travel, Consortiums, and Guilds are always reachable from the top bar,
+  // so they're intentionally left out of this city-local list.
 
   return links;
 }
@@ -240,7 +249,6 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const displayName = player.lastName ? `${player.name} ${player.lastName}` : player.name || "Unknown";
   const displayPublicId = activeAccount?.publicId ?? player.publicId;
   const displayNameWithPublicId = formatPlayerNameWithPublicId(displayName, displayPublicId);
-  const profileRoute = getProfileRoute(displayPublicId);
   const displayTitle = resolveDisplayTitle(player.title, displayPublicId);
   const portrait = (player as unknown as { portrait?: { imageUrl?: string | null; imageKey?: string | null } | null }).portrait;
   const shadow = (player as unknown as { shadow?: { current?: number; max?: number; label?: string } }).shadow;
@@ -253,17 +261,13 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const quoteSeed = `${location.pathname}|${title ?? ""}`;
   const quoteIndex = Math.abs(Array.from(quoteSeed).reduce((sum, char) => sum + char.charCodeAt(0), 0)) % cielLoadingQuotes.length;
   const shellQuote = cielLoadingQuotes[quoteIndex];
-  const visibleCore = hiddenRoutes ? core.filter(([, route]) => !hiddenRoutes.has(route)) : core;
-  const visibleWorld = hiddenRoutes ? world.filter(([, route]) => !hiddenRoutes.has(route)) : world;
-  const visibleFactions = hiddenRoutes ? factions.filter(([, route]) => !hiddenRoutes.has(route)) : factions;
+  const visibleCharacter = hiddenRoutes ? character.filter(([, route]) => !hiddenRoutes.has(route)) : character;
+  const visibleRealm = hiddenRoutes ? realm.filter(([, route]) => !hiddenRoutes.has(route)) : realm;
+  const visibleOrders = hiddenRoutes ? orders.filter(([, route]) => !hiddenRoutes.has(route)) : orders;
   const currentCityHub = getCityHubContent(travelState.currentCityId);
   const useCityLocalSidebar = !isTraveling && currentCityHub.cityId !== "nexis";
   const visibleCityLocal = buildCityLocalLinks(currentCityHub.cityId, sidebarAcademyOpen).filter(([, route]) => !hiddenRoutes?.has(route.split("#")[0]));
   const adminLinks = canAccessAdmin ? ([["Admin Panel", "/admin"]] as Array<[string, string]>) : [];
-  const onProfileSurface =
-    location.pathname === profileRoute ||
-    location.pathname === "/profile" ||
-    location.pathname.startsWith("/profile/");
 
   return (
     <div className="app-shell">
@@ -334,9 +338,9 @@ export function AppShell({ title, hint, children }: AppShellProps) {
             <SidebarSection title={currentCityHub.displayName} links={visibleCityLocal} />
           ) : (
             <>
-              <SidebarSection title="Character" links={visibleCore.map(([label, route]) => [label, route === "/profile" ? profileRoute : route])} />
-              <SidebarSection title="Realm" links={visibleWorld} />
-              <SidebarSection title="Orders" links={visibleFactions} />
+              <SidebarSection title="Character" links={visibleCharacter} />
+              <SidebarSection title="Realm" links={visibleRealm} />
+              <SidebarSection title="Orders" links={visibleOrders} />
             </>
           )}
           <SidebarSection title="Authority" links={adminLinks} />
@@ -359,18 +363,13 @@ export function AppShell({ title, hint, children }: AppShellProps) {
                 <div className="page-banner__title">{title}</div>
                 {hint ? <div className="page-banner__hint">{hint}</div> : null}
               </div>
-              <div className="page-banner__actions">
-                {!onProfileSurface ? (
-                  <NavLink to={profileRoute} className="page-banner__action">
-                    Open profile
-                  </NavLink>
-                ) : null}
-                {canAccessAdmin ? (
+              {canAccessAdmin ? (
+                <div className="page-banner__actions">
                   <NavLink to="/admin" className="page-banner__action page-banner__action--admin">
                     Control panel
                   </NavLink>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
           <ProgressionEventPanel

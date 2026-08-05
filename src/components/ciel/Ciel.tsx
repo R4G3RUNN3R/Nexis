@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import CielOrb from "./CielOrb";
 import CielDialogue from "./CielDialogue";
@@ -36,13 +36,12 @@ function pageTitleFromPath(pathname: string) {
   return (PAGE_TITLES[pathname] ?? pathname.replace(/^\//, "").replace(/-/g, " ")) || "Home";
 }
 
+// CIEL is docked to a fixed viewport corner (see .ciel-orb-anchor /
+// .ciel-dialogue in ciel.css) instead of being freely draggable, so it can
+// never end up parked on top of page content.
 export default function Ciel() {
   const location = useLocation();
   const pageTitle = useMemo(() => pageTitleFromPath(location.pathname), [location.pathname]);
-  const [position, setPosition] = useState({
-    x: typeof window !== "undefined" ? window.innerWidth - 96 : 1200,
-    y: typeof window !== "undefined" ? window.innerHeight - 120 : 700,
-  });
 
   const {
     pathname,
@@ -58,15 +57,13 @@ export default function Ciel() {
   return (
     <>
       <CielOrb
-        position={position}
-        onMove={setPosition}
+        open={open}
         onClick={open ? closeCiel : openCiel}
         title="CIEL - Cognitive inference and evaluation layer"
       />
 
       <CielDialogue
         open={open}
-        position={position}
         pathname={pathname}
         latestMessage={latestMessage}
         messages={messages}

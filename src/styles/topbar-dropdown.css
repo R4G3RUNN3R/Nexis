@@ -29,6 +29,7 @@
 .topbar__link {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   min-height: 30px;
   padding: 0 8px;
   border-radius: 6px;
@@ -36,6 +37,11 @@
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.03em;
+}
+
+.topbar__link svg {
+  flex: none;
+  opacity: 0.85;
 }
 
 .topbar__link:hover {

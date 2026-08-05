@@ -5,16 +5,21 @@ import { useAuth } from "../../state/AuthContext";
 import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicIds";
 import { PlayerAvatar } from "../common/PlayerAvatar";
 import { resolveDisplayTitle } from "../../lib/titleAccess";
+import { NAV_ICONS } from "../../assets/icons";
 
 import { isStaffOrAdmin } from "../../lib/adminAccess";
 
+// Primary, always-visible navigation. These are the high-frequency and
+// high-level destinations; everything else lives in the sidebar (see
+// AppShell.tsx) grouped under Character / Realm / Orders.
 const navLinks: Array<[string, string]> = [
   ["Home", "/home"],
   ["Profile", "/profile"],
-  ["City", "/city"],
   ["Travel", "/travel"],
+  ["World Map", "/world-map"],
   ["Codex", "/codex"],
   ["Wiki", "/wiki"],
+  ["City", "/city"],
   ["Guilds", "/guilds"],
   ["Consortiums", "/consortiums"],
 ];
@@ -167,15 +172,19 @@ export function TopBar() {
   return (
     <header className="topbar">
       <div className="topbar__left">
-        {navLinks.map(([label, to]) => (
-          <NavLink
-            key={to}
-            to={label === "Profile" ? profileRoute : to}
-            className={({ isActive }) => `topbar__link${isActive ? " topbar__link--active" : ""}`}
-          >
-            {label}
-          </NavLink>
-        ))}
+        {navLinks.map(([label, to]) => {
+          const Icon = NAV_ICONS[to.replace(/^\//, "")];
+          return (
+            <NavLink
+              key={to}
+              to={label === "Profile" ? profileRoute : to}
+              className={({ isActive }) => `topbar__link${isActive ? " topbar__link--active" : ""}`}
+            >
+              {Icon ? <Icon size={16} /> : null}
+              <span>{label}</span>
+            </NavLink>
+          );
+        })}
       </div>
 
       <div className="topbar__center" ref={searchRef}>
@@ -287,9 +296,6 @@ export function TopBar() {
                   <span>{displayTitle || "Untitled citizen"} | Level {player.level}</span>
                 </div>
               </div>
-              <NavLink to={profileRoute} className="player-menu__item" onClick={() => setPlayerOpen(false)}>
-                Character Profile
-              </NavLink>
               {canAccessAdmin ? (
                 <NavLink to="/admin" className="player-menu__item player-menu__item--admin" onClick={() => setPlayerOpen(false)}>
                   Administration

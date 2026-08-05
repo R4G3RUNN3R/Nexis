@@ -10,7 +10,6 @@ type Message = {
 
 type Props = {
   open: boolean;
-  position: { x: number; y: number };
   pathname: string;
   latestMessage: string;
   messages: Message[];
@@ -131,7 +130,6 @@ const defaultPrompts = [
 
 export default function CielDialogue({
   open,
-  position,
   pathname,
   latestMessage,
   messages,
@@ -141,15 +139,12 @@ export default function CielDialogue({
 }: Props) {
   if (!open) return null;
 
-  const left = Math.max(16, position.x - 360);
-  const top  = Math.max(16, position.y - 250);
   const prompts = quickQuestions[pathname] ?? defaultPrompts;
   const pageLabel = pathname === "/" ? "home" : pathname.replace("/", "");
 
   return (
     <div
       className="ciel-dialogue"
-      style={{ left, top }}
       role="dialog"
       aria-label="CIEL"
     >

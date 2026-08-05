@@ -71,6 +71,27 @@ select {
   background:
     linear-gradient(180deg, rgba(24, 33, 41, 0.96) 0%, rgba(12, 18, 22, 0.97) 100%);
   box-shadow: var(--shadow);
+  /* The sidebar's own nav list/player card/vitals can run taller than the
+     viewport. Without this, that height drags the whole page (sidebar +
+     content) down with it, forcing a long scroll to reach short page
+     content that would otherwise fit above the fold. Pinning the sidebar
+     under the sticky top bar and giving it its own scroll keeps content's
+     own height in charge of the page's scroll length instead. */
+  position: sticky;
+  top: 72px;
+  max-height: calc(100vh - 82px);
+  overflow-y: auto;
+}
+
+.sidebar > * {
+  /* Flex items default to flex-shrink: 1, which - now that .sidebar has a
+     max-height - would compress every child (player card, stat bars, nav
+     sections, etc.) to fit rather than letting the container scroll past
+     them. .sidebar-section also sets overflow: hidden, so a shrunk section
+     doesn't even overflow visibly - its links just vanish. Pin every direct
+     child to its natural size so overflow-y: auto is what handles the
+     excess, not shrinkage. */
+  flex-shrink: 0;
 }
 
 .sidebar-logo {
@@ -241,6 +262,18 @@ select {
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
+.sidebar-link__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sidebar-link__label svg {
+  flex: none;
+  opacity: 0.82;
+}
+
 .sidebar-link:last-child {
   border-bottom: 0;
 }
@@ -306,7 +339,14 @@ select {
 
 .content {
   min-width: 0;
-  padding: 2px 0 0;
+  /* The CIEL orb docks fixed to the viewport's bottom-right corner (see
+     ciel.css). Bottom padding alone only protects the very end of the
+     scrollable page - a right column can still butt up against the viewport
+     edge at any scroll position (this happened for real on Travel's
+     "Caravan Operations" panel during verification). Reserving a full-height
+     right-edge gutter here, sized to clear the orb's dock + margin, means no
+     page content can ever render underneath it, at any scroll position. */
+  padding: 2px 88px 96px 0;
 }
 
 .page-banner {
@@ -872,6 +912,15 @@ select {
 
   .sidebar {
     gap: 10px;
+    /* On stacked mobile layout the sidebar spans full width, so it also
+       needs bottom clearance for the docked CIEL orb. The sticky/own-scroll
+       behavior added for the desktop side-by-side layout doesn't apply here
+       - there's no adjacent column to save space against, so the sidebar
+       just flows normally with the rest of the stacked page. */
+    padding-bottom: 92px;
+    position: static;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .page-banner,
