@@ -28,6 +28,7 @@ import {
   swapGuildSkillForUser,
   triggerGuildRallyForUser,
   unlockGuildSkillForUser,
+  updateConsortiumSettingsForUser,
   updateGuildSettingsForUser,
   withdrawGuildArmoryForUser,
 } from "../services/organizationService.js";
@@ -75,6 +76,7 @@ export const postConsortiumPositionController = wrap(async (req, res) => { res.s
 export const postConsortiumMemberRemoveController = wrap(async (req, res) => { res.status(200).json(await removeConsortiumMemberForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
 export const postConsortiumTreasuryDepositController = wrap(async (req, res) => { res.status(200).json(await depositConsortiumTreasuryForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
 export const postConsortiumOutreachController = wrap(async (req, res) => { res.status(200).json(await runConsortiumOutreachForUser(req.auth.user, req.params.organizationId)); });
+export const postConsortiumSettingsController = wrap(async (req, res) => { res.status(200).json(await updateConsortiumSettingsForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
 export const getConsortiumTemplatesController = wrap(async (_req, res) => { res.status(200).json({ consortiumTemplates: listConsortiumTypes() }); });
 export const postGuildSettingsController = wrap(async (req, res) => { res.status(200).json(await updateGuildSettingsForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
 export const postGuildRecruitController = wrap(async (req, res) => { res.status(200).json(await recruitGuildMemberForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });

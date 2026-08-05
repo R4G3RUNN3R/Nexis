@@ -30,6 +30,7 @@ import {
   postConsortiumOutreachController,
   postConsortiumPositionController,
   postConsortiumRedeemController,
+  postConsortiumSettingsController,
   postConsortiumTreasuryDepositController,
   postOrganizationBaseAcquireController,
   postOrganizationBaseAuctionBidController,
@@ -57,6 +58,7 @@ router.post("/organizations/:organizationId/consortiums/positions", requireSessi
 router.post("/organizations/:organizationId/consortiums/members/remove", requireSession, postConsortiumMemberRemoveController);
 router.post("/organizations/:organizationId/consortiums/treasury/deposit", requireSession, postConsortiumTreasuryDepositController);
 router.post("/organizations/:organizationId/consortiums/outreach", requireSession, postConsortiumOutreachController);
+router.post("/organizations/:organizationId/consortiums/settings", requireSession, postConsortiumSettingsController);
 router.post("/organizations/:organizationId/consortiums/claim-points", requireSession, postConsortiumClaimPointsController);
 router.post("/organizations/:organizationId/consortiums/redeem", requireSession, postConsortiumRedeemController);
 router.get("/organizations/:organizationId/consortiums/logistics", requireSession, getConsortiumLogisticsController);

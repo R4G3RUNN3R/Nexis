@@ -545,6 +545,12 @@ export type GuildSettings = {
   publicProfile: GuildPublicProfile;
 };
 
+export type ConsortiumSettings = {
+  description: string;
+  hiringPolicy: string;
+  announcement: string;
+};
+
 export type OrganizationRecord = {
   internalId: string;
   publicId: number;
@@ -578,6 +584,7 @@ export type OrganizationRecord = {
   healthMetrics?: Record<string, ConsortiumHealthMetric>;
   consortiumPoints?: ConsortiumPointState | null;
   publicProfile?: GuildPublicProfile;
+  consortiumSettingsView?: ConsortiumSettings;
   memberDetails?: GuildMemberDetail[];
   warRoom?: GuildWarRoom;
   dungeonBoard?: GuildDungeonTemplate[];

@@ -138,6 +138,7 @@ const deriveAcademyProfile = (playerState) => {
 const normalizeManagement = (organization, template) => {
   const metadata = asRecord(organization.metadata);
   const management = asRecord(metadata.management);
+  const settings = asRecord(management.settings);
   return {
     ...metadata,
     companyStyle: true,
@@ -149,6 +150,12 @@ const normalizeManagement = (organization, template) => {
       outreach: { level: clamp(asRecord(management.outreach).level, 0, 6), campaignsLaunched: asInt(asRecord(management.outreach).campaignsLaunched), lastRunAt: typeof asRecord(management.outreach).lastRunAt === "number" ? asRecord(management.outreach).lastRunAt : null },
       health: asRecord(management.health),
       performance: asRecord(management.performance),
+      // Company settings (director-only, see updateConsortiumSettingsForUser): reuses the existing
+      // free-form metadata JSON blob rather than a new schema, mirroring guild.settings below.
+      settings: {
+        hiringPolicy: String(settings.hiringPolicy ?? "Applications reviewed by leadership").trim().slice(0, 80),
+        announcement: String(settings.announcement ?? "").trim().slice(0, 220),
+      },
     },
   };
 };
@@ -847,7 +854,7 @@ const refreshConsortiumView = async (client, user, organization) => {
   const progressEntry = getProgressEntry((await getRuntimeForUser(client, user)).runtimeState, derived.template.key, organization.internalId);
   const consortiumPoints = { consortiumTypeKey: derived.template.key, organizationInternalId: organization.internalId, scope: "type", points: progressEntry.points, totalEarned: progressEntry.totalEarned, totalSpent: progressEntry.totalSpent, lastClaimedAt: progressEntry.lastClaimedAt, dailyGain: derived.viewerDetails?.dailyCpGain ?? derived.baseDailyGain };
   return {
-    organization: { ...organization, tag: null, treasury: normalizeTreasury(organization.treasury), metadata: derived.metadata, starRating: derived.stars, consortiumType: derived.template, rolesFlavor: derived.template.rolesFlavor, memberRoleKey: derived.viewerDetails?.roleKey ?? null, rewardLadder: derived.template.rewards, unlockedPassives: getUnlockedPassives(derived.template.key, derived.stars), redeemableActives: getActiveRewards(derived.template.key, derived.stars, consortiumPoints.points), nextTierRewards: getNextConsortiumTierRewards(derived.template, derived.stars), consortiumPerkEffects: derived.perkEffects, consortiumPoints, healthMetrics: derived.healthMetrics, performance: derived.performance, academyContract: derived.academyContract, baseMechanicalEffects: derived.baseEffects, employeeCapacity: derived.employeeCapacity, companyDailyGeneration: derived.totalDailyGeneration, positions: listConsortiumPositions(derived.template.key), applications: derived.applications, memberDetails: derived.employeeDetails, yourDetails: derived.viewerDetails, companyAgeDays: getCompanyAgeDays(organization.createdAt), companyOverview: buildConsortiumOverview(organization, derived), assistanceOpportunities: buildConsortiumAssistanceOpportunities(organization, derived), layoutSections: ["Overview", "Employees", "Contracts", "Logistics", "Assets", "Finance", "Advancement"] },
+    organization: { ...organization, tag: null, treasury: normalizeTreasury(organization.treasury), metadata: derived.metadata, starRating: derived.stars, consortiumType: derived.template, rolesFlavor: derived.template.rolesFlavor, memberRoleKey: derived.viewerDetails?.roleKey ?? null, rewardLadder: derived.template.rewards, unlockedPassives: getUnlockedPassives(derived.template.key, derived.stars), redeemableActives: getActiveRewards(derived.template.key, derived.stars, consortiumPoints.points), nextTierRewards: getNextConsortiumTierRewards(derived.template, derived.stars), consortiumPerkEffects: derived.perkEffects, consortiumPoints, healthMetrics: derived.healthMetrics, performance: derived.performance, academyContract: derived.academyContract, baseMechanicalEffects: derived.baseEffects, employeeCapacity: derived.employeeCapacity, companyDailyGeneration: derived.totalDailyGeneration, positions: listConsortiumPositions(derived.template.key), applications: derived.applications, memberDetails: derived.employeeDetails, yourDetails: derived.viewerDetails, companyAgeDays: getCompanyAgeDays(organization.createdAt), companyOverview: buildConsortiumOverview(organization, derived), assistanceOpportunities: buildConsortiumAssistanceOpportunities(organization, derived), consortiumSettingsView: { description: organization.description, hiringPolicy: derived.metadata.management.settings.hiringPolicy, announcement: derived.metadata.management.settings.announcement }, layoutSections: ["Overview", "Employees", "Contracts", "Logistics", "Assets", "Finance", "Advancement"] },
     consortiumProgress: consortiumPoints,
   };
 };
@@ -1315,6 +1322,30 @@ export async function updateGuildSettingsForUser(user, organizationInternalId, p
     const updated = await updateOrganizationDetails(client, organization.internalId, { description: metadata.guild.publicProfile.headline, statusText: metadata.guild.publicProfile.recruitmentStatus, metadata });
     await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_settings_updated", summary: { recruitmentStatus: metadata.guild.publicProfile.recruitmentStatus, warDoctrine: metadata.guild.settings.warDoctrine } });
     return refreshGuildView(client, user, updated);
+  });
+}
+
+// Company settings (Torn-companies-style): director-only, additive alongside updateGuildSettingsForUser
+// above. Reuses the organizations.description column (already generic/writable via
+// updateOrganizationDetails) for the public business description, and the existing free-form
+// metadata.management JSON blob (see normalizeManagement) for hiring policy / member announcement --
+// no new columns, no new tables, no change to any existing mutation or permission check.
+export async function updateConsortiumSettingsForUser(user, organizationInternalId, payload) {
+  return withTransaction(async (client) => {
+    const organization = await findOrganizationByInternalId(client, organizationInternalId);
+    if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND");
+    const actorMember = ensureMember(organization, user.internalId);
+    ensurePermission(organization, actorMember, "manage_contracts");
+    const template = getConsortiumTypeDefinition(organization.consortiumTypeKey);
+    const metadata = normalizeManagement(organization, template);
+    const description = String(payload?.description ?? organization.description ?? "").trim().slice(0, 220);
+    metadata.management.settings = {
+      hiringPolicy: String(payload?.hiringPolicy ?? metadata.management.settings.hiringPolicy).trim().slice(0, 80),
+      announcement: String(payload?.announcement ?? metadata.management.settings.announcement).trim().slice(0, 220),
+    };
+    const updated = await persistConsortiumMetadata(client, organization, await buildConsortiumState(client, { ...organization, metadata: { ...organization.metadata, ...metadata } }, user.internalId), { description });
+    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_settings_updated", summary: { hiringPolicy: metadata.management.settings.hiringPolicy } });
+    return refreshConsortiumView(client, user, updated);
   });
 }
 

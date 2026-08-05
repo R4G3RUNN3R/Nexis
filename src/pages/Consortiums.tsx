@@ -3,14 +3,28 @@ import { useParams } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { OrganizationBaseTab } from "../components/organizations/OrganizationBaseTab";
-import { ConsortiumLogisticsBoard } from "../components/organizations/ConsortiumLogisticsBoard";
 import { OrganizationOneShotsPanel } from "../components/organizations/OrganizationOneShotsPanel";
+import { ConsortiumLogisticsBoard } from "../components/organizations/ConsortiumLogisticsBoard";
 import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
 import { useEducation } from "../state/EducationContext";
 import { allocatePublicNumericId, formatEntityPublicId } from "../lib/publicIds";
-import { claimConsortiumPoints, createOrganization, getMyOrganization, getOrganizationByPublicId, redeemConsortiumReward } from "../lib/organizationApi";
+import {
+  assignConsortiumPosition,
+  claimConsortiumPoints,
+  createOrganization,
+  depositConsortiumTreasury,
+  getConsortiumLogisticsBoard,
+  getMyOrganization,
+  getOrganizationByPublicId,
+  removeConsortiumMember,
+  reviewConsortiumApplication,
+  redeemConsortiumReward,
+  runConsortiumOutreach,
+  updateConsortiumSettings,
+} from "../lib/organizationApi";
 import { cielPageCopy } from "../data/cielPageCopy";
+import { ConsortiumSealIcon, TreasuryIcon } from "../assets/icons/orgIcons";
 import {
   CONSORTIUM_STORAGE_PREFIX,
   consortiumKey,
@@ -18,6 +32,7 @@ import {
   readConsortiumBoard,
   type ConsortiumBoard,
   type ConsortiumHealthMetric,
+  type ConsortiumLogisticsOperation,
   type ConsortiumReward,
   type ConsortiumTypeDefinition,
   writeJson,
@@ -67,7 +82,26 @@ type ConsortiumChoice = {
   roleSummary: string;
 };
 
-type ConsortiumMemberTab = "overview" | "employees" | "contracts" | "logistics" | "assets" | "finance" | "advancement" | "base";
+type ConsortiumMemberTab = "ledger" | "employees" | "contracts";
+type ConsortiumControlTab = "company" | "personnel" | "logistics" | "treasury" | "advancement" | "base" | "settings";
+type ConsortiumTab = ConsortiumMemberTab | ConsortiumControlTab;
+type ConsortiumViewMode = "member" | "control";
+
+const MEMBER_TABS: Array<{ key: ConsortiumMemberTab; label: string }> = [
+  { key: "ledger", label: "Ledger" },
+  { key: "employees", label: "Employees" },
+  { key: "contracts", label: "My Contracts" },
+];
+
+const CONTROL_TABS: Array<{ key: ConsortiumControlTab; label: string }> = [
+  { key: "company", label: "Company" },
+  { key: "personnel", label: "Personnel" },
+  { key: "logistics", label: "Logistics" },
+  { key: "treasury", label: "Treasury" },
+  { key: "advancement", label: "Advancement" },
+  { key: "base", label: "Assets & Base" },
+  { key: "settings", label: "Company Settings" },
+];
 
 function StatusRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -122,6 +156,16 @@ function getApplicantCount(board: ConsortiumBoard) {
   return Array.isArray(applications) ? applications.length : readBoardNumberMetadata(board, "applicantCount");
 }
 
+function getApplications(board: ConsortiumBoard): Array<Record<string, unknown>> {
+  const applications = (board as ConsortiumBoard & { applications?: unknown }).applications;
+  return Array.isArray(applications) ? (applications as Array<Record<string, unknown>>) : [];
+}
+
+function getPositions(board: ConsortiumBoard): Array<{ key: string; displayName: string }> {
+  const positions = (board as ConsortiumBoard & { positions?: unknown }).positions;
+  return Array.isArray(positions) ? (positions as Array<{ key: string; displayName: string }>) : [];
+}
+
 function getAdvertisingLevel(board: ConsortiumBoard) {
   const management = asRecord(asRecord(board.metadata).management);
   const outreach = asRecord(management.outreach);
@@ -164,16 +208,24 @@ function getEmployeeRows(board: ConsortiumBoard) {
       const employee = asRecord(entry);
       return {
         key: `${String(employee.userInternalId ?? "member")}-${String(employee.roleKey ?? "employee")}`,
+        userInternalId: String(employee.userInternalId ?? ""),
+        publicId: Number(employee.publicId ?? 0),
+        roleKey: String(employee.roleKey ?? "employee"),
         roleLabel: String(employee.positionDisplayName ?? employee.roleDisplayName ?? employee.roleKey ?? "Employee"),
         summary: `${String(employee.displayName ?? "Unknown")} | Daily CP ${String(employee.dailyCpGain ?? 0)}`,
+        name: String(employee.displayName ?? "Unknown"),
       };
     });
   }
 
   return board.members.map((employee) => ({
     key: `${employee.userInternalId}-${employee.roleKey}`,
+    userInternalId: employee.userInternalId,
+    publicId: employee.publicId,
+    roleKey: employee.roleKey,
     roleLabel: employee.roleKey,
     summary: `${employee.displayName} | Efficiency 100%`,
+    name: employee.displayName,
   }));
 }
 
@@ -188,9 +240,15 @@ export default function ConsortiumsPage() {
   const [consortiumName, setConsortiumName] = useState("");
   const [consortiumTag, setConsortiumTag] = useState("");
   const [selectedTypeId, setSelectedTypeId] = useState<string>("mercantile_house");
-  const [memberTab, setMemberTab] = useState<ConsortiumMemberTab>("overview");
+  const [viewMode, setViewMode] = useState<ConsortiumViewMode>("member");
+  const [memberTab, setMemberTab] = useState<ConsortiumTab>("ledger");
   const [message, setMessage] = useState<string | null>(null);
   const [boardLoadError, setBoardLoadError] = useState<string | null>(null);
+  const [treasuryDepositAmount, setTreasuryDepositAmount] = useState("1000");
+  const [positionDraftByMember, setPositionDraftByMember] = useState<Record<string, string>>({});
+  const [settingsDraft, setSettingsDraft] = useState({ description: "", hiringPolicy: "", announcement: "" });
+  const [myContracts, setMyContracts] = useState<ConsortiumLogisticsOperation[] | null>(null);
+  const [myContractsLoading, setMyContractsLoading] = useState(false);
   const routeOrganizationPublicId = typeof publicIdParam === "string" ? publicIdParam.trim() : "";
   const isDetailRoute = routeOrganizationPublicId.length > 0;
 
@@ -273,6 +331,39 @@ export default function ConsortiumsPage() {
     }
   }, [consortiumTypes, selectedTypeId]);
 
+  useEffect(() => {
+    if (!board?.consortiumSettingsView) return;
+    setSettingsDraft({
+      description: board.consortiumSettingsView.description ?? "",
+      hiringPolicy: board.consortiumSettingsView.hiringPolicy ?? "",
+      announcement: board.consortiumSettingsView.announcement ?? "",
+    });
+  }, [board?.internalId, board?.consortiumSettingsView]);
+
+  useEffect(() => {
+    if (!(viewMode === "member" && memberTab === "contracts") || !serverSessionToken || !board) {
+      return;
+    }
+    let cancelled = false;
+    setMyContractsLoading(true);
+    void getConsortiumLogisticsBoard(serverSessionToken, board.internalId)
+      .then((result) => {
+        if (cancelled) return;
+        if ("ok" in result && result.ok === false) {
+          setMyContracts([]);
+          return;
+        }
+        const logistics = (result as { logistics: { operations: ConsortiumLogisticsOperation[] } }).logistics;
+        setMyContracts(logistics.operations.filter((operation) => operation.assignedWorkers.some((worker) => worker.userInternalId === player.internalId)));
+      })
+      .finally(() => {
+        if (!cancelled) setMyContractsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewMode, memberTab, serverSessionToken, board?.internalId, player.internalId]);
+
   const consortiumBlockReason = useMemo(() => {
     if (board) return "You already operate a consortium on this character.";
     // Education hard-gate: Civic Fundamentals -> consortium founding. Checked here (matching the
@@ -290,6 +381,7 @@ export default function ConsortiumsPage() {
 
   const employeeRows = board ? getEmployeeRows(board) : [];
   const isConsortiumMemberView = Boolean(board?.memberRoleKey);
+  const isDirector = board?.memberRoleKey === "director";
   const academyContract = asRecord((board as (ConsortiumBoard & { academyContract?: unknown }) | null)?.academyContract);
   const businessContract = asRecord(academyContract.businessStudies);
   const businessCompletionPct = readNumber(businessContract.averageTrackCompletionPct);
@@ -318,6 +410,8 @@ export default function ConsortiumsPage() {
   const consortiumPerkEffects = board?.consortiumPerkEffects ?? {};
   const consortiumPointsState = board?.consortiumPoints ?? null;
   const currentStarTier = board?.starRating ?? 1;
+  const applications = board ? getApplications(board) : [];
+  const assignablePositions = board ? getPositions(board).filter((entry) => entry.key !== "director") : [];
   const commandCards = board
     ? [
         {
@@ -455,20 +549,29 @@ export default function ConsortiumsPage() {
 
   }
 
+  function switchToMemberView() {
+    setViewMode("member");
+    setMemberTab("ledger");
+  }
+
+  function switchToControlView() {
+    setViewMode("control");
+    setMemberTab("company");
+  }
+
   return (
     <AppShell
       title="Consortiums"
-      hint="Economic organizations now behave more like real player companies: pick a type, fund it properly, then run the board."
+      hint="Player companies: pick a type, fund it properly, then run the board."
     >
       <div className="guild-stack">
         <section className="panel">
           <div className="panel__body guild-grid">
             <article className="guild-card">
-              <div className="guild-card__section-title">Consortium Brief</div>
+              <div className="guild-card__section-title"><ConsortiumSealIcon size={16} /> Consortium Brief</div>
               <div className="guild-card__body guild-card__body--small">
                 {pageCopy.flavor}
               </div>
-              {pageCopy.alt ? <div className="guild-card__body guild-card__body--small">{pageCopy.alt}</div> : null}
             </article>
             <article className="guild-card">
               <div className="guild-card__section-title">CIEL</div>
@@ -511,12 +614,12 @@ export default function ConsortiumsPage() {
                 <div className="org-surface">
                   <section className="org-hero org-hero--consortium">
                     <div>
-                      <p className="org-eyebrow">Company Dossier</p>
+                      <p className="org-eyebrow">Company Ledger</p>
                       <h2 className="org-hero__title">
-                        {board.name} <span>[{formatEntityPublicId("consortium", board.publicId)}]</span>
+                        <ConsortiumSealIcon size={22} /> {board.name} <span>[{formatEntityPublicId("consortium", board.publicId)}]</span>
                       </h2>
                       <p className="org-hero__copy">
-                        {board.description ?? "Operational board for routes, treasury, and escort contracts."}
+                        {board.consortiumSettingsView?.description || board.description || "Operational board for routes, treasury, and escort contracts."}
                       </p>
                       <div className="org-tag-row">
                         <span>{board.consortiumTypeName ?? "Unclassified"}</span>
@@ -525,37 +628,127 @@ export default function ConsortiumsPage() {
                         <span>{board.statusText}</span>
                       </div>
                     </div>
-                    <div className="org-hero__actions">
-                      <button type="button" className="org-button" onClick={() => void reloadConsortiumBoard()}>
-                        Refresh Board
-                      </button>
-                      <button type="button" className="org-button" onClick={() => setMemberTab("logistics")}>
-                        Logistics
-                      </button>
-                      <button type="button" className="org-button org-button--ghost" onClick={() => setMemberTab("base")}>
-                        Base Ledger
-                      </button>
-                    </div>
                   </section>
 
+                  {isDirector ? (
+                    <div className="org-mode-toggle">
+                      <button type="button" className={`org-mode-toggle__button${viewMode === "member" ? " org-mode-toggle__button--active" : ""}`} onClick={switchToMemberView}>
+                        Member View
+                      </button>
+                      <button type="button" className={`org-mode-toggle__button${viewMode === "control" ? " org-mode-toggle__button--active" : ""}`} onClick={switchToControlView}>
+                        Control Panel
+                      </button>
+                    </div>
+                  ) : null}
+
                   <div className="guild-tabs">
-                    {[
-                      ["overview", "Overview"],
-                      ["employees", "Employees"],
-                      ["contracts", "Contracts"],
-                      ["logistics", "Logistics"],
-                      ["assets", "Assets"],
-                      ["finance", "Finance"],
-                      ["advancement", "Advancement"],
-                      ["base", "Base"],
-                    ].map(([key, label]) => (
-                      <button key={key} type="button" className={`guild-tab${memberTab === key ? " guild-tab--active" : ""}`} onClick={() => setMemberTab(key as ConsortiumMemberTab)}>
-                        {label}
+                    {(viewMode === "member" ? MEMBER_TABS : CONTROL_TABS).map((tab) => (
+                      <button key={tab.key} type="button" className={`guild-tab${memberTab === tab.key ? " guild-tab--active" : ""}`} onClick={() => setMemberTab(tab.key)}>
+                        {tab.label}
                       </button>
                     ))}
                   </div>
 
-                  {memberTab === "overview" ? (
+                  {viewMode === "member" && memberTab === "ledger" ? (
+                    <div className="guild-stack">
+                      <section className="org-stat-strip">
+                        <article className="org-stat-card">
+                          <span>Treasury</span>
+                          <strong>{board.treasury.gold.toLocaleString("en-GB")}</strong>
+                          <p>Gold on hand</p>
+                        </article>
+                        <article className="org-stat-card">
+                          <span>Staff</span>
+                          <strong>{board.members.length}</strong>
+                          <p>Assignable employees</p>
+                        </article>
+                        <article className="org-stat-card">
+                          <span>Daily Yield</span>
+                          <strong>{getDailyGeneration(board).toLocaleString("en-GB")}</strong>
+                          <p>Gold generation</p>
+                        </article>
+                        <article className="org-stat-card">
+                          <span>Rank</span>
+                          <strong>{String(overviewRank.label ?? `Rank ${board.starRating ?? 1}`)}</strong>
+                          <p>{currentStarTier}-star</p>
+                        </article>
+                      </section>
+
+                      <section className="panel org-panel">
+                        <div className="org-panel__head"><div><p className="org-eyebrow">Announcement</p><h3>From the director</h3></div></div>
+                        <p className="org-hero__copy" style={{ margin: 0 }}>{board.consortiumSettingsView?.announcement || "No announcement posted yet."}</p>
+                      </section>
+
+                      <section className="panel org-panel">
+                        <div className="org-panel__head"><div><p className="org-eyebrow">Your Position</p><h3>{board.memberRoleKey ?? "Employee"}</h3></div></div>
+                        <div className="org-detail-list">
+                          <StatusRow label="Company Type" value={board.consortiumTypeName ?? "Unclassified"} />
+                          <StatusRow label="Hiring Policy" value={board.consortiumSettingsView?.hiringPolicy || "Applications reviewed by leadership"} />
+                        </div>
+                        <div className="org-hero__actions" style={{ marginTop: 10 }}>
+                          <button type="button" className="org-button" onClick={() => setMemberTab("employees")}>
+                            View Employees
+                          </button>
+                          <button type="button" className="org-button" onClick={() => setMemberTab("contracts")}>
+                            My Contracts
+                          </button>
+                          <button type="button" className="org-button org-button--ghost" disabled title="Leaving a consortium isn't wired up yet -- ask the director to remove you.">
+                            Leave Consortium
+                          </button>
+                        </div>
+                      </section>
+                    </div>
+                  ) : null}
+
+                  {viewMode === "member" && memberTab === "employees" ? (
+                    <ContentPanel title="Employees">
+                      <div className="org-table-wrap">
+                        <table className="org-compact-table">
+                          <thead>
+                            <tr>
+                              <th>Employee</th>
+                              <th>Position</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {employeeRows.map((employee) => (
+                              <tr key={employee.key}>
+                                <td>{employee.name}</td>
+                                <td>{employee.roleLabel}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </ContentPanel>
+                  ) : null}
+
+                  {viewMode === "member" && memberTab === "contracts" ? (
+                    <div className="guild-stack">
+                      <ContentPanel title="Contracts You're Assigned To">
+                        {myContractsLoading ? (
+                          <div className="guild-inline-note">Loading your assigned logistics operations.</div>
+                        ) : myContracts && myContracts.length ? (
+                          <div className="guild-stack">
+                            {myContracts.map((operation) => (
+                              <section key={operation.internalId} className="guild-card">
+                                <div className="guild-card__title">{operation.displayName} <span>{operation.state}</span></div>
+                                <StatusRow label="Status" value={operation.statusText} />
+                                <StatusRow label="Route" value={`${operation.routeType} / ${operation.lane}`} />
+                                <StatusRow label="Your Role" value={operation.assignedWorkers.find((worker) => worker.userInternalId === player.internalId)?.assignmentRole ?? "Assigned"} />
+                              </section>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="guild-inline-note">You aren't assigned to any active or draft logistics operation right now.</div>
+                        )}
+                      </ContentPanel>
+
+                      <OrganizationOneShotsPanel organizationId={board.internalId} organizationName={board.name} organizationType="consortium" />
+                    </div>
+                  ) : null}
+
+                  {viewMode === "control" && memberTab === "company" ? (
                     <>
                       <section className="panel org-panel">
                         <div className="org-panel__head"><div><p className="org-eyebrow">Company First View</p><h3>{String(asRecord(companyOverview.companyType).name ?? board.consortiumTypeName ?? "Company")}</h3></div></div>
@@ -570,36 +763,6 @@ export default function ConsortiumsPage() {
                           <article><strong>Current benefits</strong><p>{overviewBenefits.length ? overviewBenefits.slice(0, 4).map(String).join(" | ") : "No unlocked company passives yet."}</p></article>
                           <article><strong>Next steps</strong><p>{overviewNextSteps.length ? overviewNextSteps.slice(0, 4).map(String).join(" | ") : "Staff roles, routes, and advancement are the next pressure points."}</p></article>
                         </div>
-                      </section>
-
-                      <section className="org-stat-strip">
-                        <article className="org-stat-card">
-                          <span>Treasury</span>
-                          <strong>{board.treasury.gold.toLocaleString("en-GB")}g</strong>
-                          <p>Liquid reserve</p>
-                        </article>
-                        <article className="org-stat-card">
-                          <span>Staff</span>
-                          <strong>{board.members.length}</strong>
-                          <p>Assignable employees</p>
-                        </article>
-                        <article className="org-stat-card">
-                          <span>Daily Yield</span>
-                          <strong>{getDailyGeneration(board).toLocaleString("en-GB")}</strong>
-                          <p>Gold generation</p>
-                        </article>
-                        {(() => { const hazardPressure = getHazardPressure(board); return (
-                          <article className="org-stat-card">
-                            <span>Hazard Pressure</span>
-                            <strong title={getHazardExplanation(hazardPressure)}>{hazardPressure}</strong>
-                            <p>{getHazardSeverity(hazardPressure)} - {getHazardExplanation(hazardPressure)}</p>
-                          </article>
-                        ); })()}
-                        <article className="org-stat-card">
-                          <span>Escort State</span>
-                          <strong>{board.memberRoleKey ? "Linked" : "Public"}</strong>
-                          <p>Guild coverage available</p>
-                        </article>
                       </section>
 
                       <section className="panel org-panel">
@@ -617,9 +780,16 @@ export default function ConsortiumsPage() {
                               <p title={metric.meaning}>{metric.rating}</p>
                             </article>
                           ))}
+                          {(() => { const hazardPressure = getHazardPressure(board); return (
+                            <article className="org-stat-card">
+                              <span>Hazard Pressure</span>
+                              <strong title={getHazardExplanation(hazardPressure)}>{hazardPressure}</strong>
+                              <p>{getHazardSeverity(hazardPressure)}</p>
+                            </article>
+                          ); })()}
                         </div>
                         <div className="guild-inline-note">
-                          Popularity, Efficiency, and Environment are server-computed from staffing, roles filled, treasury discipline, and unlocked {board.consortiumTypeName ?? "consortium"} perks -- not flavor text.
+                          Popularity, Efficiency, and Environment are server-computed from staffing, roles filled, treasury discipline, and unlocked perks.
                         </div>
                       </section>
 
@@ -631,108 +801,153 @@ export default function ConsortiumsPage() {
                           </div>
                         </div>
                         <div className="org-detail-list">
-                          <StatusRow label="Track completion" value={`${businessCompletionPct}%`} />
-                          <StatusRow label="Track coverage" value={`${businessCompletedCourses.toFixed(1)} / ${businessRequiredCourses}`} />
+                          <StatusRow label="Track completion" value={`${businessCompletionPct}% (${businessCompletedCourses.toFixed(1)}/${businessRequiredCourses})`} />
                           <StatusRow label="Company yield" value={`+${businessYieldPct}%`} />
                           <StatusRow label="Worker efficiency" value={`+${businessWorkerEfficiencyPct}%`} />
                           <StatusRow label="Treasury discipline" value={`+${businessTreasuryPct}%`} />
                           <StatusRow label="Route performance" value={`+${businessRoutePct}%`} />
                         </div>
-                        <div className="guild-inline-note">
-                          Business Studies now feeds this board through server-calculated modifiers tied to completed study progress.
-                        </div>
-                      </section>
-
-                      <OrganizationOneShotsPanel organizationId={board.internalId} organizationName={board.name} organizationType="consortium" />
-
-                      <section className="org-grid-two">
-                        <section className="panel org-panel">
-                          <div className="org-panel__head">
-                            <div>
-                              <p className="org-eyebrow">Operations</p>
-                              <h3>Live logistics board</h3>
-                            </div>
-                          </div>
-                          <div className="org-detail-list">
-                            <StatusRow label="Company Type" value={board.consortiumTypeName ?? "Unclassified"} />
-                            <StatusRow label="Tier" value={board.starRating ?? 1} />
-                            <StatusRow label="Applicants" value={getApplicantCount(board)} />
-                            <StatusRow label="Advertising" value={`Level ${getAdvertisingLevel(board)}`} />
-                            <StatusRow label="Daily Generation" value={`${getDailyGeneration(board).toLocaleString("en-GB")} gold`} />
-                          </div>
-                        </section>
-
-                        <section className="panel org-panel">
-                          <div className="org-panel__head">
-                            <div>
-                              <p className="org-eyebrow">Escort Contract</p>
-                              <h3>Protection layer</h3>
-                            </div>
-                          </div>
-                          <div className="org-detail-list">
-                            <StatusRow label="Guild Link" value="Set per logistics operation" />
-                            <StatusRow label="Coverage" value="Influences live route outcomes" />
-                            <StatusRow label="Mode" value="None / Internal / Guild contract" />
-                            <StatusRow label="Status" value="Configured in operation board" />
-                          </div>
-                          <div className="guild-inline-note">
-                            This board follows the handoff flow: consortium route, escort slot, guild linkage, and resolved contribution.
-                          </div>
-                        </section>
                       </section>
 
                       <section className="panel org-panel">
-                        <div className="org-panel__head">
-                          <div>
-                            <p className="org-eyebrow">Employees</p>
-                            <h3>Assignable crew</h3>
-                          </div>
-                        </div>
-                        <div className="org-table-wrap">
-                          <table className="org-compact-table">
-                            <thead>
-                              <tr>
-                                <th>Employee</th>
-                                <th>Role</th>
-                                <th>Summary</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {employeeRows.map((employee) => (
-                                <tr key={employee.key}>
-                                  <td>{employee.summary.split(" | ")[0]}</td>
-                                  <td>{employee.roleLabel}</td>
-                                  <td>{employee.summary.split(" | ").slice(1).join(" | ") || "Operationally available"}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        <div className="org-panel__head"><div><p className="org-eyebrow">Contracts &amp; Assistance</p><h3>Danger and consortium-to-guild work</h3></div></div>
+                        <div className="org-stack-list">
+                          {assistanceOpportunities.length ? assistanceOpportunities.map((entry) => <article key={String(entry.key)}><strong>{String(entry.label)}</strong><p>{String(entry.summary)}</p></article>) : <article><strong>No assistance offers</strong><p>Appears as city events and guild links generate dangerous work.</p></article>}
                         </div>
                       </section>
                     </>
                   ) : null}
 
-                  {memberTab === "employees" ? (
-                    <ContentPanel title="Employees">
-                      <div className="org-table-wrap"><table className="org-compact-table"><thead><tr><th>Employee</th><th>Company Role</th><th>Effect</th></tr></thead><tbody>{employeeRows.map((employee) => <tr key={employee.key}><td>{employee.summary.split(" | ")[0]}</td><td>{employee.roleLabel}</td><td>{employee.summary.split(" | ").slice(1).join(" | ") || "Supports output, route success, and company cadence."}</td></tr>)}</tbody></table></div>
-                    </ContentPanel>
+                  {viewMode === "control" && memberTab === "personnel" ? (
+                    <div className="guild-layout">
+                      <div className="guild-column guild-column--wide">
+                        <ContentPanel title="Employee Roster & Roles">
+                          <div className="org-table-wrap">
+                            <table className="org-compact-table">
+                              <thead>
+                                <tr>
+                                  <th>Employee</th>
+                                  <th>Position</th>
+                                  <th>Reassign</th>
+                                  <th></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {employeeRows.map((employee) => {
+                                  const isEmployeeDirector = employee.roleKey === "director";
+                                  const draft = positionDraftByMember[employee.userInternalId] ?? "";
+                                  return (
+                                    <tr key={employee.key}>
+                                      <td>{employee.name}</td>
+                                      <td>{employee.roleLabel}</td>
+                                      <td>
+                                        {isEmployeeDirector ? (
+                                          <span className="org-chip">Director slot fixed</span>
+                                        ) : (
+                                          <div className="logistics-inline-form">
+                                            <select className="org-input" value={draft} onChange={(event) => setPositionDraftByMember((current) => ({ ...current, [employee.userInternalId]: event.target.value }))}>
+                                              <option value="">Select position</option>
+                                              {assignablePositions.map((position) => (
+                                                <option key={position.key} value={position.key}>{position.displayName}</option>
+                                              ))}
+                                            </select>
+                                            <button type="button" className="org-button" disabled={!isDirector || !draft} onClick={() => runConsortiumAction(() => assignConsortiumPosition(serverSessionToken!, board.internalId, String(employee.publicId), draft), { message: () => `${employee.name} reassigned.` })}>
+                                              Assign
+                                            </button>
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td>
+                                        <button type="button" className="org-button org-button--ghost" disabled={!isDirector || isEmployeeDirector} onClick={() => runConsortiumAction(() => removeConsortiumMember(serverSessionToken!, board.internalId, String(employee.publicId)), { message: () => `${employee.name} removed from the company.` })}>
+                                          Remove
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className={`guild-inline-note${isDirector ? "" : " guild-inline-note--warning"}`}>
+                            {isDirector ? "Director-only: reassign positions or remove non-director employees." : "Only the director can reassign or remove employees."}
+                          </div>
+                        </ContentPanel>
+                      </div>
+                      <div className="guild-column">
+                        <ContentPanel title="Applications">
+                          <div className="guild-stack">
+                            {applications.length ? applications.map((entry) => (
+                              <section key={String(entry.applicantPublicId)} className="guild-card">
+                                <div className="guild-card__title">{String(entry.applicantName ?? "Applicant")}</div>
+                                <div className="guild-card__body guild-card__body--small">{String(entry.note ?? "No note attached.")}</div>
+                                <div className="guild-quest-actions">
+                                  <button type="button" className="org-button" disabled={!isDirector} onClick={() => runConsortiumAction(() => reviewConsortiumApplication(serverSessionToken!, board.internalId, String(entry.applicantPublicId), "accept"), { message: () => `${String(entry.applicantName ?? "Applicant")} accepted.` })}>
+                                    Accept
+                                  </button>
+                                  <button type="button" className="org-button org-button--ghost" disabled={!isDirector} onClick={() => runConsortiumAction(() => reviewConsortiumApplication(serverSessionToken!, board.internalId, String(entry.applicantPublicId), "reject"), { message: () => `${String(entry.applicantName ?? "Applicant")} rejected.` })}>
+                                    Reject
+                                  </button>
+                                </div>
+                              </section>
+                            )) : (
+                              <div className="guild-inline-note">No pending applications.</div>
+                            )}
+                          </div>
+                        </ContentPanel>
+                        <ContentPanel title="Outreach">
+                          <div className="guild-stack">
+                            <div className="guild-card__body guild-card__body--small">
+                              Spends 2,500 treasury gold to raise advertising level (more applicants, more hiring capacity). Six-hour cooldown.
+                            </div>
+                            <button type="button" className="org-button" disabled={!isDirector || board.treasury.gold < 2500} onClick={() => runConsortiumAction(() => runConsortiumOutreach(serverSessionToken!, board.internalId), { message: () => "Outreach campaign launched." })}>
+                              Launch Outreach Campaign
+                            </button>
+                          </div>
+                        </ContentPanel>
+                      </div>
+                    </div>
                   ) : null}
 
-                  {memberTab === "contracts" ? (
-                    <ContentPanel title="Contracts">
-                      <div className="org-stack-list"><article><strong>Company contracts</strong><p>Active company work is fed by city identity, logistics routes, marketplace demand, and board opportunities.</p></article>{assistanceOpportunities.map((entry) => <article key={String(entry.key)}><strong>{String(entry.label)}</strong><p>{String(entry.summary)} Consortium gain: {String(entry.consortiumReward ?? "company progress")}.</p></article>)}</div>
-                    </ContentPanel>
+                  {viewMode === "control" && memberTab === "logistics" ? (
+                    <ConsortiumLogisticsBoard
+                      board={board}
+                      serverSessionToken={serverSessionToken}
+                      onConsortiumReload={reloadConsortiumBoard}
+                      onMessage={setMessage}
+                    />
                   ) : null}
 
-                  {memberTab === "assets" ? (
-                    <ContentPanel title="Assets"><div className="org-detail-list"><StatusRow label="Base" value="Managed through Base Ledger" /><StatusRow label="Treasury" value={`${board.treasury.gold.toLocaleString("en-GB")} gold`} /><StatusRow label="Facilities" value="Assets modify logistics where eligible" /></div></ContentPanel>
+                  {viewMode === "control" && memberTab === "treasury" ? (
+                    <div className="guild-layout">
+                      <div className="guild-column guild-column--wide">
+                        <ContentPanel title="Finance">
+                          <div className="org-detail-list">
+                            <StatusRow label="Treasury" value={`${board.treasury.gold.toLocaleString("en-GB")} gold`} />
+                            <StatusRow label="Daily pulse" value={String(overviewDaily.label ?? `${getDailyGeneration(board)} points`)} />
+                            <StatusRow label="Hazard effect" value={String(overviewHazard.effects ?? "No hazard model reported")} />
+                          </div>
+                        </ContentPanel>
+                      </div>
+                      <div className="guild-column">
+                        <ContentPanel title="Deposit Treasury">
+                          <div className="guild-stack">
+                            <div className="guild-card__section-title"><TreasuryIcon size={16} /> Add gold to the company vault</div>
+                            <div className="org-form">
+                              <input className="org-input" value={treasuryDepositAmount} onChange={(event) => setTreasuryDepositAmount(event.target.value)} placeholder="Gold amount" />
+                              <button type="button" className="org-button" disabled={!isDirector || Number(treasuryDepositAmount || 0) <= 0} onClick={() => runConsortiumAction(() => depositConsortiumTreasury(serverSessionToken!, board.internalId, Number(treasuryDepositAmount || 0)), { message: (payload) => `Deposited ${treasuryDepositAmount} gold${typeof payload.interestGold === "number" && payload.interestGold > 0 ? ` (+${payload.interestGold} interest)` : ""}.` })}>
+                                Deposit
+                              </button>
+                            </div>
+                            <div className={`guild-inline-note${isDirector ? "" : " guild-inline-note--warning"}`}>
+                              {isDirector ? "Deposits from your personal gold; some consortium types credit interest." : "Only the director can deposit into the company treasury."}
+                            </div>
+                          </div>
+                        </ContentPanel>
+                      </div>
+                    </div>
                   ) : null}
 
-                  {memberTab === "finance" ? (
-                    <ContentPanel title="Finance"><div className="org-detail-list"><StatusRow label="Treasury" value={`${board.treasury.gold.toLocaleString("en-GB")} gold`} /><StatusRow label="Daily pulse" value={String(overviewDaily.label ?? `${getDailyGeneration(board)} points`)} /><StatusRow label="Hazard effect" value={String(overviewHazard.effects ?? "No hazard model reported")} /></div></ContentPanel>
-                  ) : null}
-
-                  {memberTab === "advancement" ? (
+                  {viewMode === "control" && memberTab === "advancement" ? (
                     <ContentPanel title="Advancement">
                       <div className="org-detail-list">
                         <StatusRow label="Current Rank" value={String(overviewRank.label ?? `Rank ${board.starRating ?? 1}`)} />
@@ -833,31 +1048,60 @@ export default function ConsortiumsPage() {
                             <StatusRow key={key} label={key} value={typeof value === "number" ? `+${value}` : String(value)} />
                           )) : <StatusRow label="Perk effects" value="None active yet" />}
                         </div>
-                        <div className="guild-inline-note">
-                          These are the exact numbers applied server-side (market prices, logistics danger, crafting cost, treasury interest, city standing) -- not just numbers shown on this page.
-                        </div>
                       </section>
                     </ContentPanel>
                   ) : null}
 
-                  {memberTab === "logistics" ? (
-                    <ConsortiumLogisticsBoard
-                      board={board}
-                      serverSessionToken={serverSessionToken}
-                      onConsortiumReload={reloadConsortiumBoard}
-                      onMessage={setMessage}
-                    />
+                  {viewMode === "control" && memberTab === "base" ? (
+                    <div className="guild-stack">
+                      <ContentPanel title="Assets">
+                        <div className="org-detail-list">
+                          <StatusRow label="Base" value="Managed below via the Base Ledger" />
+                          <StatusRow label="Treasury" value={`${board.treasury.gold.toLocaleString("en-GB")} gold`} />
+                          <StatusRow label="Facilities" value="Assets modify logistics where eligible" />
+                        </div>
+                      </ContentPanel>
+                      <ContentPanel title="Consortium Base">
+                        <OrganizationBaseTab
+                          serverSessionToken={serverSessionToken}
+                          organizationInternalId={board.internalId}
+                          organizationType="consortium"
+                          onMessage={setMessage}
+                          onRefreshOrganization={() => void reloadConsortiumBoard()}
+                        />
+                      </ContentPanel>
+                    </div>
                   ) : null}
 
-                  {memberTab === "base" ? (
-                    <ContentPanel title="Consortium Base">
-                      <OrganizationBaseTab
-                        serverSessionToken={serverSessionToken}
-                        organizationInternalId={board.internalId}
-                        organizationType="consortium"
-                        onMessage={setMessage}
-                        onRefreshOrganization={() => void reloadConsortiumBoard()}
-                      />
+                  {viewMode === "control" && memberTab === "settings" ? (
+                    <ContentPanel title="Company Settings">
+                      <div className="guild-layout">
+                        <div className="guild-column guild-column--wide">
+                          <div className="guild-card">
+                            <div className="guild-card__section-title">Business Identity</div>
+                            <div className="org-form">
+                              <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Business name<input className="org-input" value={board.name} disabled placeholder="Set at founding" /></label>
+                              <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Public description<textarea className="org-input guild-textarea" value={settingsDraft.description} onChange={(event) => setSettingsDraft((current) => ({ ...current, description: event.target.value }))} placeholder="What the company does, shown to visitors" /></label>
+                              <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Announcement (member-visible)<textarea className="org-input guild-textarea" value={settingsDraft.announcement} onChange={(event) => setSettingsDraft((current) => ({ ...current, announcement: event.target.value }))} placeholder="Message shown to employees on the Ledger tab" /></label>
+                            </div>
+                            <div className="guild-inline-note">Business name is fixed at founding, like a guild's tag.</div>
+                          </div>
+                        </div>
+                        <div className="guild-column">
+                          <div className="guild-card">
+                            <div className="guild-card__section-title">Hiring Policy</div>
+                            <div className="org-form">
+                              <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Application policy<input className="org-input" value={settingsDraft.hiringPolicy} onChange={(event) => setSettingsDraft((current) => ({ ...current, hiringPolicy: event.target.value }))} placeholder="e.g. Open applications, director review" /></label>
+                              <button type="button" className="org-button" disabled={!isDirector} onClick={() => runConsortiumAction(() => updateConsortiumSettings(serverSessionToken!, board.internalId, settingsDraft), { message: () => "Company settings updated." })}>
+                                Save Settings
+                              </button>
+                            </div>
+                            <div className={`guild-inline-note${isDirector ? "" : " guild-inline-note--warning"}`}>
+                              {isDirector ? "Director-only." : "Only the director can rewrite company settings."}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </ContentPanel>
                   ) : null}
                 </div>
@@ -929,7 +1173,7 @@ export default function ConsortiumsPage() {
                   <div className="guild-card__eyebrow">Board unavailable</div>
                   <div className="guild-card__title">Consortium record could not be rendered</div>
                   <div className="guild-card__body guild-card__body--small">
-                    {message ?? `No live consortium board matched ${routeOrganizationPublicId}. The route exists now; the record still has to cooperate.`}
+                    {message ?? `No live consortium board matched ${routeOrganizationPublicId}.`}
                   </div>
                 </section>
               </div>

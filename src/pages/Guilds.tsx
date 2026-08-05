@@ -8,6 +8,7 @@ import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
 import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
 import { formatEntityPublicId } from "../lib/publicIds";
+import { GuildBannerIcon, ArmoryIcon, QuestIcon, DungeonIcon, SkillNodeIcon } from "../assets/icons/orgIcons";
 import {
   assignGuildQuestMember,
   cancelGuildQuest,
@@ -16,6 +17,7 @@ import {
   getMyOrganization,
   getOrganizationByPublicId,
   initiateGuildQuest,
+  launchGuildDungeon,
   planGuildQuest,
   replanGuildQuest,
   recruitGuildMember,
@@ -29,13 +31,30 @@ import { formatDate, readGuildBoard, type GuildBoard } from "../lib/organization
 import "../styles/guild.css";
 
 const GUILD_PAGE_COPY = {
-  flavor: "Guilds are now the main social and operational bloc: public charter outside, command structure inside, and enough ledgers to keep an ambitious quartermaster awake at night.",
-  alt: "The interior is split into members, wars, adventuring, passives, armory, and settings so the guild stops feeling like a tab with delusions of grandeur.",
-  ciel: "CIEL notes that stable guilds are built from doctrine, supply, and timing. Which is a much cleaner sentence than saying half of strategy is just organized paranoia.",
+  flavor: "A public charter outside, a command structure inside: roster, wars, adventuring, doctrine, and an armory.",
+  ciel: "CIEL's take: stable guilds run on doctrine, supply, and timing -- organized paranoia, mostly.",
 };
 
 type GuildView = GuildBoard;
-type GuildTab = "public" | "members" | "wars" | "adventuring" | "specializations" | "armory" | "base" | "settings";
+type GuildMemberTab = "hall" | "roster" | "operations";
+type GuildCommandTab = "doctrine" | "quests" | "armory" | "war" | "base" | "settings";
+type GuildTab = GuildMemberTab | GuildCommandTab;
+type GuildViewMode = "member" | "command";
+
+const MEMBER_TABS: Array<{ key: GuildMemberTab; label: string }> = [
+  { key: "hall", label: "Hall" },
+  { key: "roster", label: "Roster" },
+  { key: "operations", label: "Operations" },
+];
+
+const COMMAND_TABS: Array<{ key: GuildCommandTab; label: string }> = [
+  { key: "doctrine", label: "Doctrine" },
+  { key: "quests", label: "Quests & Dungeons" },
+  { key: "armory", label: "Armory" },
+  { key: "war", label: "War Room" },
+  { key: "base", label: "Base" },
+  { key: "settings", label: "Charter Settings" },
+];
 
 function formatMsCountdown(ms: number) {
   const totalMinutes = Math.max(0, Math.floor(ms / 60000));
@@ -100,7 +119,8 @@ export default function GuildsPage() {
   const [armoryQty, setArmoryQty] = useState("1");
   const [withdrawItemId, setWithdrawItemId] = useState("");
   const [withdrawQty, setWithdrawQty] = useState("1");
-  const [activeTab, setActiveTab] = useState<GuildTab>("public");
+  const [viewMode, setViewMode] = useState<GuildViewMode>("member");
+  const [activeTab, setActiveTab] = useState<GuildTab>("hall");
   const [settingsDraft, setSettingsDraft] = useState({
     headline: "",
     recruitmentStatus: "",
@@ -179,6 +199,7 @@ export default function GuildsPage() {
   const canManageMembers = !!board?.viewerPermissions?.includes("recruit_members");
   const canManageDoctrine = !!board?.viewerPermissions?.includes("declare_operations");
   const canManageTreasury = !!board?.viewerPermissions?.includes("manage_treasury");
+  const isLeaderTier = canManageMembers || canManageDoctrine || canManageTreasury;
   const inventoryOptions = useMemo(
     () => Object.entries(player.inventory).filter(([, qty]) => Number(qty) > 0).map(([itemId, qty]) => ({ itemId, quantity: Number(qty) })),
     [player.inventory],
@@ -199,6 +220,7 @@ export default function GuildsPage() {
   const specializations = skillTreeState?.specializations ?? [];
   const activeSpecializations = specializations.filter((entry: any) => entry.isActive);
   const specializationCap = skillTreeState?.cap ?? 3;
+  const dungeonTemplates = board?.dungeonBoard ?? [];
   const [swapTargetByKey, setSwapTargetByKey] = useState<Record<string, string>>({});
 
   async function reloadGuild() {
@@ -233,7 +255,8 @@ export default function GuildsPage() {
     setBoard(payload.organization);
     setGuildName("");
     setGuildTag("");
-    setActiveTab("public");
+    setViewMode("member");
+    setActiveTab("hall");
     refreshPlayerCache(
       activeAccount.email,
       {
@@ -274,21 +297,19 @@ export default function GuildsPage() {
     if (options?.message) setMessage(options.message(payload));
   }
 
-  const tabs: Array<{ key: GuildTab; label: string }> = [
-    { key: "public", label: "Headquarters" },
-    { key: "members", label: "Members" },
-    { key: "wars", label: "War / Rivalries" },
-    { key: "adventuring", label: "Operations" },
-    { key: "specializations", label: "Specializations" },
-    { key: "armory", label: "Armory" },
-    { key: "base", label: "Base" },
-    { key: "settings", label: "Settings / Charter" },
-  ];
+  function switchToMemberView() {
+    setViewMode("member");
+    setActiveTab("hall");
+  }
+
+  function switchToCommandView() {
+    setViewMode("command");
+    setActiveTab("doctrine");
+  }
 
   const isGuildMember = Boolean(board?.viewerPermissions && board.viewerPermissions.length > 0);
   const guildOverview = asRecord((board as (GuildView & { guildOverview?: unknown }) | null)?.guildOverview);
   const guildFocus = asRecord(guildOverview.currentFocus);
-  const guildGains = Array.isArray(guildOverview.currentGains) ? guildOverview.currentGains : [];
   const guildNextSteps = Array.isArray(guildOverview.nextSteps) ? guildOverview.nextSteps : [];
   const assistanceOpportunities = Array.isArray((board as (GuildView & { assistanceOpportunities?: unknown }) | null)?.assistanceOpportunities)
     ? ((board as GuildView & { assistanceOpportunities?: Array<Record<string, unknown>> }).assistanceOpportunities ?? [])
@@ -341,11 +362,13 @@ export default function GuildsPage() {
       });
   }, [board?.logs]);
 
+  const myMembership = board?.memberDetails?.find((entry: any) => entry.userInternalId === player.internalId) ?? null;
+  const myQuestSlot = board?.guildQuestBoard?.currentPlan?.slots.find((slot: any) => slot.assignedMember?.userInternalId === player.internalId) ?? null;
+
   return (
     <AppShell title="Guilds" hint={pageCopy.flavor}>
       <ContentPanel title={board ? "Guild Overview" : "Found a Guild"}>
         <p className="page-intro__lead">{pageCopy.flavor}</p>
-        <p className="page-intro__body">{pageCopy.alt}</p>
         <p className="page-intro__body">{pageCopy.ciel}</p>
       </ContentPanel>
 
@@ -364,12 +387,8 @@ export default function GuildsPage() {
               <div className="guild-stack">
                 <section className="guild-card guild-card--hero">
                   <div className="guild-card__eyebrow">Membership sync</div>
-                  <div className="guild-card__title">
-                    Loading guild records
-                  </div>
-                  <div className="guild-card__body">
-                    The guild ledger is hydrating from the live shard so we do not shove you into a founding flow while you already belong to a banner. Bureaucracy remains slow, but at least now it is honest.
-                  </div>
+                  <div className="guild-card__title">Loading guild records</div>
+                  <div className="guild-card__body">Hydrating the guild ledger from the live shard.</div>
                 </section>
               </div>
             </ContentPanel>
@@ -384,7 +403,7 @@ export default function GuildsPage() {
                   <div className="guild-card__eyebrow">Charter unavailable</div>
                   <div className="guild-card__title">Guild record could not be rendered</div>
                   <div className="guild-card__body">
-                    {message ?? `No live guild board matched ${routeOrganizationPublicId}. The route exists now; the record still has to do its part.`}
+                    {message ?? `No live guild board matched ${routeOrganizationPublicId}.`}
                   </div>
                 </section>
               </div>
@@ -416,7 +435,7 @@ export default function GuildsPage() {
             <div>
               <p className="org-eyebrow">Guild Public Profile</p>
               <h2 className="org-hero__title">
-                {board.name} <span>[{formatEntityPublicId("guild", board.publicId)}]</span>
+                <GuildBannerIcon size={22} /> {board.name} <span>[{formatEntityPublicId("guild", board.publicId)}]</span>
               </h2>
               <p className="org-hero__copy">
                 {board.publicProfile?.headline ?? board.description}
@@ -482,7 +501,7 @@ export default function GuildsPage() {
                   <div className="guild-card__eyebrow">Guild formation</div>
                   <div className="guild-card__title">Raise a banner that actually means something</div>
                   <div className="guild-card__body">
-                    Guilds now run as public-facing charters with an internal command structure, dungeon board, passives, and armory. Which is considerably more useful than our earlier habit of stopping at “you made one, anyway good luck.”
+                    A public-facing charter with an internal command structure, dungeon board, doctrine, and an armory.
                   </div>
                 </section>
 
@@ -516,13 +535,13 @@ export default function GuildsPage() {
                 <section className="guild-card">
                   <div className="guild-card__section-title">Public dossier</div>
                   <div className="guild-card__body guild-card__body--small">
-                    The guild master controls what outsiders read: doctrine, territory, recruitment status, and the public notice pinned to the charter.
+                    The guild master controls what outsiders read: doctrine, territory, recruitment status, and a public notice.
                   </div>
                 </section>
                 <section className="guild-card">
-                  <div className="guild-card__section-title">Internal sections</div>
+                  <div className="guild-card__section-title">Two views, one guild</div>
                   <div className="guild-card__body guild-card__body--small">
-                    Members, wars, adventuring dungeons, passives, armory, and settings all live under one internal guild shell instead of being scattered like confetti after a regrettable parade.
+                    Every member gets a compact Hall/Roster/Operations view. The guildmaster and officers also get a Command Panel for doctrine, quests, armory, and settings.
                   </div>
                 </section>
               </div>
@@ -535,7 +554,7 @@ export default function GuildsPage() {
             <div className="guild-card guild-card--hero">
               <div className="guild-card__eyebrow">Internal command</div>
               <div className="guild-card__title">
-                {board.name} <span>[{formatEntityPublicId("guild", board.publicId)}]</span>
+                <GuildBannerIcon size={22} /> {board.name} <span>[{formatEntityPublicId("guild", board.publicId)}]</span>
               </div>
               <div className="guild-card__subline">
                 Tag {board.tag} | Founded {formatDate(board.createdAt)} | {board.statusText}
@@ -543,8 +562,19 @@ export default function GuildsPage() {
               <div className="guild-card__body">{board.publicProfile?.headline ?? board.description}</div>
             </div>
 
+            {isLeaderTier ? (
+              <div className="org-mode-toggle">
+                <button type="button" className={`org-mode-toggle__button${viewMode === "member" ? " org-mode-toggle__button--active" : ""}`} onClick={switchToMemberView}>
+                  Member View
+                </button>
+                <button type="button" className={`org-mode-toggle__button${viewMode === "command" ? " org-mode-toggle__button--active" : ""}`} onClick={switchToCommandView}>
+                  Command Panel
+                </button>
+              </div>
+            ) : null}
+
             <div className="guild-tabs">
-              {tabs.map((tab) => (
+              {(viewMode === "member" ? MEMBER_TABS : COMMAND_TABS).map((tab) => (
                 <button
                   key={tab.key}
                   type="button"
@@ -557,11 +587,11 @@ export default function GuildsPage() {
             </div>
           </ContentPanel>
 
-          {activeTab === "public" ? (
+          {viewMode === "member" && activeTab === "hall" ? (
             <div className="org-surface">
               <section className="org-hero org-hero--guild">
                 <div>
-                  <p className="org-eyebrow">Guild Headquarters</p>
+                  <p className="org-eyebrow">Guild Hall</p>
                   <h2 className="org-hero__title">
                     {board.name} <span>[{formatEntityPublicId("guild", board.publicId)}]</span>
                   </h2>
@@ -575,35 +605,15 @@ export default function GuildsPage() {
                 </div>
 
                 <div className="org-hero__actions">
-                  <button type="button" className="org-button" onClick={() => setActiveTab("members")}>
-                    Review Roster
+                  <button type="button" className="org-button" onClick={() => setActiveTab("roster")}>
+                    View Roster
                   </button>
-                  <button type="button" className="org-button" onClick={() => setActiveTab("adventuring")}>
-                    Open Operations
+                  <button type="button" className="org-button" onClick={() => setActiveTab("operations")}>
+                    My Operations
                   </button>
-                  <button type="button" className="org-button" onClick={() => setActiveTab("base")}>
-                    Base Ledger
+                  <button type="button" className="org-button org-button--ghost" disabled title="Leaving a guild isn't wired up yet -- ask an officer to remove you.">
+                    Leave Guild
                   </button>
-                  <button type="button" className="org-button" onClick={() => setActiveTab("specializations")}>
-                    Specializations
-                  </button>
-                  <button type="button" className="org-button org-button--ghost" onClick={() => setActiveTab("settings")}>
-                    Adjust Doctrine
-                  </button>
-                </div>
-              </section>
-
-              <section className="panel org-panel">
-                <div className="org-panel__head"><div><p className="org-eyebrow">Headquarters First View</p><h3>{String(asRecord(guildOverview.identity).name ?? board.name)}</h3></div></div>
-                <div className="org-detail-list">
-                  <StatusRow label="Active Operation" value={String(guildFocus.activeOperation ?? "No operation planned")} />
-                  <StatusRow label="Rivalry State" value={String(guildFocus.rivalry ?? "No rivalry declared")} />
-                  <StatusRow label="Readiness" value={String(guildFocus.readinessState ?? "Needs assignments")} />
-                  <StatusRow label="Consortium Assistance" value={String(guildFocus.consortiumAssistance ?? "Available from operations board")} />
-                </div>
-                <div className="org-stack-list">
-                  <article><strong>Current gains</strong><p>{guildGains.length ? guildGains.slice(0, 4).map(String).join(" | ") : "No guild gains recorded yet."}</p></article>
-                  <article><strong>What to do next</strong><p>{guildNextSteps.length ? guildNextSteps.slice(0, 4).map(String).join(" | ") : "Plan an operation, fill the armory, or answer a city event."}</p></article>
                 </div>
               </section>
 
@@ -619,230 +629,248 @@ export default function GuildsPage() {
                   <p>{board.settingsView?.invitePolicy ?? "Officer approval"}</p>
                 </article>
                 <article className="org-stat-card">
-                  <span>Escort Board</span>
-                  <strong>{escortBoardEntries.length}</strong>
-                  <p>Pending or historical links</p>
+                  <span>Treasury</span>
+                  <strong>{(board.treasury?.gold ?? 0).toLocaleString("en-GB")}</strong>
+                  <p>Gold on hand</p>
                 </article>
                 <article className="org-stat-card">
                   <span>War Readiness</span>
                   <strong>{board.warRoom?.readiness ?? 0}</strong>
-                  <p>{board.warRoom?.warRating ?? 0} war rating</p>
-                </article>
-                <article className="org-stat-card">
-                  <span>Armory</span>
-                  <strong>{board.armory?.items?.reduce((sum: number, entry: { quantity: number }) => sum + entry.quantity, 0) ?? 0}</strong>
-                  <p>Stored assets</p>
-                </article>
-                <article className="org-stat-card">
-                  <span>Specializations</span>
-                  <strong>{activeSpecializations.length} / {specializationCap}</strong>
-                  <p>{activeSpecializations.length ? activeSpecializations.map((entry: any) => entry.displayName).join(", ") : "None active yet"}</p>
+                  <p>{guildFocus.rivalry ? String(guildFocus.rivalry) : "No declared rivalry"}</p>
                 </article>
               </section>
 
               <section className="panel org-panel">
-                <div className="org-panel__head">
-                  <div>
-                    <p className="org-eyebrow">Academy Contract</p>
-                    <h3>Adventuring &amp; Survival linkage</h3>
-                  </div>
-                </div>
+                <div className="org-panel__head"><div><p className="org-eyebrow">Message of the Day</p><h3>From the guildmaster</h3></div></div>
+                <p className="org-hero__copy" style={{ margin: 0 }}>{board.publicProfile?.publicNotice ?? "No announcement posted yet."}</p>
+              </section>
+
+              <section className="panel org-panel">
+                <div className="org-panel__head"><div><p className="org-eyebrow">Your Membership</p><h3>{myMembership?.roleDisplayName ?? "Member"}</h3></div></div>
                 <div className="org-detail-list">
-                  <StatusRow label="Track completion" value={`${guildAcademyCompletionPct}%`} />
-                  <StatusRow label="Track coverage" value={`${guildAcademyCompletedCourses.toFixed(1)} / ${guildAcademyRequiredCourses}`} />
-                  <StatusRow label="Guild readiness" value={`+${guildAcademyReadinessPct}%`} />
-                  <StatusRow label="Operation survival" value={`+${guildAcademySurvivalPct}%`} />
-                  <StatusRow label="Battle edge" value={`+${guildAcademyBattleEdgePct}%`} />
+                  <StatusRow label="Level" value={myMembership?.level ?? player.level ?? "-"} />
+                  <StatusRow label="Status" value={myMembership?.status ?? "Available"} />
+                  <StatusRow label="Active Operation" value={String(guildFocus.activeOperation ?? "No operation planned")} />
                 </div>
                 <div className="guild-inline-note">
-                  Academy progress contributes to guild operations through the active operations ledger.
+                  {guildNextSteps.length ? `Next up for the guild: ${guildNextSteps.slice(0, 2).map(String).join(", ")}.` : "Plan an operation, stock the armory, or answer a city event."}
                 </div>
               </section>
+            </div>
+          ) : null}
 
-              <section className="panel org-panel">
-                <div className="org-panel__head"><div><p className="org-eyebrow">Guild to Consortium Assistance</p><h3>Danger work board</h3></div></div>
-                <div className="org-stack-list">
-                  {assistanceOpportunities.length ? assistanceOpportunities.map((entry) => <article key={String(entry.key)}><strong>{String(entry.label)}</strong><p>{String(entry.summary)} Guild gain: {String(entry.guildReward ?? "reputation and pay")}. Consortium gain: {String(entry.consortiumReward ?? "hazard reduction")}.</p></article>) : <article><strong>No assistance offers</strong><p>Guild assistance offers appear as company routes and city events generate dangerous work.</p></article>}
-                </div>
-              </section>
+          {viewMode === "member" && activeTab === "roster" ? (
+            <ContentPanel title="Guild Roster">
+              <div className="org-table-wrap">
+                <table className="org-compact-table">
+                  <thead>
+                    <tr>
+                      <th>Member</th>
+                      <th>Level</th>
+                      <th>Role</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(board.memberDetails ?? []).map((member: any) => (
+                      <tr key={`roster-${member.userInternalId}`}>
+                        <td>{member.displayName}</td>
+                        <td>{member.level}</td>
+                        <td>{member.roleDisplayName}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ContentPanel>
+          ) : null}
 
-              <OrganizationOneShotsPanel organizationId={board.internalId} organizationName={board.name} organizationType="guild" />
+          {viewMode === "member" && activeTab === "operations" ? (
+            <div className="guild-stack">
+              <ContentPanel title="Your Active Operation">
+                {board.guildQuestBoard?.currentPlan ? (
+                  <div className="guild-stack">
+                    <section className="guild-card">
+                      <div className="guild-card__title">{board.guildQuestBoard.currentPlan.displayName}</div>
+                      <div className="guild-card__subline">Ready in {formatCountdown(board.guildQuestBoard.currentPlan.readyAt)}</div>
+                      <div className="guild-card__body guild-card__body--small">{board.guildQuestBoard.currentPlan.summary}</div>
+                      <div className="guild-inline-note">
+                        {myQuestSlot ? `Your slot: ${myQuestSlot.label} (${myQuestSlot.focus}).` : "You are not assigned to a slot on this operation yet -- ask an officer."}
+                      </div>
+                    </section>
+                  </div>
+                ) : (
+                  <div className="guild-inline-note">No operation is currently planned. Guild leadership plans quests and dungeons from the Command Panel.</div>
+                )}
+              </ContentPanel>
 
-              <section className="org-grid-two">
-                <section className="panel org-panel">
-                  <div className="org-panel__head">
-                    <div>
-                      <p className="org-eyebrow">Public Dossier</p>
-                      <h3>What outsiders see</h3>
-                    </div>
-                    <button type="button" className="org-button org-button--ghost" onClick={() => setActiveTab("settings")}>
-                      Edit
+              <ContentPanel title="Guild Armory">
+                <div className="guild-stack">
+                  <div className="guild-inline-note">
+                    {armoryItems.length ? `${armoryItems.reduce((sum: number, entry: any) => sum + entry.quantity, 0)} items stored across ${armoryItems.length} stacks.` : "Armory is empty."}
+                  </div>
+                  <div className="org-form">
+                    <select className="org-input" value={armoryItemId} onChange={(event) => setArmoryItemId(event.target.value)}>
+                      <option value="">Select inventory item</option>
+                      {inventoryOptions.map((entry) => (
+                        <option key={entry.itemId} value={entry.itemId}>{entry.itemId} x{entry.quantity}</option>
+                      ))}
+                    </select>
+                    <input className="org-input" value={armoryQty} onChange={(event) => setArmoryQty(event.target.value)} placeholder="Quantity" />
+                    <button type="button" className="org-button" disabled={!armoryItemId} onClick={() => runGuildAction(() => depositGuildArmory(serverSessionToken!, board.internalId, armoryItemId, Number(armoryQty || 1)), { refreshPlayerState: true, message: () => "Item deposited into the guild armory." })}>
+                      Deposit
                     </button>
                   </div>
-                  <div className="org-detail-list">
-                    <StatusRow label="Headline" value={board.publicProfile?.headline ?? "No headline set"} />
-                    <StatusRow label="Recruitment" value={board.publicProfile?.recruitmentStatus ?? "Unlisted"} />
-                    <StatusRow label="Doctrine" value={board.publicProfile?.doctrine ?? "Unrecorded"} />
-                    <StatusRow label="Territory" value={board.publicProfile?.territory ?? "Unknown"} />
-                    <StatusRow label="Diplomacy" value={board.publicProfile?.diplomacy ?? "Unrecorded"} />
-                  </div>
-                </section>
-
-                <section className="panel org-panel">
-                  <div className="org-panel__head">
-                    <div>
-                      <p className="org-eyebrow">Escort Board</p>
-                      <h3>Pending consortium offers</h3>
-                    </div>
-                    <span className="org-chip">{escortBoardEntries.length} tracked</span>
-                  </div>
-                  {escortBoardEntries.length ? (
-                    <div className="org-contract-list">
-                      {escortBoardEntries.map((entry) => (
-                        <article key={entry.key} className="org-contract-card">
-                          <div>
-                            <p className="org-contract-card__title">{entry.source}</p>
-                            <p className="org-contract-card__meta">{entry.lane} | Risk {entry.risk} | {formatDate(entry.createdAt)}</p>
-                          </div>
-                          <div className="org-contract-card__side">
-                            <strong>{entry.fee}</strong>
-                            <span>Escort fee</span>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="guild-inline-note">No escort offers are pending right now. Contracts appear here once consortium links are raised.</div>
-                  )}
-                </section>
-              </section>
-
-              <section className="panel org-panel">
-                <div className="org-panel__head">
-                  <div>
-                    <p className="org-eyebrow">Guild Roster</p>
-                    <h3>Member operations ledger</h3>
-                  </div>
-                  <button type="button" className="org-button org-button--ghost" onClick={() => setActiveTab("members")}>
-                    Invite by Public ID
-                  </button>
                 </div>
-                <div className="org-table-wrap">
-                  <table className="org-compact-table">
-                    <thead>
-                      <tr>
-                        <th>Member</th>
-                        <th>Role</th>
-                        <th>Location</th>
-                        <th>Level</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(board.memberDetails ?? []).map((member: any) => (
-                        <tr key={`hq-${member.userInternalId}`}>
-                          <td>{member.displayName}</td>
-                          <td>{member.roleDisplayName}</td>
-                          <td>{member.location}</td>
-                          <td>{member.level}</td>
-                          <td>{member.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+              </ContentPanel>
+
+              <OrganizationOneShotsPanel organizationId={board.internalId} organizationName={board.name} organizationType="guild" />
             </div>
           ) : null}
 
-          {activeTab === "members" ? (
+          {viewMode === "command" && activeTab === "doctrine" ? (
             <div className="guild-layout">
               <div className="guild-column guild-column--wide">
-                <ContentPanel title="Member Ledger">
-                  <div className="guild-roster guild-roster--detailed">
-                    {(board.memberDetails ?? []).map((member: any) => (
-                      <div key={member.userInternalId} className="guild-roster__card">
-                        <div>
-                          <div className="guild-roster__name">{member.displayName}</div>
-                          <div className="guild-roster__meta">{member.roleDisplayName} | Level {member.level} | {member.title ?? "Untitled"}</div>
-                        </div>
-                        <div className="guild-roster__stats">
-                          <span>{member.location}</span>
-                          <span>{member.status}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ContentPanel>
-              </div>
-              <div className="guild-column">
-                <ContentPanel title="Recruitment">
+                <ContentPanel title="Charter Doctrine">
                   <div className="guild-stack">
                     <section className="guild-card">
-                      <div className="guild-card__section-title">Invite by Public ID</div>
-                      <div className="org-form">
-                        <input className="org-input" value={recruitPublicId} onChange={(event) => setRecruitPublicId(event.target.value)} placeholder="P1000000" />
-                        <button type="button" className="org-button" disabled={!canManageMembers || recruitPublicId.trim().length < 7} onClick={() => runGuildAction(() => recruitGuildMember(serverSessionToken!, board.internalId, recruitPublicId.trim()), { message: () => "Guild member recruited. The roster just became less lonely." })}>
-                          Recruit Member
-                        </button>
-                      </div>
-                      <div className={`guild-inline-note${canManageMembers ? "" : " guild-inline-note--warning"}`}>
-                        {canManageMembers ? "Use this for direct guild invitations while proper public applications are still warming up." : "Only guild leadership can recruit members."}
-                      </div>
+                      <div className="guild-card__section-title">Accumulation</div>
+                      <StatusRow label="Reputation" value={board.guildPassives?.reputation ?? 0} />
+                      <StatusRow label="Daily Renown" value={board.guildPassives?.dailyRenown ?? 0} />
+                      <StatusRow label="Skill Points Available" value={board.guildPassives?.availablePoints ?? 0} />
+                      <StatusRow label="Active Specializations" value={`${activeSpecializations.length} / ${specializationCap}`} />
+                      <StatusRow label="Respec Cost" value={`${(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")} gold (guild treasury)`} />
                     </section>
-                  </div>
-                </ContentPanel>
-              </div>
-            </div>
-          ) : null}
 
-          {activeTab === "wars" ? (
-            <div className="guild-layout">
-              <div className="guild-column guild-column--wide">
-                <ContentPanel title="War Room">
-                  <div className="guild-stack">
                     <section className="guild-card">
-                      <div className="guild-card__section-title">Operational Readiness</div>
-                      <StatusRow label="Doctrine" value={board.warRoom?.doctrine ?? "No doctrine set"} />
-                      <StatusRow label="Readiness" value={board.warRoom?.readiness ?? 0} />
-                      <StatusRow label="War Rating" value={board.warRoom?.warRating ?? 0} />
-                    </section>
-                    <section className="guild-card">
-                      <div className="guild-card__section-title">Campaign History</div>
-                      <div className="guild-history">
-                        {recentWarHistory.length ? (recentWarHistory as any[]).map((entry) => (
-                          <div key={`${entry.createdAt}-${entry.summary}`} className="guild-history__row">
-                            <span>{entry.summary}</span>
-                            <span>{formatDate(entry.createdAt)}</span>
+                      <div className="guild-card__section-title"><SkillNodeIcon size={16} /> Core Doctrine (every guild gets this, free)</div>
+                      <div className="guild-skill-board">
+                        {coreSkills.map((skill: any) => (
+                          <div key={skill.key} className="guild-skill-node guild-skill-node--unlocked">
+                            <div className="guild-skill-node__branch">Core</div>
+                            <div className="guild-skill-node__topline">
+                              <strong>{skill.displayName}</strong>
+                              <span>Free</span>
+                            </div>
+                            <div className="guild-card__body guild-card__body--small">{skill.memberBenefit}</div>
+                            <div className="guild-skill-node__footer">
+                              <span className="guild-skill-node__status guild-skill-node__status--unlocked">Always Active</span>
+                            </div>
                           </div>
-                        )) : <div className="guild-card__body guild-card__body--small">No declared wars yet. Which is probably wise, given how many people still confuse planning with vibes.</div>}
+                        ))}
+                      </div>
+                    </section>
+
+                    <section className="guild-card">
+                      <div className="guild-card__section-title">Specializations ({activeSpecializations.length}/{specializationCap} active)</div>
+                      <div className="guild-inline-note">
+                        Only {specializationCap} of these {specializations.length} named specializations can be active at once. Swapping in a new one at the cap costs {(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")} gold from the treasury.
+                      </div>
+                      <div className="guild-skill-board">
+                        {specializations.map((skill: any) => {
+                          const swapTarget = swapTargetByKey[skill.key] ?? activeSpecializations[0]?.key ?? "";
+                          return (
+                            <div key={skill.key} className={`guild-skill-node${skill.isActive ? " guild-skill-node--unlocked" : ""}`}>
+                              <div className="guild-skill-node__branch">{skill.branchLabel}</div>
+                              <div className="guild-skill-node__topline">
+                                <strong>{skill.displayName}</strong>
+                                <span>{skill.pointCost} pt{skill.effectType === "active" ? " | Active" : ""}</span>
+                              </div>
+                              <div className="guild-card__body guild-card__body--small">{skill.memberBenefit}</div>
+                              <div className="guild-skill-node__footer">
+                                <span className={`guild-skill-node__status${skill.isActive ? " guild-skill-node__status--unlocked" : ""}`}>
+                                  {skill.isActive ? "Active" : skill.everUnlocked ? "Learned (benched)" : "Locked"}
+                                </span>
+                                {skill.isActive ? (
+                                  <span className="org-chip">In use</span>
+                                ) : skill.canActivate ? (
+                                  <button type="button" className="org-button" disabled={!canManageDoctrine} onClick={() => runGuildAction(() => unlockGuildSkill(serverSessionToken!, board.internalId, skill.key), { message: () => `${skill.displayName} is now active for the guild.` })}>
+                                    Activate
+                                  </button>
+                                ) : (
+                                  <div className="guild-swap-controls">
+                                    <select className="org-input" value={swapTarget} onChange={(event) => setSwapTargetByKey((prev) => ({ ...prev, [skill.key]: event.target.value }))}>
+                                      {activeSpecializations.map((entry: any) => (
+                                        <option key={entry.key} value={entry.key}>Bench {entry.displayName}</option>
+                                      ))}
+                                    </select>
+                                    <button type="button" className="org-button" disabled={!canManageDoctrine || !swapTarget} onClick={() => runGuildAction(() => swapGuildSkill(serverSessionToken!, board.internalId, skill.key, swapTarget), { message: () => `Swapped in ${skill.displayName} for ${(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")} gold.` })}>
+                                      Swap ({(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")}g)
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              {skill.key === "strike_cadence" && skill.isActive ? (
+                                <div className="guild-inline-note">
+                                  {skillTreeState?.rally.ready
+                                    ? "A Strike Cadence is primed for the next guild quest or dungeon delve."
+                                    : skillTreeState?.rally.canTrigger
+                                      ? `Ready to trigger for ${skillTreeState.rally.goldCost.toLocaleString("en-GB")} gold (+${skillTreeState.rally.bonusPct}% success next operation).`
+                                      : `On cooldown: ${formatMsCountdown(skillTreeState?.rally.cooldownRemainingMs ?? 0)} remaining.`}
+                                  <div style={{ marginTop: 8 }}>
+                                    <button type="button" className="org-button" disabled={!canManageDoctrine || !skillTreeState?.rally.canTrigger} onClick={() => runGuildAction(() => triggerGuildRally(serverSessionToken!, board.internalId), { message: () => "Strike Cadence called for the next operation." })}>
+                                      Trigger Strike Cadence
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
                     </section>
                   </div>
                 </ContentPanel>
               </div>
               <div className="guild-column">
-                <ContentPanel title="Current Conflicts">
+                <ContentPanel title="Current Bonuses">
                   <div className="guild-stack">
-                    {activeWars.length ? (activeWars as any[]).map((entry) => (
-                      <section key={`${entry.target}-${entry.startedAt}`} className="guild-card">
-                        <StatusRow label="Target" value={entry.target} />
-                        <StatusRow label="Status" value={entry.status} />
-                        <StatusRow label="Started" value={formatDate(entry.startedAt)} />
-                      </section>
-                    )) : (
-                      <section className="guild-card">
-                        <div className="guild-card__section-title">No active wars</div>
-                        <div className="guild-card__body guild-card__body--small">The war room is live, the ledgers are ready, and the guild is not yet stupid enough to be in three conflicts at once.</div>
-                      </section>
-                    )}
+                    <section className="guild-card">
+                      <div className="guild-card__section-title">Passive Summary</div>
+                      <div className="guild-card__body guild-card__body--small">
+                        {board.passiveBonusSummary || "No specializations active yet."}
+                      </div>
+                    </section>
+                    <section className="panel org-panel">
+                      <div className="org-panel__head"><div><p className="org-eyebrow">Academy Contract</p><h3>Adventuring &amp; Survival linkage</h3></div></div>
+                      <div className="org-detail-list">
+                        <StatusRow label="Track completion" value={`${guildAcademyCompletionPct}% (${guildAcademyCompletedCourses.toFixed(1)}/${guildAcademyRequiredCourses})`} />
+                        <StatusRow label="Readiness / Survival / Battle" value={`+${guildAcademyReadinessPct}% / +${guildAcademySurvivalPct}% / +${guildAcademyBattleEdgePct}%`} />
+                      </div>
+                    </section>
+                    <section className="panel org-panel">
+                      <div className="org-panel__head"><div><p className="org-eyebrow">Guild to Consortium Assistance</p><h3>Danger work board</h3></div></div>
+                      <div className="org-stack-list">
+                        {assistanceOpportunities.length ? assistanceOpportunities.slice(0, 3).map((entry) => <article key={String(entry.key)}><strong>{String(entry.label)}</strong><p>{String(entry.summary)}</p></article>) : <article><strong>No assistance offers</strong><p>These appear as consortium routes and city events generate dangerous work.</p></article>}
+                      </div>
+                    </section>
+                    <section className="panel org-panel">
+                      <div className="org-panel__head"><div><p className="org-eyebrow">Escort Board</p><h3>Pending consortium offers</h3></div></div>
+                      {escortBoardEntries.length ? (
+                        <div className="org-contract-list">
+                          {escortBoardEntries.map((entry) => (
+                            <article key={entry.key} className="org-contract-card">
+                              <div>
+                                <p className="org-contract-card__title">{entry.source}</p>
+                                <p className="org-contract-card__meta">{entry.lane} | Risk {entry.risk} | {formatDate(entry.createdAt)}</p>
+                              </div>
+                              <div className="org-contract-card__side">
+                                <strong>{entry.fee}</strong>
+                                <span>Escort fee</span>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="guild-inline-note">No escort offers pending.</div>
+                      )}
+                    </section>
                   </div>
                 </ContentPanel>
               </div>
             </div>
           ) : null}
 
-          {activeTab === "adventuring" ? (
+          {viewMode === "command" && activeTab === "quests" ? (
             <div className="guild-layout">
               <div className="guild-column guild-column--wide">
                 <ContentPanel title="Guild Quests">
@@ -871,14 +899,14 @@ export default function GuildsPage() {
                       <section className="guild-card">
                         <div className="guild-card__section-title">Quest planning board</div>
                         <div className="guild-card__body guild-card__body--small">
-                          This now follows the organized-operation spine: plan a quest, staff every slot, wait out the preparation timer, then initiate when all members are okay. Bureaucracy, but with better loot.
+                          Plan a quest, staff every slot, wait out the preparation timer, then initiate when everyone's okay.
                         </div>
                         {(board.guildQuestBoard?.history ?? []).length ? (
                           <button type="button" className="org-button" disabled={!canManageDoctrine} onClick={() => runGuildAction(() => replanGuildQuest(serverSessionToken!, board.internalId), { message: () => "Previous crew submitted for planning again." })}>
                             Plan Last Crew Again
                           </button>
                         ) : (
-                          <div className="guild-inline-note">No previous quest crew exists yet. Plan a first quest before this shortcut appears.</div>
+                          <div className="guild-inline-note">No previous quest crew exists yet.</div>
                         )}
                       </section>
                     )}
@@ -921,7 +949,7 @@ export default function GuildsPage() {
                     ) : null}
 
                     <section className="guild-card">
-                      <div className="guild-card__section-title">Available guild quests</div>
+                      <div className="guild-card__section-title"><QuestIcon size={16} /> Available guild quests</div>
                       <div className="guild-grid">
                         {(board.guildQuestBoard?.templates ?? []).map((quest: any) => (
                           <section key={quest.key} className="guild-card guild-card--nested">
@@ -947,6 +975,37 @@ export default function GuildsPage() {
                         ))}
                       </div>
                     </section>
+
+                    <section className="guild-card">
+                      <div className="guild-card__section-title"><DungeonIcon size={16} /> Dungeon Board</div>
+                      <div className="guild-card__body guild-card__body--small">
+                        Dungeons resolve immediately against the guild's roster power instead of a planning timer -- pick a delve within the guild's reach.
+                      </div>
+                      <div className="guild-grid">
+                        {dungeonTemplates.map((dungeon: any) => (
+                          <section key={dungeon.key} className="guild-card guild-card--nested">
+                            <div className="guild-card__title">{dungeon.displayName}</div>
+                            <div className="guild-card__body guild-card__body--small">{dungeon.summary}</div>
+                            <StatusRow label="Min Members" value={dungeon.minMembers} />
+                            <StatusRow label="Recommended Power" value={dungeon.recommendedPower} />
+                            <StatusRow label="Rewards" value={`${dungeon.reputationReward} rep, ${dungeon.goldReward.toLocaleString("en-GB")} gold`} />
+                            <StatusRow label="Cooldown" value={formatHoursLabel(dungeon.cooldownHours)} />
+                            <button
+                              type="button"
+                              className="org-button"
+                              disabled={!canManageDoctrine || !dungeon.canLaunch}
+                              title={!canManageDoctrine ? "Only guild leadership can launch dungeons." : dungeon.blockedReason ?? "Launch this dungeon."}
+                              onClick={() => runGuildAction(() => launchGuildDungeon(serverSessionToken!, board.internalId, dungeon.key), { message: () => `${dungeon.displayName} launched.` })}
+                            >
+                              Launch Dungeon
+                            </button>
+                            <div className={`guild-inline-note${!canManageDoctrine || dungeon.blockedReason ? " guild-inline-note--warning" : ""}`}>
+                              {!canManageDoctrine ? "Only guild leadership can launch dungeons." : dungeon.blockedReason ?? "Ready to launch."}
+                            </div>
+                          </section>
+                        ))}
+                      </div>
+                    </section>
                   </div>
                 </ContentPanel>
               </div>
@@ -966,7 +1025,7 @@ export default function GuildsPage() {
                       <section className="guild-card">
                         <div className="guild-card__section-title">No operations logged</div>
                         <div className="guild-card__body guild-card__body--small">
-                          Plan a guild quest, let the timer mature, then initiate it. The guild log will keep the outcome so you can re-run crews instead of assembling them from memory like an exhausted quartermaster.
+                          Plan a guild quest or launch a dungeon to start the log.
                         </div>
                       </section>
                     )}
@@ -976,7 +1035,7 @@ export default function GuildsPage() {
             </div>
           ) : null}
 
-          {activeTab === "base" ? (
+          {viewMode === "command" && activeTab === "base" ? (
             <ContentPanel title="Guild Base">
               <OrganizationBaseTab
                 serverSessionToken={serverSessionToken}
@@ -988,138 +1047,20 @@ export default function GuildsPage() {
             </ContentPanel>
           ) : null}
 
-          {activeTab === "specializations" ? (
-            <div className="guild-layout">
-              <div className="guild-column guild-column--wide">
-                <ContentPanel title="Charter Doctrine">
-                  <div className="guild-stack">
-                    <section className="guild-card">
-                      <div className="guild-card__section-title">Accumulation</div>
-                      <StatusRow label="Reputation" value={board.guildPassives?.reputation ?? 0} />
-                      <StatusRow label="Daily Renown" value={board.guildPassives?.dailyRenown ?? 0} />
-                      <StatusRow label="Skill Points Available" value={board.guildPassives?.availablePoints ?? 0} />
-                      <StatusRow label="Active Specializations" value={`${activeSpecializations.length} / ${specializationCap}`} />
-                      <StatusRow label="Respec Cost" value={`${(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")} gold (guild treasury)`} />
-                    </section>
-
-                    <section className="guild-card">
-                      <div className="guild-card__section-title">Core Doctrine (every guild gets this, free)</div>
-                      <div className="guild-skill-board">
-                        {coreSkills.map((skill: any) => (
-                          <div key={skill.key} className="guild-skill-node guild-skill-node--unlocked">
-                            <div className="guild-skill-node__branch">Core</div>
-                            <div className="guild-skill-node__topline">
-                              <strong>{skill.displayName}</strong>
-                              <span>Free</span>
-                            </div>
-                            <div className="guild-card__body guild-card__body--small">{skill.memberBenefit}</div>
-                            <div className="guild-skill-node__footer">
-                              <span className="guild-skill-node__status guild-skill-node__status--unlocked">Always Active</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-
-                    <section className="guild-card">
-                      <div className="guild-card__section-title">Specializations ({activeSpecializations.length}/{specializationCap} active)</div>
-                      <div className="guild-inline-note">
-                        Only {specializationCap} of these {specializations.length} named specializations can be active at once. Activating an open slot costs skill points only; once the guild is at the cap, bringing in something different means swapping -- a {(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")} gold treasury cost every time, so it stays a real decision instead of a free daily toggle.
-                      </div>
-                      <div className="guild-skill-board">
-                        {specializations.map((skill: any) => {
-                          const swapTarget = swapTargetByKey[skill.key] ?? activeSpecializations[0]?.key ?? "";
-                          return (
-                            <div key={skill.key} className={`guild-skill-node${skill.isActive ? " guild-skill-node--unlocked" : ""}`}>
-                              <div className="guild-skill-node__branch">{skill.branchLabel}</div>
-                              <div className="guild-skill-node__topline">
-                                <strong>{skill.displayName}</strong>
-                                <span>{skill.pointCost} pt{skill.effectType === "active" ? " | Active" : ""}</span>
-                              </div>
-                              <div className="guild-card__body guild-card__body--small">{skill.memberBenefit}</div>
-                              <div className="guild-skill-node__footer">
-                                <span className={`guild-skill-node__status${skill.isActive ? " guild-skill-node__status--unlocked" : ""}`}>
-                                  {skill.isActive ? "Active" : skill.everUnlocked ? "Learned (benched)" : "Locked"}
-                                </span>
-                                {skill.isActive ? (
-                                  <span className="org-chip">In use</span>
-                                ) : skill.canActivate ? (
-                                  <button type="button" className="org-button" disabled={!canManageDoctrine} onClick={() => runGuildAction(() => unlockGuildSkill(serverSessionToken!, board.internalId, skill.key), { message: () => `${skill.displayName} is now active for the guild.` })}>
-                                    Activate
-                                  </button>
-                                ) : (
-                                  <div className="guild-swap-controls">
-                                    <select className="org-input" value={swapTarget} onChange={(event) => setSwapTargetByKey((prev) => ({ ...prev, [skill.key]: event.target.value }))}>
-                                      {activeSpecializations.map((entry: any) => (
-                                        <option key={entry.key} value={entry.key}>Bench {entry.displayName}</option>
-                                      ))}
-                                    </select>
-                                    <button type="button" className="org-button" disabled={!canManageDoctrine || !swapTarget} onClick={() => runGuildAction(() => swapGuildSkill(serverSessionToken!, board.internalId, skill.key, swapTarget), { message: () => `Swapped in ${skill.displayName} for ${(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")} gold.` })}>
-                                      Swap ({(board.guildPassives?.respecGoldCost ?? 5000).toLocaleString("en-GB")}g)
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                              {skill.key === "strike_cadence" && skill.isActive ? (
-                                <div className="guild-inline-note">
-                                  {skillTreeState?.rally.ready
-                                    ? "A Strike Cadence is primed and will apply to the next guild quest or dungeon delve you initiate."
-                                    : skillTreeState?.rally.canTrigger
-                                      ? `Ready to trigger for ${skillTreeState.rally.goldCost.toLocaleString("en-GB")} gold (+${skillTreeState.rally.bonusPct}% success on the next operation).`
-                                      : `On cooldown: ${formatMsCountdown(skillTreeState?.rally.cooldownRemainingMs ?? 0)} remaining.`}
-                                  <div style={{ marginTop: 8 }}>
-                                    <button type="button" className="org-button" disabled={!canManageDoctrine || !skillTreeState?.rally.canTrigger} onClick={() => runGuildAction(() => triggerGuildRally(serverSessionToken!, board.internalId), { message: () => "Strike Cadence called. The next guild quest or dungeon delve gets the bonus." })}>
-                                      Trigger Strike Cadence
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  </div>
-                </ContentPanel>
-              </div>
-              <div className="guild-column">
-                <ContentPanel title="Current Bonuses">
-                  <div className="guild-stack">
-                    <section className="guild-card">
-                      <div className="guild-card__section-title">Passive Summary</div>
-                      <div className="guild-card__body guild-card__body--small">
-                        {board.passiveBonusSummary || "No specializations active yet."}
-                      </div>
-                    </section>
-                    <section className="guild-card guild-card--hero">
-                      <div className="guild-card__section-title">Doctrine Ledger</div>
-                      <StatusRow label="Available Points" value={board.guildPassives?.availablePoints ?? 0} />
-                      <StatusRow label="Active Specializations" value={`${activeSpecializations.length} / ${specializationCap}`} />
-                      <StatusRow label="Times Respecced" value={board.guildPassives?.respecCount ?? 0} />
-                      <div className="guild-card__body guild-card__body--small">
-                        Every founded guild keeps its 2 Core Doctrine bonuses for free. The {specializations.length} named specializations below are the guild's real strategic choice -- only {specializationCap} can run at once, so who your guild recruits and what it invests in should shape which ones you pick.
-                      </div>
-                    </section>
-                  </div>
-                </ContentPanel>
-              </div>
-            </div>
-          ) : null}
-
-          {activeTab === "armory" ? (
+          {viewMode === "command" && activeTab === "armory" ? (
             <div className="guild-layout">
               <div className="guild-column guild-column--wide">
                 <ContentPanel title="Guild Armory">
                   <div className="guild-stack">
                     <section className="guild-card">
-                      <div className="guild-card__section-title">Stored Equipment</div>
+                      <div className="guild-card__section-title"><ArmoryIcon size={16} /> Stored Equipment</div>
                       <div className="guild-history">
                         {armoryItems.length ? (armoryItems as any[]).map((entry) => (
                           <div key={entry.itemId} className="guild-history__row">
                             <span>{entry.label}</span>
                             <span>x{entry.quantity}</span>
                           </div>
-                        )) : <div className="guild-card__body guild-card__body--small">Armory is empty. A majestic sentence for a deeply unimpressive state of affairs.</div>}
+                        )) : <div className="guild-card__body guild-card__body--small">Armory is empty.</div>}
                       </div>
                     </section>
                   </div>
@@ -1167,34 +1108,92 @@ export default function GuildsPage() {
             </div>
           ) : null}
 
-          {activeTab === "settings" ? (
-            <ContentPanel title="Guild Settings">
+          {viewMode === "command" && activeTab === "war" ? (
+            <div className="guild-layout">
+              <div className="guild-column guild-column--wide">
+                <ContentPanel title="War Room">
+                  <div className="guild-stack">
+                    <section className="guild-card">
+                      <div className="guild-card__section-title">Operational Readiness</div>
+                      <StatusRow label="Doctrine" value={board.warRoom?.doctrine ?? "No doctrine set"} />
+                      <StatusRow label="Readiness" value={board.warRoom?.readiness ?? 0} />
+                      <StatusRow label="War Rating" value={board.warRoom?.warRating ?? 0} />
+                    </section>
+                    <section className="guild-card">
+                      <div className="guild-card__section-title">Campaign History</div>
+                      <div className="guild-history">
+                        {recentWarHistory.length ? (recentWarHistory as any[]).map((entry) => (
+                          <div key={`${entry.createdAt}-${entry.summary}`} className="guild-history__row">
+                            <span>{entry.summary}</span>
+                            <span>{formatDate(entry.createdAt)}</span>
+                          </div>
+                        )) : <div className="guild-card__body guild-card__body--small">No declared wars yet.</div>}
+                      </div>
+                    </section>
+                  </div>
+                </ContentPanel>
+              </div>
+              <div className="guild-column">
+                <ContentPanel title="Current Conflicts">
+                  <div className="guild-stack">
+                    {activeWars.length ? (activeWars as any[]).map((entry) => (
+                      <section key={`${entry.target}-${entry.startedAt}`} className="guild-card">
+                        <StatusRow label="Target" value={entry.target} />
+                        <StatusRow label="Status" value={entry.status} />
+                        <StatusRow label="Started" value={formatDate(entry.startedAt)} />
+                      </section>
+                    )) : (
+                      <section className="guild-card">
+                        <div className="guild-card__section-title">No active wars</div>
+                        <div className="guild-card__body guild-card__body--small">The war room is live and ready; no conflicts declared.</div>
+                      </section>
+                    )}
+                  </div>
+                </ContentPanel>
+              </div>
+            </div>
+          ) : null}
+
+          {viewMode === "command" && activeTab === "settings" ? (
+            <ContentPanel title="Charter Settings">
               <div className="guild-layout">
                 <div className="guild-column guild-column--wide">
                   <div className="guild-card">
-                    <div className="guild-card__section-title">Public Charter Settings</div>
+                    <div className="guild-card__section-title">Public Charter</div>
                     <div className="org-form">
                       <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Headline<input className="org-input" value={settingsDraft.headline} onChange={(event) => setSettingsDraft((current) => ({ ...current, headline: event.target.value }))} placeholder="Recruitment headline" /></label>
                       <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Recruitment status<input className="org-input" value={settingsDraft.recruitmentStatus} onChange={(event) => setSettingsDraft((current) => ({ ...current, recruitmentStatus: event.target.value }))} placeholder="Open, selective, closed" /></label>
                       <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Doctrine<input className="org-input" value={settingsDraft.doctrine} onChange={(event) => setSettingsDraft((current) => ({ ...current, doctrine: event.target.value }))} placeholder="Guild doctrine" /></label>
                       <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Territory<input className="org-input" value={settingsDraft.territory} onChange={(event) => setSettingsDraft((current) => ({ ...current, territory: event.target.value }))} placeholder="Operating territory" /></label>
                       <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Diplomacy<input className="org-input" value={settingsDraft.diplomacy} onChange={(event) => setSettingsDraft((current) => ({ ...current, diplomacy: event.target.value }))} placeholder="Diplomatic posture" /></label>
-                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Public notice<textarea className="org-input guild-textarea" value={settingsDraft.publicNotice} onChange={(event) => setSettingsDraft((current) => ({ ...current, publicNotice: event.target.value }))} placeholder="Public notice" /></label>
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Message of the Day (member-visible)<textarea className="org-input guild-textarea" value={settingsDraft.publicNotice} onChange={(event) => setSettingsDraft((current) => ({ ...current, publicNotice: event.target.value }))} placeholder="Announcement shown to members and visitors" /></label>
                     </div>
                   </div>
                 </div>
                 <div className="guild-column">
                   <div className="guild-card">
+                    <div className="guild-card__section-title">Recruit Member</div>
+                    <div className="org-form">
+                      <input className="org-input" value={recruitPublicId} onChange={(event) => setRecruitPublicId(event.target.value)} placeholder="P1000000" />
+                      <button type="button" className="org-button" disabled={!canManageMembers || recruitPublicId.trim().length < 7} onClick={() => runGuildAction(() => recruitGuildMember(serverSessionToken!, board.internalId, recruitPublicId.trim()), { message: () => "Guild member recruited." })}>
+                        Recruit Member
+                      </button>
+                    </div>
+                    <div className={`guild-inline-note${canManageMembers ? "" : " guild-inline-note--warning"}`}>
+                      {canManageMembers ? "Direct guild invite by public ID." : "Only guild leadership can recruit members."}
+                    </div>
+                  </div>
+                  <div className="guild-card">
                     <div className="guild-card__section-title">Command Settings</div>
                     <div className="org-form">
-                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Invite policy<input className="org-input" value={settingsDraft.invitePolicy} onChange={(event) => setSettingsDraft((current) => ({ ...current, invitePolicy: event.target.value }))} placeholder="Invite policy" /></label>
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>Recruitment policy<input className="org-input" value={settingsDraft.invitePolicy} onChange={(event) => setSettingsDraft((current) => ({ ...current, invitePolicy: event.target.value }))} placeholder="e.g. Officer approval required" /></label>
                       <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#b7c3cf" }}>War doctrine<input className="org-input" value={settingsDraft.warDoctrine} onChange={(event) => setSettingsDraft((current) => ({ ...current, warDoctrine: event.target.value }))} placeholder="War doctrine" /></label>
-                      <button type="button" className="org-button" disabled={!canManageDoctrine} onClick={() => runGuildAction(() => updateGuildSettings(serverSessionToken!, board.internalId, settingsDraft), { message: () => "Guild settings updated. Outsiders will now read the revised doctrine instead of the old one." })}>
+                      <button type="button" className="org-button" disabled={!canManageDoctrine} onClick={() => runGuildAction(() => updateGuildSettings(serverSessionToken!, board.internalId, settingsDraft), { message: () => "Guild settings updated." })}>
                         Save Settings
                       </button>
                     </div>
                     <div className={`guild-inline-note${canManageDoctrine ? "" : " guild-inline-note--warning"}`}>
-                      {canManageDoctrine ? "Guildmaster-only command settings. Because anarchy is rarely a productivity tool." : "Only the guildmaster can rewrite the public dossier and doctrine."}
+                      {canManageDoctrine ? "Guildmaster and officers only." : "Only the guildmaster and officers can rewrite the charter."}
                     </div>
                   </div>
                 </div>
