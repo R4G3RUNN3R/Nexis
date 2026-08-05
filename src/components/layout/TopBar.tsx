@@ -199,7 +199,11 @@ export function TopBar() {
               setQuery(event.target.value);
               setSearchOpen(true);
             }}
-            onFocus={() => setSearchOpen(true)}
+            onFocus={() => {
+              setSearchOpen(true);
+              setPlayerOpen(false);
+              setClockOpen(false);
+            }}
           />
           {searchOpen && query.trim() ? (
             <div className="topbar__dropdown" style={{ top: "calc(100% + 6px)", left: 0, right: 0, position: "absolute", zIndex: 40 }}>
@@ -229,26 +233,32 @@ export function TopBar() {
 
       <div className="topbar__right">
         <nav className="topbar__shortcuts" aria-label="Player shortcuts">
-          <NavLink to="/achievements" className="topbar__shortcut" title="Achievements and Legacy">
-            <span>LG</span>
-            {readinessCount > 0 ? <b className="topbar__shortcut-badge">{readinessCount}</b> : null}
+          <NavLink
+            to="/achievements"
+            className="topbar__shortcut"
+            title="Achievements and Legacy"
+            aria-label={`Achievements and Legacy${readinessCount > 0 ? `, ${readinessCount} pending` : ""}`}
+          >
+            <span aria-hidden="true">LG</span>
+            {readinessCount > 0 ? <b className="topbar__shortcut-badge" aria-hidden="true">{readinessCount}</b> : null}
           </NavLink>
           <NavLink
             to="/one-shots"
             className={`topbar__shortcut${oneShotReady ? " topbar__shortcut--ready" : ""}`}
             title={oneShotActive ? "DMOS one-shot active" : oneShotTokens > 0 ? "DMOS one-shot token ready" : "Nexis One-Shots"}
+            aria-label={oneShotActive ? "Nexis One-Shots, session active" : oneShotTokens > 0 ? "Nexis One-Shots, token ready" : "Nexis One-Shots"}
           >
-            <span>OS</span>
+            <span aria-hidden="true">OS</span>
             {oneShotReady ? <i aria-hidden="true" /> : null}
           </NavLink>
-          <NavLink to={profileRoute} className="topbar__shortcut" title="Chronicle records">
-            <span>RC</span>
+          <NavLink to={profileRoute} className="topbar__shortcut" title="Chronicle records" aria-label="Chronicle records">
+            <span aria-hidden="true">RC</span>
           </NavLink>
-          <NavLink to="/codex" className="topbar__shortcut" title="Codex">
-            <span>CD</span>
+          <NavLink to="/codex" className="topbar__shortcut" title="Codex" aria-label="Codex">
+            <span aria-hidden="true">CD</span>
           </NavLink>
-          <NavLink to="/wiki" className="topbar__shortcut" title="Wiki manual">
-            <span>WK</span>
+          <NavLink to="/wiki" className="topbar__shortcut" title="Wiki manual" aria-label="Wiki manual">
+            <span aria-hidden="true">WK</span>
           </NavLink>
         </nav>
 
@@ -257,7 +267,11 @@ export function TopBar() {
             type="button"
             className="topbar__icon"
             aria-label="Clock"
-            onClick={() => setClockOpen((value) => !value)}
+            onClick={() => {
+              setClockOpen((value) => !value);
+              setPlayerOpen(false);
+              setSearchOpen(false);
+            }}
           >
             <span className="topbar__icon-label">Clock</span>
           </button>
@@ -280,7 +294,11 @@ export function TopBar() {
           <button
             type="button"
             className="player-menu__trigger"
-            onClick={() => setPlayerOpen((value) => !value)}
+            onClick={() => {
+              setPlayerOpen((value) => !value);
+              setClockOpen(false);
+              setSearchOpen(false);
+            }}
           >
             <PlayerAvatar name={player.name} lastName={player.lastName} portrait={portrait} size={30} className="player-menu__avatar" />
             <span className="player-menu__name">P{displayPublicId}{displayTitle ? ` | ${displayTitle}` : ""} | Lv {player.level}</span>
