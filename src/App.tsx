@@ -3,6 +3,7 @@ import AppRouter from "./router";
 import { AuthProvider, useAuth } from "./state/AuthContext";
 import { PlayerProvider, usePlayer } from "./state/PlayerContext";
 import { AdminModeProvider } from "./state/AdminModeContext";
+import { OrgAdvancedModeProvider } from "./state/OrgAdvancedModeContext";
 import { EducationProvider } from "./state/EducationContext";
 import { TimerProvider } from "./state/TimerContext";
 import { JobsProvider } from "./state/JobsContext";
@@ -66,20 +67,22 @@ export default function App() {
     <AuthProvider>
       <PlayerProvider>
         <AdminModeProvider>
-          <TimerProvider>
-            <JobsProvider>
-              <ArenaProvider>
-                <EducationProvider>
-                  <BackendStateBridge />
-                  <BrowserRouter>
-                    <AuthGate>
-                      <AppRouter />
-                    </AuthGate>
-                  </BrowserRouter>
-                </EducationProvider>
-              </ArenaProvider>
-            </JobsProvider>
-          </TimerProvider>
+          <OrgAdvancedModeProvider>
+            <TimerProvider>
+              <JobsProvider>
+                <ArenaProvider>
+                  <EducationProvider>
+                    <BackendStateBridge />
+                    <BrowserRouter>
+                      <AuthGate>
+                        <AppRouter />
+                      </AuthGate>
+                    </BrowserRouter>
+                  </EducationProvider>
+                </ArenaProvider>
+              </JobsProvider>
+            </TimerProvider>
+          </OrgAdvancedModeProvider>
         </AdminModeProvider>
       </PlayerProvider>
     </AuthProvider>

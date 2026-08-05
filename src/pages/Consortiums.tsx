@@ -8,6 +8,7 @@ import { OrganizationOneShotsPanel } from "../components/organizations/Organizat
 import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
 import { useEducation } from "../state/EducationContext";
+import { useOrgAdvancedMode } from "../state/OrgAdvancedModeContext";
 import { allocatePublicNumericId, formatEntityPublicId } from "../lib/publicIds";
 import { claimConsortiumPoints, createOrganization, getMyOrganization, getOrganizationByPublicId, redeemConsortiumReward } from "../lib/organizationApi";
 import { cielPageCopy } from "../data/cielPageCopy";
@@ -68,6 +69,13 @@ type ConsortiumChoice = {
 };
 
 type ConsortiumMemberTab = "overview" | "employees" | "contracts" | "logistics" | "assets" | "finance" | "advancement" | "base";
+
+// Simplification pass: Overview/Employees/Contracts/Finance cover
+// day-to-day consortium operations and stay visible by default. Logistics,
+// Assets, Advancement, and Base are deeper systems gated behind Advanced
+// Mode. No mechanics are removed - toggling Advanced Mode only changes
+// which tabs are shown.
+const ADVANCED_CONSORTIUM_TABS = new Set<ConsortiumMemberTab>(["logistics", "assets", "advancement", "base"]);
 
 function StatusRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -189,6 +197,7 @@ export default function ConsortiumsPage() {
   const [consortiumTag, setConsortiumTag] = useState("");
   const [selectedTypeId, setSelectedTypeId] = useState<string>("mercantile_house");
   const [memberTab, setMemberTab] = useState<ConsortiumMemberTab>("overview");
+  const { advancedMode, toggleAdvancedMode } = useOrgAdvancedMode();
   const [message, setMessage] = useState<string | null>(null);
   const [boardLoadError, setBoardLoadError] = useState<string | null>(null);
   const routeOrganizationPublicId = typeof publicIdParam === "string" ? publicIdParam.trim() : "";
@@ -265,6 +274,10 @@ export default function ConsortiumsPage() {
   useEffect(() => {
     void reloadConsortiumBoard();
   }, [isDetailRoute, isServerMode, player.internalId, routeOrganizationPublicId, serverSessionToken]);
+
+  useEffect(() => {
+    if (!advancedMode && ADVANCED_CONSORTIUM_TABS.has(memberTab)) setMemberTab("overview");
+  }, [advancedMode, memberTab]);
 
   useEffect(() => {
     if (!consortiumTypes.length) return;
@@ -529,12 +542,16 @@ export default function ConsortiumsPage() {
                       <button type="button" className="org-button" onClick={() => void reloadConsortiumBoard()}>
                         Refresh Board
                       </button>
-                      <button type="button" className="org-button" onClick={() => setMemberTab("logistics")}>
-                        Logistics
-                      </button>
-                      <button type="button" className="org-button org-button--ghost" onClick={() => setMemberTab("base")}>
-                        Base Ledger
-                      </button>
+                      {advancedMode ? (
+                        <>
+                          <button type="button" className="org-button" onClick={() => setMemberTab("logistics")}>
+                            Logistics
+                          </button>
+                          <button type="button" className="org-button org-button--ghost" onClick={() => setMemberTab("base")}>
+                            Base Ledger
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   </section>
 
@@ -548,11 +565,21 @@ export default function ConsortiumsPage() {
                       ["finance", "Finance"],
                       ["advancement", "Advancement"],
                       ["base", "Base"],
-                    ].map(([key, label]) => (
-                      <button key={key} type="button" className={`guild-tab${memberTab === key ? " guild-tab--active" : ""}`} onClick={() => setMemberTab(key as ConsortiumMemberTab)}>
-                        {label}
-                      </button>
-                    ))}
+                    ]
+                      .filter(([key]) => advancedMode || !ADVANCED_CONSORTIUM_TABS.has(key as ConsortiumMemberTab))
+                      .map(([key, label]) => (
+                        <button key={key} type="button" className={`guild-tab${memberTab === key ? " guild-tab--active" : ""}`} onClick={() => setMemberTab(key as ConsortiumMemberTab)}>
+                          {label}
+                        </button>
+                      ))}
+                    <button
+                      type="button"
+                      className={`org-advanced-toggle${advancedMode ? " org-advanced-toggle--on" : ""}`}
+                      onClick={toggleAdvancedMode}
+                      title="Logistics, Assets, Advancement, and Base stay available - this only shows or hides them by default."
+                    >
+                      Advanced Mode: {advancedMode ? "On" : "Off"}
+                    </button>
                   </div>
 
                   {memberTab === "overview" ? (
