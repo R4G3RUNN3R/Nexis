@@ -1761,6 +1761,20 @@ export function getSiteStaff(): Promise<{ ok: true; staff: ServerStaffEntry[] } 
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
+export type ServerSearchResult = { id: string; label: string; hint: string; to: string };
+
+// "user" | "faction" | "company" | "market" - the categories backed by a
+// real DB lookup (server/services/searchService.js). "areas" and "wiki" are
+// small, static datasets searched entirely client-side (see TopBar.tsx) -
+// no server round-trip for those two.
+export function searchDirectory(sessionToken: string, category: string, queryText: string, limit = 8): Promise<{ ok: true; results: ServerSearchResult[] } | ApiFailure> {
+  const params = new URLSearchParams({ category, q: queryText, limit: String(limit) });
+  return requestJson<{ results: ServerSearchResult[] }>(`/api/search?${params.toString()}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
 export function getServerRecords(sessionToken: string, category?: string | null, limit?: number): Promise<ApiRecordsResponse> {
   const params = new URLSearchParams();
   if (category) params.set("category", category);

@@ -6,9 +6,40 @@ import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicI
 import { PlayerAvatar } from "../common/PlayerAvatar";
 import { resolveDisplayTitle } from "../../lib/titleAccess";
 import { NAV_ICONS } from "../../assets/icons";
-import { getServerRecords, type ServerRecordEntry } from "../../lib/authApi";
+import { getServerRecords, searchDirectory, type ServerRecordEntry, type ServerSearchResult } from "../../lib/authApi";
+import { getCityHubContent } from "../../data/cityHubData";
+import { allWikiEntries } from "../../data/wikiData";
 
 import { isStaffOrAdmin } from "../../lib/adminAccess";
+
+const WORLD_CITY_IDS = ["nexis", "north", "east", "west", "south"] as const;
+
+type SearchCategory = "user" | "faction" | "company" | "areas" | "market" | "wiki";
+
+const SEARCH_CATEGORIES: Array<{ key: SearchCategory; label: string }> = [
+  { key: "user", label: "User" },
+  { key: "faction", label: "Faction" },
+  { key: "company", label: "Company" },
+  { key: "areas", label: "Areas" },
+  { key: "market", label: "Item Market" },
+  { key: "wiki", label: "Wiki" },
+];
+
+function searchAreas(term: string): ServerSearchResult[] {
+  const lowerTerm = term.toLowerCase();
+  return WORLD_CITY_IDS.map((cityId) => getCityHubContent(cityId))
+    .filter((hub) => hub.displayName.toLowerCase().includes(lowerTerm) || hub.identity.toLowerCase().includes(lowerTerm))
+    .slice(0, 8)
+    .map((hub) => ({ id: `area-${hub.cityId}`, label: hub.displayName, hint: hub.identity, to: "/world-map" }));
+}
+
+function searchWiki(term: string): ServerSearchResult[] {
+  const lowerTerm = term.toLowerCase();
+  return allWikiEntries
+    .filter((entry) => entry.title.toLowerCase().includes(lowerTerm) || entry.summary.toLowerCase().includes(lowerTerm))
+    .slice(0, 8)
+    .map((entry) => ({ id: `wiki-${entry.id}`, label: entry.title, hint: entry.summary, to: `/wiki#${entry.id}` }));
+}
 
 // Primary, always-visible navigation. These are the high-frequency and
 // high-level destinations; everything else lives in the sidebar (see
@@ -35,13 +66,6 @@ const utilityLinks: Array<[string, string]> = [
   ["Credits", "/credits"],
 ];
 
-type SearchResult = {
-  id: string;
-  label: string;
-  hint: string;
-  to: string;
-};
-
 function formatClock(date: Date, timeZone?: string) {
   return new Intl.DateTimeFormat(timeZone ? "en-GB" : undefined, {
     timeZone,
@@ -63,41 +87,6 @@ function formatRelativeTime(timestamp: number, now: number) {
   return `${days}d ago`;
 }
 
-function readJson<T>(key: string): T | null {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-function buildSearchIndex() {
-  const results: SearchResult[] = [
-    { id: "route-guilds", label: "Guilds", hint: "Group management", to: "/guilds" },
-    { id: "route-consortiums", label: "Consortiums", hint: "Player companies", to: "/consortiums" },
-    { id: "route-city-board", label: "City Board", hint: "Public notices", to: "/city-board" },
-    { id: "route-codex", label: "Codex", hint: "Archive and reference", to: "/codex" },
-    { id: "route-wiki", label: "Wiki", hint: "Game manual and systems guide", to: "/wiki" },
-  ];
-
-  const accounts = readJson<Record<string, { firstName: string; lastName: string; publicId: number }>>("nexis_accounts");
-  if (accounts) {
-    Object.entries(accounts).forEach(([email, account]) => {
-      const displayName = `${account.firstName} ${account.lastName}`.trim();
-      results.push({
-        id: `player-${email}`,
-        label: displayName,
-        hint: `Citizen ${account.publicId}`,
-        to: getProfileRoute(account.publicId),
-      });
-    });
-  }
-
-
-  return results;
-}
-
 type TopBarProps = {
   newsTickerEnabled: boolean;
   onToggleNewsTicker: (value: boolean) => void;
@@ -111,6 +100,9 @@ export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
   const [recordLogLoading, setRecordLogLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchCategory, setSearchCategory] = useState<SearchCategory>("user");
+  const [searchResults, setSearchResults] = useState<ServerSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const { player } = usePlayer();
@@ -165,13 +157,37 @@ export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
 
   const localTime = useMemo(() => formatClock(now), [now]);
   const serverTime = useMemo(() => formatClock(now, "Europe/London"), [now]);
-  const searchResults = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return [];
-    return buildSearchIndex()
-      .filter((entry) => `${entry.label} ${entry.hint}`.toLowerCase().includes(trimmed))
-      .slice(0, 6);
-  }, [query, player.publicId, searchOpen]);
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed || !searchOpen) {
+      setSearchResults([]);
+      return;
+    }
+    if (searchCategory === "areas") {
+      setSearchResults(searchAreas(trimmed));
+      return;
+    }
+    if (searchCategory === "wiki") {
+      setSearchResults(searchWiki(trimmed));
+      return;
+    }
+    if (authSource !== "server" || !serverSessionToken) {
+      setSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setSearchLoading(true);
+      const result = await searchDirectory(serverSessionToken, searchCategory, trimmed, 8);
+      if (cancelled) return;
+      setSearchLoading(false);
+      setSearchResults(result.ok ? result.results : []);
+    }, 220);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query, searchOpen, searchCategory, authSource, serverSessionToken]);
 
   const displayName = player.lastName
     ? `${player.name} ${player.lastName}`
@@ -206,7 +222,7 @@ export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
     navigate("/login", { replace: true });
   }
 
-  function openSearchResult(result: SearchResult) {
+  function openSearchResult(result: ServerSearchResult) {
     setQuery("");
     setSearchOpen(false);
     navigate(result.to);
@@ -246,46 +262,68 @@ export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
       </div>
 
       <div className="topbar__center" ref={searchRef}>
-        <form onSubmit={handleSearchSubmit} style={{ position: "relative", width: "100%" }}>
-          <input
-            className="topbar__search"
-            type="search"
-            placeholder="Search citizens and quick links..."
-            aria-label="Search citizens and quick links"
-            value={query}
+        <form onSubmit={handleSearchSubmit} className="topbar__search-group">
+          <select
+            className="topbar__search-category"
+            aria-label="Search category"
+            value={searchCategory}
             onChange={(event) => {
-              setQuery(event.target.value);
+              setSearchCategory(event.target.value as SearchCategory);
               setSearchOpen(true);
             }}
-            onFocus={() => {
-              setSearchOpen(true);
-              setPlayerOpen(false);
-              setClockOpen(false);
-            }}
-          />
-          {searchOpen && query.trim() ? (
-            <div className="topbar__dropdown" style={{ top: "calc(100% + 6px)", left: 0, right: 0, position: "absolute", zIndex: 40 }}>
-              {searchResults.length ? (
-                searchResults.map((result) => (
-                  <button
-                    key={result.id}
-                    type="button"
-                    className="player-menu__item player-menu__item--button"
-                    onClick={() => openSearchResult(result)}
-                    style={{ width: "100%", textAlign: "left" }}
-                  >
-                    <div>{result.label}</div>
-                    <div style={{ fontSize: 11, color: "#9fb0bf" }}>{result.hint}</div>
-                  </button>
-                ))
-              ) : (
-                <div className="topbar__dropdown-row">
-                  <span className="topbar__dropdown-label">Search</span>
-                  <strong>No matches</strong>
-                </div>
-              )}
-            </div>
-          ) : null}
+          >
+            {SEARCH_CATEGORIES.map((category) => (
+              <option key={category.key} value={category.key}>
+                {category.label}
+              </option>
+            ))}
+          </select>
+          <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+            <input
+              className="topbar__search"
+              type="search"
+              placeholder="Search citizens and quick links..."
+              aria-label="Search citizens and quick links"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSearchOpen(true);
+              }}
+              onFocus={() => {
+                setSearchOpen(true);
+                setPlayerOpen(false);
+                setClockOpen(false);
+              }}
+            />
+            {searchOpen && query.trim() ? (
+              <div className="topbar__dropdown" style={{ top: "calc(100% + 6px)", left: 0, right: 0, position: "absolute", zIndex: 40 }}>
+                {searchLoading ? (
+                  <div className="topbar__dropdown-row">
+                    <span className="topbar__dropdown-label">Search</span>
+                    <strong>Searching…</strong>
+                  </div>
+                ) : searchResults.length ? (
+                  searchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      className="player-menu__item player-menu__item--button"
+                      onClick={() => openSearchResult(result)}
+                      style={{ width: "100%", textAlign: "left" }}
+                    >
+                      <div>{result.label}</div>
+                      <div style={{ fontSize: 11, color: "#9fb0bf" }}>{result.hint}</div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="topbar__dropdown-row">
+                    <span className="topbar__dropdown-label">Search</span>
+                    <strong>No matches</strong>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
         </form>
       </div>
 

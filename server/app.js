@@ -20,6 +20,7 @@ import worldMapRoutes from "./routes/worldMapRoutes.js";
 import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import adventureRoutes from "./routes/adventureRoutes.js";
 import playerRecordsRoutes from "./routes/playerRecordsRoutes.js";
+import searchRoutes from "./routes/searchRoutes.js";
 import nexisOneShotRoutes from "./routes/nexisOneShotRoutes.js";
 import pvpRoutes from "./routes/pvpRoutes.js";
 import worldProgressionRoutes from "./routes/worldProgressionRoutes.js";
@@ -51,6 +52,7 @@ const ROUTE_MODULES = [
   marketplaceRoutes,
   adventureRoutes,
   playerRecordsRoutes,
+  searchRoutes,
   nexisOneShotRoutes,
   pvpRoutes,
   worldProgressionRoutes,
