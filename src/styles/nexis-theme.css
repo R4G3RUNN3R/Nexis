@@ -744,6 +744,44 @@ select {
   min-width: 0;
 }
 
+.home-vote__copy {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.home-vote__links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-vote__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-strong);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.home-vote__link:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--accent, #d89a47);
+}
+
+.home-vote__link svg {
+  flex-shrink: 0;
+  color: var(--accent, #d89a47);
+}
+
 .home-actions-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

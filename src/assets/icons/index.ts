@@ -15,3 +15,4 @@ export * from "./conditionIcons";
 export * from "./mapIcons";
 export * from "./categoryIcons";
 export * from "./orgIcons";
+export * from "./voteIcons";

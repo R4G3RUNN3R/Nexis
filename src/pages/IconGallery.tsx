@@ -28,6 +28,8 @@ import {
   // org
   GuildBannerIcon, ConsortiumSealIcon, TreasuryIcon, ArmoryIcon, QuestIcon,
   DungeonIcon, SkillNodeIcon,
+  // vote
+  RankedRibbonIcon, RisingRankIcon,
 } from "../assets/icons";
 import "../styles/iconGallery.css";
 
@@ -124,6 +126,13 @@ const SECTIONS: Section[] = [
       { name: "Quest", component: "QuestIcon", Icon: QuestIcon },
       { name: "Dungeon", component: "DungeonIcon", Icon: DungeonIcon },
       { name: "Skill Node", component: "SkillNodeIcon", Icon: SkillNodeIcon },
+    ],
+  },
+  {
+    title: "External Links",
+    entries: [
+      { name: "Ranked Ribbon", component: "RankedRibbonIcon", Icon: RankedRibbonIcon },
+      { name: "Rising Rank", component: "RisingRankIcon", Icon: RisingRankIcon },
     ],
   },
 ];
