@@ -80,6 +80,13 @@ CREATE TABLE IF NOT EXISTS player_state (
   user_internal_id TEXT PRIMARY KEY REFERENCES users(internal_id) ON DELETE CASCADE,
   level INTEGER NOT NULL DEFAULT 0,
   gold INTEGER NOT NULL DEFAULT 500,
+  -- Recovery-bar resource pools (energy/health/stamina/comfort, and now
+  -- mana) are NOT individual columns — they are keys inside this `stats`
+  -- JSONB blob, backfilled by DEFAULT_STATS in server/lib/runtimePlayerState.js
+  -- so new resources never require a migration. Mana defaults to 0/0
+  -- (locked) until the Silverbough Argent Bough Lyceum "primer" academy
+  -- stage is completed server-side (see applyReward() in cityService.js),
+  -- which permanently sets mana/maxMana to 50/50.
   stats JSONB NOT NULL DEFAULT '{}'::jsonb,
   working_stats JSONB NOT NULL DEFAULT '{}'::jsonb,
   battle_stats JSONB NOT NULL DEFAULT '{}'::jsonb,

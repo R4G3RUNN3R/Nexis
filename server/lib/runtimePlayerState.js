@@ -15,6 +15,12 @@ const DEFAULT_STATS = {
   maxNerve: 84,
   chain: 0,
   maxChain: 10,
+  // Mana is locked (0/0) until Silverbough's Argent Bough Lyceum "primer"
+  // stage is completed (the server-authoritative equivalent of "Northern
+  // Rank 1" from the academy flavor text) — see applyReward() in
+  // cityService.js, which permanently raises maxMana to 50 on that stage.
+  mana: 0,
+  maxMana: 0,
 };
 
 const DEFAULT_WORKING_STATS = {

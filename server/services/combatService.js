@@ -86,6 +86,56 @@ export function getCombatXpAward(context = "combat", winner = "draw", opponent =
   return Math.max(1, Math.floor(base + levelBonus + outcomeBonus));
 }
 
+// ── Mana (Arcane skill resource) ────────────────────────────────────────
+// Mirrors the energy assert/spend pair above. Mana cost per skill is
+// declared as `combat.resourceCost` in skillData.js (currently only the
+// Firebolt → Flame Burst → Inferno Wave Arcane chain: 10 / 15 / 20). A
+// skill with no resourceCost (or a player who hasn't unlocked the Mana Bar,
+// i.e. maxMana === 0) is always affordable.
+
+export function getSkillManaCost(skill) {
+  return Math.max(0, Math.round(asNumber(asRecord(skill?.combat).resourceCost, 0)));
+}
+
+export function getSkillManaStatus(runtimeState, skill) {
+  const stats = getPlayerStats(runtimeState);
+  return {
+    cost: getSkillManaCost(skill),
+    mana: Math.max(0, Math.floor(asNumber(stats.mana, 0))),
+    maxMana: Math.max(0, Math.floor(asNumber(stats.maxMana, 0))),
+  };
+}
+
+export function assertSufficientMana(runtimeState, skill, context = "skill use") {
+  const status = getSkillManaStatus(runtimeState, skill);
+  if (status.cost > 0 && status.mana < status.cost) {
+    const skillName = skill?.name ?? "this skill";
+    throw new HttpError(
+      409,
+      `You need ${status.cost} mana to use ${skillName} (${String(context).replaceAll("_", " ")}). Current mana: ${status.mana}.`,
+      "SKILL_MANA_REQUIRED",
+    );
+  }
+  return status;
+}
+
+export function spendSkillMana(runtimeState, skill, context = "skill use", now = Date.now()) {
+  const status = assertSufficientMana(runtimeState, skill, context);
+  if (status.cost <= 0) {
+    return { manaSpent: 0, manaBefore: status.mana, manaAfter: status.mana };
+  }
+  const stats = getPlayerStats(runtimeState);
+  stats.mana = Math.max(0, Math.floor(status.mana - status.cost));
+  const player = asRecord(runtimeState.player);
+  player.counters = {
+    ...asRecord(player.counters),
+    manaSpent: Math.max(0, Math.floor(asNumber(player.counters?.manaSpent, 0))) + status.cost,
+    lastManaSpentAt: now,
+  };
+  runtimeState.player = player;
+  return { manaSpent: status.cost, manaBefore: status.mana, manaAfter: stats.mana };
+}
+
 export function grantCombatXp(runtimeState, amount, context = "combat", now = Date.now()) {
   const gained = Math.max(0, Math.floor(asNumber(amount, 0)));
   if (!gained) return 0;
@@ -416,6 +466,8 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
 
   let turn = 1;
   let combatItemAttempted = false;
+  let manaSpentTotal = 0;
+  let manaBlockedTurns = 0;
   const combatItemId = typeof options.combatItemId === "string" ? options.combatItemId : null;
   const order = playerFirst ? ["player", "opponent"] : ["opponent", "player"];
   for (let round = 0; round < rounds && player.health > 0 && opponent.health > 0; round += 1) {
@@ -431,8 +483,30 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
             continue;
           }
         }
-        const skill = activeSkills.length ? activeSkills[round % activeSkills.length] : BASIC_STRIKE;
+        const skillCandidate = activeSkills.length ? activeSkills[round % activeSkills.length] : BASIC_STRIKE;
+        // Arcane skills (Firebolt/Flame Burst/Inferno Wave) cost mana. If the
+        // player can't afford the cast this turn, gracefully fall back to a
+        // Basic Strike rather than aborting an already-in-progress fight
+        // (energy is only checked once, up front, before the fight starts —
+        // mana is checked per turn since a fight can call the same skill
+        // many times across rounds).
+        let skill = skillCandidate;
+        const manaCost = getSkillManaCost(skillCandidate);
+        if (manaCost > 0) {
+          try {
+            const manaResult = spendSkillMana(runtimeState, skillCandidate, context, now);
+            manaSpentTotal += manaResult.manaSpent;
+          } catch {
+            skill = BASIC_STRIKE;
+            manaBlockedTurns += 1;
+          }
+        }
         const entry = tryAttack({ attacker: player, defender: opponent, skill, randomFn, turn });
+        if (skill === BASIC_STRIKE && manaCost > 0 && skillCandidate.id !== BASIC_STRIKE.id) {
+          entry.message = `${entry.message} (Not enough mana to cast ${skillCandidate.name} — used a Basic Strike instead.)`;
+        } else if (manaCost > 0) {
+          entry.manaSpent = manaCost;
+        }
         log.push(entry);
         if (skill?.id && getSkillDefinition(skill.id)) {
           const xpEvent = grantSkillXp(runtimeState, skill.id, asNumber(skill.useXp, 10) + asNumber(options.bonusSkillXp, 0), context, now);
@@ -483,6 +557,9 @@ export function resolveCombat(runtimeState, opponentInput, options = {}) {
     energyBefore: asNumber(energyResult.energyBefore, null),
     energyAfter: asNumber(energyResult.energyAfter, null),
     requiredEnergy: REAL_FIGHT_ENERGY_COST,
+    manaSpent: manaSpentTotal,
+    manaBlockedTurns,
+    manaAfter: Math.max(0, Math.floor(asNumber(playerRecord.stats?.mana, 0))),
     combatXpGained,
     skillXpGained,
     opponent: { id: opponent.id, name: opponent.name, level: opponent.level, summary: opponentSource.summary ?? null },

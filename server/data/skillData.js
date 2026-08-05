@@ -201,7 +201,9 @@ export const SKILL_DEFINITIONS = [
     summary: "A focused arcane strike taught by Silverbough's mystic academies.",
     xpToEvolve: 30,
     evolvesTo: "flame_burst",
-    combat: { damageMultiplier: 1.16, accuracyBonus: 4, critBonus: 5 },
+    // Mana cost: 10. Requires the Mana Bar (Silverbough Argent Bough Lyceum
+    // "primer" stage) to be unlocked; enforced in combatService.js.
+    combat: { damageMultiplier: 1.16, accuracyBonus: 4, critBonus: 5, resourceCost: 10 },
     useXp: 12,
   }),
   activeSkill({
@@ -213,7 +215,8 @@ export const SKILL_DEFINITIONS = [
     summary: "A wider arcane burst with higher damage and a temperamental personality.",
     xpToEvolve: 60,
     evolvesTo: "inferno_wave",
-    combat: { damageMultiplier: 1.34, accuracyBonus: 3, critBonus: 8 },
+    // Mana cost: 15.
+    combat: { damageMultiplier: 1.34, accuracyBonus: 3, critBonus: 8, resourceCost: 15 },
     useXp: 14,
   }),
   activeSkill({
@@ -223,7 +226,8 @@ export const SKILL_DEFINITIONS = [
     tier: 3,
     requiredSkills: ["flame_burst"],
     summary: "A high-pressure arcane wave for trained casters who can keep control.",
-    combat: { damageMultiplier: 1.58, accuracyBonus: 2, critBonus: 11 },
+    // Mana cost: 20.
+    combat: { damageMultiplier: 1.58, accuracyBonus: 2, critBonus: 11, resourceCost: 20 },
     useXp: 16,
   }),
   activeSkill({

@@ -49,6 +49,8 @@ type PlayerState = {
     maxNerve: number;
     chain: number;         // ← active chain count (resets on fail)
     maxChain: number;      // ← chain target (e.g. 10)
+    mana: number;          // locked at 0/0 until Silverbough academy unlock
+    maxMana: number;
   };
   workingStats: {
     manualLabor: number;
@@ -225,6 +227,8 @@ const basePlayer: PlayerState = {
     maxNerve: 84,
     chain: 0,
     maxChain: 10,
+    mana: 0,
+    maxMana: 0,
   },
   workingStats: { ...BASELINE_WORKING_STATS },
   battleStats: { ...BASELINE_BATTLE_STATS },
@@ -333,6 +337,11 @@ const ENERGY_INTERVAL_MS  = 5  * 60 * 1000;
 const HEALTH_INTERVAL_MS  = 3  * 60 * 1000;
 const STAMINA_INTERVAL_MS = 15 * 60 * 1000;
 const COMFORT_INTERVAL_MS = 10 * 60 * 1000;
+// Mana regens at the same rate as Energy (energy-comparable default — see
+// server/services/liveWorldService.js applyOfflineRecovery for the
+// authoritative server-side tick this mirrors). Only relevant once
+// maxMana > 0 (the Mana Bar is unlocked).
+const MANA_INTERVAL_MS = ENERGY_INTERVAL_MS;
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const { activeAccount, serverHydrationVersion } = useAuth();
@@ -401,6 +410,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const newHealth  = Math.min(prev.stats.maxHealth,  prev.stats.health  + healthRegen);
         const newStamina = Math.min(prev.stats.maxStamina, prev.stats.stamina + staminaRegen);
         const newComfort = Math.min(prev.stats.maxComfort, prev.stats.comfort + comfortRegen);
+        const newMana = prev.stats.maxMana > 0
+          ? Math.min(prev.stats.maxMana, prev.stats.mana + elapsed / MANA_INTERVAL_MS)
+          : 0;
         next = {
           ...next,
           stats: {
@@ -409,6 +421,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             health:  parseFloat(newHealth.toFixed(4)),
             stamina: parseFloat(newStamina.toFixed(4)),
             comfort: parseFloat(newComfort.toFixed(4)),
+            mana:    parseFloat(newMana.toFixed(4)),
           },
         };
         const nextDaysPlayed = getDaysPlayed(prev.createdAt, tickNow);

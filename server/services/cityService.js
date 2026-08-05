@@ -226,6 +226,20 @@ function applyReward(runtimeState, reward, now) {
     }
   }
 
+  // Permanent mana pool unlock (Silverbough Argent Bough Lyceum "primer" —
+  // the server-authoritative equivalent of "Northern Rank 1: Arcane
+  // Fundamentals" from the academy flavor text, which unlocks the Mana Bar
+  // at 50/50). Idempotent and never lowers an already-unlocked pool.
+  if (reward.unlockMana) {
+    const stats = player.stats = { ...asRecord(player.stats) };
+    const unlockMax = Math.max(0, Math.floor(asNumber(reward.unlockMana.max, 0)));
+    const unlockCurrent = Math.max(0, Math.floor(asNumber(reward.unlockMana.current, unlockMax)));
+    if (unlockMax > asNumber(stats.maxMana, 0)) {
+      stats.maxMana = unlockMax;
+      stats.mana = Math.max(asNumber(stats.mana, 0), unlockCurrent);
+    }
+  }
+
   const academyState = ensureAcademyState(runtimeState);
   for (const flag of asArray(reward.flags).filter((entry) => typeof entry === "string")) {
     academyState.unlocks = Array.from(new Set([...academyState.unlocks, flag]));

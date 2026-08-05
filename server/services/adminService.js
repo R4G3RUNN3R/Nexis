@@ -63,6 +63,9 @@ const RESOURCE_STAT_CONFIG = new Map([
   ["health", { maxKey: "maxHealth", defaultMax: 100, min: 1 }],
   ["comfort", { maxKey: "maxComfort", defaultMax: 100, min: 0 }],
   ["nerve", { maxKey: "maxNerve", defaultMax: 84, min: 0 }],
+  // Mana defaults to a locked 0/0 pool (see runtimePlayerState.js
+  // DEFAULT_STATS) until the Silverbough academy unlock is completed.
+  ["mana", { maxKey: "maxMana", defaultMax: 0, min: 0 }],
 ]);
 
 const ADJUSTABLE_CURRENCIES = new Set(["copper", "silver", "gold", "platinum"]);

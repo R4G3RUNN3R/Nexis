@@ -1,24 +1,30 @@
 import { usePlayer } from "../../state/PlayerContext";
 import { AdminBarInlineControls, AdminNerveInlineRow } from "../admin/AdminInlineControls";
-import { ComfortIcon, EnergyIcon, HealthIcon, StaminaIcon, type IconComponent } from "../../assets/icons";
+import { ComfortIcon, EnergyIcon, HealthIcon, ManaIcon, StaminaIcon, type IconComponent } from "../../assets/icons";
 
 const ENERGY_INTERVAL_MS = 5 * 60 * 1000;
 const HEALTH_INTERVAL_MS = 3 * 60 * 1000;
 const STAMINA_INTERVAL_MS = 15 * 60 * 1000;
 const COMFORT_INTERVAL_MS = 10 * 60 * 1000;
+// Mana regens at the same rate as Energy once unlocked — see PlayerContext's
+// MANA_INTERVAL_MS and server/services/liveWorldService.js for the
+// authoritative tick this mirrors.
+const MANA_INTERVAL_MS = ENERGY_INTERVAL_MS;
 
 const COLORS = {
   energy: "#7eb85b",
   health: "#c76754",
   stamina: "#4f8ea4",
   comfort: "#c29a52",
+  mana: "#8a6fd1",
 } as const;
 
-const STAT_BAR_ICONS: Record<"energy" | "health" | "stamina" | "comfort", IconComponent> = {
+const STAT_BAR_ICONS: Record<"energy" | "health" | "stamina" | "comfort" | "mana", IconComponent> = {
   energy: EnergyIcon,
   health: HealthIcon,
   stamina: StaminaIcon,
   comfort: ComfortIcon,
+  mana: ManaIcon,
 };
 
 function secsUntilNextTick(current: number, intervalMs: number): number {
@@ -67,8 +73,9 @@ function StatBar({
   max: number;
   color: string;
   intervalMs: number;
-  stat: "energy" | "stamina" | "health" | "comfort";
-  fillActionType: string;
+  stat: "energy" | "stamina" | "health" | "comfort" | "mana";
+  /** Omit for stats with no dedicated fillX dispatcher case (e.g. mana) — falls back to the generic setResourceStat admin action. */
+  fillActionType?: string;
 }) {
   const displayCurrent = Math.floor(current);
   const isFull = displayCurrent >= max;
@@ -155,6 +162,16 @@ export function StatBars() {
         stat="comfort"
         fillActionType="fillComfort"
       />
+      {stats.maxMana > 0 ? (
+        <StatBar
+          label="Mana"
+          current={stats.mana}
+          max={stats.maxMana}
+          color={COLORS.mana}
+          intervalMs={MANA_INTERVAL_MS}
+          stat="mana"
+        />
+      ) : null}
       <AdminNerveInlineRow current={stats.nerve} max={stats.maxNerve} />
     </div>
   );

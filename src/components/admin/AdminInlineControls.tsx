@@ -27,6 +27,7 @@ const RESOURCE_STAT_LABELS: Record<string, string> = {
   health: "Health",
   comfort: "Comfort",
   nerve: "Nerve",
+  mana: "Mana",
 };
 
 function promptReason(actionLabel: string): string | null {
@@ -129,7 +130,7 @@ export function AdminBarInlineControls({
   max,
   fillActionType,
 }: {
-  stat: "energy" | "stamina" | "health" | "comfort" | "nerve";
+  stat: "energy" | "stamina" | "health" | "comfort" | "nerve" | "mana";
   current: number;
   max: number;
   /** Existing dispatcher action reused for "Fill" when one exists (energy/stamina/health/comfort). */

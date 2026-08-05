@@ -51,6 +51,17 @@ export function ComfortIcon({ accent = ICON_ACCENT, ...props }: IconProps) {
   );
 }
 
+/** Mana - a faceted arcane crystal. */
+export function ManaIcon({ accent = ICON_ACCENT, ...props }: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 3.2 L18.4 9.6 L12 20.8 L5.6 9.6 Z" />
+      <path d="M5.6 9.6 H18.4 M12 3.2 V20.8" strokeWidth={1.1} />
+      <path d="M12 7.4 L14.4 9.6 L12 13.4 L9.6 9.6 Z" fill={accent} fillOpacity={0.28} stroke="none" />
+    </IconBase>
+  );
+}
+
 /** Nerve - the gambler's die. */
 export function NerveIcon({ accent = ICON_ACCENT, ...props }: IconProps) {
   return (
@@ -114,6 +125,7 @@ export const STAT_ICONS: Record<string, IconComponent> = {
   stamina: StaminaIcon,
   comfort: ComfortIcon,
   nerve: NerveIcon,
+  mana: ManaIcon,
   gold: GoldIcon,
   shadow: ShadowIcon,
   level: LevelIcon,

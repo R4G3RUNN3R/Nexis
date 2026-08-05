@@ -51,11 +51,14 @@ function applyDailyLogin(runtimeState, now) {
   return true;
 }
 function applyOfflineRecovery(runtimeState, now) {
-  const loops = ensureWorldLoops(runtimeState); const lastSeenAt = asNumber(loops.lastSeenAt, asNumber(ensurePlayer(runtimeState).createdAt, now)); const elapsedMs = Math.max(0, now - lastSeenAt); const stats = getStats(runtimeState); const recovered = { energy: 0, health: 0, stamina: 0 };
+  const loops = ensureWorldLoops(runtimeState); const lastSeenAt = asNumber(loops.lastSeenAt, asNumber(ensurePlayer(runtimeState).createdAt, now)); const elapsedMs = Math.max(0, now - lastSeenAt); const stats = getStats(runtimeState); const recovered = { energy: 0, health: 0, stamina: 0, mana: 0 };
   if (elapsedMs >= 300000) { const gain = Math.floor(elapsedMs / 300000); const before = asNumber(stats.energy, 100); stats.energy = clamp(before + gain, 0, asNumber(stats.maxEnergy, 100)); recovered.energy = Math.max(0, stats.energy - before); }
   if (elapsedMs >= 360000) { const gain = Math.floor(elapsedMs / 360000); const before = asNumber(stats.health, 100); stats.health = clamp(before + gain, 1, asNumber(stats.maxHealth, 100)); recovered.health = Math.max(0, stats.health - before); }
   if (elapsedMs >= 900000) { const gain = Math.floor(elapsedMs / 900000); const before = asNumber(stats.stamina, 10); stats.stamina = clamp(before + gain, 0, asNumber(stats.maxStamina, 10)); recovered.stamina = Math.max(0, stats.stamina - before); }
-  loops.lastSeenAt = now; const player = ensurePlayer(runtimeState); player.counters = { ...asRecord(player.counters), barRevision: Math.max(0, Math.floor(asNumber(player.counters?.barRevision, 0) + (recovered.energy || recovered.health || recovered.stamina ? 1 : 0))) }; return { elapsedMs, recovered };
+  // Mana regen only applies once the pool is unlocked (maxMana > 0). Rate
+  // matches energy (1 per 5 minutes) — see report for rationale.
+  if (asNumber(stats.maxMana, 0) > 0 && elapsedMs >= 300000) { const gain = Math.floor(elapsedMs / 300000); const before = asNumber(stats.mana, 0); stats.mana = clamp(before + gain, 0, asNumber(stats.maxMana, 0)); recovered.mana = Math.max(0, stats.mana - before); }
+  loops.lastSeenAt = now; const player = ensurePlayer(runtimeState); player.counters = { ...asRecord(player.counters), barRevision: Math.max(0, Math.floor(asNumber(player.counters?.barRevision, 0) + (recovered.energy || recovered.health || recovered.stamina || recovered.mana ? 1 : 0))) }; return { elapsedMs, recovered };
 }
 function readyEntries(runtimeState, now = Date.now()) {
   const education = asRecord(runtimeState.education); const activeCourse = asRecord(education.activeCourse); const entries = [];
@@ -64,7 +67,7 @@ function readyEntries(runtimeState, now = Date.now()) {
   return entries;
 }
 function buildReturnSummary(runtimeState, elapsedMs, recovered, now) {
-  const entries = []; if (recovered.energy) entries.push({ id: "energy", label: `Energy recovered: +${recovered.energy}`, route: "/home" }); if (recovered.health) entries.push({ id: "health", label: `Health recovered: +${recovered.health}`, route: "/home" }); if (recovered.stamina) entries.push({ id: "stamina", label: `Stamina recovered: +${recovered.stamina}`, route: "/home" });
+  const entries = []; if (recovered.energy) entries.push({ id: "energy", label: `Energy recovered: +${recovered.energy}`, route: "/home" }); if (recovered.health) entries.push({ id: "health", label: `Health recovered: +${recovered.health}`, route: "/home" }); if (recovered.stamina) entries.push({ id: "stamina", label: `Stamina recovered: +${recovered.stamina}`, route: "/home" }); if (recovered.mana) entries.push({ id: "mana", label: `Mana recovered: +${recovered.mana}`, route: "/home" });
   const travel = asRecord(runtimeState.travel); if (asRecord(travel.arrivalNotice).arrivedAt) entries.push({ id: "travel", label: `Arrived in ${travel.arrivalNotice.destinationName ?? "destination city"}`, route: "/travel" }); entries.push(...readyEntries(runtimeState, now));
   const contracts = Object.values(asRecord(asRecord(ensurePlayer(runtimeState).cityContracts).records)).filter((record) => asRecord(record).status === "completed"); if (contracts.length) entries.push({ id: "contracts", label: `${contracts.length} contract${contracts.length === 1 ? "" : "s"} ready to claim`, route: "/city#contracts" });
   const discoveries = asArray(asRecord(ensurePlayer(runtimeState).worldDiscovery).discoveries).filter((entry) => now - asNumber(asRecord(entry).foundAt, 0) < 172800000); if (discoveries.length) entries.push({ id: "discoveries", label: `${discoveries.length} recent discovery note${discoveries.length === 1 ? "" : "s"}`, route: "/world-map" });
