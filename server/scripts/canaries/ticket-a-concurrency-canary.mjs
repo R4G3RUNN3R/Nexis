@@ -523,6 +523,37 @@ async function runTests() {
     check("exactly one marketplace_listings row exists for this listing id (no duplicate row created by the race)", rowCount === 1);
   }
 
+  console.log("== 21. State-sync (PUT /state) no longer loses a concurrent authoritative write ==");
+  {
+    // Found 2026-08-03 verifying an unrelated admin fix, and confirmed live
+    // in production: syncRuntimeState() read player_state without a row
+    // lock, so a routine state-sync autosave racing against ANY
+    // properly-locked authoritative mutation (admin action, combat,
+    // salvage, a gold award - anything) could read a stale snapshot, then
+    // blindly carry it through and overwrite the other mutation's
+    // already-committed change. Fixed by passing { forUpdate: true } into
+    // the read in stateService.js - the same pattern loadLockedRuntimeState
+    // already uses for every other authoritative mutation.
+    //
+    // This can't be reproduced as a dynamic Promise.all race in this
+    // canary: pool.js's pglite driver is a single embedded PGlite instance
+    // (new PGlite(path), not a connection pool), so withTransaction() calls
+    // can't actually hold two independent, overlapping transactions open at
+    // once the way production's real pg.Pool does - a "concurrent" race
+    // here just serializes on the one connection regardless of locking, so
+    // a test built on Promise.all timing here would pass whether or not
+    // the fix is present, which is worse than no test at all. Verifying the
+    // fix itself is present is the honest thing this environment can prove.
+    const fs = await import("node:fs");
+    const stateServiceSource = fs.readFileSync(new URL("../../services/stateService.js", import.meta.url), "utf8");
+    const readCallMatch = stateServiceSource.match(/const existingPlayerState = await findPlayerStateByUserInternalId\(([^)]*)\);/);
+    check("found syncRuntimeState's player_state read", Boolean(readCallMatch));
+    check(
+      "the read now requests { forUpdate: true }, matching every other authoritative mutation's locked read-modify-write pattern",
+      Boolean(readCallMatch) && readCallMatch[1].includes("{ forUpdate: true }"),
+    );
+  }
+
   console.log(`\n${checks - failures}/${checks} checks passed.`);
   if (failures > 0) {
     console.log(`${failures} FAILED.`);

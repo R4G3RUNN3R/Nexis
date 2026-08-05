@@ -197,7 +197,15 @@ export async function syncRuntimeState(userInternalId, runtimeState) {
   return withTransaction(async (client) => {
     await createDefaultPlayerState(client, userInternalId);
     const user = await findUserByInternalId(client, userInternalId);
-    const existingPlayerState = await findPlayerStateByUserInternalId(client, userInternalId);
+    // Locked read: without this, a concurrent authoritative write (an admin
+    // action, combat, salvage - anything using the same locked
+    // read-modify-write pattern) that commits between this read and this
+    // transaction's own upsert gets silently lost. This handler only ever
+    // patches bio/preferences/ui (see buildAllowedClientPatch), but it still
+    // carries the REST of existingRuntime.player through unchanged on every
+    // call - including stats - so an unlocked stale read here overwrites
+    // any resource change that landed in that window.
+    const existingPlayerState = await findPlayerStateByUserInternalId(client, userInternalId, { forUpdate: true });
     const existingRuntime = user && existingPlayerState
       ? buildMutableRuntimeState(user, existingPlayerState)
       : {};
