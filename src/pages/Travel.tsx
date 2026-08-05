@@ -523,6 +523,11 @@ export default function TravelPage() {
                       <div className="travel-transport-option__stats">
                         Cargo {tier.cargoCapacity} | {tier.goldCost} gold
                       </div>
+                      {tier.estimatedDurationMs != null ? (
+                        <div className="travel-transport-option__stats travel-transport-option__duration">
+                          Est. travel time: {formatTravelDuration(tier.estimatedDurationMs)}
+                        </div>
+                      ) : null}
                       <div className="travel-transport-option__stats">{tier.summary}</div>
                     </button>
                   ))}
@@ -589,6 +594,11 @@ export default function TravelPage() {
                   Departure cost: {totalDepartureCost} gold ({player.gold} on hand).
                   {!canAffordDeparture ? " Not enough gold for this loadout." : ""}
                 </div>
+                {selectedTier?.estimatedDurationMs != null ? (
+                  <div className="travel-inline-note">
+                    Estimated travel time to {selectedCity.name}: {formatTravelDuration(selectedTier.estimatedDurationMs)} by {selectedTier.name}.
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

@@ -571,19 +571,33 @@ export async function getTravelOptionsForUser(user, payload = {}) {
         ? getRouteDefinition(originCityId, destinationCityId)
         : null;
     const routeDanger = route ? clamp(asNumber(route.danger, 0.3), 0, 1) : null;
+    // Pre-departure duration estimate: same speed-modifier math startTravelForUser applies
+    // (route.durationMs * tier speed modifier, then the travel-efficiency legacy perk),
+    // but without any encounter delay, since encounters haven't been rolled yet at this point.
+    const travelEfficiency = Math.min(25, Math.max(0, getLegacyPerkEffect(runtimeState, "travel-efficiency")));
 
-    const tiers = listTransportTiers().map((tier) => ({
-      ...tier,
-      effectiveSpeedModifier: resolveTransportSpeedModifier(tier, route?.routeType ?? "road"),
-      effectiveDangerModifier: resolveTransportDangerModifier(tier, route?.routeType ?? "road"),
-      estimatedEscortCost: routeDanger !== null ? calculateEscortCost(routeDanger, tier) : null,
-    }));
+    const tiers = listTransportTiers().map((tier) => {
+      const effectiveSpeedModifier = resolveTransportSpeedModifier(tier, route?.routeType ?? "road");
+      const estimatedDurationMs =
+        route && typeof route.durationMs === "number"
+          ? Math.max(60 * 1000, Math.round(route.durationMs * effectiveSpeedModifier * (1 - travelEfficiency / 100)))
+          : null;
+      return {
+        ...tier,
+        effectiveSpeedModifier,
+        effectiveDangerModifier: resolveTransportDangerModifier(tier, route?.routeType ?? "road"),
+        estimatedEscortCost: routeDanger !== null ? calculateEscortCost(routeDanger, tier) : null,
+        estimatedDurationMs,
+      };
+    });
 
     return {
       playerState,
       tiers,
       escort: { ...ESCORT_OPTION },
-      route: route ? { originCityId, destinationCityId, routeType: route.routeType, danger: routeDanger } : null,
+      route: route
+        ? { originCityId, destinationCityId, routeType: route.routeType, danger: routeDanger, durationMs: route.durationMs }
+        : null,
       defaultTierId: getDefaultTransportTier().id,
     };
   });

@@ -227,6 +227,7 @@ export type ServerTransportTier = {
   effectiveSpeedModifier: number;
   effectiveDangerModifier: number;
   estimatedEscortCost: number | null;
+  estimatedDurationMs: number | null;
 };
 
 export type ServerEscortOption = {
@@ -248,7 +249,7 @@ export type ApiTravelOptionsResponse =
       playerState: ServerPlayerState;
       tiers: ServerTransportTier[];
       escort: ServerEscortOption;
-      route: { originCityId: string; destinationCityId: string; routeType: string; danger: number } | null;
+      route: { originCityId: string; destinationCityId: string; routeType: string; danger: number; durationMs: number } | null;
       defaultTierId: string;
     }
   | ApiFailure;
