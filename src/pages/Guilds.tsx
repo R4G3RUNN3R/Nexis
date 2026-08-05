@@ -6,7 +6,6 @@ import { OrganizationBaseTab } from "../components/organizations/OrganizationBas
 import { OrganizationOneShotsPanel } from "../components/organizations/OrganizationOneShotsPanel";
 import { usePlayer } from "../state/PlayerContext";
 import { useAuth } from "../state/AuthContext";
-import { useOrgAdvancedMode } from "../state/OrgAdvancedModeContext";
 import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
 import { formatEntityPublicId } from "../lib/publicIds";
 import {
@@ -37,14 +36,6 @@ const GUILD_PAGE_COPY = {
 
 type GuildView = GuildBoard;
 type GuildTab = "public" | "members" | "wars" | "adventuring" | "specializations" | "armory" | "base" | "settings";
-
-// Simplification pass: Headquarters/Members/Operations/Settings cover
-// day-to-day guild life and stay visible by default. War/Rivalries,
-// Specializations, Armory, and Base are deeper systems gated behind
-// Advanced Mode so new members aren't handed all 8 tabs at once. No
-// mechanics are removed - toggling Advanced Mode only changes which tabs
-// are shown.
-const ADVANCED_GUILD_TABS = new Set<GuildTab>(["wars", "specializations", "armory", "base"]);
 
 function formatMsCountdown(ms: number) {
   const totalMinutes = Math.max(0, Math.floor(ms / 60000));
@@ -110,7 +101,6 @@ export default function GuildsPage() {
   const [withdrawItemId, setWithdrawItemId] = useState("");
   const [withdrawQty, setWithdrawQty] = useState("1");
   const [activeTab, setActiveTab] = useState<GuildTab>("public");
-  const { advancedMode, toggleAdvancedMode } = useOrgAdvancedMode();
   const [settingsDraft, setSettingsDraft] = useState({
     headline: "",
     recruitmentStatus: "",
@@ -133,10 +123,6 @@ export default function GuildsPage() {
   useEffect(() => {
     setMessage(null);
   }, [activeTab, routeOrganizationPublicId]);
-
-  useEffect(() => {
-    if (!advancedMode && ADVANCED_GUILD_TABS.has(activeTab)) setActiveTab("public");
-  }, [advancedMode, activeTab]);
 
   useEffect(() => {
     if (authSource === "server" && serverSessionToken) {
@@ -288,7 +274,7 @@ export default function GuildsPage() {
     if (options?.message) setMessage(options.message(payload));
   }
 
-  const allTabs: Array<{ key: GuildTab; label: string }> = [
+  const tabs: Array<{ key: GuildTab; label: string }> = [
     { key: "public", label: "Headquarters" },
     { key: "members", label: "Members" },
     { key: "wars", label: "War / Rivalries" },
@@ -298,7 +284,6 @@ export default function GuildsPage() {
     { key: "base", label: "Base" },
     { key: "settings", label: "Settings / Charter" },
   ];
-  const tabs = advancedMode ? allTabs : allTabs.filter((tab) => !ADVANCED_GUILD_TABS.has(tab.key));
 
   const isGuildMember = Boolean(board?.viewerPermissions && board.viewerPermissions.length > 0);
   const guildOverview = asRecord((board as (GuildView & { guildOverview?: unknown }) | null)?.guildOverview);
@@ -569,14 +554,6 @@ export default function GuildsPage() {
                   {tab.label}
                 </button>
               ))}
-              <button
-                type="button"
-                className={`org-advanced-toggle${advancedMode ? " org-advanced-toggle--on" : ""}`}
-                onClick={toggleAdvancedMode}
-                title="War/Rivalries, Specializations, Armory, and Base stay available - this only shows or hides them by default."
-              >
-                Advanced Mode: {advancedMode ? "On" : "Off"}
-              </button>
             </div>
           </ContentPanel>
 
@@ -604,16 +581,12 @@ export default function GuildsPage() {
                   <button type="button" className="org-button" onClick={() => setActiveTab("adventuring")}>
                     Open Operations
                   </button>
-                  {advancedMode ? (
-                    <>
-                      <button type="button" className="org-button" onClick={() => setActiveTab("base")}>
-                        Base Ledger
-                      </button>
-                      <button type="button" className="org-button" onClick={() => setActiveTab("specializations")}>
-                        Specializations
-                      </button>
-                    </>
-                  ) : null}
+                  <button type="button" className="org-button" onClick={() => setActiveTab("base")}>
+                    Base Ledger
+                  </button>
+                  <button type="button" className="org-button" onClick={() => setActiveTab("specializations")}>
+                    Specializations
+                  </button>
                   <button type="button" className="org-button org-button--ghost" onClick={() => setActiveTab("settings")}>
                     Adjust Doctrine
                   </button>

@@ -202,34 +202,6 @@
   color: #f3ead6;
 }
 
-/* Shared Guild/Consortium "Advanced Mode" toggle - reveals the deeper tabs
-   (War/Rivalries, Specializations, Armory, Base for guilds; Logistics,
-   Assets, Advancement, Base for consortiums) without removing them. */
-.org-advanced-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid rgba(154, 175, 103, 0.4);
-  background: rgba(154, 175, 103, 0.08);
-  color: #c3d1a6;
-  padding: 10px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-
-.org-advanced-toggle:hover {
-  background: rgba(154, 175, 103, 0.16);
-}
-
-.org-advanced-toggle--on {
-  border-color: rgba(216, 194, 120, 0.5);
-  background: rgba(216, 194, 120, 0.14);
-  color: #f3ead6;
-}
-
 .guild-grid {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
