@@ -6,6 +6,7 @@ import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicI
 import { PlayerAvatar } from "../common/PlayerAvatar";
 import { resolveDisplayTitle } from "../../lib/titleAccess";
 import { NAV_ICONS } from "../../assets/icons";
+import { getServerRecords, type ServerRecordEntry } from "../../lib/authApi";
 
 import { isStaffOrAdmin } from "../../lib/adminAccess";
 
@@ -24,6 +25,16 @@ const navLinks: Array<[string, string]> = [
   ["Consortiums", "/consortiums"],
 ];
 
+// Thin utility strip above the main bar, matching the reference site's
+// Wiki/Rules/Forums/Discord/Staff/Credits row. Forums and Discord are
+// omitted - neither exists for Nexis yet.
+const utilityLinks: Array<[string, string]> = [
+  ["Wiki", "/wiki"],
+  ["Rules", "/rules"],
+  ["Staff", "/staff"],
+  ["Credits", "/credits"],
+];
+
 type SearchResult = {
   id: string;
   label: string;
@@ -39,6 +50,17 @@ function formatClock(date: Date, timeZone?: string) {
     second: "2-digit",
     hour12: false,
   }).format(date);
+}
+
+function formatRelativeTime(timestamp: number, now: number) {
+  const diffMs = Math.max(0, now - timestamp);
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 function readJson<T>(key: string): T | null {
@@ -76,19 +98,28 @@ function buildSearchIndex() {
   return results;
 }
 
-export function TopBar() {
+type TopBarProps = {
+  newsTickerEnabled: boolean;
+  onToggleNewsTicker: (value: boolean) => void;
+};
+
+export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
   const [playerOpen, setPlayerOpen] = useState(false);
   const [clockOpen, setClockOpen] = useState(false);
+  const [recordLogOpen, setRecordLogOpen] = useState(false);
+  const [recordLog, setRecordLog] = useState<ServerRecordEntry[] | null>(null);
+  const [recordLogLoading, setRecordLogLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const { player } = usePlayer();
-  const { activeAccount, logout } = useAuth();
+  const { activeAccount, authSource, serverSessionToken, logout } = useAuth();
   const navigate = useNavigate();
 
   const playerMenuRef = useRef<HTMLDivElement | null>(null);
   const clockMenuRef = useRef<HTMLDivElement | null>(null);
+  const recordLogRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -105,6 +136,9 @@ export function TopBar() {
       if (clockMenuRef.current && !clockMenuRef.current.contains(target)) {
         setClockOpen(false);
       }
+      if (recordLogRef.current && !recordLogRef.current.contains(target)) {
+        setRecordLogOpen(false);
+      }
       if (searchRef.current && !searchRef.current.contains(target)) {
         setSearchOpen(false);
       }
@@ -113,6 +147,21 @@ export function TopBar() {
     window.addEventListener("click", handleClick);
     return () => window.removeEventListener("click", handleClick);
   }, []);
+
+  useEffect(() => {
+    if (!recordLogOpen || authSource !== "server" || !serverSessionToken) return;
+    let cancelled = false;
+    setRecordLogLoading(true);
+    (async () => {
+      const result = await getServerRecords(serverSessionToken, null, 20);
+      if (cancelled) return;
+      setRecordLogLoading(false);
+      if (result.ok) setRecordLog(result.records);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [recordLogOpen, authSource, serverSessionToken]);
 
   const localTime = useMemo(() => formatClock(now), [now]);
   const serverTime = useMemo(() => formatClock(now, "Europe/London"), [now]);
@@ -170,7 +219,16 @@ export function TopBar() {
   }
 
   return (
-    <header className="topbar">
+    <div className="topbar-wrap">
+      <nav className="topbar-utility" aria-label="Site links">
+        {utilityLinks.map(([label, to]) => (
+          <NavLink key={to} to={to} className="topbar-utility__link">
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <header className="topbar">
       <div className="topbar__left">
         {navLinks.map(([label, to]) => {
           const Icon = NAV_ICONS[to.replace(/^\//, "")];
@@ -270,6 +328,7 @@ export function TopBar() {
             onClick={() => {
               setClockOpen((value) => !value);
               setPlayerOpen(false);
+              setRecordLogOpen(false);
               setSearchOpen(false);
             }}
           >
@@ -290,6 +349,56 @@ export function TopBar() {
           ) : null}
         </div>
 
+        <div className="topbar__menu-wrap" ref={recordLogRef}>
+          <button
+            type="button"
+            className="topbar__icon"
+            aria-label="Record Log"
+            onClick={() => {
+              setRecordLogOpen((value) => !value);
+              setPlayerOpen(false);
+              setClockOpen(false);
+              setSearchOpen(false);
+            }}
+          >
+            <span className="topbar__icon-label">Log</span>
+          </button>
+
+          {recordLogOpen ? (
+            <div className="topbar__dropdown topbar__dropdown--log">
+              <div className="topbar__dropdown-title">Record Log</div>
+              {recordLogLoading ? (
+                <div className="topbar__log-empty">Loading.</div>
+              ) : recordLog && recordLog.length ? (
+                <div className="topbar__log-list">
+                  {recordLog.map((entry) => {
+                    const body = (
+                      <>
+                        <span className="topbar__log-time">{formatRelativeTime(entry.timestamp, now.getTime())}</span>
+                        <span className="topbar__log-summary">{entry.summary}</span>
+                      </>
+                    );
+                    return entry.route ? (
+                      <NavLink key={entry.id} to={entry.route} className="topbar__log-row topbar__log-row--link" onClick={() => setRecordLogOpen(false)}>
+                        {body}
+                      </NavLink>
+                    ) : (
+                      <div key={entry.id} className="topbar__log-row">
+                        {body}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="topbar__log-empty">No recent activity yet.</div>
+              )}
+              <NavLink to="/records" className="topbar__log-viewall" onClick={() => setRecordLogOpen(false)}>
+                View Log
+              </NavLink>
+            </div>
+          ) : null}
+        </div>
+
         <div className="player-menu" ref={playerMenuRef}>
           <button
             type="button"
@@ -297,6 +406,7 @@ export function TopBar() {
             onClick={() => {
               setPlayerOpen((value) => !value);
               setClockOpen(false);
+              setRecordLogOpen(false);
               setSearchOpen(false);
             }}
           >
@@ -319,14 +429,19 @@ export function TopBar() {
                   Administration
                 </NavLink>
               ) : null}
-              <NavLink to="/achievements" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
-                Achievements / Legacy
+              <NavLink to={profileRoute} className="player-menu__item" onClick={() => setPlayerOpen(false)}>
+                View Profile
               </NavLink>
-              <NavLink to="/housing" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
-                Housing
-              </NavLink>
-              <NavLink to="/education" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
-                Education
+              <button
+                type="button"
+                className="player-menu__item player-menu__item--toggle"
+                onClick={() => onToggleNewsTicker(!newsTickerEnabled)}
+              >
+                <span>News Ticker</span>
+                <span className={`player-menu__switch${newsTickerEnabled ? " player-menu__switch--on" : ""}`} aria-hidden="true" />
+              </button>
+              <NavLink to="/settings" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
+                Settings
               </NavLink>
               <div className="player-menu__divider" />
               <button
@@ -336,10 +451,12 @@ export function TopBar() {
               >
                 Log Out
               </button>
+              <div className="player-menu__server">Server: Cay</div>
             </div>
           ) : null}
         </div>
       </div>
-    </header>
+      </header>
+    </div>
   );
 }

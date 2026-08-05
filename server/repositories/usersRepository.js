@@ -153,3 +153,16 @@ export async function searchUsers(client, queryText, limit = 20) {
 
   return result.rows.map(mapUserRow);
 }
+
+export async function listStaffUsers(client) {
+  const result = await client.query(
+    `
+      SELECT internal_id, public_id, username, email, first_name, last_name, entity_type, privilege_role, created_at
+      FROM users
+      WHERE privilege_role IN ('staff', 'admin')
+      ORDER BY privilege_role = 'admin' DESC, created_at ASC
+    `,
+  );
+
+  return result.rows.map(mapUserRow);
+}

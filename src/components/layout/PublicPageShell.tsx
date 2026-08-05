@@ -4,6 +4,7 @@ import { ReactNode } from "react";
 const supportLinks: Array<[string, string]> = [
   ["News", "/news"],
   ["Rules", "/rules"],
+  ["Staff", "/staff"],
   ["Contact", "/contact"],
   ["Credits", "/credits"],
 ];

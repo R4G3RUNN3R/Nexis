@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { getSiteRankings } from "../controllers/siteController.js";
+import { getSiteRankings, getSiteStaff } from "../controllers/siteController.js";
 
 const router = Router();
 
 router.get("/site/rankings", getSiteRankings);
+router.get("/site/staff", getSiteStaff);
 
 export default router;

@@ -1751,6 +1751,16 @@ export function getServerSkills(sessionToken: string): Promise<ApiSkillsResponse
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
+export type ServerStaffEntry = { name: string; publicId: number; roleLabel: string };
+
+// Public, unauthenticated - backs the /staff marketing page, same trust
+// boundary as the site rankings endpoint above.
+export function getSiteStaff(): Promise<{ ok: true; staff: ServerStaffEntry[] } | ApiFailure> {
+  return requestJson<{ staff: ServerStaffEntry[] }>("/api/site/staff", {
+    method: "GET",
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
 export function getServerRecords(sessionToken: string, category?: string | null, limit?: number): Promise<ApiRecordsResponse> {
   const params = new URLSearchParams();
   if (category) params.set("category", category);

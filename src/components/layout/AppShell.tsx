@@ -1,6 +1,8 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { TopBar } from "./TopBar";
+import { NewsTicker } from "./NewsTicker";
+import { useNewsTickerPreference } from "../../lib/uiPreferences";
 import { PlayerAvatar } from "../common/PlayerAvatar";
 import { usePlayer } from "../../state/PlayerContext";
 import { useAuth } from "../../state/AuthContext";
@@ -181,6 +183,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const { activeAccount, logout, authSource, serverHydrationVersion, serverSessionToken, refreshServerState } = useAuth();
   const [acknowledgingEventId, setAcknowledgingEventId] = useState<string | null>(null);
   const [sidebarAcademyOpen, setSidebarAcademyOpen] = useState<boolean | null>(null);
+  const [newsTickerEnabled, setNewsTickerEnabled] = useNewsTickerPreference();
   const navigate = useNavigate();
   const location = useLocation();
   const travelState = readTravelStateFromPlayer(player);
@@ -271,7 +274,8 @@ export function AppShell({ title, hint, children }: AppShellProps) {
 
   return (
     <div className="app-shell">
-      <TopBar />
+      <TopBar newsTickerEnabled={newsTickerEnabled} onToggleNewsTicker={setNewsTickerEnabled} />
+      {newsTickerEnabled ? <NewsTicker /> : null}
       <div className="app-main">
         <aside className="sidebar">
           <div className="sidebar-logo">

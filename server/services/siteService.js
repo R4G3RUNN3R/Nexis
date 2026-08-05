@@ -1,5 +1,8 @@
 import { withTransaction } from "../db/pool.js";
 import { listConsortiumRankings, listGuildRankings, listPendingRankings } from "../repositories/siteRepository.js";
+import { listStaffUsers } from "../repositories/usersRepository.js";
+
+const STAFF_ROLE_LABEL = { admin: "Administrator", staff: "Staff" };
 
 function buildPendingTitle(level, battleScore, workingScore) {
   if (level >= 25 || battleScore >= 220) return "Provisional war-tier citizen";
@@ -101,6 +104,22 @@ export async function getPendingRankings(limit = 6) {
         methodLabel: "Retained earnings",
         entries: consortiumRankings,
       },
+    };
+  });
+}
+
+// Public roster: name, public ID, and role label only. Never expose email or
+// internalId here - this backs an unauthenticated marketing page (Staff),
+// same trust boundary as /site/rankings above.
+export async function getStaffRoster() {
+  return withTransaction(async (client) => {
+    const rows = await listStaffUsers(client);
+    return {
+      staff: rows.map((row) => ({
+        name: `${row.firstName}${row.lastName ? ` ${row.lastName}` : ""}`.trim(),
+        publicId: row.publicId,
+        roleLabel: STAFF_ROLE_LABEL[row.privilegeRole] ?? "Staff",
+      })),
     };
   });
 }

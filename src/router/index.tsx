@@ -7,6 +7,7 @@ import ResetPasswordPage from "../pages/ResetPassword";
 import LandingPage from "../pages/Landing";
 import NewsPage from "../pages/News";
 import RulesPage from "../pages/Rules";
+import StaffPage from "../pages/Staff";
 import ContactPage from "../pages/Contact";
 import CreditsPage from "../pages/Credits";
 import { usePlayer } from "../state/PlayerContext";
@@ -15,6 +16,8 @@ import { getProfileRoute } from "../lib/publicIds";
 import { getCurrentServerUser } from "../lib/authApi";
 
 import HomePage from "../pages/Home";
+import RecordsPage from "../pages/Records";
+import SettingsPage from "../pages/Settings";
 import EducationPage from "../pages/Education";
 import JobsPage from "../pages/Jobs";
 import TravelPage from "../pages/Travel";
@@ -143,11 +146,14 @@ export default function AppRouter() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/news" element={<NewsPage />} />
       <Route path="/rules" element={<RulesPage />} />
+      <Route path="/staff" element={<StaffPage />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/credits" element={<CreditsPage />} />
 
       <Route path="/" element={<RootEntry />} />
       <Route path="/home" element={<HomePage />} />
+      <Route path="/records" element={<RecordsPage />} />
+      <Route path="/settings" element={<SettingsPage />} />
       <Route path="/ciel-intro" element={<CielIntroPage />} />
       <Route path="/inventory" element={<InventoryPage />} />
       <Route path="/crafting" element={<RouteGuard><CraftingPage /></RouteGuard>} />

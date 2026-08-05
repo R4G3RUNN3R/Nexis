@@ -58,7 +58,7 @@ select {
   width: min(var(--content-width), calc(100vw - 24px));
   margin: 0 auto;
   padding: 10px 0 14px;
-  min-height: calc(100vh - 62px);
+  min-height: calc(100vh - 76px);
 }
 
 .sidebar {
@@ -78,8 +78,8 @@ select {
      under the sticky top bar and giving it its own scroll keeps content's
      own height in charge of the page's scroll length instead. */
   position: sticky;
-  top: 72px;
-  max-height: calc(100vh - 82px);
+  top: 86px;
+  max-height: calc(100vh - 96px);
   overflow-y: auto;
 }
 

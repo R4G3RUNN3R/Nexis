@@ -22,6 +22,7 @@ const PUBLIC_PATHS = new Set([
   "/rules",
   "/contact",
   "/credits",
+  "/staff",
 ]);
 
 function AuthGate({ children }: { children: React.ReactNode }) {
