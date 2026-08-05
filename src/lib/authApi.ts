@@ -1775,6 +1775,58 @@ export function searchDirectory(sessionToken: string, category: string, queryTex
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 
+export type AdvancedSearchAccess = { ok: true; allowed: boolean; donorTier: string } | ApiFailure;
+
+export function getAdvancedSearchAccess(sessionToken: string): Promise<AdvancedSearchAccess> {
+  return requestJson<{ allowed: boolean; donorTier: string }>("/api/search/advanced/access", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export type AdvancedSearchResult = {
+  publicId: number;
+  name: string;
+  level: number;
+  propertyId: string;
+  conditionType: string;
+  conditionLabel: string;
+  factionName: string | null;
+  factionTag: string | null;
+  factionRoute: string | null;
+  daysOld: number;
+  lastSeenAt: number | null;
+  to: string;
+};
+
+export type AdvancedSearchFilters = {
+  name?: string;
+  faction?: string;
+  property?: string;
+  condition?: string;
+  levelMin?: string;
+  levelMax?: string;
+  daysMin?: string;
+  daysMax?: string;
+  lastAction?: string;
+  sortBy?: string;
+  sortDir?: string;
+};
+
+export function runAdvancedSearch(
+  sessionToken: string,
+  filters: AdvancedSearchFilters,
+): Promise<{ ok: true; donorTier: string; results: AdvancedSearchResult[] } | ApiFailure> {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return requestJson<{ donorTier: string; results: AdvancedSearchResult[] }>(`/api/search/advanced?${params.toString()}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
 export function getServerRecords(sessionToken: string, category?: string | null, limit?: number): Promise<ApiRecordsResponse> {
   const params = new URLSearchParams();
   if (category) params.set("category", category);

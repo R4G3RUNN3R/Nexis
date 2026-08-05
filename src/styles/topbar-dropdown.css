@@ -162,6 +162,16 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
+.topbar__icon--donor {
+  border-color: rgba(201, 177, 122, 0.34);
+  color: #f1e5c5;
+  background: rgba(42, 35, 20, 0.9);
+}
+
+.topbar__icon--donor::before {
+  border-color: currentColor;
+}
+
 .topbar__dropdown,
 .player-menu__dropdown {
   position: absolute;

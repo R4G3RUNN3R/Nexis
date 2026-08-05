@@ -6,7 +6,7 @@ import { formatPlayerNameWithPublicId, getProfileRoute } from "../../lib/publicI
 import { PlayerAvatar } from "../common/PlayerAvatar";
 import { resolveDisplayTitle } from "../../lib/titleAccess";
 import { NAV_ICONS } from "../../assets/icons";
-import { getServerRecords, searchDirectory, type ServerRecordEntry, type ServerSearchResult } from "../../lib/authApi";
+import { getAdvancedSearchAccess, getServerRecords, searchDirectory, type ServerRecordEntry, type ServerSearchResult } from "../../lib/authApi";
 import { getCityHubContent } from "../../data/cityHubData";
 import { allWikiEntries } from "../../data/wikiData";
 
@@ -104,6 +104,7 @@ export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
   const [searchResults, setSearchResults] = useState<ServerSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [isDonor, setIsDonor] = useState(false);
 
   const { player } = usePlayer();
   const { activeAccount, authSource, serverSessionToken, logout } = useAuth();
@@ -118,6 +119,25 @@ export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  // player.legacy doesn't exist - the runtime state's "legacy" branch is a
+  // sibling of "player", not nested inside it, so donorTier can't be read
+  // off the player object like dmosOneShots/notifications/etc above. Ask
+  // the endpoint directly instead; it re-checks server-side regardless.
+  useEffect(() => {
+    if (authSource !== "server" || !serverSessionToken) {
+      setIsDonor(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const result = await getAdvancedSearchAccess(serverSessionToken);
+      if (!cancelled && result.ok) setIsDonor(result.allowed);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSource, serverSessionToken]);
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
@@ -436,6 +456,17 @@ export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
             </div>
           ) : null}
         </div>
+
+        {isDonor ? (
+          <NavLink
+            to="/search/advanced"
+            className="topbar__icon topbar__icon--donor"
+            aria-label="Advanced Search"
+            title="Advanced Search (donator perk)"
+          >
+            <span className="topbar__icon-label">Advanced Search</span>
+          </NavLink>
+        ) : null}
 
         <div className="player-menu" ref={playerMenuRef}>
           <button

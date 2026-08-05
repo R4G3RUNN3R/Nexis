@@ -18,6 +18,7 @@ import { getCurrentServerUser } from "../lib/authApi";
 import HomePage from "../pages/Home";
 import RecordsPage from "../pages/Records";
 import SettingsPage from "../pages/Settings";
+import AdvancedSearchPage from "../pages/AdvancedSearch";
 import EducationPage from "../pages/Education";
 import JobsPage from "../pages/Jobs";
 import TravelPage from "../pages/Travel";
@@ -154,6 +155,7 @@ export default function AppRouter() {
       <Route path="/home" element={<HomePage />} />
       <Route path="/records" element={<RecordsPage />} />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/search/advanced" element={<AdvancedSearchPage />} />
       <Route path="/ciel-intro" element={<CielIntroPage />} />
       <Route path="/inventory" element={<InventoryPage />} />
       <Route path="/crafting" element={<RouteGuard><CraftingPage /></RouteGuard>} />
