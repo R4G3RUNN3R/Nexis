@@ -21,6 +21,7 @@ import {
   normalizeCityId,
 } from "../data/travelData.js";
 import { getItemDefinition } from "../data/itemData.js";
+import { syncAcademyStudyPresence } from "../lib/academyStudyState.js";
 import {
   ESCORT_OPTION,
   calculateEscortCost,
@@ -516,11 +517,17 @@ export function resolveTravelForRuntimeState(runtimeState, now = Date.now()) {
     runtimeState.player = player;
     addPlayerRecord(runtimeState, { category: "travel", summary: `Arrived in ${getCityName(current.destinationCityId)}.`, detail: { originCityId: current.originCityId, destinationCityId: current.destinationCityId }, source: "travel", route: "/travel", timestamp: now });
     syncTravelOntoPlayer(runtimeState, resolved);
+    // Arrival may put the player back in an academy's city -- resume any
+    // paused study for that city (or leave it frozen if this isn't it).
+    syncAcademyStudyPresence(runtimeState, resolved.currentCityId, resolved.status === "in_transit", now);
     return { changed: true, travelState: resolved };
   }
 
   syncTravelOntoPlayer(runtimeState, current);
-  return { changed: false, travelState: current };
+  // Re-check academy study presence on every resolution (not just arrivals)
+  // so a stale accrual state never lingers between explicit travel events.
+  const academyPresenceChanged = syncAcademyStudyPresence(runtimeState, current.currentCityId, current.status === "in_transit", now);
+  return { changed: academyPresenceChanged, travelState: current };
 }
 
 // Ticket A: this helper is called from all four travel endpoints,
@@ -689,6 +696,7 @@ export async function startTravelForUser(user, payload) {
         encounterNotice: cargoOutcome ? { ...encounter, cargoLoss: cargoOutcome } : encounter,
       };
       syncTravelOntoPlayer(runtimeState, nextTravel);
+      syncAcademyStudyPresence(runtimeState, nextTravel.currentCityId, nextTravel.status === "in_transit", now);
       evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
       const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
       return { playerState, travel: nextTravel };
@@ -725,6 +733,9 @@ export async function startTravelForUser(user, payload) {
     };
 
     syncTravelOntoPlayer(runtimeState, nextTravel);
+    // Departure freezes any active academy study the moment travel begins --
+    // it resumes automatically once the player returns to that city.
+    syncAcademyStudyPresence(runtimeState, nextTravel.currentCityId, nextTravel.status === "in_transit", now);
     evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, travel: nextTravel };
@@ -772,6 +783,7 @@ export async function cancelTravelForUser(user) {
     };
 
     syncTravelOntoPlayer(runtimeState, reversed);
+    syncAcademyStudyPresence(runtimeState, reversed.currentCityId, reversed.status === "in_transit", now);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState, travel: reversed };
   });

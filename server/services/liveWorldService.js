@@ -14,6 +14,7 @@ import {
   WORLD_BOSS_EVENTS,
 } from "../data/liveWorldData.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
+import { getAccumulatedStudyMs } from "../lib/academyStudyState.js";
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asArray(value) { return Array.isArray(value) ? value : []; }
@@ -63,7 +64,14 @@ function applyOfflineRecovery(runtimeState, now) {
 function readyEntries(runtimeState, now = Date.now()) {
   const education = asRecord(runtimeState.education); const activeCourse = asRecord(education.activeCourse); const entries = [];
   if (activeCourse.courseId && asNumber(activeCourse.completesAt, Infinity) <= now) entries.push({ id: "education_ready", label: "Education course ready to complete", route: "/education" });
-  const study = asRecord(ensurePlayer(runtimeState).cityAcademy?.activeStudy); if (study.academyId && asNumber(study.endsAt, Infinity) <= now) entries.push({ id: "academy_ready", label: "Academy study ready to complete", route: "/city#academy" });
+  const study = asRecord(ensurePlayer(runtimeState).cityAcademy?.activeStudy);
+  if (study.academyId) {
+    const studyDurationMs = asNumber(study.durationMs, Infinity);
+    const studyAccumulatedMs = getAccumulatedStudyMs(study, now);
+    const travelForStudy = asRecord(runtimeState.travel);
+    const presentAtStudyCity = travelForStudy.status !== "in_transit" && travelForStudy.currentCityId === study.cityId;
+    if (studyAccumulatedMs >= studyDurationMs && presentAtStudyCity) entries.push({ id: "academy_ready", label: "Academy study ready to complete", route: "/city#academy" });
+  }
   return entries;
 }
 function buildReturnSummary(runtimeState, elapsedMs, recovered, now) {

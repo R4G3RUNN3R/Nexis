@@ -428,7 +428,11 @@ export type ServerCityAcademy = {
     stageId: string;
     cityId: string;
     startedAt: number;
-    endsAt: number;
+    durationMs: number;
+    accumulatedMs: number;
+    remainingMs: number;
+    isAccruing: boolean;
+    projectedReadyAt: number | null;
     readyToComplete: boolean;
     progressPercent: number;
   } | null;

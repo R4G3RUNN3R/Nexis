@@ -11,6 +11,15 @@ import { getAcademyById, getCityAcademies, getCityAcademy, getCityContract, getC
 import { resolveTravelForRuntimeState } from "./travelService.js";
 import { resolveNpcCombatWithRewards } from "./combatService.js";
 import { getMissingCourses } from "./educationService.js";
+import { ensureAcademyState, getAccumulatedStudyMs, isAccruing as isStudyAccruing } from "../lib/academyStudyState.js";
+
+function formatDurationLabel(ms) {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  return `${seconds}s`;
+}
 
 const CITY_STANDING_TIERS = [
   { value: 0, label: "New Arrival" },
@@ -100,22 +109,6 @@ function ensureContractState(runtimeState) {
   player.cityContracts = { ...existing, records: { ...records } };
   runtimeState.player = player;
   return player.cityContracts;
-}
-
-function ensureAcademyState(runtimeState) {
-  const player = asRecord(runtimeState.player);
-  const existing = asRecord(player.cityAcademy);
-  const activeStudy = asRecord(existing.activeStudy);
-  const completed = asRecord(existing.completed);
-  player.cityAcademy = {
-    ...existing,
-    activeStudy: activeStudy.academyId ? { ...activeStudy } : null,
-    completed: { ...completed },
-    unlocks: asArray(existing.unlocks).filter((entry) => typeof entry === "string"),
-    skillAccess: asArray(existing.skillAccess).filter((entry) => typeof entry === "string"),
-  };
-  runtimeState.player = player;
-  return player.cityAcademy;
 }
 
 function ensureCityStandingState(runtimeState) {
@@ -418,26 +411,51 @@ function getAcademyStageStatus(academy, stage, index, runtimeState, now = Date.n
   const isCompleted = Boolean(completedRecord.completedAt);
   const activeForStage = activeStudy.academyId === academy.id && activeStudy.stageId === stage.id;
   const anyActive = Boolean(activeStudy.academyId);
-  const startedAt = activeForStage ? asNumber(activeStudy.startedAt, 0) : null;
-  const endsAt = activeForStage ? asNumber(activeStudy.endsAt, 0) : null;
+  const presentAtAcademy = inAcademyCity && !inTransit;
+
+  // Owner decision: base academy access opens purely from being physically
+  // present in the academy's city. Course/standing requirements no longer
+  // gate the first stage of an academy (initial enrollment); they remain in
+  // force for later stages, which are designed as in-track progression
+  // checkpoints rather than entry requirements.
+  const isFirstStage = index === 0;
+  const courseGateActive = !isFirstStage && missingCourses.length > 0;
+  const standingGateActive = !isFirstStage && standingMissing > 0;
+
   const durationMs = Math.max(1000, asNumber(stage.durationMs, 5 * 60 * 1000));
-  const readyToComplete = Boolean(activeForStage && endsAt && now >= endsAt && inAcademyCity);
+  const accumulatedMs = activeForStage ? Math.min(durationMs, getAccumulatedStudyMs(activeStudy, now)) : 0;
+  const remainingMs = activeForStage ? Math.max(0, durationMs - accumulatedMs) : durationMs;
+  const accruingNow = activeForStage && isStudyAccruing(activeStudy);
+  const startedAt = activeForStage ? asNumber(activeStudy.startedAt, now) : null;
+  const readyToComplete = Boolean(activeForStage && accumulatedMs >= durationMs && presentAtAcademy);
 
   let status = "available";
   if (isCompleted) status = "completed";
   else if (activeForStage) status = "active";
-  else if (!previousComplete || missingCourses.length || standingMissing > 0 || !inAcademyCity || inTransit || anyActive) status = "locked";
+  else if (!previousComplete || courseGateActive || standingGateActive || !inAcademyCity || inTransit || anyActive) status = "locked";
 
   let lockReason = null;
-  if (isCompleted) lockReason = "This stage is complete.";
-  else if (activeForStage && !inAcademyCity) lockReason = `Return to ${getCityDefinition(academy.cityId).name} to complete this study.`;
-  else if (activeForStage && !readyToComplete) lockReason = "Study is underway. Stay local and return when the timer is complete.";
-  else if (!previousComplete) lockReason = `Complete ${previousStage.title} first.`;
-  else if (inTransit) lockReason = "Finish travel before starting academy study.";
-  else if (!inAcademyCity) lockReason = `Travel to ${getCityDefinition(academy.cityId).name} to study here.`;
-  else if (missingCourses.length) lockReason = academy.lockReason;
-  else if (standingMissing > 0) lockReason = `Earn ${standingMissing} more ${getCityDefinition(academy.cityId).name} standing from local contracts.`;
-  else if (anyActive && !activeForStage) lockReason = "Finish your active academy study before starting another stage.";
+  if (isCompleted) {
+    lockReason = "This stage is complete.";
+  } else if (activeForStage && !presentAtAcademy) {
+    lockReason = accumulatedMs >= durationMs
+      ? `Return to ${getCityDefinition(academy.cityId).name} to complete this study.`
+      : `Study is paused while you are away — ${formatDurationLabel(remainingMs)} left. Return to ${getCityDefinition(academy.cityId).name} to keep studying.`;
+  } else if (activeForStage && !readyToComplete) {
+    lockReason = `Studying. ${formatDurationLabel(remainingMs)} remaining while you stay in ${getCityDefinition(academy.cityId).name}.`;
+  } else if (!previousComplete) {
+    lockReason = `Complete ${previousStage.title} first.`;
+  } else if (inTransit) {
+    lockReason = "Finish travel before starting academy study.";
+  } else if (!inAcademyCity) {
+    lockReason = `Travel to ${getCityDefinition(academy.cityId).name} to study here.`;
+  } else if (courseGateActive) {
+    lockReason = academy.lockReason ?? "Complete the required coursework before this stage opens.";
+  } else if (standingGateActive) {
+    lockReason = `Earn ${standingMissing} more ${getCityDefinition(academy.cityId).name} standing from local contracts.`;
+  } else if (anyActive && !activeForStage) {
+    lockReason = "Finish your active academy study before starting another stage.";
+  }
 
   return {
     id: stage.id,
@@ -454,7 +472,24 @@ function getAcademyStageStatus(academy, stage, index, runtimeState, now = Date.n
     status,
     lockReason,
     completedAt: typeof completedRecord.completedAt === "number" ? completedRecord.completedAt : null,
-    activeStudy: activeForStage ? { academyId: academy.id, stageId: stage.id, cityId: academy.cityId, startedAt, endsAt, readyToComplete, progressPercent: Math.max(0, Math.min(100, Math.round(((now - startedAt) / durationMs) * 100))) } : null,
+    activeStudy: activeForStage
+      ? {
+          academyId: academy.id,
+          stageId: stage.id,
+          cityId: academy.cityId,
+          startedAt,
+          durationMs,
+          accumulatedMs,
+          remainingMs,
+          isAccruing: accruingNow,
+          // Absolute timestamp the client can count down against live while
+          // accrual is in progress (mirrors travel's arrivalAt pattern).
+          // Null while paused, since there is nothing ticking to count down.
+          projectedReadyAt: accruingNow ? now + remainingMs : null,
+          readyToComplete,
+          progressPercent: Math.max(0, Math.min(100, Math.round((accumulatedMs / durationMs) * 100))),
+        }
+      : null,
     canStart: status === "available" && !isCompleted && !anyActive,
     canComplete: readyToComplete,
   };
@@ -681,7 +716,13 @@ export async function startCityAcademyForUser(user, academyId) {
 
     const now = Date.now();
     const state = ensureAcademyState(runtimeState);
-    state.activeStudy = { academyId: academy.id, stageId: stage.id, cityId: academy.cityId, startedAt: now, endsAt: now + stage.durationMs };
+    // Study begins accruing immediately: canStart already required the player
+    // to be present in the academy's city, so accrual starts unpaused.
+    // durationMs is persisted here (not just computed transiently in
+    // getAcademyStageStatus) because Home.tsx reads this raw player state
+    // directly via /api/me to do its own client-side accrual countdown,
+    // rather than going through the per-request computed academy view.
+    state.activeStudy = { academyId: academy.id, stageId: stage.id, cityId: academy.cityId, startedAt: now, durationMs: stage.durationMs, accumulatedMs: 0, lastResumedAt: now };
     runtimeState.player.counters = {
       ...asRecord(runtimeState.player.counters),
       academyEnrollments: Math.max(0, Math.floor(asNumber(runtimeState.player.counters?.academyEnrollments, 0) + 1)),

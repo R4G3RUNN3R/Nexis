@@ -344,8 +344,16 @@ function AcademyPanel({
   }
 
   const active = academy.activeStudy;
-  const progress = active ? Math.max(0, Math.min(100, Math.round(((now - active.startedAt) / Math.max(academy.durationMs, 1000)) * 100))) : 0;
-  const remainingMs = active ? Math.max(0, active.endsAt - now) : 0;
+  // While accrual is live, count down from the server-projected ready time
+  // (like travel's arrivalAt). While paused (player is away), remainingMs is
+  // a frozen snapshot from the last fetch -- it must not keep ticking with
+  // the local clock, or a departed player would see it drain anyway.
+  const remainingMs = active
+    ? active.isAccruing && active.projectedReadyAt
+      ? Math.max(0, active.projectedReadyAt - now)
+      : Math.max(0, active.remainingMs)
+    : 0;
+  const progress = active ? Math.max(0, Math.min(100, Math.round(((active.durationMs - remainingMs) / Math.max(active.durationMs, 1000)) * 100))) : 0;
   const nextAction = academy.canComplete ? "complete" : academy.canStart ? "start" : null;
   const disabled = busy || !nextAction;
   const availableStage = academy.stages.find((stage) => stage.status === "active" || stage.status === "available");
@@ -370,7 +378,7 @@ function AcademyPanel({
               <div className="info-row"><span className="info-row__label">Active stage</span><span className="info-row__value">{academy.stages.find((stage) => stage.id === active.stageId)?.title ?? active.stageId}</span></div>
               <div className="info-row"><span className="info-row__label">Study progress</span><span className="info-row__value">{progress}%</span></div>
               <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}><div style={{ width: `${progress}%`, height: "100%", background: "#d8c278" }} /></div>
-              <div style={{ color: "#9fb0bf", fontSize: 12 }}>{active.readyToComplete || remainingMs <= 0 ? "Ready to complete if you are in the academy city." : `Ready in ${formatDuration(remainingMs)}.`}</div>
+              <div style={{ color: "#9fb0bf", fontSize: 12 }}>{active.readyToComplete ? "Ready to complete." : active.isAccruing ? `Ready in ${formatDuration(remainingMs)}.` : `Paused — ${formatDuration(remainingMs)} of study left. Return to this city to resume.`}</div>
             </div>
           ) : null}
           <div style={{ display: "grid", gap: 8 }}>
@@ -386,7 +394,8 @@ function AcademyPanel({
             ))}
           </div>
           {academy.isCompleted ? <div style={{ color: "#8ec8a7", fontSize: 12 }}>Academy chain complete.</div> : null}
-          {academy.lockReason && !nextAction && !academy.isCompleted ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academy.lockReason}</div> : null}
+          {/* Active study already explains itself in the box above -- avoid repeating it. Everything else that is locked must always show its reason. */}
+          {academy.lockReason && !academy.isCompleted && !active ? <div style={{ fontSize: 12, color: "#d0ad74" }}>{academy.lockReason}</div> : null}
           <button type="button" disabled={disabled} onClick={() => nextAction ? onAction(academy.id, nextAction) : undefined} style={actionButtonStyle(disabled)}>{busy ? "Working..." : nextAction === "complete" ? "Complete stage" : "Start next stage"}</button>
         </div>
       ) : null}
