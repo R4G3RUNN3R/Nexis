@@ -473,3 +473,25 @@ CREATE TABLE IF NOT EXISTS city_market_stock (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (market_type, city_id, item_id)
 );
+
+-- "Living world" city crisis state: one row per city. A player/guild "critical
+-- fail" against a city's signature threat triggers an atomic conditional
+-- activation here, visible to every player in that city with no
+-- application-level locking beyond the row itself - same pattern as
+-- city_market_stock above. Distinct from worldProgressionData.js's
+-- WORLD_EVENT_TEMPLATES (dead scaffold) and liveWorldData.js's
+-- CITY_THREAT_EVENTS/WORLD_BOSS_EVENTS (decorative day-of-month rotation) -
+-- never touch either of those from this table's read/write paths.
+CREATE TABLE IF NOT EXISTS city_events (
+  city_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('inactive', 'active')),
+  template_id TEXT,
+  severity TEXT CHECK (severity IN ('moderate', 'major')),
+  trigger_source TEXT,
+  started_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  cooldown_until TIMESTAMPTZ,
+  triggered_by_label TEXT,
+  triggered_by_public_id BIGINT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

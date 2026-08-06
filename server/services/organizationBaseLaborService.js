@@ -396,7 +396,7 @@ export async function listEligiblePlayerBuilders(client) {
       FROM player_state ps
       JOIN users u ON u.internal_id = ps.user_internal_id
       WHERE COALESCE(ps.civic_state->>'activeTrackId', '') = '${BUILDER_TRACK_ID}'
-        AND COALESCE(ps.player_snapshot->'condition'->>'type', '') NOT IN ('hospitalized', 'jailed')
+        AND COALESCE(ps.player_snapshot->'condition'->>'type', '') NOT IN ('hospitalized', 'jailed', 'burned')
         AND COALESCE((ps.civic_state->'trackProgress'->'${BUILDER_TRACK_ID}'->'activeAssignment'->>'expiresAt')::bigint, 0) <= (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
       ORDER BY profession_level DESC, shifts_worked DESC, manual_labor DESC, endurance DESC, intelligence DESC
       LIMIT 250
@@ -463,7 +463,7 @@ export async function reservePlayerBuilderAssignment(client, {
   }
 
   const conditionType = String(asRecord(asRecord(row.player_snapshot).condition).type ?? '').trim();
-  if (conditionType === 'hospitalized' || conditionType === 'jailed') {
+  if (conditionType === 'hospitalized' || conditionType === 'jailed' || conditionType === 'burned') {
     throw new HttpError(409, 'Selected builder is currently unavailable.', 'ORG_BASE_BUILDER_CONDITION_BLOCKED');
   }
 

@@ -36,6 +36,9 @@ import {
 } from "../data/consortiumTypes.js";
 import { getOrganizationBaseEffectsForOrg } from "./organizationBaseEffectService.js";
 import { hasCompletedCourse } from "./educationService.js";
+import { triggerCityEventIfEligible, applyBurnedConditionToRuntimeState } from "./cityEventService.js";
+import { getGuildQuestTriggerTier } from "../data/cityEventData.js";
+import { normalizeCityId } from "../data/cityData.js";
 
 const FIRST_ORGANIZATION_PUBLIC_ID = PLAYER_PUBLIC_ID_BASE + RESERVED_PLAYER_PUBLIC_ID_COUNT;
 const normalizeOrganizationPublicId = (value, type = null) => {
@@ -1271,6 +1274,11 @@ export async function initiateGuildQuestForUser(user, organizationInternalId) {
       metadata.guild.passives.rally = { ...rally, active: false };
     }
     const succeeded = successScore >= quest.powerFloor;
+    // A whole guild failing one of its harder, longer-planned operations has
+    // a chance to spill over into a shared city crisis - see
+    // cityEventService.js. Only the harder quest tiers qualify; the easiest
+    // templates are entry-tier ops, not "the guild failed to tame a dragon."
+    const crisisTier = succeeded ? null : getGuildQuestTriggerTier(quest.powerFloor);
     const failureFloor = specializationEffects.failurePayoutFloor ?? null;
     const reputationFailurePct = failureFloor ?? 0.38;
     const treasuryFailurePct = failureFloor ?? 0.22;
@@ -1289,8 +1297,28 @@ export async function initiateGuildQuestForUser(user, organizationInternalId) {
       const { runtimeState } = await getRuntimeForUser(client, targetUser, { forUpdate: true });
       runtimeState.player.gold = Number(runtimeState.player.gold ?? 0) + memberGoldGain;
       runtimeState.player.currencies = { ...(runtimeState.player.currencies ?? {}), gold: runtimeState.player.gold };
+      if (crisisTier) applyBurnedConditionToRuntimeState(runtimeState, { reason: `${quest.displayName} went wrong.`, severity: crisisTier.severity, now: Date.now() });
       if (specializationEffects.medicalRecoveryReductionPct > 0) applyRecoveryReductionPct(runtimeState, specializationEffects.medicalRecoveryReductionPct);
       await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState);
+    }
+    if (crisisTier) {
+      // Guilds have no home-city column and GUILD_QUESTS templates carry no
+      // cityId, so the initiating officer's own current city is the
+      // pragmatic v1 substitute for "where the guild's failure lands" - a
+      // known, narratively-arbitrary quirk (the crisis lands wherever the
+      // clicking officer stood), not a bug. Plain non-locking read: the
+      // initiator isn't necessarily one of the already-locked participants
+      // above, and only travel.currentCityId is being read here, not mutated.
+      const { runtimeState: initiatorState } = await getRuntimeForUser(client, user);
+      const targetCityId = normalizeCityId(asRecord(initiatorState.travel).currentCityId, "nexis");
+      await triggerCityEventIfEligible(client, {
+        cityId: targetCityId,
+        source: "guild_quest_failure",
+        chance: crisisTier.chance,
+        severity: crisisTier.severity,
+        triggeredByLabel: organization.name,
+        triggeredByPublicId: organization.publicId,
+      });
     }
     metadata.guild.adventuring.lastRunAt = Date.now();
     metadata.guild.adventuring.lastCrew = currentPlan.slots.map((slot) => ({

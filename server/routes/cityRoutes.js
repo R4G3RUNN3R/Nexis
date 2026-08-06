@@ -10,6 +10,7 @@ import {
   getBlackMarket,
   getCityAcademy,
   getCityContracts,
+  getCityEvent,
   getCityMarket,
   getCityPeople,
   getCitySpecials,
@@ -23,6 +24,7 @@ import {
 const router = Router();
 
 router.get("/cities/:cityId/people", requireSession, getCityPeople);
+router.get("/cities/:cityId/event", requireSession, getCityEvent);
 router.get("/cities/:cityId/market", requireSession, getCityMarket);
 router.post("/cities/:cityId/market/:itemId/buy", requireSession, buyCityMarketItem);
 router.post("/cities/:cityId/market/:itemId/sell", requireSession, sellCityMarketItem);

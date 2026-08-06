@@ -12,7 +12,7 @@ function playerProfileRoute(publicId) {
   return `/profile/P${String(publicId).padStart(7, "0")}`;
 }
 
-const CONDITION_LABELS = { normal: "Okay", hospitalized: "Hospital", jailed: "Jail" };
+const CONDITION_LABELS = { normal: "Okay", hospitalized: "Hospital", jailed: "Jail", burned: "Burned" };
 const CONDITION_VALUES = new Set(Object.keys(CONDITION_LABELS));
 const SORT_VALUES = new Set(["level", "days", "lastAction"]);
 const LAST_ACTION_WINDOWS = { day: 1, week: 7, month: 30 };

@@ -80,7 +80,7 @@ function formatAgeLabel(createdAt) {
 function normalizeCondition(value) {
   const record = asRecord(value);
   const type = typeof record.type === "string" ? record.type : "normal";
-  if (type === "hospitalized" || type === "jailed") {
+  if (type === "hospitalized" || type === "jailed" || type === "burned") {
     return {
       type,
       until: typeof record.until === "number" ? record.until : null,

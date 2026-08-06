@@ -23,6 +23,7 @@ import { getCourseLabel } from "../data/educationData.js";
 import { ensureShadowState, getCityDemandProfile, spendShadow } from "./liveWorldService.js";
 import { getConsortiumEffectPctForRuntime } from "./consortiumPerkService.js";
 import { getCompletedCourseIds, getMissingCourses } from "./educationService.js";
+import { applyCityEventExposureIfEligible, getActiveCityEvent } from "./cityEventService.js";
 
 const MAX_PURCHASE_QUANTITY = 99;
 // Global, shared-across-all-players stock caps for city_market_stock, keyed by the stock entry's
@@ -248,6 +249,7 @@ function serializeLegalSellOffer(good, runtimeState, context, quantity = 1) {
   const unitPrice = getLegalSellPrice(good, context.cityId, runtimeState);
   const totalPrice = unitPrice ? unitPrice * quantity : 0;
   const reasons = [];
+  if (context.activeEvent?.blocksShops) reasons.push(`${context.city.name}'s markets are barred while ${context.activeEvent.antagonist} holds the district.`);
   if (context.inTransit) reasons.push("Finish current travel before selling local goods.");
   if (!context.isCurrentCity) reasons.push(`Travel to ${context.city.name} to sell to this market.`);
   if (unitPrice === null) reasons.push(`${context.city.name} is not buying this good right now.`);
@@ -350,21 +352,30 @@ async function loadRuntimeState(client, user) {
 
   const runtimeState = buildMutableRuntimeState(user, playerState);
   const travelResolution = resolveTravelForRuntimeState(runtimeState);
-  if (travelResolution.changed) {
+  // A city crisis "burn" is a real mutation (stats + condition), not just a
+  // read - it must be persisted the same way travel resolution already is,
+  // or GET-only callers below (which never call upsertPlayerRuntimeState
+  // themselves) would silently discard it.
+  const eventExposureChanged = await applyCityEventExposureIfEligible(client, runtimeState, Date.now());
+  if (travelResolution.changed || eventExposureChanged) {
     const nextPlayerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return { playerState: nextPlayerState, runtimeState: buildMutableRuntimeState(user, nextPlayerState) };
   }
   return { playerState, runtimeState };
 }
 
-function getEconomyContext(runtimeState, cityId) {
+// activeEvent is fetched once per request by the top-level exported functions
+// below (they already hold the DB client) and threaded through here rather
+// than fetched inline - this whole serialization call graph is synchronous
+// and stays that way; only the public entry points touch the database.
+function getEconomyContext(runtimeState, cityId, activeEvent = null) {
   const normalizedCityId = assertCity(cityId);
   const city = getCityDefinition(normalizedCityId);
   const currentCityId = getCurrentCityId(runtimeState);
   const inTransit = isInTransit(runtimeState);
   const isCurrentCity = currentCityId === normalizedCityId;
   const standing = getCityStanding(runtimeState, normalizedCityId);
-  return { city, cityId: normalizedCityId, currentCityId, inTransit, isCurrentCity, standing };
+  return { city, cityId: normalizedCityId, currentCityId, inTransit, isCurrentCity, standing, activeEvent };
 }
 
 function serializeStockItem(stockItem, runtimeState, context, quantity = 1, marketOpen = true, stockInfo = null) {
@@ -377,6 +388,7 @@ function serializeStockItem(stockItem, runtimeState, context, quantity = 1, mark
   const remainingQuantity = stockInfo ? stockInfo.remainingQuantity : null;
   const totalQuantity = stockInfo ? stockInfo.totalQuantity : null;
   const reasons = [];
+  if (context.activeEvent?.blocksShops) reasons.push(`${context.city.name}'s shops are barred while ${context.activeEvent.antagonist} holds the district.`);
   if (!marketOpen) reasons.push("This city market is locked.");
   if (context.inTransit) reasons.push("Finish current travel before buying local goods.");
   if (!context.isCurrentCity) reasons.push(`Travel to ${context.city.name} to buy this stock.`);
@@ -423,8 +435,8 @@ function applyDiscount(price, discountPercent) {
   return Math.max(1, Math.round(asNumber(price, 1) * (1 - Math.max(0, discountPercent) / 100)));
 }
 
-function serializeMarketProfile(profile, runtimeState, quantity = 1, stockMap = {}) {
-  const context = getEconomyContext(runtimeState, profile.cityId);
+function serializeMarketProfile(profile, runtimeState, quantity = 1, stockMap = {}, activeEvent = null) {
+  const context = getEconomyContext(runtimeState, profile.cityId, activeEvent);
   const discountPercent = getLegalMarketDiscountPercent(runtimeState);
   return {
     city: { id: context.city.id, name: context.city.name, role: context.city.role },
@@ -451,8 +463,8 @@ function serializeMarketProfile(profile, runtimeState, quantity = 1, stockMap = 
   };
 }
 
-function serializeBlackMarket(blackMarket, runtimeState, quantity = 1, stockMap = {}) {
-  const context = getEconomyContext(runtimeState, blackMarket.cityId);
+function serializeBlackMarket(blackMarket, runtimeState, quantity = 1, stockMap = {}, activeEvent = null) {
+  const context = getEconomyContext(runtimeState, blackMarket.cityId, activeEvent);
   const shadow = ensureShadowState(runtimeState);
   const shadowCosts = { buy: blackMarket.cityId === "west" ? 1 : 2, sell: blackMarket.cityId === "west" ? 1 : 2 };
   const missingCourses = getMissingCourses(runtimeState, blackMarket.requiredCourses ?? []);
@@ -489,6 +501,7 @@ function serializeBlackMarketSellOffer(fenceItem, blackMarket, runtimeState, con
   const standingMissing = Math.max(0, minimumStanding - context.standing.value);
   const unitPrice = Math.max(1, Math.floor(asNumber(fenceItem.price, 1)));
   const reasons = [];
+  if (context.activeEvent?.blocksShops) reasons.push(`${context.city.name}'s under-market is barred while ${context.activeEvent.antagonist} holds the district.`);
   if (!marketOpen) reasons.push(blackMarket.lockReason ?? "This under-market is locked.");
   if (context.inTransit) reasons.push("Finish current travel before fencing goods.");
   if (!context.isCurrentCity) reasons.push(`Travel to ${context.city.name} to use this under-market.`);
@@ -613,7 +626,8 @@ export async function getCityMarketForUser(user, cityId) {
     const { playerState, runtimeState } = await loadRuntimeState(client, user);
     const profile = getCityMarketProfile(assertCity(cityId));
     const stockMap = await buildStockMap(client, "legal", profile.cityId, profile.stock);
-    return { playerState, ...serializeMarketProfile(profile, runtimeState, 1, stockMap) };
+    const activeEvent = await getActiveCityEvent(client, profile.cityId);
+    return { playerState, ...serializeMarketProfile(profile, runtimeState, 1, stockMap, activeEvent) };
   });
 }
 
@@ -624,7 +638,8 @@ export async function buyCityMarketItemForUser(user, cityId, itemId, quantityInp
     const profile = getCityMarketProfile(assertCity(cityId));
     const stockItem = profile.stock.find((entry) => entry.itemId === itemId);
     if (!stockItem) throw new HttpError(404, "This city does not stock that item.", "CITY_MARKET_ITEM_NOT_FOUND");
-    const context = getEconomyContext(runtimeState, profile.cityId);
+    const activeEvent = await getActiveCityEvent(client, profile.cityId);
+    const context = getEconomyContext(runtimeState, profile.cityId, activeEvent);
     const discountedStockItem = { ...stockItem, price: applyDiscount(stockItem.price, getLegalMarketDiscountPercent(runtimeState, stockItem)) };
     const cap = getStockCapForItem(stockItem, "legal");
     const stockInfo = await getCityMarketStock(client, "legal", profile.cityId, itemId, cap);
@@ -633,7 +648,7 @@ export async function buyCityMarketItemForUser(user, cityId, itemId, quantityInp
     const nextStockMap = await buildStockMap(client, "legal", profile.cityId, profile.stock);
     return {
       playerState,
-      ...serializeMarketProfile(profile, buildMutableRuntimeState(user, playerState), quantity, nextStockMap),
+      ...serializeMarketProfile(profile, buildMutableRuntimeState(user, playerState), quantity, nextStockMap, activeEvent),
       message: `Purchased ${getItemDisplayName(stockItem.itemId)} x${quantity} for ${purchase.totalPrice} gold.`,
     };
   });
@@ -646,7 +661,8 @@ export async function sellCityMarketItemForUser(user, cityId, itemId, quantityIn
     const profile = getCityMarketProfile(assertCity(cityId));
     const good = getLegalTradeGood(itemId);
     if (!good) throw new HttpError(404, "This item is not accepted by legal trade buyers.", "CITY_MARKET_SELL_ITEM_NOT_FOUND");
-    const context = getEconomyContext(runtimeState, profile.cityId);
+    const activeEvent = await getActiveCityEvent(client, profile.cityId);
+    const context = getEconomyContext(runtimeState, profile.cityId, activeEvent);
     const offer = serializeLegalSellOffer(good, runtimeState, context, quantity);
     if (!offer.canSell) throw new HttpError(409, offer.lockReason ?? "This item cannot be sold here right now.", "CITY_MARKET_SELL_BLOCKED");
     const now = Date.now();
@@ -665,7 +681,7 @@ export async function sellCityMarketItemForUser(user, cityId, itemId, quantityIn
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return {
       playerState,
-      ...serializeMarketProfile(profile, buildMutableRuntimeState(user, playerState), quantity),
+      ...serializeMarketProfile(profile, buildMutableRuntimeState(user, playerState), quantity, {}, activeEvent),
       message: `Sold ${getItemDisplayName(itemId)} x${quantity} for ${offer.totalPrice} gold in ${context.city.name}.`,
     };
   });
@@ -726,8 +742,9 @@ export async function sellBlackMarketItemForUser(user, cityId, itemId, quantityI
     const quantity = validateQuantity(quantityInput);
     const { runtimeState } = await loadRuntimeState(client, user);
     const blackMarket = getCityBlackMarket(assertCity(cityId));
-    const context = getEconomyContext(runtimeState, blackMarket.cityId);
-    const marketState = serializeBlackMarket(blackMarket, runtimeState, quantity);
+    const activeEvent = await getActiveCityEvent(client, blackMarket.cityId);
+    const context = getEconomyContext(runtimeState, blackMarket.cityId, activeEvent);
+    const marketState = serializeBlackMarket(blackMarket, runtimeState, quantity, {}, activeEvent);
     const fenceItem = getBlackMarketFence(blackMarket.cityId).find((entry) => entry.itemId === itemId);
     if (!fenceItem) throw new HttpError(404, "This under-market is not buying that item.", "CITY_BLACK_MARKET_SELL_ITEM_NOT_FOUND");
     const offer = serializeBlackMarketSellOffer(fenceItem, blackMarket, runtimeState, context, quantity, marketState.blackMarket.canOpen);
@@ -750,7 +767,7 @@ export async function sellBlackMarketItemForUser(user, cityId, itemId, quantityI
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
     return {
       playerState,
-      ...serializeBlackMarket(blackMarket, buildMutableRuntimeState(user, playerState), quantity),
+      ...serializeBlackMarket(blackMarket, buildMutableRuntimeState(user, playerState), quantity, {}, activeEvent),
       message: `Fenced ${getItemDisplayName(itemId)} x${quantity} for ${offer.totalPrice} gold in ${context.city.name}.`,
     };
   });
@@ -761,7 +778,8 @@ export async function getBlackMarketForUser(user, cityId) {
     const { playerState, runtimeState } = await loadRuntimeState(client, user);
     const blackMarket = getCityBlackMarket(assertCity(cityId));
     const stockMap = await buildStockMap(client, "black", blackMarket.cityId, blackMarket.stock);
-    return { playerState, ...serializeBlackMarket(blackMarket, runtimeState, 1, stockMap) };
+    const activeEvent = await getActiveCityEvent(client, blackMarket.cityId);
+    return { playerState, ...serializeBlackMarket(blackMarket, runtimeState, 1, stockMap, activeEvent) };
   });
 }
 
@@ -772,8 +790,9 @@ export async function buyBlackMarketItemForUser(user, cityId, itemId, quantityIn
     const blackMarket = getCityBlackMarket(assertCity(cityId));
     const stockItem = blackMarket.stock.find((entry) => entry.itemId === itemId);
     if (!stockItem) throw new HttpError(404, "This under-market does not stock that item.", "CITY_BLACK_MARKET_ITEM_NOT_FOUND");
-    const context = getEconomyContext(runtimeState, blackMarket.cityId);
-    const marketState = serializeBlackMarket(blackMarket, runtimeState, quantity);
+    const activeEvent = await getActiveCityEvent(client, blackMarket.cityId);
+    const context = getEconomyContext(runtimeState, blackMarket.cityId, activeEvent);
+    const marketState = serializeBlackMarket(blackMarket, runtimeState, quantity, {}, activeEvent);
     const cap = getStockCapForItem(stockItem, "black");
     const stockInfo = await getCityMarketStock(client, "black", blackMarket.cityId, itemId, cap);
     const purchase = await buyStock(client, "black", blackMarket.cityId, runtimeState, stockItem, context, quantity, marketState.blackMarket.canOpen, stockInfo);
@@ -792,7 +811,7 @@ export async function buyBlackMarketItemForUser(user, cityId, itemId, quantityIn
     const nextStockMap = await buildStockMap(client, "black", blackMarket.cityId, blackMarket.stock);
     return {
       playerState,
-      ...serializeBlackMarket(blackMarket, buildMutableRuntimeState(user, playerState), quantity, nextStockMap),
+      ...serializeBlackMarket(blackMarket, buildMutableRuntimeState(user, playerState), quantity, nextStockMap, activeEvent),
       message: `Purchased ${getItemDisplayName(stockItem.itemId)} x${quantity} for ${purchase.totalPrice} gold from the under-market.`,
     };
   });

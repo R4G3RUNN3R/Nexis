@@ -21,6 +21,8 @@ import {
   useCitySpecialForUser,
 } from "../services/cityEconomyService.js";
 
+import { getCityEventForUser } from "../services/cityEventService.js";
+
 export async function getCityPeople(req, res, next) {
   try {
     const result = await getCityPeopleForUser(req.auth.user, req.params.cityId, req.query ?? {});
@@ -168,6 +170,15 @@ export async function buyBlackMarketItem(req, res, next) {
 export async function sellBlackMarketItem(req, res, next) {
   try {
     const result = await sellBlackMarketItemForUser(req.auth.user, req.params.cityId, req.params.itemId, req.body?.quantity);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCityEvent(req, res, next) {
+  try {
+    const result = await getCityEventForUser(req.auth.user, req.params.cityId);
     res.status(200).json(result);
   } catch (error) {
     next(error);

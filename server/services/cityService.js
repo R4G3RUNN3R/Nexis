@@ -12,6 +12,7 @@ import { resolveTravelForRuntimeState } from "./travelService.js";
 import { resolveNpcCombatWithRewards } from "./combatService.js";
 import { getMissingCourses } from "./educationService.js";
 import { ensureAcademyState, getAccumulatedStudyMs, isAccruing as isStudyAccruing } from "../lib/academyStudyState.js";
+import { applyCityEventExposureIfEligible } from "./cityEventService.js";
 
 function formatDurationLabel(ms) {
   const totalSeconds = Math.max(0, Math.round(ms / 1000));
@@ -276,6 +277,9 @@ async function loadRuntimeState(client, user) {
   const travelResolution = resolveTravelForRuntimeState(runtimeState);
   let changed = travelResolution.changed;
   changed = touchContractProgress(runtimeState) || changed;
+  // A city crisis "burn" is a real mutation (stats + condition), not just a
+  // read - persist it the same way travel/contract resolution already is.
+  changed = (await applyCityEventExposureIfEligible(client, runtimeState, Date.now())) || changed;
 
   if (changed) {
     const nextPlayerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);

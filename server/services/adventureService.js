@@ -9,6 +9,8 @@ import { rollLoot } from "../data/lootData.js";
 import { applyCombatReward, resolveCombat } from "./combatService.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
 import { evaluateLegacyAchievementsForRuntime } from "./achievementService.js";
+import { triggerCityEventIfEligible } from "./cityEventService.js";
+import { ADVENTURE_ELITE_HUNT_TRIGGER } from "../data/cityEventData.js";
 
 function asRecord(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function asArray(value) { return Array.isArray(value) ? value : []; }
@@ -235,6 +237,20 @@ export async function startAdventureForUser(user, adventureId, payload = {}) {
         // category, source, and timestamp) and silently drop one of the two entries.
         addPlayerRecord(runtimeState, { id: `adventure_milestone_${adventure.id}_${now}`, category: "adventure", summary: adventure.chronicleMilestone, detail: { adventureId: adventure.id, milestone: true }, source: "adventure", route: "/adventure", timestamp: now });
       }
+    } else if (combat.winner === "opponent" && adventure.category === "elite_hunt") {
+      // A true defeat (not a draw) against a city's signature elite threat has
+      // a chance to spill over into a shared city crisis - see
+      // cityEventService.js. Never throws and never alters this player's own
+      // outcome; a losing roll or a losing race against another concurrent
+      // trigger are both silent no-ops.
+      await triggerCityEventIfEligible(client, {
+        cityId: adventure.cityId,
+        source: "adventure_defeat",
+        chance: ADVENTURE_ELITE_HUNT_TRIGGER.chance,
+        severity: ADVENTURE_ELITE_HUNT_TRIGGER.severity,
+        triggeredByLabel: `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "A local adventurer",
+        triggeredByPublicId: user.publicId,
+      });
     }
     addPlayerRecord(runtimeState, { category: "adventure", summary: `${adventure.title}: ${combat.outcome}${reward ? `, ${reward.items.length} item reward(s)` : ""}.`, detail: { adventureId: adventure.id, outcome: combat.outcome, reward, hiddenSite }, source: "adventure", route: "/adventure", timestamp: now });
     evaluateLegacyAchievementsForRuntime(runtimeState, user, now);

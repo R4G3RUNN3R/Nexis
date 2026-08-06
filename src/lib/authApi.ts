@@ -773,6 +773,23 @@ export type ApiCityBlackMarketResponse =
   | (CityEconomyBaseResponse & { ok: true; blackMarket: ServerCityBlackMarket })
   | ApiFailure;
 
+export type ServerCityEvent = {
+  cityId: string;
+  templateId: string;
+  label: string;
+  antagonist: string;
+  summary: string;
+  blocksShops: boolean;
+  severity: "moderate" | "major";
+  startedAt: number;
+  expiresAt: number;
+  triggeredByLabel: string | null;
+};
+
+export type ApiCityEventResponse =
+  | { ok: true; cityId: string; event: ServerCityEvent | null; isCurrentCity: boolean }
+  | ApiFailure;
+
 export type ServerMarketplaceListing = {
   id: string;
   itemId: string;
@@ -1466,6 +1483,13 @@ export function sellServerCityMarketItem(
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
     body: JSON.stringify({ quantity }),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function getServerCityEvent(sessionToken: string, cityId: string): Promise<ApiCityEventResponse> {
+  return requestJson<Omit<ApiCityEventResponse & { ok: true }, "ok">>(`/api/cities/${encodeURIComponent(cityId)}/event`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }
 

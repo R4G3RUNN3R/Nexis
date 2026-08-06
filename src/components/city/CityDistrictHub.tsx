@@ -15,6 +15,7 @@ import {
   completeServerCityContract,
   getServerCityAcademy,
   getServerCityContracts,
+  getServerCityEvent,
   getServerCityPeople,
   getServerCitySpecials,
   refreshServerCityContract,
@@ -22,6 +23,7 @@ import {
   useServerCitySpecial,
   type ServerCityAcademy,
   type ServerCityContract,
+  type ServerCityEvent,
   type ServerCitySpecialAction,
   type ServerCityOccupant,
   type ServerCityPopulation,
@@ -438,6 +440,7 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
   const [openSection, setOpenSection] = useState<CityHubSectionId>("overview");
   const [showAllContracts, setShowAllContracts] = useState(false);
   const [openAcademyId, setOpenAcademyId] = useState<string | null>(null);
+  const [cityEvent, setCityEvent] = useState<ServerCityEvent | null>(null);
 
   useEffect(() => {
     const hashId = location.hash.replace("#", "") as CityHubSectionId;
@@ -483,6 +486,25 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
       cancelled = true;
     };
   }, [authSource, city.id, peopleFilter, peoplePage, serverSessionToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCityEvent() {
+      if (authSource !== "server" || !serverSessionToken) {
+        setCityEvent(null);
+        return;
+      }
+      const result = await getServerCityEvent(serverSessionToken, city.id);
+      if (cancelled) return;
+      setCityEvent(result.ok ? result.event : null);
+    }
+
+    void loadCityEvent();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSource, city.id, serverSessionToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -654,6 +676,17 @@ export default function CityDistrictHub({ city }: { city: WorldCity }) {
         <div style={{ color: "#d8c278", fontSize: 13 }}>{hub.identity}</div>
         <div style={{ color: "#9fb0bf", fontSize: 13 }}>{shortText(hub.overview, 96)} <Link className="inline-route-link" to={cityCodexRoute}>Read city entry</Link></div>
       </div>
+
+      {cityEvent ? (
+        <div style={{ border: "1px solid rgba(217, 143, 143, 0.4)", borderRadius: 10, padding: 14, background: "rgba(40, 14, 14, 0.5)", display: "grid", gap: 4 }}>
+          <strong style={{ color: "#d98f8f" }}>{cityEvent.label}: {cityEvent.antagonist} is loose</strong>
+          <div style={{ color: "#e3b8b8", fontSize: 13 }}>{cityEvent.summary}</div>
+          <div style={{ color: "#d0ad74", fontSize: 12 }}>
+            {cityEvent.blocksShops ? "Shops and the under-market are barred until this clears. " : ""}
+            Expected to clear by {new Date(cityEvent.expiresAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}.
+          </div>
+        </div>
+      ) : null}
 
       <HubSection id="overview" title="City Overview" summary={`${standing ? `${standing.tier} standing` : "Local status"} | ${hub.market.imports.slice(0, 2).join(", ") || "city imports"} in, ${hub.market.exports.slice(0, 2).join(", ") || "city exports"} out`} openSection={openSection} onToggle={setOpenSection}>
         <div style={{ display: "grid", gap: 10 }}>
