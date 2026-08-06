@@ -46,6 +46,14 @@ export function getCodexEntryIdForRegion(regionId: string | null | undefined) {
   return `atlas-region-${regionId || "unknown"}`;
 }
 
+// worldRegions (charted map markers) and macroRegions (regional-bloc overlays, e.g. the
+// Hellenic Sphere) are independent lists that can share the same source id - keeping this in a
+// separate id namespace is what stops macroRegionEntries and regionEntries below from ever
+// colliding on the same React key.
+export function getCodexEntryIdForMacroRegion(regionId: string | null | undefined) {
+  return `atlas-macro-region-${regionId || "unknown"}`;
+}
+
 export function getCodexEntryIdForLegacyAcademy(academyId: string | null | undefined) {
   return `archive-academy-${academyId || "index"}`;
 }
@@ -95,7 +103,7 @@ const regionEntries: CodexEntry[] = worldRegions.map((region) => ({
 }));
 
 const macroRegionEntries: CodexEntry[] = macroRegions.map((region) => ({
-  id: getCodexEntryIdForRegion(region.id),
+  id: getCodexEntryIdForMacroRegion(region.id),
   section: "atlas",
   title: region.name,
   kicker: region.role,

@@ -1024,17 +1024,6 @@ export async function createOrganizationForUser(user, payload) {
   });
 }
 
-export async function addOrganizationMemberForUser(user, organizationInternalId, payload) {
-  return withTransaction(async (client) => {
-    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND");
-    const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "manage_members");
-    const targetUser = await findUserByPublicId(client, normalizePublicId(payload?.publicId)); if (!targetUser) throw new HttpError(404, "Target citizen record unavailable.", "TARGET_USER_NOT_FOUND"); if (targetUser.internalId === user.internalId) throw new HttpError(400, "You are already the director.", "CONSORTIUM_MEMBER_INVALID");
-    if (await findOrganizationForUserByType(client, targetUser.internalId, "consortium")) throw new HttpError(409, "That citizen already belongs to a consortium.", "CONSORTIUM_MEMBER_EXISTS");
-    const employeeRole = organization.roles.find((entry) => entry.roleKey === "employee") ?? organization.roles[organization.roles.length - 1]; await addOrganizationMember(client, organization.internalId, { userInternalId: targetUser.internalId, userPublicId: targetUser.publicId, displayName: founderDisplayName(targetUser), roleKey: employeeRole.roleKey }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "member_added", summary: { targetPublicId: targetUser.publicId, targetName: founderDisplayName(targetUser), roleKey: employeeRole.roleKey } });
-    let refreshed = await findOrganizationByInternalId(client, organization.internalId); refreshed = await persistConsortiumMetadata(client, refreshed, await buildConsortiumState(client, refreshed, user.internalId)); return refreshConsortiumView(client, user, refreshed);
-  });
-}
-
 export async function applyToConsortiumForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
     const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); if (await findOrganizationForUserByType(client, user.internalId, "consortium")) throw new HttpError(409, "You already belong to a consortium.", "CONSORTIUM_MEMBER_EXISTS");

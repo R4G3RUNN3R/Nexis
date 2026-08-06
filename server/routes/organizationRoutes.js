@@ -48,7 +48,6 @@ import {
   postOrganizationRoomBuildCancelController,
   postOrganizationRoomBuildStartController,
   postOrganizationRoomRemoveController,
-  postOrganizationMemberController,
 } from "../controllers/organizationController.js";
 
 const router = Router();
@@ -56,7 +55,6 @@ router.get("/organizations/mine", requireSession, getMyOrganizationController);
 router.get("/organizations/public/:publicId", requireSession, getOrganizationByPublicIdController);
 router.get("/organizations/consortium-templates", requireSession, getConsortiumTemplatesController);
 router.post("/organizations", requireSession, postOrganizationController);
-router.post("/organizations/:organizationId/members", requireSession, postOrganizationMemberController);
 router.post("/organizations/:organizationId/consortiums/apply", requireSession, postConsortiumApplyController);
 router.post("/organizations/:organizationId/consortiums/applications/review", requireSession, postConsortiumApplicationReviewController);
 router.post("/organizations/:organizationId/consortiums/invites", requireSession, postConsortiumInviteController);
