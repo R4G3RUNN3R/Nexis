@@ -253,6 +253,12 @@ function evaluateAchievementProgress(definition, runtimeState, user, now = Date.
       return asWholeNumber(counters.duelsResolved, 0);
     case "academy_stages_completed":
       return asWholeNumber(counters.academyStagesCompleted, 0);
+    case "dmos_one_shots_completed":
+      return asWholeNumber(counters.dmosOneShotsCompleted, 0);
+    case "dmos_one_shots_combat_completed":
+      return asWholeNumber(counters.dmosOneShotsCombatCompleted, 0);
+    case "dmos_one_shots_elite_completed":
+      return asWholeNumber(counters.dmosOneShotsEliteCompleted, 0);
     default:
       return 0;
   }

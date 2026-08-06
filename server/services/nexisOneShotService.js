@@ -189,6 +189,9 @@ function serializeCampaignSummary(campaign, selectedCampaignId, completedCampaig
     rewardTags: asArray(campaign.rewardTags).filter((entry) => typeof entry === "string"),
     summary: campaign.summary,
     rewardPreview: campaign.rewardPreview,
+    kind: campaign.kind ?? "civic",
+    grade: campaign.grade ?? "common",
+    thumbnailImageUrl: imageUrlFromKey(campaign.imageKey),
     selected: campaign.id === selectedCampaignId,
     isCompleted: Boolean(completion),
     completedAt: completion?.completedAt ?? null,
@@ -227,6 +230,10 @@ function getScene(campaign, sceneId) {
   return asRecord(campaign.scenes)[sceneId] ?? null;
 }
 
+function imageUrlFromKey(imageKey) {
+  return typeof imageKey === "string" && imageKey.trim() ? `/one-shot-images/${imageKey}` : null;
+}
+
 function serializeChoice(choice) {
   return { id: choice.id, label: choice.label, tags: asArray(choice.tags), completesRun: Boolean(choice.conclusion) };
 }
@@ -247,7 +254,7 @@ function serializeSession(session) {
     startedAt: session.startedAt,
     completedAt: session.completedAt ?? null,
     characterSnapshot: asRecord(session.characterSnapshot),
-    scene: scene ? { id: scene.id, title: scene.title, narration: scene.narration, choices: asArray(scene.choices).map(serializeChoice) } : null,
+    scene: scene ? { id: scene.id, title: scene.title, narration: session.sceneNarrationOverride ?? scene.narration, imageUrl: imageUrlFromKey(scene.imageKey), choices: asArray(scene.choices).map(serializeChoice) } : null,
     log: asArray(session.log).slice(-12),
     choicesMade: asArray(session.choicesMade),
     rewardPreview: campaign?.rewardPreview ?? null,
@@ -346,14 +353,16 @@ function buildSession(user, runtimeState, campaign, tokenSource, now, organizati
   };
 }
 
-function completeSession(runtimeState, user, session, choice, conclusion, now) {
+const ELITE_ONE_SHOT_GRADES = new Set(["epic", "legendary", "mythic"]);
+
+function completeSession(runtimeState, user, session, choice, conclusion, now, campaign) {
   const reward = applyOneShotReward(runtimeState, user, asRecord(conclusion.reward), now);
   const completed = {
     ...session,
     status: "completed",
     completedAt: now,
     sceneId: null,
-    completion: { outcome: conclusion.outcome, chronicleSummary: conclusion.chronicleSummary, reward, recordTags: asArray(conclusion.recordTags) },
+    completion: { outcome: conclusion.outcome, chronicleSummary: conclusion.chronicleSummary, reward, recordTags: asArray(conclusion.recordTags), imageUrl: imageUrlFromKey(conclusion.imageKey) },
     log: [...asArray(session.log), { id: `${session.id}_${choice.id}_choice`, type: "choice", title: choice.label, text: choice.label, timestamp: now }, { id: `${session.id}_${choice.id}_outcome`, type: "dm", title: "Outcome", text: conclusion.outcome, timestamp: now }].slice(-20),
     choicesMade: [...asArray(session.choicesMade), { id: choice.id, label: choice.label, at: now, outcome: conclusion.outcome }],
   };
@@ -365,7 +374,13 @@ function completeSession(runtimeState, user, session, choice, conclusion, now) {
   oneShots.lastUpdatedAt = now;
   runtimeState.player.dmosOneShots = oneShots;
   const player = asRecord(runtimeState.player);
-  player.counters = { ...asRecord(player.counters), dmosOneShotsCompleted: asWholeNumber(asRecord(player.counters).dmosOneShotsCompleted, 0) + 1 };
+  const counters = asRecord(player.counters);
+  player.counters = {
+    ...counters,
+    dmosOneShotsCompleted: asWholeNumber(counters.dmosOneShotsCompleted, 0) + 1,
+    dmosOneShotsCombatCompleted: asWholeNumber(counters.dmosOneShotsCombatCompleted, 0) + (campaign?.kind === "combat" ? 1 : 0),
+    dmosOneShotsEliteCompleted: asWholeNumber(counters.dmosOneShotsEliteCompleted, 0) + (ELITE_ONE_SHOT_GRADES.has(campaign?.grade) ? 1 : 0),
+  };
   runtimeState.player = player;
   addPlayerRecord(runtimeState, { id: `dmos_chronicle_${completed.id}`, category: "chronicle", summary: `${completed.title}: ${conclusion.chronicleSummary}`, detail: { type: "dmos_one_shot", campaignId: completed.campaignId, theme: completed.theme, region: completed.region, choices: completed.choicesMade, reward, visibility: "private" }, source: "dmos-one-shot", route: "/one-shots", timestamp: now });
   queueProgressionEvent(runtimeState, { id: `dmos_one_shot_complete_${completed.id}`, type: "dmos_one_shot_complete", title: "One-shot completed", summary: `${completed.title} recorded in your Chronicle.`, route: "/one-shots", createdAt: now, detail: { campaignId: completed.campaignId, reward } });
@@ -434,7 +449,7 @@ export async function advanceOneShotForUser(user, sessionId, payload = {}) {
         sessionId: session.id,
         outcomeKey: typeof choice.conclusion.outcome === "string" && choice.conclusion.outcome.trim() ? choice.conclusion.outcome.trim().slice(0, 120) : "completed",
       });
-      const { completed, reward } = completeSession(runtimeState, user, session, choice, choice.conclusion, now);
+      const { completed, reward } = completeSession(runtimeState, user, session, choice, choice.conclusion, now, campaign);
       evaluateLegacyAchievementsForRuntime(runtimeState, user, now);
       const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
       const organizationLabels = await loadOrganizationLabels(client, user, runtimeState);
@@ -443,10 +458,13 @@ export async function advanceOneShotForUser(user, sessionId, payload = {}) {
 
     const nextScene = getScene(campaign, choice.nextSceneId);
     if (!nextScene) throw new HttpError(409, "One-shot route unavailable.", "ONE_SHOT_NEXT_SCENE_NOT_FOUND");
+    const leadIn = typeof choice.decisionLeadIn === "string" ? choice.decisionLeadIn.trim() : "";
+    const sceneNarrationOverride = leadIn ? `${leadIn} ${nextScene.narration}` : null;
     const advanced = {
       ...session,
       sceneId: nextScene.id,
-      log: [...asArray(session.log), { id: `${session.id}_${choice.id}_choice`, type: "choice", title: choice.label, text: choice.label, timestamp: now }, { id: `${session.id}_${choice.id}_result`, type: "dm", title: nextScene.title, text: choice.narration ?? nextScene.narration, timestamp: now }, { id: `${session.id}_${nextScene.id}_scene`, type: "dm", title: nextScene.title, text: nextScene.narration, timestamp: now + 1 }].slice(-20),
+      sceneNarrationOverride,
+      log: [...asArray(session.log), { id: `${session.id}_${choice.id}_choice`, type: "choice", title: choice.label, text: choice.label, timestamp: now }, { id: `${session.id}_${choice.id}_result`, type: "dm", title: nextScene.title, text: choice.narration ?? nextScene.narration, timestamp: now }, { id: `${session.id}_${nextScene.id}_scene`, type: "dm", title: nextScene.title, text: sceneNarrationOverride ?? nextScene.narration, timestamp: now + 1 }].slice(-20),
       choicesMade: [...asArray(session.choicesMade), { id: choice.id, label: choice.label, at: now, outcome: choice.narration ?? nextScene.title }],
     };
     oneShots.activeSession = advanced;

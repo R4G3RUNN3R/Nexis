@@ -304,6 +304,54 @@ export const LEGACY_ACHIEVEMENTS = [
     "chronicleSummary": "Defeated an elite threat tied to city notices or expeditions."
   },
   {
+    "id": "adv-004",
+    "kind": "honor",
+    "category": "Contracts / Quests / Adventures",
+    "name": "First Contract",
+    "description": "Complete one DMOS Nexis one-shot.",
+    "metric": "dmos_one_shots_completed",
+    "target": 1,
+    "rewardPoints": 1,
+    "chronicleTitle": "First Contract",
+    "chronicleSummary": "Closed out a DMOS one-shot and recorded it in the Chronicle."
+  },
+  {
+    "id": "adv-005",
+    "kind": "medal",
+    "category": "Contracts / Quests / Adventures",
+    "name": "Chronicle Regular",
+    "description": "Complete twenty-five DMOS Nexis one-shots.",
+    "metric": "dmos_one_shots_completed",
+    "target": 25,
+    "rewardPoints": 1,
+    "chronicleTitle": "Chronicle Regular",
+    "chronicleSummary": "Built a long record of DMOS one-shot contracts across Nexis."
+  },
+  {
+    "id": "adv-006",
+    "kind": "honor",
+    "category": "Contracts / Quests / Adventures",
+    "name": "Monster Hunter",
+    "description": "Complete one combat-flagged DMOS Nexis one-shot.",
+    "metric": "dmos_one_shots_combat_completed",
+    "target": 1,
+    "rewardPoints": 1,
+    "chronicleTitle": "Monster Hunter",
+    "chronicleSummary": "Faced down a real threat in a DMOS one-shot and walked away with the story."
+  },
+  {
+    "id": "adv-007",
+    "kind": "medal",
+    "category": "Contracts / Quests / Adventures",
+    "name": "Legendary Contractor",
+    "description": "Complete five epic-or-higher grade DMOS Nexis one-shots.",
+    "metric": "dmos_one_shots_elite_completed",
+    "target": 5,
+    "rewardPoints": 1,
+    "chronicleTitle": "Legendary Contractor",
+    "chronicleSummary": "Took on Nexis's highest-grade DMOS contracts, repeatedly."
+  },
+  {
     "id": "org-001",
     "kind": "honor",
     "category": "Guild / Consortium",

@@ -6,6 +6,7 @@ import { AppShell } from "../components/layout/AppShell";
 import { useAuth } from "../state/AuthContext";
 import { usePlayer } from "../state/PlayerContext";
 import { chooseOneShotOption, getOneShotHub, startOneShot, type OneShotHub, type OneShotSession } from "../lib/nexisOneShotApi";
+import { OneShotArt } from "../components/one-shots/OneShotArt";
 
 function formatDate(value: unknown) {
   const timestamp = typeof value === "number" ? value : 0;
@@ -94,6 +95,7 @@ function CampaignList({ hub, campaigns, selectedId, onSelect }: { hub: OneShotHu
           disabled={Boolean(hub.activeSession) || campaign.isLocked}
           aria-pressed={selectedId === campaign.id}
         >
+          <OneShotArt imageUrl={campaign.thumbnailImageUrl} alt={campaign.title} variant="thumb" kind={campaign.kind} />
           <span>{campaign.region} | {campaign.category}</span>
           <strong>{campaign.title}</strong>
           <small>{campaign.theme} | {campaign.durationMinutes} min | {campaign.rewardPreview}</small>
@@ -105,11 +107,12 @@ function CampaignList({ hub, campaigns, selectedId, onSelect }: { hub: OneShotHu
   );
 }
 
-function ActiveSessionPanel({ session, busy, onChoose }: { session: OneShotSession; busy: boolean; onChoose: (choiceId: string) => void }) {
+function ActiveSessionPanel({ session, kind, busy, onChoose }: { session: OneShotSession; kind?: string; busy: boolean; onChoose: (choiceId: string) => void }) {
   if (session.status === "completed") {
     return (
       <ContentPanel title="Completed Chronicle">
         <div className="one-shot-complete">
+          <OneShotArt imageUrl={session.completion?.imageUrl} alt={`${session.title} outcome`} variant="outcome" kind={kind} />
           <div>
             <span className="one-shot-eyebrow">Recorded</span>
             <h2>{session.title}</h2>
@@ -126,6 +129,7 @@ function ActiveSessionPanel({ session, busy, onChoose }: { session: OneShotSessi
   return (
     <ContentPanel title="Active One-Shot">
       <div className="one-shot-scene">
+        <OneShotArt imageUrl={scene?.imageUrl} alt={scene?.title ?? session.title} variant="scene" kind={kind} />
         <div className="one-shot-scene__head">
           <div>
             <span className="one-shot-eyebrow">{session.region} | {session.theme}</span>
@@ -378,7 +382,7 @@ export default function OneShotsPage() {
             {loading ? (
               <ContentPanel title="DMOS Channel"><div className="one-shot-empty">Loading Nexis one-shot channel.</div></ContentPanel>
             ) : session ? (
-              <ActiveSessionPanel session={session} busy={busy} onChoose={handleChoose} />
+              <ActiveSessionPanel session={session} kind={hub?.campaigns.find((campaign) => campaign.id === session.campaignId)?.kind} busy={busy} onChoose={handleChoose} />
             ) : hub ? (
               <ContentPanel title="Campaign Selection">
                 <div className="one-shot-brief">

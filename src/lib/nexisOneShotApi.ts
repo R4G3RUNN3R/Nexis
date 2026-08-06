@@ -11,6 +11,7 @@ export type OneShotScene = {
   id: string;
   title: string;
   narration: string;
+  imageUrl: string | null;
   choices: OneShotChoice[];
 };
 
@@ -52,6 +53,7 @@ export type OneShotSession = {
     chronicleSummary?: string;
     reward?: OneShotReward;
     recordTags?: string[];
+    imageUrl?: string | null;
   } | null;
 };
 
@@ -62,10 +64,13 @@ export type OneShotCampaignSummary = {
   region: string;
   theme: string;
   category: string;
+  kind: "civic" | "combat" | string;
+  grade: "common" | "uncommon" | "rare" | "epic" | "legendary" | "mythic" | string;
   durationMinutes: number;
   rewardTags: string[];
   summary: string;
   rewardPreview: string;
+  thumbnailImageUrl: string | null;
   selected: boolean;
   isCompleted: boolean;
   completedAt: number | null;
