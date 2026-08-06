@@ -147,6 +147,7 @@ const normalizeManagement = (organization, template) => {
     management: {
       positions: asRecord(management.positions),
       applications: Array.isArray(management.applications) ? management.applications.map((entry) => ({ ...asRecord(entry), workingStats: normalizeWorkingStats(asRecord(entry).workingStats) })) : [],
+      invites: Array.isArray(management.invites) ? management.invites.map((entry) => ({ ...asRecord(entry) })) : [],
       outreach: { level: clamp(asRecord(management.outreach).level, 0, 6), campaignsLaunched: asInt(asRecord(management.outreach).campaignsLaunched), lastRunAt: typeof asRecord(management.outreach).lastRunAt === "number" ? asRecord(management.outreach).lastRunAt : null },
       health: asRecord(management.health),
       performance: asRecord(management.performance),
@@ -321,6 +322,8 @@ const normalizeGuildMetadata = (organization) => {
         invitePolicy: String(settings.invitePolicy ?? "Officer Approval").trim() || "Officer Approval",
         warDoctrine: String(settings.warDoctrine ?? "Precision Strikes").trim() || "Precision Strikes",
       },
+      applications: Array.isArray(guild.applications) ? guild.applications.map((entry) => ({ ...asRecord(entry) })) : [],
+      invites: Array.isArray(guild.invites) ? guild.invites.map((entry) => ({ ...asRecord(entry) })) : [],
     },
   };
 };
@@ -589,6 +592,10 @@ const buildGuildState = async (client, organization, viewerInternalId = null) =>
     armory: { items: armoryItems },
     settingsView: { invitePolicy: guild.settings.invitePolicy, warDoctrine: guild.settings.warDoctrine, publicProfile: guild.publicProfile },
     viewerPermissions: viewerRole?.permissions ?? [],
+    applications: guild.applications,
+    invites: guild.invites,
+    viewerHasPendingApplication: guild.applications.some((entry) => entry.applicantInternalId === viewerInternalId),
+    viewerHasPendingInvite: guild.invites.some((entry) => entry.targetInternalId === viewerInternalId),
   };
 };
 
@@ -711,6 +718,10 @@ const refreshGuildView = async (client, user, organization) => {
       armory: derived.armory,
       settingsView: derived.settingsView,
       viewerPermissions: derived.viewerPermissions,
+      applications: derived.applications,
+      invites: derived.invites,
+      viewerHasPendingApplication: derived.viewerHasPendingApplication,
+      viewerHasPendingInvite: derived.viewerHasPendingInvite,
       guildOverview: buildGuildOverview(organization, derived),
       assistanceOpportunities: buildGuildAssistanceOpportunities(organization, derived),
       layoutSections: ["Headquarters", "Members", "War / Rivalries", "Operations", "Specializations", "Armory", "Base", "Settings / Charter"],
@@ -836,9 +847,11 @@ const buildConsortiumState = async (client, organization, viewerInternalId = nul
   metadata.management.health = { popularity: round1(popularity), efficiency: round1(efficiency), environment: round1(environment), lastComputedAt: Date.now() };
   metadata.management.performance = { ...performance, lastComputedAt: Date.now() };
   const viewerDetails = employeeDetails.find((entry) => entry.userInternalId === viewerInternalId) ?? null;
-  return { baseEffects, template, metadata, healthMetrics, performance, stars, baseDailyGain, employeeDetails, viewerDetails, applications: pendingApplications, employeeCapacity, totalDailyGeneration, academyContract: consortiumAcademyContract, perkEffects: finalConsortiumPerkBundle };
+  const pendingInvites = metadata.management.invites;
+  return { baseEffects, template, metadata, healthMetrics, performance, stars, baseDailyGain, employeeDetails, viewerDetails, applications: pendingApplications, invites: pendingInvites, employeeCapacity, totalDailyGeneration, academyContract: consortiumAcademyContract, perkEffects: finalConsortiumPerkBundle };
 };
-const buildDirectoryEntry = (organization, derived, viewerInternalId) => ({ internalId: organization.internalId, publicId: organization.publicId, name: organization.name, type: organization.type, description: organization.description, statusText: organization.statusText, consortiumTypeKey: organization.consortiumTypeKey, consortiumTypeName: organization.consortiumTypeName, starRating: derived.stars, employeeCapacity: derived.employeeCapacity, employeeCount: organization.members.length, treasury: normalizeTreasury(organization.treasury), healthMetrics: derived.healthMetrics, performanceSummary: derived.performance.summary, director: organization.members.find((entry) => entry.roleKey === "director") ?? organization.members[0] ?? null, pendingApplications: derived.applications.length, viewerHasPendingApplication: derived.applications.some((entry) => entry.applicantInternalId === viewerInternalId) });
+const buildDirectoryEntry = (organization, derived, viewerInternalId) => ({ internalId: organization.internalId, publicId: organization.publicId, name: organization.name, type: organization.type, description: organization.description, statusText: organization.statusText, consortiumTypeKey: organization.consortiumTypeKey, consortiumTypeName: organization.consortiumTypeName, starRating: derived.stars, employeeCapacity: derived.employeeCapacity, employeeCount: organization.members.length, treasury: normalizeTreasury(organization.treasury), healthMetrics: derived.healthMetrics, performanceSummary: derived.performance.summary, director: organization.members.find((entry) => entry.roleKey === "director") ?? organization.members[0] ?? null, pendingApplications: derived.applications.length, viewerHasPendingApplication: derived.applications.some((entry) => entry.applicantInternalId === viewerInternalId), viewerHasPendingInvite: derived.invites.some((entry) => entry.targetInternalId === viewerInternalId) });
+const buildGuildDirectoryEntry = (organization, derived, viewerInternalId) => ({ internalId: organization.internalId, publicId: organization.publicId, name: organization.name, tag: organization.tag, type: organization.type, description: organization.description, statusText: organization.statusText, headline: derived.publicProfile.headline, recruitmentStatus: derived.publicProfile.recruitmentStatus, territory: derived.publicProfile.territory, reputation: derived.guildPassives.reputation, memberCount: organization.members.length, guildmaster: organization.members.find((entry) => entry.roleKey === "guildmaster") ?? organization.members[0] ?? null, pendingApplications: derived.applications.length, viewerHasPendingApplication: derived.applications.some((entry) => entry.applicantInternalId === viewerInternalId), viewerHasPendingInvite: derived.invites.some((entry) => entry.targetInternalId === viewerInternalId) });
 const persistConsortiumMetadata = async (client, organization, derived, patch = {}) => updateOrganizationDetails(client, organization.internalId, { ...patch, metadata: { ...derived.metadata }, passiveBonusSummary: buildPassiveSummary(derived.template) });
 // Everything unlocking at the next star tier above the consortium's current rating -- lets the
 // Advancement tab show "here's what you have now" (unlockedPassives/redeemableActives) right next to
@@ -854,7 +867,7 @@ const refreshConsortiumView = async (client, user, organization) => {
   const progressEntry = getProgressEntry((await getRuntimeForUser(client, user)).runtimeState, derived.template.key, organization.internalId);
   const consortiumPoints = { consortiumTypeKey: derived.template.key, organizationInternalId: organization.internalId, scope: "type", points: progressEntry.points, totalEarned: progressEntry.totalEarned, totalSpent: progressEntry.totalSpent, lastClaimedAt: progressEntry.lastClaimedAt, dailyGain: derived.viewerDetails?.dailyCpGain ?? derived.baseDailyGain };
   return {
-    organization: { ...organization, tag: null, treasury: normalizeTreasury(organization.treasury), metadata: derived.metadata, starRating: derived.stars, consortiumType: derived.template, rolesFlavor: derived.template.rolesFlavor, memberRoleKey: derived.viewerDetails?.roleKey ?? null, rewardLadder: derived.template.rewards, unlockedPassives: getUnlockedPassives(derived.template.key, derived.stars), redeemableActives: getActiveRewards(derived.template.key, derived.stars, consortiumPoints.points), nextTierRewards: getNextConsortiumTierRewards(derived.template, derived.stars), consortiumPerkEffects: derived.perkEffects, consortiumPoints, healthMetrics: derived.healthMetrics, performance: derived.performance, academyContract: derived.academyContract, baseMechanicalEffects: derived.baseEffects, employeeCapacity: derived.employeeCapacity, companyDailyGeneration: derived.totalDailyGeneration, positions: listConsortiumPositions(derived.template.key), applications: derived.applications, memberDetails: derived.employeeDetails, yourDetails: derived.viewerDetails, companyAgeDays: getCompanyAgeDays(organization.createdAt), companyOverview: buildConsortiumOverview(organization, derived), assistanceOpportunities: buildConsortiumAssistanceOpportunities(organization, derived), consortiumSettingsView: { description: organization.description, hiringPolicy: derived.metadata.management.settings.hiringPolicy, announcement: derived.metadata.management.settings.announcement }, layoutSections: ["Overview", "Employees", "Contracts", "Logistics", "Assets", "Finance", "Advancement"] },
+    organization: { ...organization, tag: null, treasury: normalizeTreasury(organization.treasury), metadata: derived.metadata, starRating: derived.stars, consortiumType: derived.template, rolesFlavor: derived.template.rolesFlavor, memberRoleKey: derived.viewerDetails?.roleKey ?? null, rewardLadder: derived.template.rewards, unlockedPassives: getUnlockedPassives(derived.template.key, derived.stars), redeemableActives: getActiveRewards(derived.template.key, derived.stars, consortiumPoints.points), nextTierRewards: getNextConsortiumTierRewards(derived.template, derived.stars), consortiumPerkEffects: derived.perkEffects, consortiumPoints, healthMetrics: derived.healthMetrics, performance: derived.performance, academyContract: derived.academyContract, baseMechanicalEffects: derived.baseEffects, employeeCapacity: derived.employeeCapacity, companyDailyGeneration: derived.totalDailyGeneration, positions: listConsortiumPositions(derived.template.key), applications: derived.applications, invites: derived.invites, viewerHasPendingApplication: derived.applications.some((entry) => entry.applicantInternalId === user.internalId), viewerHasPendingInvite: derived.invites.some((entry) => entry.targetInternalId === user.internalId), memberDetails: derived.employeeDetails, yourDetails: derived.viewerDetails, companyAgeDays: getCompanyAgeDays(organization.createdAt), companyOverview: buildConsortiumOverview(organization, derived), assistanceOpportunities: buildConsortiumAssistanceOpportunities(organization, derived), consortiumSettingsView: { description: organization.description, hiringPolicy: derived.metadata.management.settings.hiringPolicy, announcement: derived.metadata.management.settings.announcement }, layoutSections: ["Overview", "Employees", "Contracts", "Logistics", "Assets", "Finance", "Advancement"] },
     consortiumProgress: consortiumPoints,
   };
 };
@@ -964,6 +977,16 @@ export async function getMyOrganization(user, type) {
   return withTransaction(async (client) => {
     const organization = await findOrganizationForUserByType(client, user.internalId, type);
     const hydrated = type === "guild" ? await refreshGuildView(client, user, organization) : await refreshConsortiumView(client, user, organization);
+
+    if (type === "guild") {
+      const directory = [];
+      const guilds = await listOrganizationsByType(client, "guild");
+      for (const entry of guilds) {
+        directory.push(buildGuildDirectoryEntry(entry, await buildGuildState(client, entry, user.internalId), user.internalId));
+      }
+      return { ...hydrated, directory };
+    }
+
     if (type !== "consortium") {
       return hydrated;
     }
@@ -992,7 +1015,7 @@ export async function createOrganizationForUser(user, payload) {
     if (type === "consortium" && !hasCompletedCourse(runtimeState, "civic-fundamentals")) throw new HttpError(403, "Civic Fundamentals is required before founding a consortium.", "EDUCATION_LOCKED");
     const cost = type === "guild" ? getGuildFoundationCost(runtimeState) : getConsortiumFoundationCost(runtimeState, template); if (runtimeState.player.gold < cost) throw new HttpError(400, `Not enough gold to found this ${type}.`, "ORG_FUNDS_REQUIRED");
     runtimeState.player.gold -= cost; runtimeState.player.currencies = { ...runtimeState.player.currencies, gold: runtimeState.player.gold };
-    const organization = await createOrganization(client, { internalId: `org_${crypto.randomUUID()}`, publicId: await allocateNextPublicNumericId(client, type, getFirstOrganizationPublicId(type)), type, name, tag: type === "guild" ? normalizeTag(payload?.tag) : null, founderInternalId: user.internalId, founderPublicId: user.publicId, description: type === "guild" ? "A live guild charter with public doctrine, internal command, dungeons, passives, and an armory instead of vague promises." : template.description, statusText: type === "guild" ? "Recruiting" : "Operational", consortiumTypeKey: template?.key ?? null, consortiumTypeName: template?.displayName ?? null, passiveBonusSummary: template ? buildPassiveSummary(template) : "", creationCost: cost, treasury: { copper: 0, silver: 0, gold: 0, platinum: 0 }, metadata: type === "consortium" ? { companyStyle: true, rewardTiers: template.rewards.map((entry) => entry.starTier), rolesFlavor: template.rolesFlavor, management: { positions: {}, applications: [], outreach: { level: 0, campaignsLaunched: 0, lastRunAt: null }, health: {}, performance: {} } } : { guild: { publicProfile: { headline: `${name} moves quietly, cuts deeply, and recruits with standards.`, recruitmentStatus: "Recruiting disciplined members", doctrine: "Strike clean, vanish cleaner.", territory: "Nexis City", diplomacy: "Open to respectful accords, allergic to clowns.", publicNotice: "Visitors see the banner. Members see the machinery." }, passives: { reputation: 120, totalEarned: 120, totalSpent: 0, everUnlocked: [], activeSpecializations: [], respecCount: 0, lastRespecAt: null, rally: { active: false, activatedAt: null, expiresAt: null, lastTriggeredAt: null } }, wars: { doctrine: "Precision Strikes", activeWars: [], history: [] }, adventuring: { lastRunAt: null, currentQuest: null, lastCrew: [], history: [] }, armory: { items: {} }, settings: { invitePolicy: "Officer Approval", warDoctrine: "Precision Strikes" } } } });
+    const organization = await createOrganization(client, { internalId: `org_${crypto.randomUUID()}`, publicId: await allocateNextPublicNumericId(client, type, getFirstOrganizationPublicId(type)), type, name, tag: type === "guild" ? normalizeTag(payload?.tag) : null, founderInternalId: user.internalId, founderPublicId: user.publicId, description: type === "guild" ? "A live guild charter with public doctrine, internal command, dungeons, passives, and an armory instead of vague promises." : template.description, statusText: type === "guild" ? "Recruiting" : "Operational", consortiumTypeKey: template?.key ?? null, consortiumTypeName: template?.displayName ?? null, passiveBonusSummary: template ? buildPassiveSummary(template) : "", creationCost: cost, treasury: { copper: 0, silver: 0, gold: 0, platinum: 0 }, metadata: type === "consortium" ? { companyStyle: true, rewardTiers: template.rewards.map((entry) => entry.starTier), rolesFlavor: template.rolesFlavor, management: { positions: {}, applications: [], invites: [], outreach: { level: 0, campaignsLaunched: 0, lastRunAt: null }, health: {}, performance: {} } } : { guild: { publicProfile: { headline: `${name} moves quietly, cuts deeply, and recruits with standards.`, recruitmentStatus: "Recruiting disciplined members", doctrine: "Strike clean, vanish cleaner.", territory: "Nexis City", diplomacy: "Open to respectful accords, allergic to clowns.", publicNotice: "Visitors see the banner. Members see the machinery." }, passives: { reputation: 120, totalEarned: 120, totalSpent: 0, everUnlocked: [], activeSpecializations: [], respecCount: 0, lastRespecAt: null, rally: { active: false, activatedAt: null, expiresAt: null, lastTriggeredAt: null } }, wars: { doctrine: "Precision Strikes", activeWars: [], history: [] }, adventuring: { lastRunAt: null, currentQuest: null, lastCrew: [], history: [] }, armory: { items: {} }, settings: { invitePolicy: "Officer Approval", warDoctrine: "Precision Strikes" }, applications: [], invites: [] } } });
     const roles = type === "guild" ? buildGuildRoles() : buildConsortiumRoles(template); await replaceOrganizationRoles(client, organization.internalId, roles); await addOrganizationMember(client, organization.internalId, { userInternalId: user.internalId, userPublicId: user.publicId, displayName: founderDisplayName(user), roleKey: roles[0].roleKey }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "organization_created", summary: { type, name: organization.name, publicId: organization.publicId, creationCost: cost, consortiumTypeKey: template?.key ?? null } });
     let hydratedOrganization = await findOrganizationByInternalId(client, organization.internalId);
     if (type === "consortium") { const derived = await buildConsortiumState(client, hydratedOrganization, user.internalId); hydratedOrganization = await persistConsortiumMetadata(client, hydratedOrganization, derived); syncMembershipSummary(runtimeState, hydratedOrganization, template, derived.stars, roles[0].roleKey); setProgressEntry(runtimeState, template.key, getProgressEntry(runtimeState, template.key, hydratedOrganization.internalId)); }
@@ -1030,6 +1053,29 @@ export async function reviewConsortiumApplicationForUser(user, organizationInter
     let updated = organization;
     if (decision === "accept") { const targetUser = await findUserByPublicId(client, applicantPublicId); if (!targetUser) throw new HttpError(404, "Applicant record unavailable.", "TARGET_USER_NOT_FOUND"); if (await findOrganizationForUserByType(client, targetUser.internalId, "consortium")) throw new HttpError(409, "Applicant already joined another consortium.", "CONSORTIUM_MEMBER_EXISTS"); const employeeRole = organization.roles.find((entry) => entry.roleKey === "employee") ?? organization.roles[organization.roles.length - 1]; await addOrganizationMember(client, organization.internalId, { userInternalId: targetUser.internalId, userPublicId: targetUser.publicId, displayName: founderDisplayName(targetUser), roleKey: employeeRole.roleKey }); updated = await findOrganizationByInternalId(client, organization.internalId); const derived = await buildConsortiumState(client, { ...updated, metadata: { ...updated.metadata, ...metadata } }, user.internalId); updated = await persistConsortiumMetadata(client, updated, derived); const { runtimeState } = await getRuntimeForUser(client, targetUser, { forUpdate: true }); syncMembershipSummary(runtimeState, updated, template, derived.stars, employeeRole.roleKey); await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_application_accepted", summary: { applicantPublicId } }); }
     else { updated = await updateOrganizationDetails(client, organization.internalId, { metadata }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_application_rejected", summary: { applicantPublicId } }); }
+    return refreshConsortiumView(client, user, updated);
+  });
+}
+
+export async function inviteConsortiumMemberForUser(user, organizationInternalId, payload) {
+  return withTransaction(async (client) => {
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "recruit_members");
+    const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); const targetPublicId = normalizePublicId(payload?.publicId); const targetUser = await findUserByPublicId(client, targetPublicId); if (!targetUser) throw new HttpError(404, "Target citizen record unavailable.", "TARGET_USER_NOT_FOUND"); if (targetUser.internalId === user.internalId) throw new HttpError(400, "You already run this consortium.", "CONSORTIUM_MEMBER_INVALID"); if (await findOrganizationForUserByType(client, targetUser.internalId, "consortium")) throw new HttpError(409, "That citizen already belongs to a consortium.", "CONSORTIUM_MEMBER_EXISTS"); if (metadata.management.invites.some((entry) => entry.targetInternalId === targetUser.internalId)) throw new HttpError(409, "That citizen already has a pending invite from this consortium.", "CONSORTIUM_INVITE_EXISTS");
+    metadata.management.invites.unshift({ targetInternalId: targetUser.internalId, targetPublicId: targetUser.publicId, targetName: founderDisplayName(targetUser), invitedByPublicId: user.publicId, invitedByName: founderDisplayName(user), invitedAt: Date.now() });
+    const updated = await persistConsortiumMetadata(client, organization, await buildConsortiumState(client, { ...organization, metadata: { ...organization.metadata, ...metadata } }, user.internalId));
+    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_invite_sent", summary: { targetPublicId } });
+    return refreshConsortiumView(client, user, updated);
+  });
+}
+
+export async function respondToConsortiumInviteForUser(user, organizationInternalId, payload) {
+  return withTransaction(async (client) => {
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "consortium") throw new HttpError(404, "Consortium record unavailable.", "CONSORTIUM_NOT_FOUND");
+    const template = getConsortiumTypeDefinition(organization.consortiumTypeKey); const metadata = normalizeManagement(organization, template); const decision = String(payload?.decision ?? "").toLowerCase(); const invite = metadata.management.invites.find((entry) => entry.targetInternalId === user.internalId); if (!invite) throw new HttpError(404, "Invite record unavailable.", "CONSORTIUM_INVITE_NOT_FOUND");
+    metadata.management.invites = metadata.management.invites.filter((entry) => entry.targetInternalId !== user.internalId);
+    let updated = organization;
+    if (decision === "accept") { if (await findOrganizationForUserByType(client, user.internalId, "consortium")) throw new HttpError(409, "You already belong to a consortium.", "CONSORTIUM_MEMBER_EXISTS"); const employeeRole = organization.roles.find((entry) => entry.roleKey === "employee") ?? organization.roles[organization.roles.length - 1]; await addOrganizationMember(client, organization.internalId, { userInternalId: user.internalId, userPublicId: user.publicId, displayName: founderDisplayName(user), roleKey: employeeRole.roleKey }); updated = await findOrganizationByInternalId(client, organization.internalId); const derived = await buildConsortiumState(client, { ...updated, metadata: { ...updated.metadata, ...metadata } }, user.internalId); updated = await persistConsortiumMetadata(client, updated, derived); const { runtimeState } = await getRuntimeForUser(client, user, { forUpdate: true }); syncMembershipSummary(runtimeState, updated, template, derived.stars, employeeRole.roleKey); await upsertPlayerRuntimeState(client, user.internalId, runtimeState); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_invite_accepted", summary: { targetPublicId: user.publicId } }); }
+    else { updated = await updateOrganizationDetails(client, organization.internalId, { metadata }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "consortium_invite_declined", summary: { targetPublicId: user.publicId } }); }
     return refreshConsortiumView(client, user, updated);
   });
 }
@@ -1349,30 +1395,66 @@ export async function updateConsortiumSettingsForUser(user, organizationInternal
   });
 }
 
-export async function recruitGuildMemberForUser(user, organizationInternalId, payload) {
+// Grants the guild's standard join-reputation bonus (base 45, scaled by the Open Roster Accord
+// specialization) directly onto an in-hand metadata object -- shared by both the invite-accept
+// and application-accept paths below, since either route ends the same way: a new member joins
+// and the guild's roster grows. Mutates in place and returns the gain; the caller is responsible
+// for persisting this same metadata object in its one final updateOrganizationDetails call, so
+// this never races against the applications/invites-array mutation already sitting in that object.
+function grantGuildJoinReputation(metadata) {
+  const base = 45;
+  const multiplier = computeGuildSpecializationEffects(metadata.guild.passives.activeSpecializations).reputationMultiplier(true);
+  const gain = Math.round(base * multiplier);
+  metadata.guild.passives.reputation += gain;
+  metadata.guild.passives.totalEarned += gain;
+  return gain;
+}
+
+export async function applyToGuildForUser(user, organizationInternalId, payload) {
   return withTransaction(async (client) => {
-    const organization = await lockOrganizationForUpdate(client, organizationInternalId);
-    if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
-    const actorMember = ensureMember(organization, user.internalId);
-    ensurePermission(organization, actorMember, "recruit_members");
-    const targetPublicId = normalizePublicId(payload?.publicId);
-    const targetUser = await findUserByPublicId(client, targetPublicId);
-    if (!targetUser) throw new HttpError(404, "Target citizen record unavailable.", "TARGET_USER_NOT_FOUND");
-    if (targetUser.internalId === user.internalId) throw new HttpError(400, "You already run this guild, dramatic as that would be.", "GUILD_MEMBER_INVALID");
-    if (await findOrganizationForUserByType(client, targetUser.internalId, "guild")) throw new HttpError(409, "That citizen already belongs to a guild.", "GUILD_MEMBER_EXISTS");
-    const memberRole = organization.roles.find((entry) => entry.roleKey === "member") ?? organization.roles[organization.roles.length - 1];
-    await addOrganizationMember(client, organization.internalId, { userInternalId: targetUser.internalId, userPublicId: targetUser.publicId, displayName: founderDisplayName(targetUser), roleKey: memberRole.roleKey });
-    const { runtimeState } = await getRuntimeForUser(client, targetUser, { forUpdate: true });
-    syncGuildMembershipSummary(runtimeState, organization, memberRole.roleKey);
-    await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState);
-    const metadata = normalizeGuildMetadata(await findOrganizationByInternalId(client, organization.internalId));
-    const recruitReputationBase = 45;
-    const recruitMultiplier = computeGuildSpecializationEffects(metadata.guild.passives.activeSpecializations).reputationMultiplier(true);
-    const recruitReputationGain = Math.round(recruitReputationBase * recruitMultiplier);
-    metadata.guild.passives.reputation += recruitReputationGain;
-    metadata.guild.passives.totalEarned += recruitReputationGain;
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND"); if (await findOrganizationForUserByType(client, user.internalId, "guild")) throw new HttpError(409, "You already belong to a guild.", "GUILD_MEMBER_EXISTS");
+    const metadata = normalizeGuildMetadata(organization); if (metadata.guild.applications.some((entry) => entry.applicantInternalId === user.internalId)) throw new HttpError(409, "You already have a pending application with this guild.", "GUILD_APPLICATION_EXISTS");
+    metadata.guild.applications.unshift({ applicantInternalId: user.internalId, applicantPublicId: user.publicId, applicantName: founderDisplayName(user), note: sanitizeApplicationNote(payload?.note), submittedAt: Date.now() });
+    await updateOrganizationDetails(client, organization.internalId, { metadata }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_application_submitted", summary: { applicantPublicId: user.publicId } });
+    return { ok: true };
+  });
+}
+
+export async function reviewGuildApplicationForUser(user, organizationInternalId, payload) {
+  return withTransaction(async (client) => {
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "recruit_members");
+    const metadata = normalizeGuildMetadata(organization); const applicantPublicId = normalizePublicId(payload?.applicantPublicId); const decision = String(payload?.decision ?? "").toLowerCase(); const application = metadata.guild.applications.find((entry) => Number(entry.applicantPublicId) === applicantPublicId); if (!application) throw new HttpError(404, "Application record unavailable.", "GUILD_APPLICATION_NOT_FOUND");
+    metadata.guild.applications = metadata.guild.applications.filter((entry) => Number(entry.applicantPublicId) !== applicantPublicId);
+    let updated = organization;
+    if (decision === "accept") { const targetUser = await findUserByPublicId(client, applicantPublicId); if (!targetUser) throw new HttpError(404, "Applicant record unavailable.", "TARGET_USER_NOT_FOUND"); if (await findOrganizationForUserByType(client, targetUser.internalId, "guild")) throw new HttpError(409, "Applicant already joined another guild.", "GUILD_MEMBER_EXISTS"); const memberRole = organization.roles.find((entry) => entry.roleKey === "member") ?? organization.roles[organization.roles.length - 1]; await addOrganizationMember(client, organization.internalId, { userInternalId: targetUser.internalId, userPublicId: targetUser.publicId, displayName: founderDisplayName(targetUser), roleKey: memberRole.roleKey }); const { runtimeState } = await getRuntimeForUser(client, targetUser, { forUpdate: true }); syncGuildMembershipSummary(runtimeState, organization, memberRole.roleKey); await upsertPlayerRuntimeState(client, targetUser.internalId, runtimeState); const reputationGain = grantGuildJoinReputation(metadata); updated = await updateOrganizationDetails(client, organization.internalId, { metadata }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_application_accepted", summary: { applicantPublicId, reputationGain } }); }
+    else { updated = await updateOrganizationDetails(client, organization.internalId, { metadata }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_application_rejected", summary: { applicantPublicId } }); }
+    return refreshGuildView(client, user, updated);
+  });
+}
+
+// Renamed from the old recruitGuildMemberForUser (instant, no-consent add) -- this now only
+// creates a pending invite; the target must call respondToGuildInviteForUser to actually join.
+// See the "Guild recruit scope" decision: a guild officer/guildmaster could previously add any
+// citizen by public ID with zero say from that player.
+export async function inviteGuildMemberForUser(user, organizationInternalId, payload) {
+  return withTransaction(async (client) => {
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND"); const actorMember = ensureMember(organization, user.internalId); ensurePermission(organization, actorMember, "recruit_members");
+    const metadata = normalizeGuildMetadata(organization); const targetPublicId = normalizePublicId(payload?.publicId); const targetUser = await findUserByPublicId(client, targetPublicId); if (!targetUser) throw new HttpError(404, "Target citizen record unavailable.", "TARGET_USER_NOT_FOUND"); if (targetUser.internalId === user.internalId) throw new HttpError(400, "You already run this guild, dramatic as that would be.", "GUILD_MEMBER_INVALID"); if (await findOrganizationForUserByType(client, targetUser.internalId, "guild")) throw new HttpError(409, "That citizen already belongs to a guild.", "GUILD_MEMBER_EXISTS"); if (metadata.guild.invites.some((entry) => entry.targetInternalId === targetUser.internalId)) throw new HttpError(409, "That citizen already has a pending invite from this guild.", "GUILD_INVITE_EXISTS");
+    metadata.guild.invites.unshift({ targetInternalId: targetUser.internalId, targetPublicId: targetUser.publicId, targetName: founderDisplayName(targetUser), invitedByPublicId: user.publicId, invitedByName: founderDisplayName(user), invitedAt: Date.now() });
     const updated = await updateOrganizationDetails(client, organization.internalId, { metadata });
-    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_member_recruited", summary: { targetPublicId, reputationGain: recruitReputationGain } });
+    await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_invite_sent", summary: { targetPublicId } });
+    return refreshGuildView(client, user, updated);
+  });
+}
+
+export async function respondToGuildInviteForUser(user, organizationInternalId, payload) {
+  return withTransaction(async (client) => {
+    const organization = await lockOrganizationForUpdate(client, organizationInternalId); if (!organization || organization.type !== "guild") throw new HttpError(404, "Guild record unavailable.", "GUILD_NOT_FOUND");
+    const metadata = normalizeGuildMetadata(organization); const decision = String(payload?.decision ?? "").toLowerCase(); const invite = metadata.guild.invites.find((entry) => entry.targetInternalId === user.internalId); if (!invite) throw new HttpError(404, "Invite record unavailable.", "GUILD_INVITE_NOT_FOUND");
+    metadata.guild.invites = metadata.guild.invites.filter((entry) => entry.targetInternalId !== user.internalId);
+    let updated = organization;
+    if (decision === "accept") { if (await findOrganizationForUserByType(client, user.internalId, "guild")) throw new HttpError(409, "You already belong to a guild.", "GUILD_MEMBER_EXISTS"); const memberRole = organization.roles.find((entry) => entry.roleKey === "member") ?? organization.roles[organization.roles.length - 1]; await addOrganizationMember(client, organization.internalId, { userInternalId: user.internalId, userPublicId: user.publicId, displayName: founderDisplayName(user), roleKey: memberRole.roleKey }); const { runtimeState } = await getRuntimeForUser(client, user, { forUpdate: true }); syncGuildMembershipSummary(runtimeState, organization, memberRole.roleKey); await upsertPlayerRuntimeState(client, user.internalId, runtimeState); const reputationGain = grantGuildJoinReputation(metadata); updated = await updateOrganizationDetails(client, organization.internalId, { metadata }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_invite_accepted", summary: { targetPublicId: user.publicId, reputationGain } }); }
+    else { updated = await updateOrganizationDetails(client, organization.internalId, { metadata }); await insertOrganizationLog(client, organization.internalId, { actorInternalId: user.internalId, actorPublicId: user.publicId, actionType: "guild_invite_declined", summary: { targetPublicId: user.publicId } }); }
     return refreshGuildView(client, user, updated);
   });
 }

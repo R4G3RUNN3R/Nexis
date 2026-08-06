@@ -7,6 +7,7 @@ import {
   addOrganizationMemberForUser,
   assignGuildQuestMemberForUser,
   applyToConsortiumForUser,
+  applyToGuildForUser,
   cancelGuildQuestForUser,
   assignConsortiumPositionForUser,
   claimDailyConsortiumPointsForUser,
@@ -16,14 +17,18 @@ import {
   getMyOrganization,
   getOrganizationByPublicIdForUser,
   initiateGuildQuestForUser,
+  inviteConsortiumMemberForUser,
+  inviteGuildMemberForUser,
   listConsortiumTypes,
   launchGuildDungeonForUser,
   planGuildQuestForUser,
-  recruitGuildMemberForUser,
   redeemConsortiumRewardForUser,
   replanGuildQuestForUser,
   removeConsortiumMemberForUser,
+  respondToConsortiumInviteForUser,
+  respondToGuildInviteForUser,
   reviewConsortiumApplicationForUser,
+  reviewGuildApplicationForUser,
   runConsortiumOutreachForUser,
   swapGuildSkillForUser,
   triggerGuildRallyForUser,
@@ -60,7 +65,7 @@ export const getOrganizationByPublicIdController = wrap(async (req, res) => {
 export const getMyOrganizationController = wrap(async (req, res) => {
   const payload = await getMyOrganization(req.auth.user, req.query.type);
   if (req.query.type === "guild") {
-    res.status(200).json({ organization: payload.organization ?? null });
+    res.status(200).json({ organization: payload.organization ?? null, directory: payload.directory ?? [] });
     return;
   }
 
@@ -79,7 +84,12 @@ export const postConsortiumOutreachController = wrap(async (req, res) => { res.s
 export const postConsortiumSettingsController = wrap(async (req, res) => { res.status(200).json(await updateConsortiumSettingsForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
 export const getConsortiumTemplatesController = wrap(async (_req, res) => { res.status(200).json({ consortiumTemplates: listConsortiumTypes() }); });
 export const postGuildSettingsController = wrap(async (req, res) => { res.status(200).json(await updateGuildSettingsForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
-export const postGuildRecruitController = wrap(async (req, res) => { res.status(200).json(await recruitGuildMemberForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
+export const postGuildApplyController = wrap(async (req, res) => { res.status(200).json(await applyToGuildForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
+export const postGuildApplicationReviewController = wrap(async (req, res) => { res.status(200).json(await reviewGuildApplicationForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
+export const postGuildInviteController = wrap(async (req, res) => { res.status(200).json(await inviteGuildMemberForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
+export const postGuildInviteRespondController = wrap(async (req, res) => { res.status(200).json(await respondToGuildInviteForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
+export const postConsortiumInviteController = wrap(async (req, res) => { res.status(200).json(await inviteConsortiumMemberForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
+export const postConsortiumInviteRespondController = wrap(async (req, res) => { res.status(200).json(await respondToConsortiumInviteForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
 export const postGuildSkillUnlockController = wrap(async (req, res) => { res.status(200).json(await unlockGuildSkillForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
 export const postGuildSkillSwapController = wrap(async (req, res) => { res.status(200).json(await swapGuildSkillForUser(req.auth.user, req.params.organizationId, req.body ?? {})); });
 export const postGuildRallyController = wrap(async (req, res) => { res.status(200).json(await triggerGuildRallyForUser(req.auth.user, req.params.organizationId)); });

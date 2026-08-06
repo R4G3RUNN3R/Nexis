@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { OrganizationBaseTab } from "../components/organizations/OrganizationBaseTab";
@@ -10,6 +10,7 @@ import { useAuth } from "../state/AuthContext";
 import { useEducation } from "../state/EducationContext";
 import { allocatePublicNumericId, formatEntityPublicId } from "../lib/publicIds";
 import {
+  applyToConsortium,
   assignConsortiumPosition,
   claimConsortiumPoints,
   createOrganization,
@@ -17,7 +18,9 @@ import {
   getConsortiumLogisticsBoard,
   getMyOrganization,
   getOrganizationByPublicId,
+  inviteConsortiumMember,
   removeConsortiumMember,
+  respondToConsortiumInvite,
   reviewConsortiumApplication,
   redeemConsortiumReward,
   runConsortiumOutreach,
@@ -161,6 +164,11 @@ function getApplications(board: ConsortiumBoard): Array<Record<string, unknown>>
   return Array.isArray(applications) ? (applications as Array<Record<string, unknown>>) : [];
 }
 
+function getInvites(board: ConsortiumBoard): Array<Record<string, unknown>> {
+  const invites = (board as ConsortiumBoard & { invites?: unknown }).invites;
+  return Array.isArray(invites) ? (invites as Array<Record<string, unknown>>) : [];
+}
+
 function getPositions(board: ConsortiumBoard): Array<{ key: string; displayName: string }> {
   const positions = (board as ConsortiumBoard & { positions?: unknown }).positions;
   return Array.isArray(positions) ? (positions as Array<{ key: string; displayName: string }>) : [];
@@ -244,6 +252,9 @@ export default function ConsortiumsPage() {
   const [memberTab, setMemberTab] = useState<ConsortiumTab>("ledger");
   const [message, setMessage] = useState<string | null>(null);
   const [boardLoadError, setBoardLoadError] = useState<string | null>(null);
+  const [directory, setDirectory] = useState<Array<Record<string, unknown>>>([]);
+  const [applicationNote, setApplicationNote] = useState("");
+  const [invitePublicId, setInvitePublicId] = useState("");
   const [treasuryDepositAmount, setTreasuryDepositAmount] = useState("1000");
   const [positionDraftByMember, setPositionDraftByMember] = useState<Record<string, string>>({});
   const [settingsDraft, setSettingsDraft] = useState({ description: "", hiringPolicy: "", announcement: "" });
@@ -278,10 +289,12 @@ export default function ConsortiumsPage() {
       const payload = result as {
         organization: ConsortiumBoard | null;
         consortiumTemplates?: ConsortiumTypeDefinition[];
+        directory?: Array<Record<string, unknown>>;
       };
       setBoardLoadError(null);
       setBoard(payload.organization);
       setServerTemplates(payload.consortiumTemplates ?? []);
+      setDirectory(payload.directory ?? []);
       setLoadingBoard(false);
       return;
     }
@@ -411,6 +424,7 @@ export default function ConsortiumsPage() {
   const consortiumPointsState = board?.consortiumPoints ?? null;
   const currentStarTier = board?.starRating ?? 1;
   const applications = board ? getApplications(board) : [];
+  const invites = board ? getInvites(board) : [];
   const assignablePositions = board ? getPositions(board).filter((entry) => entry.key !== "director") : [];
   const commandCards = board
     ? [
@@ -894,6 +908,24 @@ export default function ConsortiumsPage() {
                             )}
                           </div>
                         </ContentPanel>
+                        <ContentPanel title="Send Invite">
+                          <div className="org-form">
+                            <input className="org-input" value={invitePublicId} onChange={(event) => setInvitePublicId(event.target.value)} placeholder="P1000000" />
+                            <button type="button" className="org-button" disabled={!isDirector || invitePublicId.trim().length < 7} onClick={() => runConsortiumAction(() => inviteConsortiumMember(serverSessionToken!, board.internalId, invitePublicId.trim()), { message: () => "Invite sent." })}>
+                              Send Invite
+                            </button>
+                          </div>
+                          <div className={`guild-inline-note${isDirector ? "" : " guild-inline-note--warning"}`}>
+                            {isDirector ? "The citizen must accept before joining." : "Only the director can send invites."}
+                          </div>
+                          <div className="guild-stack" style={{ marginTop: 10 }}>
+                            {invites.length ? invites.map((entry) => (
+                              <div key={String(entry.targetPublicId)} className="guild-inline-note">
+                                {String(entry.targetName ?? "Citizen")} -- pending
+                              </div>
+                            )) : (<div className="guild-inline-note">No pending invites.</div>)}
+                          </div>
+                        </ContentPanel>
                         <ContentPanel title="Outreach">
                           <div className="guild-stack">
                             <div className="guild-card__body guild-card__body--small">
@@ -1116,14 +1148,43 @@ export default function ConsortiumsPage() {
                       <p className="org-hero__copy">{board.description ?? "Public consortium charter."}</p>
                     </div>
                     <div className="org-hero__actions">
-                      <button type="button" className="org-button" disabled>
-                        Submit Application
-                      </button>
+                      {board.viewerHasPendingInvite ? (
+                        <>
+                          <button type="button" className="org-button" onClick={() => runConsortiumAction(() => respondToConsortiumInvite(serverSessionToken!, board.internalId, "accept"), { message: () => `Joined ${board.name}.` })}>
+                            Accept Invite
+                          </button>
+                          <button type="button" className="org-button org-button--ghost" onClick={() => runConsortiumAction(() => respondToConsortiumInvite(serverSessionToken!, board.internalId, "decline"), { message: () => "Invite declined." })}>
+                            Decline Invite
+                          </button>
+                        </>
+                      ) : board.viewerHasPendingApplication ? (
+                        <button type="button" className="org-button" disabled>
+                          Application Pending
+                        </button>
+                      ) : (
+                        <button type="button" className="org-button" onClick={() => runConsortiumAction(() => applyToConsortium(serverSessionToken!, board.internalId, applicationNote), { message: () => "Application submitted." })}>
+                          Submit Application
+                        </button>
+                      )}
                       <button type="button" className="org-button org-button--ghost" disabled>
                         Request Escort Partnering
                       </button>
                     </div>
                   </section>
+
+                  {!board.viewerHasPendingInvite && !board.viewerHasPendingApplication ? (
+                    <section className="panel org-panel">
+                      <div className="org-panel__head">
+                        <div>
+                          <p className="org-eyebrow">Application</p>
+                          <h3>A short note to leadership</h3>
+                        </div>
+                      </div>
+                      <div className="org-form">
+                        <input className="org-input" value={applicationNote} onChange={(event) => setApplicationNote(event.target.value)} placeholder="Why this consortium? (optional)" />
+                      </div>
+                    </section>
+                  ) : null}
 
                   <section className="org-grid-two">
                     <section className="panel org-panel">
@@ -1197,6 +1258,7 @@ export default function ConsortiumsPage() {
                 </section>
               </div>
             ) : (
+              <>
               <div className="guild-grid">
                 <section className="guild-card guild-card--hero">
                   <div className="guild-card__eyebrow">Founding Charter</div>
@@ -1256,6 +1318,28 @@ export default function ConsortiumsPage() {
                   </div>
                 </section>
               </div>
+
+              <ContentPanel title="Consortium Directory">
+                <div className="guild-stack">
+                  {directory.length ? directory.map((entry) => (
+                    <section key={String(entry.internalId)} className="guild-card">
+                      <div className="guild-card__title">{String(entry.name)}</div>
+                      <div className="guild-card__body guild-card__body--small">
+                        {String(entry.consortiumTypeName ?? "")} | {Number(entry.employeeCount ?? 0)} employees | {String(entry.performanceSummary ?? "")}
+                      </div>
+                      <div className="guild-quest-actions">
+                        {entry.viewerHasPendingInvite ? <span className="guild-inline-note">Invited</span> : entry.viewerHasPendingApplication ? <span className="guild-inline-note">Applied</span> : null}
+                        <Link className="org-button org-button--ghost" to={`/consortiums/${formatEntityPublicId("consortium", Number(entry.publicId))}`}>
+                          View
+                        </Link>
+                      </div>
+                    </section>
+                  )) : (
+                    <div className="guild-inline-note">No consortiums have been founded yet -- be the first.</div>
+                  )}
+                </div>
+              </ContentPanel>
+              </>
             )}
           </div>
         </section>

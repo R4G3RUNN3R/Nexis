@@ -16,13 +16,18 @@ import {
   postGuildQuestPlanController,
   postGuildQuestReplanController,
   postGuildRallyController,
-  postGuildRecruitController,
+  postGuildApplyController,
+  postGuildApplicationReviewController,
+  postGuildInviteController,
+  postGuildInviteRespondController,
   postGuildSettingsController,
   postGuildSkillSwapController,
   postGuildSkillUnlockController,
   postConsortiumApplicationReviewController,
   postConsortiumApplyController,
   postConsortiumClaimPointsController,
+  postConsortiumInviteController,
+  postConsortiumInviteRespondController,
   postConsortiumLogisticsAssignController,
   postConsortiumLogisticsCreateController,
   postConsortiumLogisticsEscortController,
@@ -54,6 +59,8 @@ router.post("/organizations", requireSession, postOrganizationController);
 router.post("/organizations/:organizationId/members", requireSession, postOrganizationMemberController);
 router.post("/organizations/:organizationId/consortiums/apply", requireSession, postConsortiumApplyController);
 router.post("/organizations/:organizationId/consortiums/applications/review", requireSession, postConsortiumApplicationReviewController);
+router.post("/organizations/:organizationId/consortiums/invites", requireSession, postConsortiumInviteController);
+router.post("/organizations/:organizationId/consortiums/invites/respond", requireSession, postConsortiumInviteRespondController);
 router.post("/organizations/:organizationId/consortiums/positions", requireSession, postConsortiumPositionController);
 router.post("/organizations/:organizationId/consortiums/members/remove", requireSession, postConsortiumMemberRemoveController);
 router.post("/organizations/:organizationId/consortiums/treasury/deposit", requireSession, postConsortiumTreasuryDepositController);
@@ -66,7 +73,10 @@ router.post("/organizations/:organizationId/consortiums/logistics", requireSessi
 router.post("/organizations/:organizationId/consortiums/logistics/:operationId/workers", requireSession, postConsortiumLogisticsAssignController);
 router.post("/organizations/:organizationId/consortiums/logistics/:operationId/escort", requireSession, postConsortiumLogisticsEscortController);
 router.post("/organizations/:organizationId/guilds/settings", requireSession, postGuildSettingsController);
-router.post("/organizations/:organizationId/guilds/members", requireSession, postGuildRecruitController);
+router.post("/organizations/:organizationId/guilds/apply", requireSession, postGuildApplyController);
+router.post("/organizations/:organizationId/guilds/applications/review", requireSession, postGuildApplicationReviewController);
+router.post("/organizations/:organizationId/guilds/invites", requireSession, postGuildInviteController);
+router.post("/organizations/:organizationId/guilds/invites/respond", requireSession, postGuildInviteRespondController);
 router.post("/organizations/:organizationId/guilds/skills/unlock", requireSession, postGuildSkillUnlockController);
 router.post("/organizations/:organizationId/guilds/skills/swap", requireSession, postGuildSkillSwapController);
 router.post("/organizations/:organizationId/guilds/rally", requireSession, postGuildRallyController);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { ContentPanel } from "../components/layout/ContentPanel";
 import { OrganizationBaseTab } from "../components/organizations/OrganizationBaseTab";
@@ -10,6 +10,7 @@ import { mergeServerStateIntoCache } from "../lib/runtimeStateCache";
 import { formatEntityPublicId } from "../lib/publicIds";
 import { GuildBannerIcon, ArmoryIcon, QuestIcon, DungeonIcon, SkillNodeIcon } from "../assets/icons/orgIcons";
 import {
+  applyToGuild,
   assignGuildQuestMember,
   cancelGuildQuest,
   createOrganization,
@@ -17,10 +18,12 @@ import {
   getMyOrganization,
   getOrganizationByPublicId,
   initiateGuildQuest,
+  inviteGuildMember,
   launchGuildDungeon,
   planGuildQuest,
   replanGuildQuest,
-  recruitGuildMember,
+  respondToGuildInvite,
+  reviewGuildApplication,
   swapGuildSkill,
   triggerGuildRally,
   unlockGuildSkill,
@@ -115,6 +118,8 @@ export default function GuildsPage() {
   const [guildName, setGuildName] = useState("");
   const [guildTag, setGuildTag] = useState("");
   const [recruitPublicId, setRecruitPublicId] = useState("");
+  const [applicationNote, setApplicationNote] = useState("");
+  const [directory, setDirectory] = useState<Array<Record<string, unknown>>>([]);
   const [armoryItemId, setArmoryItemId] = useState("");
   const [armoryQty, setArmoryQty] = useState("1");
   const [withdrawItemId, setWithdrawItemId] = useState("");
@@ -157,6 +162,7 @@ export default function GuildsPage() {
           }
           setBoardLoadError(null);
           setBoard((result as { organization: GuildView | null }).organization);
+          setDirectory((result as { directory?: Array<Record<string, unknown>> }).directory ?? []);
         })
         .finally(() => setLoadingBoard(false));
       return;
@@ -442,14 +448,43 @@ export default function GuildsPage() {
               </p>
             </div>
             <div className="org-hero__actions">
-              <button type="button" className="org-button" disabled>
-                Apply to Join
-              </button>
+              {board.viewerHasPendingInvite ? (
+                <>
+                  <button type="button" className="org-button" onClick={() => runGuildAction(() => respondToGuildInvite(serverSessionToken!, board.internalId, "accept"), { message: () => `Joined ${board.name}.` })}>
+                    Accept Invite
+                  </button>
+                  <button type="button" className="org-button org-button--ghost" onClick={() => runGuildAction(() => respondToGuildInvite(serverSessionToken!, board.internalId, "decline"), { message: () => "Invite declined." })}>
+                    Decline Invite
+                  </button>
+                </>
+              ) : board.viewerHasPendingApplication ? (
+                <button type="button" className="org-button" disabled>
+                  Application Pending
+                </button>
+              ) : (
+                <button type="button" className="org-button" onClick={() => runGuildAction(() => applyToGuild(serverSessionToken!, board.internalId, applicationNote), { message: () => "Application submitted." })}>
+                  Apply to Join
+                </button>
+              )}
               <button type="button" className="org-button org-button--ghost" disabled>
                 Request Escort
               </button>
             </div>
           </section>
+
+          {!board.viewerHasPendingInvite && !board.viewerHasPendingApplication ? (
+            <section className="panel org-panel">
+              <div className="org-panel__head">
+                <div>
+                  <p className="org-eyebrow">Application</p>
+                  <h3>A short note to leadership</h3>
+                </div>
+              </div>
+              <div className="org-form">
+                <input className="org-input" value={applicationNote} onChange={(event) => setApplicationNote(event.target.value)} placeholder="Why this guild? (optional)" />
+              </div>
+            </section>
+          ) : null}
 
           <section className="org-grid-two">
             <section className="panel org-panel">
@@ -493,6 +528,7 @@ export default function GuildsPage() {
           </section>
         </div>
       ) : !board ? (
+        <>
         <div className="guild-layout">
           <div className="guild-column guild-column--wide">
             <ContentPanel title="Found a Guild">
@@ -548,6 +584,30 @@ export default function GuildsPage() {
             </ContentPanel>
           </div>
         </div>
+
+        <ContentPanel title="Guild Directory">
+          <div className="guild-stack">
+            {directory.length ? directory.map((entry) => (
+              <section key={String(entry.internalId)} className="guild-card">
+                <div className="guild-card__title">
+                  {String(entry.name)} {entry.tag ? <span>[{String(entry.tag)}]</span> : null}
+                </div>
+                <div className="guild-card__body guild-card__body--small">
+                  {String(entry.headline ?? entry.description ?? "")} | {Number(entry.memberCount ?? 0)} members | {String(entry.recruitmentStatus ?? "")}
+                </div>
+                <div className="guild-quest-actions">
+                  {entry.viewerHasPendingInvite ? <span className="guild-inline-note">Invited</span> : entry.viewerHasPendingApplication ? <span className="guild-inline-note">Applied</span> : null}
+                  <Link className="org-button org-button--ghost" to={`/guilds/${formatEntityPublicId("guild", Number(entry.publicId))}`}>
+                    View
+                  </Link>
+                </div>
+              </section>
+            )) : (
+              <div className="guild-inline-note">No guilds have been founded yet -- be the first.</div>
+            )}
+          </div>
+        </ContentPanel>
+        </>
       ) : (
         <div className="guild-stack">
           <ContentPanel title="Guild Interior">
@@ -1172,15 +1232,40 @@ export default function GuildsPage() {
                 </div>
                 <div className="guild-column">
                   <div className="guild-card">
-                    <div className="guild-card__section-title">Recruit Member</div>
+                    <div className="guild-card__section-title">Send Invite</div>
                     <div className="org-form">
                       <input className="org-input" value={recruitPublicId} onChange={(event) => setRecruitPublicId(event.target.value)} placeholder="P1000000" />
-                      <button type="button" className="org-button" disabled={!canManageMembers || recruitPublicId.trim().length < 7} onClick={() => runGuildAction(() => recruitGuildMember(serverSessionToken!, board.internalId, recruitPublicId.trim()), { message: () => "Guild member recruited." })}>
-                        Recruit Member
+                      <button type="button" className="org-button" disabled={!canManageMembers || recruitPublicId.trim().length < 7} onClick={() => runGuildAction(() => inviteGuildMember(serverSessionToken!, board.internalId, recruitPublicId.trim()), { message: () => "Invite sent." })}>
+                        Send Invite
                       </button>
                     </div>
                     <div className={`guild-inline-note${canManageMembers ? "" : " guild-inline-note--warning"}`}>
-                      {canManageMembers ? "Direct guild invite by public ID." : "Only guild leadership can recruit members."}
+                      {canManageMembers ? "The citizen must accept before joining -- this no longer adds them directly." : "Only guild leadership can send invites."}
+                    </div>
+                  </div>
+                  <div className="guild-card">
+                    <div className="guild-card__section-title">Applications</div>
+                    <div className="guild-stack">
+                      {(board.applications ?? []).length ? (board.applications ?? []).map((entry) => (
+                        <section key={String(entry.applicantPublicId)} className="guild-card">
+                          <div className="guild-card__title">{String(entry.applicantName ?? "Applicant")}</div>
+                          <div className="guild-card__body guild-card__body--small">{String(entry.note ?? "No note attached.")}</div>
+                          <div className="guild-quest-actions">
+                            <button type="button" className="org-button" disabled={!canManageMembers} onClick={() => runGuildAction(() => reviewGuildApplication(serverSessionToken!, board.internalId, String(entry.applicantPublicId), "accept"), { message: () => `${String(entry.applicantName ?? "Applicant")} accepted.` })}>Accept</button>
+                            <button type="button" className="org-button org-button--ghost" disabled={!canManageMembers} onClick={() => runGuildAction(() => reviewGuildApplication(serverSessionToken!, board.internalId, String(entry.applicantPublicId), "reject"), { message: () => `${String(entry.applicantName ?? "Applicant")} rejected.` })}>Reject</button>
+                          </div>
+                        </section>
+                      )) : (<div className="guild-inline-note">No pending applications.</div>)}
+                    </div>
+                  </div>
+                  <div className="guild-card">
+                    <div className="guild-card__section-title">Sent Invites</div>
+                    <div className="guild-stack">
+                      {(board.invites ?? []).length ? (board.invites ?? []).map((entry) => (
+                        <div key={String(entry.targetPublicId)} className="guild-inline-note">
+                          {String(entry.targetName ?? "Citizen")} -- pending
+                        </div>
+                      )) : (<div className="guild-inline-note">No pending invites.</div>)}
                     </div>
                   </div>
                   <div className="guild-card">

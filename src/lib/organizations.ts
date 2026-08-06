@@ -610,6 +610,10 @@ export type OrganizationRecord = {
   guildOverview?: Record<string, unknown>;
   assistanceOpportunities?: Array<Record<string, unknown>>;
   layoutSections?: string[];
+  applications?: Array<Record<string, unknown>>;
+  invites?: Array<Record<string, unknown>>;
+  viewerHasPendingApplication?: boolean;
+  viewerHasPendingInvite?: boolean;
 };
 
 export type GuildBoard = OrganizationRecord & { type: "guild" };
