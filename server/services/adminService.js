@@ -21,6 +21,7 @@ import {
 } from "../repositories/usersRepository.js";
 import { resolveAdminTargetUser } from "../lib/adminTargetResolution.js";
 import { findGrantByIdempotencyKey, recordTokenGrant } from "../repositories/adminOneShotTokenGrantRepository.js";
+import { getTitleDefinition, normalizeTitlesState } from "../data/titlesData.js";
 
 // Admin hotfix: reuses the existing dmosOneShots.tokens.{sealed,patronBound}
 // counters (server/services/nexisOneShotService.js /
@@ -613,6 +614,41 @@ function applyAdminAction(runtimeState, actionType, payload) {
       player.cityContracts = cityContracts;
       if (!contractId) player.current = { ...player.current, job: null };
       afterSummary = { contractId: contractId || "all", cityContracts: player.cityContracts };
+      break;
+    }
+    case "grantTitle": {
+      const titleId = String(payload?.titleId ?? "").trim();
+      const title = getTitleDefinition(titleId);
+      if (!title) throw new HttpError(400, "Unknown title.", "ADMIN_TITLE_UNKNOWN");
+      // The Absolute (and any other title locked to a specific account via
+      // exclusiveToPublicId) is hard-excluded from this generic grant flow.
+      // It can only ever be granted through
+      // titleService.grantAbsoluteTitleToAllowlistedAccount, which does not
+      // take a target and cannot be pointed at an arbitrary player - so even
+      // a compromised admin session cannot use this action to hand it out.
+      if (title.exclusiveToPublicId) {
+        throw new HttpError(403, "This title cannot be granted through the generic admin action.", "ADMIN_TITLE_EXCLUSIVE_FORBIDDEN");
+      }
+      const titlesState = normalizeTitlesState(player.titles);
+      beforeSummary = { titleId, granted: titlesState.grantedTitleIds.includes(titleId) };
+      player.titles = {
+        ...titlesState,
+        grantedTitleIds: Array.from(new Set([...titlesState.grantedTitleIds, titleId])),
+      };
+      afterSummary = { titleId, granted: true };
+      break;
+    }
+    case "revokeTitle": {
+      const titleId = String(payload?.titleId ?? "").trim();
+      if (!titleId) throw new HttpError(400, "Title ID is required.", "ADMIN_TITLE_REQUIRED");
+      const titlesState = normalizeTitlesState(player.titles);
+      beforeSummary = { titleId, granted: titlesState.grantedTitleIds.includes(titleId), equipped: titlesState.equippedTitleId === titleId };
+      player.titles = {
+        ...titlesState,
+        grantedTitleIds: titlesState.grantedTitleIds.filter((entry) => entry !== titleId),
+        equippedTitleId: titlesState.equippedTitleId === titleId ? null : titlesState.equippedTitleId,
+      };
+      afterSummary = { titleId, granted: false, equipped: false };
       break;
     }
     default:

@@ -223,8 +223,13 @@ function addEffectTotals(target, source) {
 
 function buildPlayerCombatant(runtimeState, name = "You") {
   const player = asRecord(runtimeState.player);
-  const stats = asRecord(player.stats);
-  const battle = asRecord(player.battleStats);
+  // Prefer the title-boosted views (effectiveStats/effectiveBattleStats) when
+  // present so an equipped stat title's bonuses apply in combat, the same
+  // way equipment bonuses are layered on below. Falls back to the raw base
+  // stats for any caller that builds a runtimeState.player by hand (e.g.
+  // tests) without going through buildMutableRuntimeState.
+  const stats = asRecord(player.effectiveStats ?? player.stats);
+  const battle = asRecord(player.effectiveBattleStats ?? player.battleStats);
   const passive = applyPassiveEffects(runtimeState);
   const equipment = getEquipmentStatTotalsForRuntimeState(runtimeState);
   const effects = { ...asRecord(passive.effects) };

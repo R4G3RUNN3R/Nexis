@@ -162,7 +162,8 @@ async function buildProfileResponse(viewerUser, targetUser, playerState, organiz
     publicProfile: {
       name: `${targetUser.firstName}${targetUser.lastName ? ` ${targetUser.lastName}` : ""}`.trim(),
       publicId: targetUser.publicId,
-      title: prestige.currentTitle?.label ?? runtimeState.player.title ?? "",
+      title: runtimeState.player.equippedTitle?.name ?? prestige.currentTitle?.label ?? runtimeState.player.title ?? "",
+      equippedTitle: runtimeState.player.equippedTitle,
       prestige,
       entityType,
       level: playerState.level ?? 1,
@@ -195,13 +196,17 @@ async function buildProfileResponse(viewerUser, targetUser, playerState, organiz
     selfProfile: isSelf
       ? {
           currencies: runtimeState.player.currencies,
-          workingStats: runtimeState.player.workingStats,
-          battleStats: runtimeState.player.battleStats,
+          // Boosted (base + equipped title effects) views, so a stat title's
+          // bonus is actually visible to the player who earned it. Base
+          // values remain available server-side on runtimeState.player.workingStats
+          // / battleStats for anything that must not see the boost.
+          workingStats: runtimeState.player.effectiveWorkingStats ?? runtimeState.player.workingStats,
+          battleStats: runtimeState.player.effectiveBattleStats ?? runtimeState.player.battleStats,
           inventoryCount: Object.values(runtimeState.player.inventory ?? {}).reduce((sum, value) => sum + Number(value ?? 0), 0),
           inventoryTypes: Object.keys(runtimeState.player.inventory ?? {}).length,
           life: {
             current: Number(runtimeState.player.stats?.health ?? 100),
-            max: Number(runtimeState.player.stats?.maxHealth ?? 100),
+            max: Number(runtimeState.player.effectiveStats?.maxHealth ?? runtimeState.player.stats?.maxHealth ?? 100),
           },
           portraitFileMissing,
         }
@@ -215,7 +220,7 @@ async function buildProfileResponse(viewerUser, targetUser, playerState, organiz
           reservedIdentityName: null,
           life: {
             current: Number(runtimeState.player.stats?.health ?? 100),
-            max: Number(runtimeState.player.stats?.maxHealth ?? 100),
+            max: Number(runtimeState.player.effectiveStats?.maxHealth ?? runtimeState.player.stats?.maxHealth ?? 100),
           },
         }
       : null,

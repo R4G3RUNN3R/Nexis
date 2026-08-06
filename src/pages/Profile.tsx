@@ -8,6 +8,7 @@ import { formatPlayerPublicId, getProfileRoute, parsePlayerPublicId } from "../l
 import { resolveDisplayTitle } from "../lib/titleAccess";
 import { getProfileView, setOwnProfileTitle, type ProfileResponse, uploadOwnProfileImage } from "../lib/profileApi";
 import { getLegacyAchievements, getServerRecords, type ServerLegacyAchievement, type ServerRecordEntry } from "../lib/authApi";
+import { equipOwnTitle, getOwnTitles, unequipOwnTitle, type TitleCatalogEntry } from "../lib/titleApi";
 import { readCachedRuntimeState, writeCachedRuntimeState } from "../lib/runtimeStateCache";
 import { getCityName, readTravelStateFromPlayer } from "../lib/travelState";
 import "../styles/character-profile.css";
@@ -113,6 +114,10 @@ export default function ProfilePage() {
   const [achievementsTotalCount, setAchievementsTotalCount] = useState(0);
   const [achievementsLoading, setAchievementsLoading] = useState(false);
   const [achievementsError, setAchievementsError] = useState<string | null>(null);
+  const [titles, setTitles] = useState<TitleCatalogEntry[]>([]);
+  const [titlesLoading, setTitlesLoading] = useState(false);
+  const [titlesError, setTitlesError] = useState<string | null>(null);
+  const [titleActionPendingId, setTitleActionPendingId] = useState<string | null>(null);
 
   const targetPublicId = useMemo(() => {
     const parsed = parsePlayerPublicId(publicIdParam);
@@ -232,6 +237,36 @@ export default function ProfilePage() {
     }
 
     void loadAchievements();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwnRoute, serverSessionToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTitles() {
+      if (!isOwnRoute || !serverSessionToken) {
+        setTitles([]);
+        setTitlesError(null);
+        return;
+      }
+
+      setTitlesLoading(true);
+      const result = await getOwnTitles(serverSessionToken);
+      if (cancelled) return;
+      setTitlesLoading(false);
+
+      if (!result.ok) {
+        setTitlesError(result.error);
+        return;
+      }
+
+      setTitlesError(null);
+      setTitles(result.titles);
+    }
+
+    void loadTitles();
     return () => {
       cancelled = true;
     };
@@ -449,6 +484,32 @@ export default function ProfilePage() {
     }
     setProfile((current) => current ? { ...current, publicProfile: { ...current.publicProfile, title: result.prestige.currentTitle?.label ?? current.publicProfile.title, prestige: result.prestige } } : current);
     setPrestigeMessage(result.message ?? "Title updated.");
+    await refreshServerState();
+  }
+
+  async function handleEquipTitle(titleId: string) {
+    setTitleActionPendingId(titleId);
+    setTitlesError(null);
+    const result = await equipOwnTitle(titleId, serverSessionToken);
+    setTitleActionPendingId(null);
+    if (!result.ok) {
+      setTitlesError(result.error);
+      return;
+    }
+    setTitles(result.titles);
+    await refreshServerState();
+  }
+
+  async function handleUnequipTitle() {
+    setTitleActionPendingId("__unequip__");
+    setTitlesError(null);
+    const result = await unequipOwnTitle(serverSessionToken);
+    setTitleActionPendingId(null);
+    if (!result.ok) {
+      setTitlesError(result.error);
+      return;
+    }
+    setTitles(result.titles);
     await refreshServerState();
   }
 
@@ -686,6 +747,75 @@ export default function ProfilePage() {
               {prestigeMessage ? <div className="profile-empty-note">{prestigeMessage}</div> : null}
               {prestigeError ? <div className="profile-empty-note">{prestigeError}</div> : null}
             </PanelSection>
+
+            {viewer.isSelf ? (
+              <PanelSection title="Titles">
+                <div className="profile-panel-summary">
+                  <span>{titles.filter((title) => title.earned).length} / {titles.length} earned</span>
+                </div>
+
+                {titlesLoading ? (
+                  <div className="profile-empty-note">Syncing titles...</div>
+                ) : titlesError ? (
+                  <div className="profile-empty-note">{titlesError}</div>
+                ) : titles.length ? (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {titles.some((title) => title.equipped) ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleUnequipTitle()}
+                        disabled={titleActionPendingId !== null}
+                      >
+                        {titleActionPendingId === "__unequip__" ? "Clearing..." : "Clear Equipped Title"}
+                      </button>
+                    ) : null}
+                    {titles.map((title) => (
+                      <article
+                        key={title.id}
+                        style={{
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: 8,
+                          padding: 10,
+                          background: title.equipped ? "rgba(255,255,255,0.04)" : "transparent",
+                          opacity: title.earned ? 1 : 0.6,
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                          <strong>{title.name}</strong>
+                          <span style={{ fontSize: 12, textTransform: "uppercase", opacity: 0.8 }}>
+                            {title.kind === "stat" ? "Stat-affecting" : "Cosmetic"}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.76, margin: "4px 0" }}>{title.description}</div>
+                        <p style={{ margin: "6px 0", opacity: 0.82 }}>{title.flavor}</p>
+                        {title.effects.length ? (
+                          <ul style={{ margin: "6px 0", paddingLeft: 18 }}>
+                            {title.effects.map((effect) => (
+                              <li key={`${title.id}-${effect}`}>{effect}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div style={{ fontSize: 12, opacity: 0.6, margin: "6px 0" }}>No stat effect (cosmetic).</div>
+                        )}
+                        {title.earned ? (
+                          <button
+                            type="button"
+                            disabled={title.equipped || titleActionPendingId !== null}
+                            onClick={() => void handleEquipTitle(title.id)}
+                          >
+                            {title.equipped ? "Equipped" : titleActionPendingId === title.id ? "Equipping..." : "Equip"}
+                          </button>
+                        ) : (
+                          <div style={{ fontSize: 12, opacity: 0.6 }}>Not yet earned.</div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="profile-empty-note">No titles recorded yet.</div>
+                )}
+              </PanelSection>
+            ) : null}
 
             <PanelSection title="Legacy Record">
               <div className="profile-narrative">

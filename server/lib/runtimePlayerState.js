@@ -2,6 +2,14 @@ import { getItemSummary } from "../data/itemData.js";
 import { getPlayerRecords } from "../services/playerRecordsService.js";
 import { getRareManualEligibility } from "../services/rareManualService.js";
 import { isValidLifePathId } from "../data/lifePathsData.js";
+import {
+  computeEffectiveBattleStats,
+  computeEffectiveMaxStats,
+  computeEffectiveWorkingStats,
+  describeTitleEffects,
+  normalizeTitlesState,
+  resolveEquippedTitleForRuntime,
+} from "../data/titlesData.js";
 const DEFAULT_STATS = {
   energy: 100,
   maxEnergy: 100,
@@ -162,6 +170,46 @@ export function buildMutableRuntimeState(user, playerState) {
   const createdAt = resolveCreatedAt(user, player);
   const daysPlayed = calculateDaysPlayed(createdAt);
 
+  // Base (persisted) stat blocks. These are exactly what gets written back to
+  // storage by upsertPlayerRuntimeState, so title bonuses must NOT be folded
+  // into them here -- doing so would bake a temporary, unequippable bonus into
+  // the player's permanent base the next time any action saves state. Instead
+  // title effects are layered into separate effective* fields below, computed
+  // fresh on every read and never treated as an input.
+  const baseStats = (() => {
+    const merged = {
+      ...DEFAULT_STATS,
+      ...asRecord(playerState?.stats),
+      ...asRecord(player.stats),
+    };
+    const expectedMaxHealth = getMaxLifeForLevel(Math.max(1, Math.floor(asNumber(player.level, playerState?.level ?? 1))));
+    merged.maxHealth = Math.max(expectedMaxHealth, Math.floor(asNumber(merged.maxHealth, expectedMaxHealth)));
+    merged.health = Math.max(1, Math.min(merged.maxHealth, Math.floor(asNumber(merged.health, merged.maxHealth))));
+    return merged;
+  })();
+  const baseWorkingStats = {
+    ...DEFAULT_WORKING_STATS,
+    ...asRecord(playerState?.workingStats),
+    ...asRecord(player.workingStats),
+  };
+  const baseBattleStats = {
+    ...DEFAULT_BATTLE_STATS,
+    ...asRecord(playerState?.battleStats),
+    ...asRecord(player.battleStats),
+  };
+
+  // Titles: which ones this player holds, which one (if any) is equipped,
+  // and -- after re-checking the exclusivity allowlist -- what that equipped
+  // title's definition actually is. resolveEquippedTitleForRuntime refuses
+  // to resolve an exclusive title (e.g. The Absolute) for any publicId other
+  // than the one it is locked to, so a forged/stale equippedTitleId can never
+  // cause its bonuses to apply to the wrong account.
+  const titlesState = normalizeTitlesState(player.titles);
+  const equippedTitle = resolveEquippedTitleForRuntime(titlesState.equippedTitleId, user.publicId);
+  const effectiveStats = computeEffectiveMaxStats(baseStats, equippedTitle);
+  const effectiveWorkingStats = computeEffectiveWorkingStats(baseWorkingStats, equippedTitle);
+  const effectiveBattleStats = computeEffectiveBattleStats(baseBattleStats, equippedTitle);
+
   return {
     player: {
       internalId: user.internalId,
@@ -197,27 +245,25 @@ export function buildMutableRuntimeState(user, playerState) {
           ? asRecord(player.property).installedUpgrades.filter((entry) => typeof entry === "string")
           : [],
       },
-      stats: (() => {
-        const merged = {
-          ...DEFAULT_STATS,
-          ...asRecord(playerState?.stats),
-          ...asRecord(player.stats),
-        };
-        const expectedMaxHealth = getMaxLifeForLevel(Math.max(1, Math.floor(asNumber(player.level, playerState?.level ?? 1))));
-        merged.maxHealth = Math.max(expectedMaxHealth, Math.floor(asNumber(merged.maxHealth, expectedMaxHealth)));
-        merged.health = Math.max(1, Math.min(merged.maxHealth, Math.floor(asNumber(merged.health, merged.maxHealth))));
-        return merged;
-      })(),
-      workingStats: {
-        ...DEFAULT_WORKING_STATS,
-        ...asRecord(playerState?.workingStats),
-        ...asRecord(player.workingStats),
-      },
-      battleStats: {
-        ...DEFAULT_BATTLE_STATS,
-        ...asRecord(playerState?.battleStats),
-        ...asRecord(player.battleStats),
-      },
+      stats: baseStats,
+      workingStats: baseWorkingStats,
+      battleStats: baseBattleStats,
+      titles: titlesState,
+      // Boosted views used by combat, job, and display code that wants a
+      // title's effect to actually apply. Always recomputed here, never
+      // itself persisted as a base value (see baseStats/baseWorkingStats/
+      // baseBattleStats above).
+      equippedTitle: equippedTitle
+        ? {
+            id: equippedTitle.id,
+            name: equippedTitle.name,
+            kind: equippedTitle.kind,
+            effects: describeTitleEffects(equippedTitle),
+          }
+        : null,
+      effectiveStats,
+      effectiveWorkingStats,
+      effectiveBattleStats,
       current: {
         education: current.education ?? null,
         job:

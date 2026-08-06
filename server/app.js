@@ -27,6 +27,7 @@ import worldProgressionRoutes from "./routes/worldProgressionRoutes.js";
 import organizationOneShotRoutes from "./routes/organizationOneShotRoutes.js";
 import excursionRoutes from "./routes/excursionRoutes.js";
 import guideRoutes from "./routes/guideRoutes.js";
+import titleRoutes from "./routes/titleRoutes.js";
 import { DatabaseUnavailableError, HttpError } from "./lib/errors.js";
 import { requireTrustedOrigin } from "./middleware/originGuard.js";
 import { unsafeApiRateLimit } from "./middleware/rateLimit.js";
@@ -59,6 +60,7 @@ const ROUTE_MODULES = [
   organizationOneShotRoutes,
   excursionRoutes,
   guideRoutes,
+  titleRoutes,
   adminRoutes,
   adminOrganizationRoutes,
 ];

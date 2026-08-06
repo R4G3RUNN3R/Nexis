@@ -181,6 +181,19 @@ export const ADMIN_ACTION_POLICIES = {
     minimumRole: "admin",
     label: "Grant One-Shot Token",
   },
+  grantTitle: {
+    category: "sensitive progression action",
+    minimumRole: "admin",
+    // Exclusive titles (e.g. The Absolute) are refused inside
+    // applyAdminAction itself regardless of role - this policy entry only
+    // controls the non-exclusive catalog.
+    label: "Grant Title",
+  },
+  revokeTitle: {
+    category: "sensitive progression action",
+    minimumRole: "admin",
+    label: "Revoke Title",
+  },
 };
 
 export function getAdminActionPolicy(actionType) {
