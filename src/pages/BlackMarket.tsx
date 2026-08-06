@@ -48,6 +48,11 @@ function UnderMarketStockCard({
       <div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.description || entry.item?.shortDescription}</div>
       {entry.item?.flavorText ? <div style={{ color: "#8293a3", fontSize: 12 }}>{entry.item.flavorText}</div> : null}
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Source: {entry.source} | Tier: {entry.tier} | Rarity: {entry.item?.rarity ?? "common"}</div>
+      {entry.remainingQuantity != null ? (
+        <div style={{ color: entry.remainingQuantity <= 0 ? "#c97a7a" : "#9fb0bf", fontSize: 12 }}>
+          Stock: {entry.remainingQuantity.toLocaleString("en-GB")}/{entry.totalQuantity?.toLocaleString("en-GB") ?? entry.remainingQuantity.toLocaleString("en-GB")}
+        </div>
+      ) : null}
       {entry.item?.effectSummary?.length ? <div style={{ color: "#d8c278", fontSize: 12 }}>{entry.item.effectSummary.slice(0, 3).join(" | ")}</div> : null}
       {entry.lockReason ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{entry.lockReason}</div> : null}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>

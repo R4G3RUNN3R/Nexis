@@ -65,6 +65,11 @@ function StockCard({ entry, quantity, busy, onQuantityChange, onBuy }: { entry: 
       <div style={{ color: "#b7c3cf", fontSize: 13 }}>{entry.description || item?.shortDescription || localItem?.description || "Local vendor stock."}</div>
       {item?.flavorText ? <div style={{ color: "#8293a3", fontSize: 12 }}>{item.flavorText}</div> : null}
       <div style={{ color: "#9fb0bf", fontSize: 12 }}>Source: {entry.source} | Tier: {entry.tier} | Rarity: {item?.rarity ?? "common"}</div>
+      {entry.remainingQuantity != null ? (
+        <div style={{ color: entry.remainingQuantity <= 0 ? "#c97a7a" : "#9fb0bf", fontSize: 12 }}>
+          Stock: {entry.remainingQuantity.toLocaleString("en-GB")}/{entry.totalQuantity?.toLocaleString("en-GB") ?? entry.remainingQuantity.toLocaleString("en-GB")}
+        </div>
+      ) : null}
       {entry.lockReason ? <div style={{ color: "#d0ad74", fontSize: 12 }}>{entry.lockReason}</div> : null}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#b7c3cf", fontSize: 13 }}>Quantity<input type="number" min={1} max={99} value={quantity} onChange={(event) => onQuantityChange(entry.itemId, event.target.value)} style={{ width: 72 }} /></label>

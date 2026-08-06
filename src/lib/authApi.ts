@@ -653,6 +653,8 @@ export type ServerCityEconomyStock = {
   requiredCourses: string[];
   missingCourses: string[];
   standingMissing: number;
+  remainingQuantity: number | null;
+  totalQuantity: number | null;
   canBuy: boolean;
   lockReason: string | null;
 };

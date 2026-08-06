@@ -7,6 +7,7 @@ import {
   upsertPlayerRuntimeState,
 } from "../repositories/playerStateRepository.js";
 import { getCityDefinition, isValidCityId, normalizeCityId } from "../data/cityData.js";
+import { decrementCityMarketStock, getCityMarketStock } from "../repositories/cityMarketStockRepository.js";
 import {
   getBlackMarketFence,
   getCityBlackMarket,
@@ -24,6 +25,15 @@ import { getConsortiumEffectPctForRuntime } from "./consortiumPerkService.js";
 import { getCompletedCourseIds, getMissingCourses } from "./educationService.js";
 
 const MAX_PURCHASE_QUANTITY = 99;
+// Global, shared-across-all-players stock caps for city_market_stock, keyed by the stock entry's
+// existing tier field. Black-market stock is scarcer than its legal-market equivalent on purpose -
+// illicit goods should feel harder to keep in supply than a legal storefront's.
+const LEGAL_STOCK_CAP_BY_TIER = { core: 400, specialty: 120, luxury: 50 };
+const BLACK_MARKET_STOCK_MULTIPLIER = 0.4;
+function getStockCapForItem(stockItem, marketType) {
+  const base = LEGAL_STOCK_CAP_BY_TIER[stockItem.tier] ?? LEGAL_STOCK_CAP_BY_TIER.core;
+  return marketType === "black" ? Math.max(10, Math.round(base * BLACK_MARKET_STOCK_MULTIPLIER)) : base;
+}
 const CITY_STANDING_TIERS = [
   { value: 0, label: "New Arrival" },
   { value: 2, label: "Known Hand" },
@@ -357,13 +367,15 @@ function getEconomyContext(runtimeState, cityId) {
   return { city, cityId: normalizedCityId, currentCityId, inTransit, isCurrentCity, standing };
 }
 
-function serializeStockItem(stockItem, runtimeState, context, quantity = 1, marketOpen = true) {
+function serializeStockItem(stockItem, runtimeState, context, quantity = 1, marketOpen = true, stockInfo = null) {
   const missingCourses = getMissingCourses(runtimeState, stockItem.requiredCourses ?? []);
   const minimumStanding = Math.max(0, Math.floor(asNumber(stockItem.minimumStanding, 0)));
   const standingMissing = Math.max(0, minimumStanding - context.standing.value);
   const price = Math.max(1, Math.floor(asNumber(stockItem.price, 1)));
   const totalPrice = price * quantity;
   const gold = Math.max(0, Math.floor(asNumber(runtimeState.player?.gold, 0)));
+  const remainingQuantity = stockInfo ? stockInfo.remainingQuantity : null;
+  const totalQuantity = stockInfo ? stockInfo.totalQuantity : null;
   const reasons = [];
   if (!marketOpen) reasons.push("This city market is locked.");
   if (context.inTransit) reasons.push("Finish current travel before buying local goods.");
@@ -371,6 +383,8 @@ function serializeStockItem(stockItem, runtimeState, context, quantity = 1, mark
   if (standingMissing > 0) reasons.push(`Requires ${minimumStanding} ${context.city.name} standing. Current standing: ${context.standing.value}.`);
   if (missingCourses.length) reasons.push(`Requires ${describeCourseList(missingCourses)}.`);
   if (gold < totalPrice) reasons.push(`Requires ${totalPrice} gold. Current gold: ${gold}.`);
+  if (remainingQuantity != null && remainingQuantity <= 0) reasons.push("This stock has sold out.");
+  else if (remainingQuantity != null && remainingQuantity < quantity) reasons.push(`Only ${remainingQuantity} left in stock.`);
 
   return {
     itemId: stockItem.itemId,
@@ -385,6 +399,8 @@ function serializeStockItem(stockItem, runtimeState, context, quantity = 1, mark
     requiredCourses: stockItem.requiredCourses ?? [],
     missingCourses,
     standingMissing,
+    remainingQuantity,
+    totalQuantity,
     canBuy: reasons.length === 0,
     lockReason: reasons[0] ?? null,
   };
@@ -407,7 +423,7 @@ function applyDiscount(price, discountPercent) {
   return Math.max(1, Math.round(asNumber(price, 1) * (1 - Math.max(0, discountPercent) / 100)));
 }
 
-function serializeMarketProfile(profile, runtimeState, quantity = 1) {
+function serializeMarketProfile(profile, runtimeState, quantity = 1, stockMap = {}) {
   const context = getEconomyContext(runtimeState, profile.cityId);
   const discountPercent = getLegalMarketDiscountPercent(runtimeState);
   return {
@@ -426,7 +442,7 @@ function serializeMarketProfile(profile, runtimeState, quantity = 1) {
       sellBonusPercent: getLegalSellBonusPercent(runtimeState),
       stock: profile.stock.map((entry) => {
         const itemDiscountPercent = getLegalMarketDiscountPercent(runtimeState, entry);
-        return serializeStockItem({ ...entry, price: applyDiscount(entry.price, itemDiscountPercent) }, runtimeState, context, quantity);
+        return serializeStockItem({ ...entry, price: applyDiscount(entry.price, itemDiscountPercent) }, runtimeState, context, quantity, true, stockMap[entry.itemId] ?? null);
       }),
       sellOffers: getLegalSellOffers(runtimeState, context, quantity),
       tradeOpportunities: serializeTradeOpportunities(profile, runtimeState, discountPercent),
@@ -435,7 +451,7 @@ function serializeMarketProfile(profile, runtimeState, quantity = 1) {
   };
 }
 
-function serializeBlackMarket(blackMarket, runtimeState, quantity = 1) {
+function serializeBlackMarket(blackMarket, runtimeState, quantity = 1, stockMap = {}) {
   const context = getEconomyContext(runtimeState, blackMarket.cityId);
   const shadow = ensureShadowState(runtimeState);
   const shadowCosts = { buy: blackMarket.cityId === "west" ? 1 : 2, sell: blackMarket.cityId === "west" ? 1 : 2 };
@@ -459,7 +475,7 @@ function serializeBlackMarket(blackMarket, runtimeState, quantity = 1) {
       standingMissing,
       canOpen,
       lockReason,
-      stock: blackMarket.stock.map((entry) => serializeStockItem(entry, runtimeState, context, quantity, canOpen)),
+      stock: blackMarket.stock.map((entry) => serializeStockItem(entry, runtimeState, context, quantity, canOpen, stockMap[entry.itemId] ?? null)),
       sellOffers: getBlackMarketSellOffers(blackMarket, runtimeState, context, quantity, canOpen),
     },
   };
@@ -554,10 +570,33 @@ function serializeSpecials(cityId, runtimeState, now = Date.now()) {
   };
 }
 
-function buyStock(runtimeState, stockItem, context, quantity, marketOpen) {
-  const serialized = serializeStockItem(stockItem, runtimeState, context, quantity, marketOpen);
+// listCityMarketStock seeds every item it hasn't seen with the SAME defaultQuantity, but stock
+// items have per-item caps (tier-based, see getStockCapForItem) - so stock maps are always built
+// item-by-item here rather than via that single-default batch helper, to guarantee each item is
+// first-seeded with its own correct cap rather than whatever the first caller's shared default was.
+async function buildStockMap(client, marketType, cityId, stockItems) {
+  const entries = await Promise.all(
+    stockItems.map(async (stockItem) => {
+      const cap = getStockCapForItem(stockItem, marketType);
+      const info = await getCityMarketStock(client, marketType, cityId, stockItem.itemId, cap);
+      return [stockItem.itemId, info];
+    }),
+  );
+  return Object.fromEntries(entries);
+}
+
+async function buyStock(client, marketType, cityId, runtimeState, stockItem, context, quantity, marketOpen, stockInfo) {
+  const serialized = serializeStockItem(stockItem, runtimeState, context, quantity, marketOpen, stockInfo);
   if (!serialized.canBuy) {
     throw new HttpError(409, serialized.lockReason ?? "This stock cannot be purchased right now.", "CITY_MARKET_BUY_BLOCKED");
+  }
+  // The read-time stockInfo snapshot above is only an optimistic UX check - the atomic conditional
+  // UPDATE inside decrementCityMarketStock is the real gate against two concurrent buyers racing
+  // the last units of a global, shared-across-all-players pool.
+  const cap = getStockCapForItem(stockItem, marketType);
+  const decremented = await decrementCityMarketStock(client, marketType, cityId, stockItem.itemId, quantity, cap);
+  if (!decremented) {
+    throw new HttpError(409, "This stock just sold out. Try a smaller quantity.", "CITY_MARKET_STOCK_EXHAUSTED");
   }
   applyGold(runtimeState, asNumber(runtimeState.player.gold, 0) - serialized.totalPrice);
   applyItems(runtimeState.player, [{ itemId: stockItem.itemId, quantity }]);
@@ -572,7 +611,9 @@ function buyStock(runtimeState, stockItem, context, quantity, marketOpen) {
 export async function getCityMarketForUser(user, cityId) {
   return withTransaction(async (client) => {
     const { playerState, runtimeState } = await loadRuntimeState(client, user);
-    return { playerState, ...serializeMarketProfile(getCityMarketProfile(assertCity(cityId)), runtimeState) };
+    const profile = getCityMarketProfile(assertCity(cityId));
+    const stockMap = await buildStockMap(client, "legal", profile.cityId, profile.stock);
+    return { playerState, ...serializeMarketProfile(profile, runtimeState, 1, stockMap) };
   });
 }
 
@@ -585,11 +626,14 @@ export async function buyCityMarketItemForUser(user, cityId, itemId, quantityInp
     if (!stockItem) throw new HttpError(404, "This city does not stock that item.", "CITY_MARKET_ITEM_NOT_FOUND");
     const context = getEconomyContext(runtimeState, profile.cityId);
     const discountedStockItem = { ...stockItem, price: applyDiscount(stockItem.price, getLegalMarketDiscountPercent(runtimeState, stockItem)) };
-    const purchase = buyStock(runtimeState, discountedStockItem, context, quantity, true);
+    const cap = getStockCapForItem(stockItem, "legal");
+    const stockInfo = await getCityMarketStock(client, "legal", profile.cityId, itemId, cap);
+    const purchase = await buyStock(client, "legal", profile.cityId, runtimeState, discountedStockItem, context, quantity, true, stockInfo);
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+    const nextStockMap = await buildStockMap(client, "legal", profile.cityId, profile.stock);
     return {
       playerState,
-      ...serializeMarketProfile(profile, buildMutableRuntimeState(user, playerState), quantity),
+      ...serializeMarketProfile(profile, buildMutableRuntimeState(user, playerState), quantity, nextStockMap),
       message: `Purchased ${getItemDisplayName(stockItem.itemId)} x${quantity} for ${purchase.totalPrice} gold.`,
     };
   });
@@ -715,7 +759,9 @@ export async function sellBlackMarketItemForUser(user, cityId, itemId, quantityI
 export async function getBlackMarketForUser(user, cityId) {
   return withTransaction(async (client) => {
     const { playerState, runtimeState } = await loadRuntimeState(client, user);
-    return { playerState, ...serializeBlackMarket(getCityBlackMarket(assertCity(cityId)), runtimeState) };
+    const blackMarket = getCityBlackMarket(assertCity(cityId));
+    const stockMap = await buildStockMap(client, "black", blackMarket.cityId, blackMarket.stock);
+    return { playerState, ...serializeBlackMarket(blackMarket, runtimeState, 1, stockMap) };
   });
 }
 
@@ -728,7 +774,9 @@ export async function buyBlackMarketItemForUser(user, cityId, itemId, quantityIn
     if (!stockItem) throw new HttpError(404, "This under-market does not stock that item.", "CITY_BLACK_MARKET_ITEM_NOT_FOUND");
     const context = getEconomyContext(runtimeState, blackMarket.cityId);
     const marketState = serializeBlackMarket(blackMarket, runtimeState, quantity);
-    const purchase = buyStock(runtimeState, stockItem, context, quantity, marketState.blackMarket.canOpen);
+    const cap = getStockCapForItem(stockItem, "black");
+    const stockInfo = await getCityMarketStock(client, "black", blackMarket.cityId, itemId, cap);
+    const purchase = await buyStock(client, "black", blackMarket.cityId, runtimeState, stockItem, context, quantity, marketState.blackMarket.canOpen, stockInfo);
     try {
       spendShadow(runtimeState, blackMarket.cityId === "west" ? 1 : 2, "buying under-market goods");
     } catch (error) {
@@ -741,9 +789,10 @@ export async function buyBlackMarketItemForUser(user, cityId, itemId, quantityIn
       lastBlackMarketPurchaseAt: Date.now(),
     };
     const playerState = await upsertPlayerRuntimeState(client, user.internalId, runtimeState);
+    const nextStockMap = await buildStockMap(client, "black", blackMarket.cityId, blackMarket.stock);
     return {
       playerState,
-      ...serializeBlackMarket(blackMarket, buildMutableRuntimeState(user, playerState), quantity),
+      ...serializeBlackMarket(blackMarket, buildMutableRuntimeState(user, playerState), quantity, nextStockMap),
       message: `Purchased ${getItemDisplayName(stockItem.itemId)} x${quantity} for ${purchase.totalPrice} gold from the under-market.`,
     };
   });

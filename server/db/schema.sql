@@ -460,3 +460,16 @@ CREATE TABLE IF NOT EXISTS admin_one_shot_token_grants (
 
 CREATE INDEX IF NOT EXISTS idx_admin_one_shot_token_grants_target
   ON admin_one_shot_token_grants (target_internal_id, created_at DESC);
+
+-- City market/black-market global stock pools. Each (market_type, city_id, item_id) row is a
+-- single shared counter across every player, decremented atomically on purchase so the game-wide
+-- supply of a city stock item can genuinely run out.
+CREATE TABLE IF NOT EXISTS city_market_stock (
+  market_type TEXT NOT NULL CHECK (market_type IN ('legal', 'black')),
+  city_id TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  remaining_quantity INTEGER NOT NULL DEFAULT 5000 CHECK (remaining_quantity >= 0),
+  total_quantity INTEGER NOT NULL DEFAULT 5000 CHECK (total_quantity >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (market_type, city_id, item_id)
+);
