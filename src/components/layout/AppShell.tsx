@@ -16,6 +16,7 @@ import { cielLoadingQuotes } from "../../data/cielPageCopy";
 import { getCityHubContent } from "../../data/cityHubData";
 import { acknowledgeProgressionEvent, getServerCityAcademy, type ServerProgressionEvent } from "../../lib/authApi";
 import { NAV_ICONS } from "../../assets/icons";
+import { applySidebarLinkOrder, type SidebarLinksPreference } from "../../data/sidebarCatalog";
 
 type AppShellProps = {
   title?: string;
@@ -27,28 +28,10 @@ type AppShellProps = {
 // Consortiums live in the top bar (see TopBar.tsx) as the primary,
 // always-visible nav. The sidebar below only holds destinations that AREN'T
 // already reachable from the top bar, grouped into three refined sections.
-
-const character: Array<[string, string]> = [
-  ["Life Paths", "/life-paths"],
-  ["Inventory", "/inventory"],
-  ["Crafting", "/crafting"],
-  ["Education", "/education"],
-  ["Skills", "/skills"],
-  ["One-Shots", "/one-shots"],
-  ["Housing", "/housing"],
-];
-
-const realm: Array<[string, string]> = [
-  ["Arena", "/arena"],
-  ["Salvage Yard", "/salvage-yard"],
-  ["Hospital", "/hospital"],
-];
-
-const orders: Array<[string, string]> = [
-  ["Civic Jobs", "/civic-jobs"],
-  ["Adventure", "/adventure"],
-  ["City Board", "/city-board"],
-];
+// The canonical catalog for these three sections lives in
+// src/data/sidebarCatalog.ts (shared with Settings.tsx's Navigation settings
+// customization UI) - order/visibility below is the canonical default,
+// overridden per-player by applySidebarLinkOrder() further down.
 
 /** Resolves the nav icon for a sidebar link from its route (strips hash/query). */
 function iconForRoute(route: string) {
@@ -183,7 +166,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const { activeAccount, logout, authSource, serverHydrationVersion, serverSessionToken, refreshServerState } = useAuth();
   const [acknowledgingEventId, setAcknowledgingEventId] = useState<string | null>(null);
   const [sidebarAcademyOpen, setSidebarAcademyOpen] = useState<boolean | null>(null);
-  const [newsTickerEnabled, setNewsTickerEnabled] = useNewsTickerPreference();
+  const [newsTickerEnabled] = useNewsTickerPreference();
   const navigate = useNavigate();
   const location = useLocation();
   const travelState = readTravelStateFromPlayer(player);
@@ -264,9 +247,16 @@ export function AppShell({ title, hint, children }: AppShellProps) {
   const quoteSeed = `${location.pathname}|${title ?? ""}`;
   const quoteIndex = Math.abs(Array.from(quoteSeed).reduce((sum, char) => sum + char.charCodeAt(0), 0)) % cielLoadingQuotes.length;
   const shellQuote = cielLoadingQuotes[quoteIndex];
-  const visibleCharacter = hiddenRoutes ? character.filter(([, route]) => !hiddenRoutes.has(route)) : character;
-  const visibleRealm = hiddenRoutes ? realm.filter(([, route]) => !hiddenRoutes.has(route)) : realm;
-  const visibleOrders = hiddenRoutes ? orders.filter(([, route]) => !hiddenRoutes.has(route)) : orders;
+  const sidebarLinksPref = (player as unknown as { ui?: { sidebarLinks?: SidebarLinksPreference } }).ui?.sidebarLinks;
+  const orderedCharacter = applySidebarLinkOrder("character", sidebarLinksPref?.character);
+  const orderedRealm = applySidebarLinkOrder("realm", sidebarLinksPref?.realm);
+  const orderedOrders = applySidebarLinkOrder("orders", sidebarLinksPref?.orders);
+  // Player customization is applied first; the hospital/jail/travel filter
+  // is a second, unconditional layer on top - a hospitalized player never
+  // sees Education even if they pinned it in Navigation settings.
+  const visibleCharacter = hiddenRoutes ? orderedCharacter.filter(([, route]) => !hiddenRoutes.has(route)) : orderedCharacter;
+  const visibleRealm = hiddenRoutes ? orderedRealm.filter(([, route]) => !hiddenRoutes.has(route)) : orderedRealm;
+  const visibleOrders = hiddenRoutes ? orderedOrders.filter(([, route]) => !hiddenRoutes.has(route)) : orderedOrders;
   const currentCityHub = getCityHubContent(travelState.currentCityId);
   const useCityLocalSidebar = !isTraveling && currentCityHub.cityId !== "nexis";
   const visibleCityLocal = buildCityLocalLinks(currentCityHub.cityId, sidebarAcademyOpen).filter(([, route]) => !hiddenRoutes?.has(route.split("#")[0]));
@@ -274,7 +264,7 @@ export function AppShell({ title, hint, children }: AppShellProps) {
 
   return (
     <div className="app-shell">
-      <TopBar newsTickerEnabled={newsTickerEnabled} onToggleNewsTicker={setNewsTickerEnabled} />
+      <TopBar />
       {newsTickerEnabled ? <NewsTicker /> : null}
       <div className="app-main">
         <aside className="sidebar">
@@ -367,13 +357,6 @@ export function AppShell({ title, hint, children }: AppShellProps) {
                 <div className="page-banner__title">{title}</div>
                 {hint ? <div className="page-banner__hint">{hint}</div> : null}
               </div>
-              {canAccessAdmin ? (
-                <div className="page-banner__actions">
-                  <NavLink to="/admin" className="page-banner__action page-banner__action--admin">
-                    Control panel
-                  </NavLink>
-                </div>
-              ) : null}
             </div>
           ) : null}
           <ProgressionEventPanel

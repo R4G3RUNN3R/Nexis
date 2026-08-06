@@ -124,6 +124,36 @@ function sanitizeCielTutorial(value) {
   return tutorial;
 }
 
+// Settings page "Navigation settings" - mirrors the route-id keys in
+// src/data/sidebarCatalog.ts (server and frontend can't share a module
+// across the Node/Vite boundary, so this list is intentionally duplicated -
+// keep both in sync when the sidebar catalog changes). Omission from a
+// section's array means hidden; an unrecognized/duplicate/oversized entry is
+// silently dropped rather than rejected outright, matching sanitizeCielTutorial's
+// forgiving style for a low-stakes display preference.
+const SIDEBAR_LINK_KEYS = {
+  character: new Set(["life-paths", "inventory", "crafting", "education", "skills", "one-shots", "housing"]),
+  realm: new Set(["arena", "salvage-yard", "hospital"]),
+  orders: new Set(["civic-jobs", "adventure", "city-board"]),
+};
+
+function sanitizeSidebarLinks(value) {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const result = {};
+  for (const section of Object.keys(SIDEBAR_LINK_KEYS)) {
+    if (!Array.isArray(record[section])) continue;
+    const catalog = SIDEBAR_LINK_KEYS[section];
+    const seen = new Set();
+    const cleaned = record[section]
+      .filter((entry) => typeof entry === "string" && catalog.has(entry) && !seen.has(entry) && seen.add(entry))
+      .slice(0, catalog.size);
+    if (cleaned.length) result[section] = cleaned;
+  }
+  return Object.keys(result).length ? result : null;
+}
+
 function collectBlockedClientFields(payload) {
   const blocked = [];
   for (const key of Object.keys(payload)) {
@@ -159,6 +189,12 @@ function buildAllowedClientPatch(payload) {
       const tutorial = sanitizeCielTutorial(payloadUi.cielTutorial);
       if (tutorial) {
         ui.cielTutorial = tutorial;
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(payloadUi, "sidebarLinks")) {
+      const sidebarLinks = sanitizeSidebarLinks(payloadUi.sidebarLinks);
+      if (sidebarLinks) {
+        ui.sidebarLinks = sidebarLinks;
       }
     }
     if (Object.keys(ui).length) patch.ui = ui;

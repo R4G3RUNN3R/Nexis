@@ -4,6 +4,7 @@ import RouteGuard from "../components/routing/RouteGuard";
 import RegisterPage from "../pages/Register";
 import ForgotPasswordPage from "../pages/ForgotPassword";
 import ResetPasswordPage from "../pages/ResetPassword";
+import ConfirmEmailChangePage from "../pages/ConfirmEmailChange";
 import LandingPage from "../pages/Landing";
 import NewsPage from "../pages/News";
 import RulesPage from "../pages/Rules";
@@ -145,6 +146,7 @@ export default function AppRouter() {
       <Route path="/login" element={<RegisterPage initialMode="login" />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
       <Route path="/news" element={<NewsPage />} />
       <Route path="/rules" element={<RulesPage />} />
       <Route path="/staff" element={<StaffPage />} />

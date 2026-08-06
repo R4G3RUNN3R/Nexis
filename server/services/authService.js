@@ -290,6 +290,10 @@ export async function loginUser({ email, password }) {
       throw new HttpError(401, "No account found with that email.", "ACCOUNT_NOT_FOUND");
     }
 
+    if (authUser.deactivatedAt) {
+      throw new HttpError(403, "This account has been closed.", "ACCOUNT_DEACTIVATED");
+    }
+
     if (!authUser.passwordHash) {
       // Google-only account: never had a password, never gets a fake one.
       // bcrypt.compare against a null/non-bcrypt hash is not something to
@@ -330,6 +334,12 @@ export async function getSessionUser(sessionToken) {
   const result = await findSessionUserByTokenHash({ query }, tokenHash);
 
   if (!result) return null;
+
+  // A deactivated account may still hold a live, not-yet-expired session
+  // token from a device other than the one that closed it - closeAccountForUser
+  // already deletes every session in the same transaction as the closure, so
+  // this is mainly belt-and-suspenders for a session that predates that call.
+  if (result.user.deactivatedAt) return null;
 
   await touchSession({ query }, tokenHash);
   const playerState = await resolvePlayerStateForResponse(

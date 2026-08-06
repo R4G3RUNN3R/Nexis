@@ -1,5 +1,6 @@
 import express from "express";
 import authRoutes from "./routes/authRoutes.js";
+import accountRoutes from "./routes/accountRoutes.js";
 import stateRoutes from "./routes/stateRoutes.js";
 import siteRoutes from "./routes/siteRoutes.js";
 import travelRoutes from "./routes/travelRoutes.js";
@@ -35,6 +36,7 @@ import { securityHeaders } from "./middleware/securityHeaders.js";
 
 const ROUTE_MODULES = [
   authRoutes,
+  accountRoutes,
   stateRoutes,
   siteRoutes,
   travelRoutes,

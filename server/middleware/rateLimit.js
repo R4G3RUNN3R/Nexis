@@ -75,6 +75,11 @@ export const passwordResetRateLimit = createRateLimiter({
 });
 
 export const profileUploadRateLimit = createRateLimiter({ windowMs: 10 * 60_000, max: 8, keyPrefix: "profile-upload" });
+// Authenticated account-mutation actions (change password/email/name, close
+// account). Default keyBy (actorKey) already resolves user:${internalId} for
+// any authenticated request - no custom keyBy needed, unlike authRateLimit
+// which is IP-keyed for the unauthenticated login/register surface.
+export const accountMutationRateLimit = createRateLimiter({ windowMs: 60_000, max: 10, keyPrefix: "account-mutation" });
 export const stateSyncRateLimit = createRateLimiter({ windowMs: 60_000, max: 45, keyPrefix: "state-sync" });
 export const adminMutationRateLimit = createRateLimiter({ windowMs: 60_000, max: 120, keyPrefix: "admin-mutation" });
 export const unsafeApiRateLimit = createRateLimiter({

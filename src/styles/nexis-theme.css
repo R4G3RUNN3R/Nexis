@@ -390,33 +390,6 @@ select {
   font-size: 14px;
 }
 
-.page-banner__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.page-banner__action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid rgba(154, 175, 103, 0.22);
-  border-radius: 999px;
-  background: rgba(154, 175, 103, 0.08);
-  color: #dbe7c2;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.page-banner__action--admin {
-  border-color: rgba(201, 177, 122, 0.22);
-  background: rgba(201, 177, 122, 0.08);
-  color: #ead8ae;
-}
-
 .nexis-grid,
 .character-layout {
   display: grid;

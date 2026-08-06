@@ -36,6 +36,18 @@ ALTER TABLE users
 ALTER TABLE users
   ALTER COLUMN password_hash DROP NOT NULL;
 
+-- Settings page account actions: name-change cooldown tracking (null = never
+-- changed, no cooldown yet) and soft account deactivation. Deactivation is
+-- intentionally never a hard delete - every FK elsewhere is ON DELETE CASCADE,
+-- so removing a users row would silently corrupt other players' guild
+-- rosters, marketplace listings, etc. loginUser/getSessionUser both reject a
+-- deactivated account (see authService.js).
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS name_changed_at TIMESTAMPTZ NULL;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ NULL;
+
 -- One row per (provider, external account) a Nexis user has linked. Google
 -- is the only provider today but the shape is provider-generic on purpose.
 -- provider_subject is Google's immutable "sub" claim, never the email -
@@ -164,6 +176,27 @@ CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_internal_id
 
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at
   ON password_reset_tokens (expires_at);
+
+-- Settings page "change email" flow: same shape as password_reset_tokens,
+-- but the pending destination must travel with the token since it isn't a
+-- fixed field being reset - the actual users.email UPDATE happens at
+-- confirm time, inside a transaction that re-checks the unique constraint
+-- (the request-time check is best-effort UX only, not the enforcement
+-- boundary - see accountService.js).
+CREATE TABLE IF NOT EXISTS email_change_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_internal_id TEXT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
+  new_email TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_change_tokens_user_internal_id
+  ON email_change_tokens (user_internal_id);
+
+CREATE INDEX IF NOT EXISTS idx_email_change_tokens_expires_at
+  ON email_change_tokens (expires_at);
 
 CREATE TABLE IF NOT EXISTS organizations (
   internal_id TEXT PRIMARY KEY,

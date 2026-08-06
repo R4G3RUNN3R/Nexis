@@ -203,6 +203,26 @@ export type ApiPasswordResetResponse =
   | { ok: true; reset: true }
   | ApiFailure;
 
+export type ApiChangePasswordResponse =
+  | { ok: true; changed: true; wasSetForFirstTime: boolean }
+  | ApiFailure;
+
+export type ApiRequestEmailChangeResponse =
+  | { ok: true; requested: true }
+  | ApiFailure;
+
+export type ApiConfirmEmailChangeResponse =
+  | { ok: true; confirmed: true; email: string }
+  | ApiFailure;
+
+export type ApiChangeNameResponse =
+  | { ok: true; user: { firstName: string; lastName: string }; playerState: ServerPlayerState; goldSpent: number }
+  | ApiFailure;
+
+export type ApiCloseAccountResponse =
+  | { ok: true; closed: true }
+  | ApiFailure;
+
 export type ApiTravelResponse =
   | {
       ok: true;
@@ -1307,6 +1327,55 @@ export function requestPasswordReset(data: { email: string }): Promise<ApiPasswo
 export function submitPasswordReset(data: { token: string; password: string }): Promise<ApiPasswordResetResponse> {
   return requestJson<{ reset: true }>("/api/reset-password", {
     method: "POST",
+    body: JSON.stringify(data),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+// Settings page "change my password while logged in" - kills every existing
+// session on success (matches submitPasswordReset's own precedent), so the
+// caller should treat a successful response as "log out and prompt a fresh
+// login," not just close the panel.
+export function changePassword(sessionToken: string, data: { currentPassword: string; newPassword: string }): Promise<ApiChangePasswordResponse> {
+  return requestJson<{ changed: true; wasSetForFirstTime: boolean }>("/api/account/change-password", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify(data),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function requestEmailChange(sessionToken: string, data: { newEmail: string }): Promise<ApiRequestEmailChangeResponse> {
+  return requestJson<{ requested: true }>("/api/account/change-email/request", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify(data),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+// Not authenticated - the token itself is the credential (same pattern as
+// submitPasswordReset), so this can be called from a fresh browser session.
+export function confirmEmailChange(data: { token: string }): Promise<ApiConfirmEmailChangeResponse> {
+  return requestJson<{ confirmed: true; email: string }>("/api/account/change-email/confirm", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+export function changeName(sessionToken: string, data: { firstName: string; lastName: string }): Promise<ApiChangeNameResponse> {
+  return requestJson<{ user: { firstName: string; lastName: string }; playerState: ServerPlayerState; goldSpent: number }>("/api/account/change-name", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify(data),
+  }).then((result) => ("ok" in result ? result : asSuccess(result)));
+}
+
+// closeAccountForUser only checks the password for accounts that have one
+// (Google-only accounts pass no password at all) - the frontend's own
+// confirmation-phrase requirement for those accounts is a UX gate, not
+// something this endpoint needs to see.
+export function closeAccount(sessionToken: string, data: { password?: string }): Promise<ApiCloseAccountResponse> {
+  return requestJson<{ closed: true }>("/api/account/close", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
     body: JSON.stringify(data),
   }).then((result) => ("ok" in result ? result : asSuccess(result)));
 }

@@ -18,7 +18,7 @@ function getTransporter() {
   if (!SMTP_HOST || !SMTP_FROM) {
     throw new HttpError(
       503,
-      "Password reset email service is not configured yet.",
+      "Email service is not configured yet.",
       "EMAIL_NOT_CONFIGURED",
     );
   }
@@ -58,6 +58,36 @@ export async function sendPasswordResetEmail({ email, firstName, resetToken }) {
         <p><a href="${resetUrl}">Reset your password</a></p>
         <p>This link expires in ${PASSWORD_RESET_TTL_MINUTES} minutes.</p>
         <p>If you did not request this, you can safely ignore this email.</p>
+      </div>
+    `,
+  });
+}
+
+export async function sendEmailChangeConfirmation({ email, firstName, confirmToken }) {
+  const transporter = getTransporter();
+  const confirmUrl = `${APP_BASE_URL.replace(/\/$/, "")}/confirm-email-change?token=${encodeURIComponent(confirmToken)}`;
+  const displayName = firstName?.trim() || "Citizen";
+
+  await transporter.sendMail({
+    from: SMTP_FROM,
+    to: email,
+    subject: "Confirm your new Nexis email address",
+    text: [
+      `Hello ${displayName},`,
+      "",
+      "A request was made to change the email address on your Nexis account to this one.",
+      `Confirm the change here: ${confirmUrl}`,
+      "",
+      `This link expires in ${PASSWORD_RESET_TTL_MINUTES} minutes.`,
+      "If you did not request this, you can safely ignore this email - your account email will not change.",
+    ].join("\n"),
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1a1a1a">
+        <p>Hello ${displayName},</p>
+        <p>A request was made to change the email address on your Nexis account to this one.</p>
+        <p><a href="${confirmUrl}">Confirm the change</a></p>
+        <p>This link expires in ${PASSWORD_RESET_TTL_MINUTES} minutes.</p>
+        <p>If you did not request this, you can safely ignore this email - your account email will not change.</p>
       </div>
     `,
   });

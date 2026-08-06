@@ -87,12 +87,7 @@ function formatRelativeTime(timestamp: number, now: number) {
   return `${days}d ago`;
 }
 
-type TopBarProps = {
-  newsTickerEnabled: boolean;
-  onToggleNewsTicker: (value: boolean) => void;
-};
-
-export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
+export function TopBar() {
   const [playerOpen, setPlayerOpen] = useState(false);
   const [clockOpen, setClockOpen] = useState(false);
   const [recordLogOpen, setRecordLogOpen] = useState(false);
@@ -514,14 +509,6 @@ export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
               <NavLink to={profileRoute} className="player-menu__item" onClick={() => setPlayerOpen(false)}>
                 View Profile
               </NavLink>
-              <button
-                type="button"
-                className="player-menu__item player-menu__item--toggle"
-                onClick={() => onToggleNewsTicker(!newsTickerEnabled)}
-              >
-                <span>News Ticker</span>
-                <span className={`player-menu__switch${newsTickerEnabled ? " player-menu__switch--on" : ""}`} aria-hidden="true" />
-              </button>
               <NavLink to="/settings" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
                 Settings
               </NavLink>

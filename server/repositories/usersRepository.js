@@ -1,5 +1,9 @@
 import { normalizeEntityType, normalizePrivilegeRole } from "../lib/userIdentity.js";
 
+function isUniqueViolation(error) {
+  return Boolean(error && (error.code === "23505" || String(error.message ?? "").includes("unique")));
+}
+
 function mapUserRow(row) {
   if (!row) return null;
 
@@ -13,6 +17,7 @@ function mapUserRow(row) {
     lastName: row.last_name,
     entityType: normalizeEntityType(row.entity_type, publicId),
     privilegeRole: normalizePrivilegeRole(row.privilege_role, publicId),
+    deactivatedAt: row.deactivated_at ? new Date(row.deactivated_at).getTime() : null,
     createdAt: new Date(row.created_at).getTime(),
   };
 }
@@ -20,7 +25,7 @@ function mapUserRow(row) {
 export async function findAuthUserByEmail(client, email) {
   const result = await client.query(
     `
-      SELECT internal_id, public_id, username, email, first_name, last_name, entity_type, privilege_role, password_hash, created_at
+      SELECT internal_id, public_id, username, email, first_name, last_name, entity_type, privilege_role, password_hash, deactivated_at, created_at
       FROM users
       WHERE email = $1
     `,
@@ -36,17 +41,24 @@ export async function findAuthUserByEmail(client, email) {
   };
 }
 
-export async function findUserByInternalId(client, internalId) {
+export async function findUserByInternalId(client, internalId, { forUpdate = false } = {}) {
   const result = await client.query(
     `
-      SELECT internal_id, public_id, username, email, first_name, last_name, entity_type, privilege_role, created_at
+      SELECT internal_id, public_id, username, email, first_name, last_name, entity_type, privilege_role, password_hash, name_changed_at, deactivated_at, created_at
       FROM users
       WHERE internal_id = $1
+      ${forUpdate ? "FOR UPDATE" : ""}
     `,
     [internalId],
   );
 
-  return mapUserRow(result.rows[0]);
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    ...mapUserRow(row),
+    passwordHash: row.password_hash,
+    nameChangedAt: row.name_changed_at ? new Date(row.name_changed_at).getTime() : null,
+  };
 }
 
 export async function findUserByPublicId(client, publicId) {
@@ -125,6 +137,72 @@ export async function updateUserPasswordHash(client, internalId, passwordHash) {
 
   return mapUserRow(result.rows[0]);
 }
+
+// Atomic conditional UPDATE (Ticket A discipline, not read-then-write): only
+// succeeds if the 30-day cooldown has actually elapsed at the moment of the
+// UPDATE, so two concurrent rename requests from the same account can't both
+// succeed and double-charge gold - accountService.js checks this returned
+// null before ever debiting gold, and only debits if a row came back.
+export async function updateUserNameIfCooldownElapsed(client, internalId, firstName, lastName, cooldownDays) {
+  const result = await client.query(
+    `
+      UPDATE users
+      SET first_name = $2, last_name = $3, name_changed_at = NOW()
+      WHERE internal_id = $1
+        AND (name_changed_at IS NULL OR name_changed_at <= NOW() - ($4 || ' days')::interval)
+      RETURNING internal_id, public_id, username, email, first_name, last_name, entity_type, privilege_role, created_at
+    `,
+    [internalId, firstName, lastName, cooldownDays],
+  );
+
+  return mapUserRow(result.rows[0]);
+}
+
+// Atomic conditional UPDATE: idempotent against a double-submit (a second
+// close-account click while the first is still in flight sees zero rows and
+// is treated as already-done by the caller, not an error).
+export async function updateUserDeactivatedAt(client, internalId) {
+  const result = await client.query(
+    `
+      UPDATE users
+      SET deactivated_at = NOW()
+      WHERE internal_id = $1 AND deactivated_at IS NULL
+      RETURNING internal_id, public_id, username, email, first_name, last_name, entity_type, privilege_role, created_at
+    `,
+    [internalId],
+  );
+
+  return mapUserRow(result.rows[0]);
+}
+
+// Plain UPDATE - the users.email UNIQUE constraint is the real race-safety
+// boundary here (Postgres rejects a concurrent collision atomically at the
+// index level), not an application-level check-then-write.
+//
+// Deliberately does NOT catch the unique-violation itself: withTransaction
+// (server/db/pool.js) is a flat BEGIN/COMMIT/ROLLBACK with no savepoints, so
+// once any statement inside a transaction errors, Postgres poisons the whole
+// transaction until ROLLBACK - any further query on that same client would
+// fail with "current transaction is aborted". The caller must make this the
+// LAST statement it runs before either succeeding or handling the error (see
+// confirmEmailChangeForUser in accountService.js, which catches immediately
+// here and re-throws as HttpError so the poisoned state never encounters
+// another query before the enclosing withTransaction's own ROLLBACK, which
+// always succeeds regardless of transaction state).
+export async function updateUserEmail(client, internalId, email) {
+  const result = await client.query(
+    `
+      UPDATE users
+      SET email = $2
+      WHERE internal_id = $1
+      RETURNING internal_id, public_id, username, email, first_name, last_name, entity_type, privilege_role, created_at
+    `,
+    [internalId, email],
+  );
+  return mapUserRow(result.rows[0]);
+}
+
+export { isUniqueViolation };
 
 export async function searchUsers(client, queryText, limit = 20) {
   const term = String(queryText ?? "").trim();
