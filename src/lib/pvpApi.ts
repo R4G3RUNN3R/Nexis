@@ -42,3 +42,7 @@ export function updatePvpSafety(token: string, safety: Record<string, boolean>) 
 export function issueBountyWrit(token: string, targetPublicId: number, gold: number, reason: string) {
   return requestPvp(token, "/api/pvp/bounties", { method: "POST", body: JSON.stringify({ targetPublicId, gold, reason }) });
 }
+
+export function cancelBountyWrit(token: string, writId: string) {
+  return requestPvp(token, "/api/pvp/bounties/cancel", { method: "POST", body: JSON.stringify({ writId }) });
+}

@@ -183,3 +183,82 @@ export async function issueBountyWritForUser(user, payload = {}) {
     return { playerState, ...serializePvpHub(issuerRuntime), writ, message: "Bounty writ posted." };
   });
 }
+
+// Nothing else in the codebase ever resolves or pays out a bounty writ (no combat
+// hook, no expiry sweep) - without this, escrowed gold from issueBountyWritForUser
+// would be permanently unrecoverable the moment a writ is filed. Only the issuer can
+// cancel their own still-active writ, and the full escrow is refunded.
+export async function cancelBountyWritForUser(user, payload = {}) {
+  return withTransaction(async (client) => {
+    const writId = typeof payload.writId === "string" ? payload.writId.trim() : "";
+    if (!writId) throw new HttpError(400, "Bounty writ ID is required.", "BOUNTY_WRIT_ID_REQUIRED");
+
+    // Peek at the writ with a plain, non-locking read purely to learn the target's
+    // public ID. Deliberately NOT forUpdate: taking a lock on the issuer here, before
+    // canonical order is known, would itself be a deadlock risk against a concurrent
+    // operation that locks the same two accounts in the opposite (correct) order.
+    const { runtimeState: peekRuntime } = await loadRuntimeState(client, user);
+    const peekWrit = ensurePvpProfile(peekRuntime).bountyWrits.issued.find((entry) => entry?.id === writId);
+    if (!peekWrit) throw new HttpError(404, "Bounty writ not found.", "BOUNTY_WRIT_NOT_FOUND");
+    if (peekWrit.status !== "active") throw new HttpError(409, "This bounty writ is no longer active.", "BOUNTY_WRIT_NOT_ACTIVE");
+    const targetPublicId = Math.floor(asNumber(peekWrit.target?.publicId, 0));
+    const targetUser = targetPublicId ? await findUserByPublicId(client, targetPublicId) : null;
+
+    const now = Date.now();
+
+    if (!targetUser) {
+      // Target account no longer resolvable (deleted/renumbered) - still refund the
+      // issuer under a proper lock, there is nothing on the other side to reconcile.
+      const { runtimeState: issuerRuntime } = await loadRuntimeState(client, user, { forUpdate: true });
+      const issuerPvp = ensurePvpProfile(issuerRuntime);
+      const writ = issuerPvp.bountyWrits.issued.find((entry) => entry?.id === writId);
+      if (!writ) throw new HttpError(404, "Bounty writ not found.", "BOUNTY_WRIT_NOT_FOUND");
+      if (writ.status !== "active") throw new HttpError(409, "This bounty writ is no longer active.", "BOUNTY_WRIT_NOT_ACTIVE");
+      const issuerPlayer = asRecord(issuerRuntime.player);
+      issuerPlayer.gold = asWholeNumber(issuerPlayer.gold, 0) + asWholeNumber(writ.gold, 0);
+      issuerRuntime.player = issuerPlayer;
+      issuerPvp.bountyWrits.issued = issuerPvp.bountyWrits.issued.map((entry) =>
+        entry?.id === writId ? { ...entry, status: "cancelled", cancelledAt: now } : entry,
+      );
+      issuerPvp.lastUpdatedAt = now;
+      addPlayerRecord(issuerRuntime, { category: "combat", source: "bounty_writ", summary: `Bounty writ cancelled; escrow refunded.`, route: "/arena", detail: { writId, refundedGold: writ.gold } });
+      await upsertPlayerRuntimeState(client, user.internalId, issuerRuntime);
+      const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+      return { playerState, ...serializePvpHub(issuerRuntime), message: "Bounty writ cancelled and escrow refunded." };
+    }
+
+    // Ticket A: canonical lock order (lowest internal ID first), matching
+    // issueBountyWritForUser.
+    const [firstId] = orderInternalIds(user.internalId, targetUser.internalId);
+    const [firstUser, secondUser] = firstId === user.internalId ? [user, targetUser] : [targetUser, user];
+    const { runtimeState: firstRuntime } = await loadRuntimeState(client, firstUser, { forUpdate: true });
+    const { runtimeState: secondRuntime } = await loadRuntimeState(client, secondUser, { forUpdate: true });
+    const issuerRuntime = firstUser.internalId === user.internalId ? firstRuntime : secondRuntime;
+    const targetRuntime = firstUser.internalId === user.internalId ? secondRuntime : firstRuntime;
+    const issuerPvp = ensurePvpProfile(issuerRuntime);
+    const targetPvp = ensurePvpProfile(targetRuntime);
+    const writ = issuerPvp.bountyWrits.issued.find((entry) => entry?.id === writId);
+    if (!writ) throw new HttpError(404, "Bounty writ not found.", "BOUNTY_WRIT_NOT_FOUND");
+    if (writ.status !== "active") throw new HttpError(409, "This bounty writ is no longer active.", "BOUNTY_WRIT_NOT_ACTIVE");
+
+    const issuerPlayer = asRecord(issuerRuntime.player);
+    issuerPlayer.gold = asWholeNumber(issuerPlayer.gold, 0) + asWholeNumber(writ.gold, 0);
+    issuerRuntime.player = issuerPlayer;
+    issuerPvp.bountyWrits.issued = issuerPvp.bountyWrits.issued.map((entry) =>
+      entry?.id === writId ? { ...entry, status: "cancelled", cancelledAt: now } : entry,
+    );
+    issuerPvp.lastUpdatedAt = now;
+    targetPvp.bountyWrits.activeAgainstMe = targetPvp.bountyWrits.activeAgainstMe.map((entry) =>
+      entry?.id === writId ? { ...entry, status: "cancelled", cancelledAt: now } : entry,
+    );
+    targetPvp.lastUpdatedAt = now;
+
+    addPlayerRecord(issuerRuntime, { category: "combat", source: "bounty_writ", summary: `Bounty writ against ${displayName(targetUser)} cancelled; escrow refunded.`, route: "/arena", detail: { writId, refundedGold: writ.gold } });
+    addPlayerRecord(targetRuntime, { category: "combat", source: "bounty_writ", summary: `${displayName(user)} cancelled their bounty writ against you.`, route: "/arena", detail: { writId } });
+
+    await upsertPlayerRuntimeState(client, user.internalId, issuerRuntime);
+    await upsertPlayerRuntimeState(client, targetUser.internalId, targetRuntime);
+    const playerState = await findPlayerStateByUserInternalId(client, user.internalId);
+    return { playerState, ...serializePvpHub(issuerRuntime), message: "Bounty writ cancelled and escrow refunded." };
+  });
+}

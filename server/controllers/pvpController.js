@@ -1,4 +1,4 @@
-import { getPvpHubForUser, issueBountyWritForUser, updatePvpSafetyForUser } from "../services/pvpService.js";
+import { cancelBountyWritForUser, getPvpHubForUser, issueBountyWritForUser, updatePvpSafetyForUser } from "../services/pvpService.js";
 
 export async function getPvpHub(req, res, next) {
   try {
@@ -19,6 +19,14 @@ export async function updatePvpSafety(req, res, next) {
 export async function issueBountyWrit(req, res, next) {
   try {
     res.status(200).json(await issueBountyWritForUser(req.auth.user, req.body ?? {}));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function cancelBountyWrit(req, res, next) {
+  try {
+    res.status(200).json(await cancelBountyWritForUser(req.auth.user, req.body ?? {}));
   } catch (error) {
     next(error);
   }
