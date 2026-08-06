@@ -5,6 +5,7 @@ import { createDefaultPlayerState, findPlayerStateByUserInternalId, upsertPlayer
 import { findUserByPublicId } from "../repositories/usersRepository.js";
 import { findOrganizationByInternalId, findOrganizationByPublicId, insertOrganizationLog, lockOrganizationForUpdate, updateOrganizationDetails } from "../repositories/organizationRepository.js";
 import { recordOneShotCompletion } from "../repositories/oneShotCompletionRepository.js";
+import { orderInternalIds } from "../lib/lockOrdering.js";
 import {
   ORGANIZATION_ONE_SHOT_MIN_SIGNUPS,
   ORGANIZATION_ONE_SHOT_TOKEN_COST,
@@ -313,12 +314,28 @@ export async function signUpOrganizationOneShotForUser(user, organizationId, cam
 }
 
 async function refundParticipantTokens(client, campaignState, now) {
-  const refunds = [];
+  // Ticket A: decide which signups actually need a refund (and resolve each to its
+  // participant user) BEFORE taking any row lock, then lock those participants in
+  // canonical ascending-internalId order. Locking in signup order instead - as this
+  // used to do - is a lock-order violation: a concurrent resolve of a different
+  // campaign whose signups happen to be in the opposite order could deadlock against
+  // this one, since both loops would be locking the same two accounts oppositely.
+  const candidates = [];
   for (const signup of asArray(campaignState.signups)) {
     const tokenCommitment = normalizeTokenCommitment(signup.tokenCommitment);
     if (!tokenCommitment || tokenCommitment.refundedAt || !shouldRefundOrganizationOneShotToken()) continue;
     const participant = await findUserByPublicId(client, signup.publicId);
     if (!participant) continue;
+    candidates.push({ signup, tokenCommitment, participant });
+  }
+  candidates.sort((a, b) => {
+    const [first] = orderInternalIds(a.participant.internalId, b.participant.internalId);
+    if (a.participant.internalId === b.participant.internalId) return 0;
+    return first === a.participant.internalId ? -1 : 1;
+  });
+
+  const refunds = [];
+  for (const { signup, tokenCommitment, participant } of candidates) {
     const { runtimeState } = await loadRuntimeState(client, participant, { forUpdate: true });
     const refund = refundOrganizationOneShotToken(runtimeState, tokenCommitment, now);
     if (!refund) continue;
