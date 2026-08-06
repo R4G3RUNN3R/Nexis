@@ -161,6 +161,19 @@ export function TopBar({ newsTickerEnabled, onToggleNewsTicker }: TopBarProps) {
   }, []);
 
   useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setPlayerOpen(false);
+      setClockOpen(false);
+      setRecordLogOpen(false);
+      setSearchOpen(false);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
     if (!recordLogOpen || authSource !== "server" || !serverSessionToken) return;
     let cancelled = false;
     setRecordLogLoading(true);
