@@ -81,8 +81,12 @@ function redactOpponentHealth(result, { hidePlayerSide, hideOpponentSide }) {
 
 function buildPlayerOpponent(user, runtimeState) {
   const player = asRecord(runtimeState.player);
-  const stats = asRecord(player.stats);
-  const battle = asRecord(player.battleStats);
+  // Prefer the title-boosted views, matching combatService.js's
+  // buildPlayerCombatant() - otherwise the defending side of a duel loses
+  // their equipped stat title's bonus entirely (only the challenger's own
+  // side went through combatService.js and got it correctly).
+  const stats = asRecord(player.effectiveStats ?? player.stats);
+  const battle = asRecord(player.effectiveBattleStats ?? player.battleStats);
   const maxHealth = Math.max(30, asNumber(stats.maxHealth, 100));
   return {
     id: `player_${user.publicId}`,

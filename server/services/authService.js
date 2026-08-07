@@ -134,6 +134,15 @@ async function resolvePlayerStateForResponse(client, user, playerState) {
   const chronicleResolution = ensureChronicleEntitlement(runtimeState);
   normalizeProgressionState(runtimeState);
   const liveWorldResolution = resolveLiveWorldForRuntimeState(runtimeState, user);
+  // resolveLiveWorldForRuntimeState() -> resolvePrestigeState() unconditionally
+  // overwrites player.title with the OLD prestige system's label, clobbering
+  // whatever buildMutableRuntimeState() resolved from the NEW title system's
+  // equippedTitleId. Re-apply the same precedence profileService.js's
+  // buildProfileResponse already uses (equipped title wins, then prestige,
+  // then whatever raw string is left) so every response - not just the
+  // Profile page - reflects an equipped title correctly.
+  runtimeState.player.title =
+    runtimeState.player.equippedTitle?.name ?? runtimeState.player.prestige?.currentTitle?.label ?? runtimeState.player.title ?? "";
   const currentRuntimePlayer = playerState?.runtimeState?.player ?? {};
   const accountAgeChanged =
     currentRuntimePlayer.createdAt !== runtimeState.player.createdAt ||
