@@ -1,10 +1,15 @@
 import { isAbsoluteOwner } from "./adminAccess";
 
-export function resolveDisplayTitle(rawTitle: string | null | undefined, publicId: number | null | undefined) {
+export function resolveDisplayTitle(
+  rawTitle: string | null | undefined,
+  publicId: number | null | undefined,
+  viewerMayObserveExclusiveTitle = true,
+) {
   const title = (rawTitle ?? "").trim();
 
   if (title === "0" || title.toLowerCase() === "the_absolute" || title.toLowerCase() === "the absolute") {
-    return isAbsoluteOwner(publicId) ? "The Absolute" : "None";
+    if (!isAbsoluteOwner(publicId)) return "None";
+    return viewerMayObserveExclusiveTitle ? "The Absolute" : "None";
   }
 
   return title || "None";

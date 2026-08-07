@@ -11,6 +11,7 @@ export type ProfileResponse = {
     prestige?: {
       currentTitle?: { id: string; label: string; source?: string };
       titles?: Array<{ id: string; label: string; source?: string; owned?: boolean }>;
+      catalog?: Array<{ id: string; label: string; source?: string; summary?: string; unlocked: boolean }>;
       badges?: Array<{ id: string; label: string; kind?: string; summary?: string }>;
       distinctions?: string[];
     };

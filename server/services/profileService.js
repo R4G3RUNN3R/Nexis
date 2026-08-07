@@ -9,6 +9,7 @@ import { findOrganizationForUserByType } from "../repositories/organizationRepos
 import { resolveTravelForRuntimeState } from "./travelService.js";
 import { upsertPlayerRuntimeState } from "../repositories/playerStateRepository.js";
 import { resolvePrestigeState, setPrestigeTitle } from "./liveWorldService.js";
+import { getTitleDefinition } from "../data/titlesData.js";
 import { getLifePath } from "../data/lifePathsData.js";
 import { addPlayerRecord } from "./playerRecordsService.js";
 import { getProfileImageDir, isProfileImageUploadAvailable } from "../lib/profileImageStorage.js";
@@ -153,6 +154,20 @@ async function buildProfileResponse(viewerUser, targetUser, playerState, organiz
   const canModerate = Boolean(viewerUser && viewerUser.privilegeRole && viewerUser.privilegeRole !== "player");
   const portraitFileMissing = isSelf ? await checkOwnPortraitFileMissing(runtimeState) : false;
 
+  // Exclusive titles (e.g. The Absolute) must never be visible to a viewer who
+  // is neither the owner nor staff/admin - the mutation/equip paths already
+  // enforce exclusivity against the OWNER's publicId (titleService.js), but
+  // that says nothing about who is allowed to merely SEE it displayed on a
+  // public, even-logged-out profile view. Gate display here, at the source.
+  const viewerMayObserveExclusiveTitle = isSelf || canModerate;
+  const equippedTitleDefinition = runtimeState.player.equippedTitle
+    ? getTitleDefinition(runtimeState.player.equippedTitle.id)
+    : null;
+  const visibleEquippedTitle =
+    equippedTitleDefinition?.exclusiveToPublicId && !viewerMayObserveExclusiveTitle
+      ? null
+      : runtimeState.player.equippedTitle;
+
   return {
     viewer: {
       mode: isSelf ? "self" : canModerate ? "staff" : "public",
@@ -162,8 +177,8 @@ async function buildProfileResponse(viewerUser, targetUser, playerState, organiz
     publicProfile: {
       name: `${targetUser.firstName}${targetUser.lastName ? ` ${targetUser.lastName}` : ""}`.trim(),
       publicId: targetUser.publicId,
-      title: runtimeState.player.equippedTitle?.name ?? prestige.currentTitle?.label ?? runtimeState.player.title ?? "",
-      equippedTitle: runtimeState.player.equippedTitle,
+      title: visibleEquippedTitle?.name ?? prestige.currentTitle?.label ?? runtimeState.player.title ?? "",
+      equippedTitle: visibleEquippedTitle,
       prestige,
       entityType,
       level: playerState.level ?? 1,

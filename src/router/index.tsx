@@ -31,6 +31,7 @@ import LifePathsPage from "../pages/LifePaths";
 import CityBoardPage from "../pages/CityBoard";
 import ProfilePage from "../pages/Profile";
 import AchievementsPage from "../pages/Achievements";
+import TitlesPage from "../pages/Titles";
 import BlackMarketPage from "../pages/BlackMarket";
 import BankPage from "../pages/Bank";
 import GuildsPage from "../pages/Guilds";
@@ -166,6 +167,7 @@ export default function AppRouter() {
       <Route path="/profiles/:publicId" element={<ProfilePage />} />
       <Route path="/profiles" element={<Navigate to="/profile" replace />} />
       <Route path="/achievements" element={<AchievementsPage />} />
+      <Route path="/titles" element={<TitlesPage />} />
       <Route path="/housing" element={<RouteGuard><HousingPage /></RouteGuard>} />
       <Route path="/guild" element={<Navigate to="/guilds" replace />} />
       <Route path="/guild/:publicId" element={<RouteGuard><GuildsPage /></RouteGuard>} />

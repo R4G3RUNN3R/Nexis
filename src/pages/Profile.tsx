@@ -6,9 +6,7 @@ import { usePlayer } from "../state/PlayerContext";
 import { getPropertyById } from "../data/propertyData";
 import { formatPlayerPublicId, getProfileRoute, parsePlayerPublicId } from "../lib/publicIds";
 import { resolveDisplayTitle } from "../lib/titleAccess";
-import { getProfileView, setOwnProfileTitle, type ProfileResponse, uploadOwnProfileImage } from "../lib/profileApi";
-import { getLegacyAchievements, getServerRecords, type ServerLegacyAchievement, type ServerRecordEntry } from "../lib/authApi";
-import { equipOwnTitle, getOwnTitles, unequipOwnTitle, type TitleCatalogEntry } from "../lib/titleApi";
+import { getProfileView, type ProfileResponse, uploadOwnProfileImage } from "../lib/profileApi";
 import { readCachedRuntimeState, writeCachedRuntimeState } from "../lib/runtimeStateCache";
 import { getCityName, readTravelStateFromPlayer } from "../lib/travelState";
 import "../styles/character-profile.css";
@@ -69,14 +67,6 @@ function derivePlayerCurrencies(gold: number) {
   };
 }
 
-function formatRecordCategory(category: string) {
-  return category.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatRecordTimestamp(timestamp: number) {
-  return new Date(timestamp).toLocaleString("en-GB");
-}
-
 function formatEntityLabel(entityType: ProfileResponse["publicProfile"]["entityType"]) {
   switch (entityType) {
     case "npc":
@@ -93,31 +83,15 @@ function formatEntityLabel(entityType: ProfileResponse["publicProfile"]["entityT
 export default function ProfilePage() {
   const { publicId: publicIdParam } = useParams();
   const { player } = usePlayer();
-  const { activeAccount, serverSessionToken, refreshServerState } = useAuth();
+  const { activeAccount, serverSessionToken } = useAuth();
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadingPortrait, setUploadingPortrait] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
-  const [prestigeMessage, setPrestigeMessage] = useState<string | null>(null);
-  const [prestigeError, setPrestigeError] = useState<string | null>(null);
   const [failedPortraitUrl, setFailedPortraitUrl] = useState<string | null>(null);
   const portraitInputRef = useRef<HTMLInputElement | null>(null);
-  const [chronicleEntries, setChronicleEntries] = useState<ServerRecordEntry[]>([]);
-  const [chronicleTotal, setChronicleTotal] = useState(0);
-  const [chronicleLoading, setChronicleLoading] = useState(false);
-  const [chronicleError, setChronicleError] = useState<string | null>(null);
-  const [chronicleCategory, setChronicleCategory] = useState<string>("all");
-  const [achievementHighlights, setAchievementHighlights] = useState<ServerLegacyAchievement[]>([]);
-  const [achievementsCompletedCount, setAchievementsCompletedCount] = useState(0);
-  const [achievementsTotalCount, setAchievementsTotalCount] = useState(0);
-  const [achievementsLoading, setAchievementsLoading] = useState(false);
-  const [achievementsError, setAchievementsError] = useState<string | null>(null);
-  const [titles, setTitles] = useState<TitleCatalogEntry[]>([]);
-  const [titlesLoading, setTitlesLoading] = useState(false);
-  const [titlesError, setTitlesError] = useState<string | null>(null);
-  const [titleActionPendingId, setTitleActionPendingId] = useState<string | null>(null);
 
   const targetPublicId = useMemo(() => {
     const parsed = parsePlayerPublicId(publicIdParam);
@@ -171,106 +145,6 @@ export default function ProfilePage() {
       cancelled = true;
     };
   }, [isOwnRoute, serverSessionToken, targetPublicId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadChronicle() {
-      if (!isOwnRoute || !serverSessionToken) {
-        setChronicleEntries([]);
-        setChronicleTotal(0);
-        setChronicleError(null);
-        return;
-      }
-
-      setChronicleLoading(true);
-      const result = await getServerRecords(serverSessionToken, null, 120);
-      if (cancelled) return;
-      setChronicleLoading(false);
-
-      if (!result.ok) {
-        setChronicleError(result.error);
-        return;
-      }
-
-      setChronicleError(null);
-      setChronicleEntries(result.records);
-      setChronicleTotal(result.summary.total);
-    }
-
-    void loadChronicle();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOwnRoute, serverSessionToken]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadAchievements() {
-      if (!isOwnRoute || !serverSessionToken) {
-        setAchievementHighlights([]);
-        setAchievementsCompletedCount(0);
-        setAchievementsTotalCount(0);
-        setAchievementsError(null);
-        return;
-      }
-
-      setAchievementsLoading(true);
-      const result = await getLegacyAchievements(serverSessionToken);
-      if (cancelled) return;
-      setAchievementsLoading(false);
-
-      if (!result.ok) {
-        setAchievementsError(result.error);
-        return;
-      }
-
-      setAchievementsError(null);
-      const completed = result.achievements.filter((achievement) => achievement.completed);
-      const inProgress = result.achievements
-        .filter((achievement) => !achievement.completed)
-        .sort((a, b) => b.progress / Math.max(1, b.target) - a.progress / Math.max(1, a.target));
-      setAchievementsTotalCount(result.achievements.length);
-      setAchievementsCompletedCount(completed.length);
-      setAchievementHighlights((completed.length ? completed : inProgress).slice(0, 4));
-    }
-
-    void loadAchievements();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOwnRoute, serverSessionToken]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadTitles() {
-      if (!isOwnRoute || !serverSessionToken) {
-        setTitles([]);
-        setTitlesError(null);
-        return;
-      }
-
-      setTitlesLoading(true);
-      const result = await getOwnTitles(serverSessionToken);
-      if (cancelled) return;
-      setTitlesLoading(false);
-
-      if (!result.ok) {
-        setTitlesError(result.error);
-        return;
-      }
-
-      setTitlesError(null);
-      setTitles(result.titles);
-    }
-
-    void loadTitles();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOwnRoute, serverSessionToken]);
 
   const flavor =
     "A citizen record should read like a lived station: title, health, movement, allegiances, holdings, and the inconvenient truths people are allowed to know.";
@@ -473,46 +347,6 @@ export default function ProfilePage() {
     setUploadSuccess("Portrait updated.");
   }
 
-
-  async function handleTitleChoice(titleId: string) {
-    setPrestigeMessage(null);
-    setPrestigeError(null);
-    const result = await setOwnProfileTitle(titleId, serverSessionToken);
-    if (!result.ok) {
-      setPrestigeError(result.error);
-      return;
-    }
-    setProfile((current) => current ? { ...current, publicProfile: { ...current.publicProfile, title: result.prestige.currentTitle?.label ?? current.publicProfile.title, prestige: result.prestige } } : current);
-    setPrestigeMessage(result.message ?? "Title updated.");
-    await refreshServerState();
-  }
-
-  async function handleEquipTitle(titleId: string) {
-    setTitleActionPendingId(titleId);
-    setTitlesError(null);
-    const result = await equipOwnTitle(titleId, serverSessionToken);
-    setTitleActionPendingId(null);
-    if (!result.ok) {
-      setTitlesError(result.error);
-      return;
-    }
-    setTitles(result.titles);
-    await refreshServerState();
-  }
-
-  async function handleUnequipTitle() {
-    setTitleActionPendingId("__unequip__");
-    setTitlesError(null);
-    const result = await unequipOwnTitle(serverSessionToken);
-    setTitleActionPendingId(null);
-    if (!result.ok) {
-      setTitlesError(result.error);
-      return;
-    }
-    setTitles(result.titles);
-    await refreshServerState();
-  }
-
   if (loading) {
     return (
       <AppShell title="Character Profile" hint={flavor}>
@@ -557,8 +391,12 @@ export default function ProfilePage() {
   }
 
   const propertyName = getPropertyById(publicProfile.property.propertyId)?.name ?? "Unknown residence";
-  const displayTitle = resolveDisplayTitle(publicProfile.prestige?.currentTitle?.label ?? publicProfile.title, publicProfile.publicId);
-  const prestige = publicProfile.prestige;
+  const canSeeExclusiveTitle = viewer.isSelf || viewer.canModerate;
+  const displayTitle = resolveDisplayTitle(
+    publicProfile.prestige?.currentTitle?.label ?? publicProfile.title,
+    publicProfile.publicId,
+    canSeeExclusiveTitle,
+  );
   const displayNameWithPublicId = `${publicProfile.name} [${formatPlayerPublicId(publicProfile.publicId)}]`;
   const guildLabel = publicProfile.guild
     ? `${publicProfile.guild.name} [G${String(publicProfile.guild.publicId).padStart(7, "0")}]`
@@ -594,12 +432,13 @@ export default function ProfilePage() {
     },
     { label: "Current Job", value: publicProfile.job ?? "None" },
     { label: "Travel", value: publicProfile.travel.summary },
-    { label: "Status", value: publicProfile.status.label },
+    {
+      label: "Status",
+      value: publicProfile.status.condition.reason
+        ? `${publicProfile.status.label} — ${publicProfile.status.condition.reason}`
+        : publicProfile.status.label,
+    },
   ];
-  const chronicleCategories = Array.from(new Set(chronicleEntries.map((entry) => entry.category))).sort();
-  const filteredChronicleEntries = (
-    chronicleCategory === "all" ? chronicleEntries : chronicleEntries.filter((entry) => entry.category === chronicleCategory)
-  ).slice(0, 40);
 
   return (
     <AppShell title="Character Profile" hint={flavor}>
@@ -697,123 +536,14 @@ export default function ProfilePage() {
 
         <div className="profile-body">
           <div className="profile-body__main">
-            <PanelSection title="Identity and Standing">
-              <div className="stat-table">
-                <StatRow label="Name" value={displayNameWithPublicId} />
-                <StatRow label="Title" value={displayTitle || "Untitled"} />
-                <StatRow label="Classification" value={formatEntityLabel(publicProfile.entityType)} />
-                <StatRow label="Status" value={publicProfile.status.label} />
-                <StatRow label="Last Action" value={publicProfile.lastAction.label} />
-              </div>
-            </PanelSection>
-
-            <PanelSection title="Affiliations and Standing">
-              <div className="profile-affiliation-grid">
-                <div className="panel-cluster">
-                  <div className="panel-cluster__title">Residence</div>
-                  <div className="profile-affiliation-grid__value">{propertyName}</div>
-                </div>
-                <div className="panel-cluster">
-                  <div className="panel-cluster__title">Guild</div>
-                  <div className="profile-affiliation-grid__value">{guildRoute ? <Link className="inline-route-link" to={guildRoute}>{guildLabel}</Link> : guildLabel}</div>
-                </div>
-                <div className="panel-cluster">
-                  <div className="panel-cluster__title">Consortium</div>
-                  <div className="profile-affiliation-grid__value">{consortiumRoute ? <Link className="inline-route-link" to={consortiumRoute}>{consortiumLabel}</Link> : consortiumLabel}</div>
-                </div>
-                <div className="panel-cluster">
-                  <div className="panel-cluster__title">Current Duty</div>
-                  <div className="profile-affiliation-grid__value">{publicProfile.job ?? "None"}</div>
-                </div>
-              </div>
-            </PanelSection>
-
-
-            <PanelSection title="Prestige and Distinctions">
-              <div className="stat-table">
-                <StatRow label="Current Title" value={prestige?.currentTitle?.label ?? displayTitle ?? "Untitled"} />
-                <StatRow label="Distinctions" value={prestige?.distinctions?.length ? prestige.distinctions.join(" | ") : "None recorded"} />
-                <StatRow label="Badges" value={prestige?.badges?.length ? prestige.badges.slice(0, 4).map((badge) => badge.label).join(" | ") : "No badges yet"} />
-              </div>
-              {viewer.isSelf && prestige?.titles?.length ? (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                  {prestige.titles.map((title) => (
-                    <button key={title.id} type="button" disabled={prestige.currentTitle?.id === title.id} onClick={() => handleTitleChoice(title.id)}>
-                      {prestige.currentTitle?.id === title.id ? "Equipped" : title.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              {prestigeMessage ? <div className="profile-empty-note">{prestigeMessage}</div> : null}
-              {prestigeError ? <div className="profile-empty-note">{prestigeError}</div> : null}
-            </PanelSection>
-
             {viewer.isSelf ? (
-              <PanelSection title="Titles">
-                <div className="profile-panel-summary">
-                  <span>{titles.filter((title) => title.earned).length} / {titles.length} earned</span>
+              <PanelSection title="Title">
+                <div className="stat-table">
+                  <StatRow label="Current Title" value={displayTitle || "None"} />
                 </div>
-
-                {titlesLoading ? (
-                  <div className="profile-empty-note">Syncing titles...</div>
-                ) : titlesError ? (
-                  <div className="profile-empty-note">{titlesError}</div>
-                ) : titles.length ? (
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {titles.some((title) => title.equipped) ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleUnequipTitle()}
-                        disabled={titleActionPendingId !== null}
-                      >
-                        {titleActionPendingId === "__unequip__" ? "Clearing..." : "Clear Equipped Title"}
-                      </button>
-                    ) : null}
-                    {titles.map((title) => (
-                      <article
-                        key={title.id}
-                        style={{
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          borderRadius: 8,
-                          padding: 10,
-                          background: title.equipped ? "rgba(255,255,255,0.04)" : "transparent",
-                          opacity: title.earned ? 1 : 0.6,
-                        }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                          <strong>{title.name}</strong>
-                          <span style={{ fontSize: 12, textTransform: "uppercase", opacity: 0.8 }}>
-                            {title.kind === "stat" ? "Stat-affecting" : "Cosmetic"}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: 12, opacity: 0.76, margin: "4px 0" }}>{title.description}</div>
-                        <p style={{ margin: "6px 0", opacity: 0.82 }}>{title.flavor}</p>
-                        {title.effects.length ? (
-                          <ul style={{ margin: "6px 0", paddingLeft: 18 }}>
-                            {title.effects.map((effect) => (
-                              <li key={`${title.id}-${effect}`}>{effect}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div style={{ fontSize: 12, opacity: 0.6, margin: "6px 0" }}>No stat effect (cosmetic).</div>
-                        )}
-                        {title.earned ? (
-                          <button
-                            type="button"
-                            disabled={title.equipped || titleActionPendingId !== null}
-                            onClick={() => void handleEquipTitle(title.id)}
-                          >
-                            {title.equipped ? "Equipped" : titleActionPendingId === title.id ? "Equipping..." : "Equip"}
-                          </button>
-                        ) : (
-                          <div style={{ fontSize: 12, opacity: 0.6 }}>Not yet earned.</div>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="profile-empty-note">No titles recorded yet.</div>
-                )}
+                <Link className="profile-panel-link" to="/titles">
+                  Manage Titles
+                </Link>
               </PanelSection>
             ) : null}
 
@@ -839,18 +569,6 @@ export default function ProfilePage() {
           </div>
 
           <div className="profile-body__rail">
-            <PanelSection title="Selected Facts">
-              <div className="stat-table">
-                <StatRow label="Classification" value={formatEntityLabel(publicProfile.entityType)} />
-                <StatRow label="Standing" value={displayTitle || "Untitled"} />
-                {viewer.isSelf && selfProfile ? (
-                  <StatRow label="Life" value={`${selfProfile.life.current} / ${selfProfile.life.max}`} />
-                ) : null}
-                <StatRow label="Presence" value={publicProfile.lastAction.isOnline ? "Online" : "Offline"} />
-                <StatRow label="Condition" value={publicProfile.status.condition.reason ?? "No active condition"} />
-                <StatRow label="Recorded At" value={publicProfile.lastAction.lastActionAt ? new Date(publicProfile.lastAction.lastActionAt).toLocaleString("en-GB") : "Unknown"} />
-              </div>
-            </PanelSection>
 
             {viewer.isSelf && selfProfile ? (
               <PanelSection title="Private Holdings">
@@ -888,102 +606,15 @@ export default function ProfilePage() {
             ) : null}
 
             {viewer.isSelf ? (
-              <PanelSection title="Achievements">
-                <div className="profile-panel-summary">
-                  <span>{achievementsCompletedCount} / {achievementsTotalCount} completed</span>
+              <PanelSection title="Full Records">
+                <div className="profile-split-list">
+                  <Link className="profile-panel-link" to="/achievements">
+                    Achievements &amp; Legacy tracker
+                  </Link>
+                  <Link className="profile-panel-link" to="/records">
+                    Chronicle (activity log)
+                  </Link>
                 </div>
-
-                {achievementsLoading ? (
-                  <div className="profile-empty-note">Syncing achievements...</div>
-                ) : achievementsError ? (
-                  <div className="profile-empty-note">{achievementsError}</div>
-                ) : achievementHighlights.length ? (
-                  <div className="legacy-list">
-                    {achievementHighlights.map((achievement) => (
-                      <article key={achievement.id} className="legacy-entry">
-                        <div className="legacy-entry__date">
-                          {achievement.category}
-                          {" · "}
-                          {achievement.completed
-                            ? "Complete"
-                            : `${achievement.progress.toLocaleString()} / ${achievement.target.toLocaleString()}`}
-                        </div>
-                        <h3>{achievement.name}</h3>
-                        <p>{achievement.description}</p>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="profile-empty-note">No achievements recorded yet.</div>
-                )}
-
-                <Link className="profile-panel-link" to="/achievements">
-                  View full Achievements &amp; Legacy tracker
-                </Link>
-              </PanelSection>
-            ) : null}
-
-            {viewer.isSelf ? (
-              <PanelSection title="Chronicle">
-                <div className="profile-panel-summary">
-                  <span>{chronicleTotal} record{chronicleTotal === 1 ? "" : "s"} on file</span>
-                  {chronicleEntries.length && chronicleEntries.length < chronicleTotal ? (
-                    <span>Showing latest {chronicleEntries.length}</span>
-                  ) : null}
-                </div>
-
-                {chronicleCategories.length ? (
-                  <div className="chronicle-filter-row">
-                    <button
-                      type="button"
-                      className={`chronicle-filter${chronicleCategory === "all" ? " chronicle-filter--active" : ""}`}
-                      onClick={() => setChronicleCategory("all")}
-                    >
-                      All
-                    </button>
-                    {chronicleCategories.map((category) => (
-                      <button
-                        key={category}
-                        type="button"
-                        className={`chronicle-filter${chronicleCategory === category ? " chronicle-filter--active" : ""}`}
-                        onClick={() => setChronicleCategory(category)}
-                      >
-                        {formatRecordCategory(category)}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-
-                {chronicleLoading ? (
-                  <div className="profile-empty-note">Syncing the permanent record...</div>
-                ) : chronicleError ? (
-                  <div className="profile-empty-note">{chronicleError}</div>
-                ) : filteredChronicleEntries.length ? (
-                  <div className="chronicle-list">
-                    {filteredChronicleEntries.map((entry) => (
-                      <article key={entry.id} className="chronicle-entry">
-                        <div className="chronicle-entry__top">
-                          <span className="chronicle-entry__category">{formatRecordCategory(entry.category)}</span>
-                          <span className="chronicle-entry__date">{formatRecordTimestamp(entry.timestamp)}</span>
-                        </div>
-                        <p>{entry.summary}</p>
-                        {entry.route ? (
-                          <Link className="inline-route-link" to={entry.route}>
-                            Open related page
-                          </Link>
-                        ) : null}
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="profile-empty-note">
-                    No account records logged yet. Education, travel, combat, crafting, and other milestones will appear here as they happen.
-                  </div>
-                )}
-
-                <Link className="profile-panel-link" to="/codex?entry=record-city-board">
-                  Browse the full archive in the Codex
-                </Link>
               </PanelSection>
             ) : null}
 

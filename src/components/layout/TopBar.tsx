@@ -375,7 +375,7 @@ export function TopBar() {
             <span aria-hidden="true">OS</span>
             {oneShotReady ? <i aria-hidden="true" /> : null}
           </NavLink>
-          <NavLink to={profileRoute} className="topbar__shortcut" title="Chronicle records" aria-label="Chronicle records">
+          <NavLink to="/records" className="topbar__shortcut" title="Chronicle records" aria-label="Chronicle records">
             <span aria-hidden="true">RC</span>
           </NavLink>
           <NavLink to="/codex" className="topbar__shortcut" title="Codex" aria-label="Codex">
@@ -508,6 +508,15 @@ export function TopBar() {
               ) : null}
               <NavLink to={profileRoute} className="player-menu__item" onClick={() => setPlayerOpen(false)}>
                 View Profile
+              </NavLink>
+              <NavLink to="/titles" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
+                Titles
+              </NavLink>
+              <NavLink to="/achievements" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
+                Achievements
+              </NavLink>
+              <NavLink to="/records" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
+                Chronicle
               </NavLink>
               <NavLink to="/settings" className="player-menu__item" onClick={() => setPlayerOpen(false)}>
                 Settings
