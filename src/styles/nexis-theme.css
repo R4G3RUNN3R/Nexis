@@ -81,6 +81,16 @@ select {
   top: 86px;
   max-height: calc(100vh - 96px);
   overflow-y: auto;
+  /* Keep the independent-scroll behavior above (a tall sidebar shouldn't
+     drag short page content down with it) but hide the scrollbar chrome
+     itself - Torn's own sidebar scrolls the same way with no visible
+     scrollbar, and a second bar next to the page's own reads as a bug. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 .sidebar > * {

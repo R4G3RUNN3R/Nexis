@@ -268,34 +268,37 @@ export function mergeServerStateIntoCache({
     gold: playerState?.gold ?? runtimePlayer.gold ?? existing.gold ?? 500,
     stats: {
       ...(isRecord(existing.stats) ? existing.stats : {}),
-      // Prefer the title-boosted view (effectiveStats) when the server sent
-      // one, matching combatService.js's own effective-stats-first pattern -
-      // otherwise an equipped stat title's bonus never reaches the cached
-      // player object the whole app (sidebar, stat bars, etc.) reads from.
-      ...(isRecord(runtimePlayer.effectiveStats) ? runtimePlayer.effectiveStats : isRecord(runtimePlayer.stats) ? runtimePlayer.stats : {}),
       ...(isRecord(playerState?.stats) ? playerState.stats : {}),
+      // Prefer the title-boosted view (effectiveStats) when the server sent
+      // one, matching combatService.js's own effective-stats-first pattern,
+      // and apply it LAST - playerState.stats (the top-level player_state.stats
+      // DB column) is written as a raw copy of runtimeState.player.stats on
+      // every save (see upsertPlayerRuntimeState) and can NEVER itself
+      // contain a boosted value, so spreading it after effectiveStats would
+      // silently clobber the boost back to the raw number every time.
+      ...(isRecord(runtimePlayer.effectiveStats) ? runtimePlayer.effectiveStats : isRecord(runtimePlayer.stats) ? runtimePlayer.stats : {}),
     },
     workingStats: normalizeStatRecord(
       {
         ...(isRecord(existing.workingStats) ? existing.workingStats : {}),
+        ...(isRecord(playerState?.workingStats) ? playerState.workingStats : {}),
         ...(isRecord(runtimePlayer.effectiveWorkingStats)
           ? runtimePlayer.effectiveWorkingStats
           : isRecord(runtimePlayer.workingStats)
             ? runtimePlayer.workingStats
             : {}),
-        ...(isRecord(playerState?.workingStats) ? playerState.workingStats : {}),
       },
       DEFAULT_WORKING_STATS,
     ),
     battleStats: normalizeStatRecord(
       {
         ...(isRecord(existing.battleStats) ? existing.battleStats : {}),
+        ...(isRecord(playerState?.battleStats) ? playerState.battleStats : {}),
         ...(isRecord(runtimePlayer.effectiveBattleStats)
           ? runtimePlayer.effectiveBattleStats
           : isRecord(runtimePlayer.battleStats)
             ? runtimePlayer.battleStats
             : {}),
-        ...(isRecord(playerState?.battleStats) ? playerState.battleStats : {}),
       },
       DEFAULT_BATTLE_STATS,
     ),
