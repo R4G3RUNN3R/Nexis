@@ -218,8 +218,69 @@ Bond progression follows a Pokémon GO-style active-companion rule:
 - Inactive spirits do not decay, reset, or progress in the background.
 - A player therefore cannot develop Fire, Wind, Water and Earth bonds simultaneously simply because they have found all four.
 - Switching which spirit is active is a strategic progression choice: time spent deepening one bond is time not spent deepening another.
+- **Only the currently equipped spirit provides its passive boon.** Inactive spirits provide no passive bonus.
+- **Only the currently equipped spirit can use Spirit Manifestation.**
+- Inactive spirits retain their bond and training permanently, but contribute no active combat or utility effect until re-equipped.
 
-Whether the equipped-spirit restriction also controls **which spirit bonus and Spirit Manifestation are currently active** is the next balance decision to settle.
+### 8.5 Elemental affinity in PvP
+
+Spirits should create a **soft elemental counter system** in PvP rather than a hard rock-paper-scissors system that overrides the rest of a player's build.
+
+Working elemental wheel:
+
+| Active Spirit | Advantage over | Disadvantage against | Neutral against |
+|---|---|---|---|
+| Fire | Earth | Water | Wind / Fire |
+| Water | Fire | Wind | Earth / Water |
+| Wind | Water | Earth | Fire / Wind |
+| Earth | Wind | Fire | Water / Earth |
+
+The intended philosophy is that affinity modifies the **active Spirit boon**, not the player's entire character. A working example for a mature 5% spirit is:
+
+- Disadvantaged matchup: effective boon around **4%**.
+- Neutral matchup: effective boon **5%**.
+- Advantaged matchup: effective boon around **6%**.
+
+Exact numbers remain subject to combat balancing, but the counter should be meaningful without invalidating equipment, education, mastery, Legacy perks, consumables, battle stats or other progression.
+
+Spirit selection should be locked once a PvP encounter begins. The previous v1 12-hour switching cooldown is a useful candidate for preventing instant counter-swapping, though the exact v2 attunement cooldown remains open.
+
+### 8.6 Light and Dark Apex Spirits
+
+Add **Light** and **Dark** as rare Apex Spirit affinities outside the normal four-element wheel.
+
+Rules agreed so far:
+
+- Light has an affinity advantage against Fire, Water, Wind and Earth.
+- Dark has an affinity advantage against Fire, Water, Wind and Earth.
+- The four normal elements are **neutral when attacking/interacting against Light or Dark**; Light and Dark do not inherit a weakness to the ordinary elemental wheel.
+- Light and Dark are both strong against each other. Their opposition is mutual rather than one cleanly countering the other.
+- Light vs Light and Dark vs Dark are neutral same-affinity matchups.
+- Light and Dark should be significantly rarer and harder to earn favour from than ordinary elemental spirits, but rarity alone must not be relied upon as the balancing mechanism.
+
+This produces an asymmetric Apex relationship: Light/Dark receive an affinity edge against ordinary spirits without causing ordinary spirits to suffer an additional mirrored penalty, while Light and Dark become mutually dangerous when they meet.
+
+### 8.7 Light and Dark specialisations
+
+Light and Dark should use **opposed specialisations**, not identical general-purpose combat bonuses.
+
+**Light Spirit direction:**
+
+- protection and mitigation
+- restoration/healing support
+- cleansing and resistance to harmful effects
+- magical resistance/warding
+- possibly perception or accuracy as a secondary theme
+
+**Dark Spirit direction:**
+
+- offensive pressure
+- critical/finishing pressure
+- curses and debuffs
+- concealment or suppression
+- life/mana manipulation as a possible advanced theme
+
+The exact 5% mature boon for each has not yet been chosen. The purpose of the opposed specialisations is to keep Light and Dark prestigious and broadly strong in affinity matchups without turning Fire, Water, Wind and Earth into obsolete choices.
 
 ## 9. Practical Mastery: Martial, Ranged and Shadow
 
@@ -347,8 +408,10 @@ Initial structural findings:
 
 These are intentionally unresolved and should be answered one at a time during the continuing brainstorm:
 
-- Does only the equipped spirit provide its passive bonus and access to Spirit Manifestation, or do inactive bonded spirits continue providing their learned passive effects?
+- What exact permanent boon should Light provide at mature Bond?
+- What exact permanent boon should Dark provide at mature Bond?
 - What happens when a player fails a spirit's favour/bond challenge?
+- What exact attunement/switch cooldown should Spirits use?
 - What is CIEL's true in-world/product role?
 - Which formal schools of magic exist?
 - Does Grand Archmage require forbidden/hidden schools?
