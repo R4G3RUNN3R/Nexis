@@ -148,29 +148,84 @@ Working model:
 
 Exact regeneration rates, starting pool, potion values and cooldown lengths remain open.
 
-## 8. Practical Mastery: Martial, Ranged and Shadow
+## 8. Spirits and Elemental Spirit Magic
+
+The old Spirit Binding concept should be rebuilt as a combination of **real spirit entities** and a **formal Elemental Spirit Magic discipline**.
+
+A spirit is not an equippable percentage buff. It is a rare being that must choose or accept the player before the player can benefit from spirit magic.
+
+### 8.1 Discovery and favour
+
+- Players must go adventuring/exploring to encounter spirits in the world.
+- Spirit encounters should be **very rare** and can be strongly influenced by region, environment, active world events, hidden sites and the spirit's element.
+- Finding a spirit does **not** immediately bind or grant it.
+- An encounter becomes a favour/bond challenge.
+- The spirit can ask several questions, present a dilemma, require a specific action, demand proof of character, or otherwise test the player.
+- Different spirits should care about different values rather than sharing one obvious answer sheet.
+- Success establishes the initial **Bond** with that individual spirit.
+- The spirit remains a character/entity with its own identity, not merely an inventory item.
+
+Examples of possible elemental temperament, not yet final rules:
+
+- Fire may care about courage, decisiveness, passion or willingness to act.
+- Wind may care about freedom, instinct, adaptability or refusal to be controlled.
+- Water may care about patience, empathy, perception or adaptability.
+- Earth may care about resolve, reliability, craftsmanship or protection.
+
+The exact consequence of failing a spirit's favour challenge remains unresolved.
+
+### 8.2 Bond as an educational prerequisite
+
+A player cannot simply enrol in Elemental Spirit Magic because they have enough gold or completed a generic prerequisite.
+
+The intended flow is:
+
+1. Discover an actual spirit in the world.
+2. Earn that spirit's favour.
+3. Establish the Bond.
+4. Travel to **Silverbough**.
+5. Use the Bond as a prerequisite for the corresponding Elemental Spirit Magic training.
+6. Study/train the discipline over real time.
+7. Earn the substantial elemental bonus only after meaningful study and bond development.
+
+The rare world encounter therefore creates access; Silverbough provides the knowledge and technique needed to actually channel that bond effectively.
+
+### 8.3 Elemental bonuses
+
+The current v1 spirit data contains four elemental identities worth preserving conceptually:
+
+- **Fire:** offensive/attack effectiveness.
+- **Wind:** evasion/avoidance/dodge.
+- **Water:** magic/spell/skill effectiveness.
+- **Earth:** defense and crafting effectiveness.
+
+The old implementation used 3%, 5% and 10% bond tiers. That scale is **not yet approved for v2**. The current design discussion treats **5% as a major reward**, meaning a straight return to an automatic 10% passive is questionable.
+
+A likely v2 direction is that deeper/rarer spirits gain identity through unique abilities, interactions, techniques and relationship depth rather than simply doubling the same passive percentage. Exact cap remains open.
+
+## 9. Practical Mastery: Martial, Ranged and Shadow
 
 The existing Skills system contains useful foundations and should be redesigned/generalized rather than discarded.
 
 Nexis should use a common Tier 1-10 mastery vocabulary across major practical disciplines, while allowing each discipline to progress through appropriate real use.
 
-### 8.1 Martial
+### 9.1 Martial
 
 Possible mastery domains include swordsmanship, axes, blunt weapons, polearms, shields, unarmed fighting, two-handed styles and other meaningful weapon disciplines. The exact taxonomy is open.
 
 Specific techniques can be learned through education, trainers, books, academies, discoveries or other requirements. Using those techniques with the appropriate weapon contributes to the broader discipline's mastery.
 
-### 8.2 Ranged
+### 9.2 Ranged
 
 Ranged mastery should become a first-class progression family. Potential disciplines include archery, crossbows, thrown weapons and any additional ranged technology that belongs in the setting.
 
-### 8.3 Shadow
+### 9.3 Shadow
 
 Shadow should be broader than simply "rogue combat". Potential practical disciplines include stealth, pickpocketing, lockpicking, infiltration, disguise, tracking, counter-tracking, sabotage, poisons, assassination and escape/evasion.
 
 Non-combat shadow actions should be able to progress mastery through valid field use rather than forcing every skill into combat.
 
-## 9. Bounty and Capture System
+## 10. Bounty and Capture System
 
 Bounties should become a substantial gameplay loop that rewards different character builds.
 
@@ -189,13 +244,13 @@ Different builds should solve bounties differently: fighters through direct cont
 
 First implementation scope should focus on **NPC bounties**. Player bounties/capture can come later once griefing, offline protection, imprisonment, abuse prevention and PvP consent/risk rules have their own design.
 
-## 10. Life Paths Retired
+## 11. Life Paths Retired
 
 The active Life Paths system should be removed from future character progression.
 
 Player identity should instead emerge from actual decisions, education, mastery, professions, discoveries, organizations, reputation, titles and history.
 
-### 10.1 Existing Life Paths become Feats of Strength
+### 11.1 Existing Life Paths become Feats of Strength
 
 Existing players who chose an old Life Path should not lose that piece of history.
 
@@ -209,7 +264,7 @@ During migration, old Life Path choices become permanent **Feats of Strength**:
 
 This category can later preserve other retired or one-time Nexis history: pre-v2 participation, retired academy content, one-time world events, server-first discoveries, discontinued items/content and similar milestones.
 
-## 11. Chronicle, Achievements, Titles and Legacy
+## 12. Chronicle, Achievements, Titles and Legacy
 
 The emerging direction is that the Chronicle should tell the actual biography of a character: major learning, discoveries, mastery milestones, organizations, world events, rare knowledge, captures, notable accomplishments and Feats of Strength.
 
@@ -222,7 +277,7 @@ Open questions include:
 - Should the Chronicle be a universal player-history system rather than anything donor-gated?
 - How should Feats of Strength appear relative to normal achievements?
 
-## 12. Existing Systems Requiring Dedicated Review
+## 13. Existing Systems Requiring Dedicated Review
 
 The following existing systems are considered valuable candidates for **preserve, redesign, merge, split or retire** decisions. None should be carried forward automatically merely because code exists:
 
@@ -257,7 +312,7 @@ The following existing systems are considered valuable candidates for **preserve
 - Database migration and persistent storage.
 - Routing, page taxonomy and the complete visual/navigation redesign.
 
-## 13. Repository Audit Notes So Far
+## 14. Repository Audit Notes So Far
 
 A complete repository **path inventory** has been taken. The semantic audit is being performed subsystem by subsystem rather than pretending that listing every file is the same as understanding every line.
 
@@ -270,11 +325,12 @@ Initial structural findings:
 - Existing operational incident documentation, canaries and data-safety lessons are valuable and must survive the rebuild.
 - Existing exploration, rare manual, recipe-fragment, hidden-site and world-event systems already provide useful foundations for the newly emphasized discovery/research direction.
 
-## 14. Open Product Questions
+## 15. Open Product Questions
 
 These are intentionally unresolved and should be answered one at a time during the continuing brainstorm:
 
-- What are Spirits actually meant to be in-world, and should their old stat-buff model survive?
+- Is 5% the absolute v2 spirit passive cap, replacing the old 10% high-tier bonus?
+- What happens when a player fails a spirit's favour/bond challenge?
 - What is CIEL's true in-world/product role?
 - Which formal schools of magic exist?
 - Does Grand Archmage require forbidden/hidden schools?
@@ -294,7 +350,7 @@ These are intentionally unresolved and should be answered one at a time during t
 - How should the new game shell/navigation expose deep systems without recreating the old wall-of-pages problem?
 - Which current visual identity elements remain canonical, and which should be recreated from scratch?
 
-## 15. Current Rebuild Priority
+## 16. Current Rebuild Priority
 
 The earlier idea of making Adventures the first central vertical slice has been superseded by the education-first product direction.
 
