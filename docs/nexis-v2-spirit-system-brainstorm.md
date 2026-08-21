@@ -100,6 +100,28 @@ Switching to another bonded Spirit starts a **12-hour real-time attunement coold
 
 This makes Spirit choice strategically meaningful without trapping a player in a poor selection for an excessive period.
 
+### 4.2 Hybrid Bond progression
+
+Bond development uses a **hybrid real-time + activity model**.
+
+- The currently equipped Spirit gains a slow baseline amount of Bond progress continuously over real equipped time.
+- Relevant, server-validated actions can grant additional Bond progress and therefore accelerate development.
+- Only the currently equipped Spirit receives either form of progress.
+- Unequipped Spirits remain completely frozen even if the player performs actions that would normally suit them.
+- Activity bonuses should reward playing in ways that fit the Spirit's nature rather than encourage one universal repetitive grind.
+- Repeated low-value actions must not become an exploitable infinite Bond farm; exact diminishing returns, caps or eligibility rules will be designed later with the underlying activity systems.
+
+Illustrative affinity-aligned activity themes:
+
+- **Fire:** combat, dangerous encounters, decisive/offensive actions.
+- **Wind:** travel, evasion, exploration, mobility-oriented actions.
+- **Water:** spellcasting, support, adaptive or restorative actions where appropriate.
+- **Earth:** crafting, defense, endurance, protection-oriented actions.
+- **Light:** healing, cleansing, warding, protection and rescue-oriented actions.
+- **Dark:** curses, debuffs, concealment, pressure and other thematically dark actions.
+
+These examples describe direction, not a final list of Bond-awarding actions. The exact baseline speed and the maximum acceleration from active play remain open balance decisions.
+
 This prevents players from simultaneously maxing every spirit simply because they have found them all.
 
 ## 5. Ordinary Elemental Spirits
@@ -208,8 +230,8 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 
 ## 10. Open Spirit Questions
 
-- How quickly does Bond progress while a spirit is equipped?
-- Does Bond progress passively with real equipped time, through qualifying actions, or through a hybrid of both?
+- How quickly does the passive baseline Bond progress while a Spirit is equipped?
+- How much can affinity-appropriate activity accelerate Bond development, and should there be a daily/weekly acceleration cap?
 - What exact Spirit Manifestation effects, duration and cooldown does each affinity receive?
 - How rare are Light and Dark relative to Fire/Water/Wind/Earth?
 - Can particular spirit individuals have unique personalities or variants within the same affinity?
