@@ -140,36 +140,40 @@ This makes Light and Dark prestigious Apex affinities without giving the four or
 
 The chosen direction is **split specialisation within the same total mature power budget**.
 
-Light and Dark do **not** each receive a simple universal +5% general combat buff. Instead, their mature boon is divided across their identity while keeping the combined power budget approximately equivalent to one ordinary mature Spirit.
+Light and Dark do **not** each receive a simple universal +5% general combat buff. Instead, their mature boon is split **evenly at 2.5% + 2.5%**, keeping the combined power budget equivalent to one ordinary mature 5% Spirit.
 
 ### Light Spirit
 
-Primary identity:
+Mature boon direction:
 
-- protection / mitigation
-- restoration / healing support
-- cleansing / harmful-effect resistance
-- warding / magical resistance
+- **+2.5% protection / mitigation effectiveness**
+- **+2.5% restoration / cleansing effectiveness**
 
-Possible secondary identity later:
+Broader identity for abilities and later Spirit Magic:
 
-- perception or accuracy
+- protection and mitigation
+- restoration/healing support
+- cleansing and resistance to harmful effects
+- warding/magical resistance
+- possibly perception or accuracy as a secondary advanced theme
 
 ### Dark Spirit
 
-Primary identity:
+Mature boon direction:
+
+- **+2.5% offensive pressure**
+- **+2.5% curse / debuff effectiveness**
+
+Broader identity for abilities and later Spirit Magic:
 
 - offensive pressure
-- critical / finishing pressure
-- curse and debuff effectiveness
-- concealment / suppression
+- critical/finishing pressure
+- curses and debuffs
+- concealment/suppression
+- life manipulation as a possible advanced theme
+- mana manipulation as a possible advanced theme
 
-Possible advanced identity later:
-
-- life manipulation
-- mana manipulation
-
-The exact split of the 5% mature power budget is **not yet final**. A likely direction is an asymmetric split, such as a larger primary effect and a smaller secondary effect, rather than two unrelated full-strength bonuses.
+The exact mechanical definitions of "protection/mitigation effectiveness", "restoration/cleansing effectiveness", "offensive pressure", and "curse/debuff effectiveness" should be defined when the v2 combat and status-effect math is designed. The important locked decision here is that Light and Dark each receive **two equally weighted 2.5% mature boon components**, not one dominant effect and one minor effect.
 
 ## 9. Balance Principles
 
@@ -181,7 +185,6 @@ The exact split of the 5% mature power budget is **not yet final**. A likely dir
 
 ## 10. Open Spirit Questions
 
-- Should the split mature boon for Light/Dark be roughly **3% primary + 2% secondary**, or an even **2.5% + 2.5%** style split?
 - What happens when a player fails a spirit's favour challenge?
 - What exact attunement/switch cooldown should spirits use?
 - How quickly does Bond progress while a spirit is equipped?
