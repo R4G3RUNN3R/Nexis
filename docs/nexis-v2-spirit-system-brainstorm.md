@@ -88,6 +88,18 @@ Bond progression follows a Pokémon GO-style active-companion rule:
 - Only the currently equipped spirit can use Spirit Manifestation.
 - Inactive spirits provide no combat or utility benefit until equipped again.
 
+### 4.1 Attunement switching cooldown
+
+Switching to another bonded Spirit starts a **12-hour real-time attunement cooldown**.
+
+- The newly selected Spirit becomes active immediately.
+- Its boon, affinity and Bond progression apply immediately after the switch.
+- The 12-hour cooldown prevents the player from switching to yet another Spirit until it expires.
+- The cooldown does not pause or weaken the newly equipped Spirit.
+- Spirit selection is also locked once a PvP encounter begins, so an active fight cannot become an endless counter-swapping exercise.
+
+This makes Spirit choice strategically meaningful without trapping a player in a poor selection for an excessive period.
+
 This prevents players from simultaneously maxing every spirit simply because they have found them all.
 
 ## 5. Ordinary Elemental Spirits
@@ -128,7 +140,7 @@ Working mature-spirit example:
 
 Exact values remain subject to later combat balancing.
 
-Spirit selection should be locked once a PvP encounter begins. The old 12-hour switching cooldown is a candidate for v2 attunement, but the exact cooldown remains open.
+Spirit selection is locked once a PvP encounter begins, and the general **12-hour attunement cooldown** prevents players from repeatedly scouting and counter-swapping outside combat as well.
 
 ## 7. Light and Dark Apex Spirits
 
@@ -196,7 +208,6 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 
 ## 10. Open Spirit Questions
 
-- What exact attunement/switch cooldown should spirits use?
 - How quickly does Bond progress while a spirit is equipped?
 - Does Bond progress passively with real equipped time, through qualifying actions, or through a hybrid of both?
 - What exact Spirit Manifestation effects, duration and cooldown does each affinity receive?
