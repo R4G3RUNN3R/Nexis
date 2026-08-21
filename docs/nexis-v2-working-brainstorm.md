@@ -190,7 +190,7 @@ The intended flow is:
 
 The rare world encounter therefore creates access; Silverbough provides the knowledge and technique needed to actually channel that bond effectively.
 
-### 8.3 Elemental bonuses
+### 8.3 Elemental bonuses and manifestation
 
 The current v1 spirit data contains four elemental identities worth preserving conceptually:
 
@@ -199,9 +199,27 @@ The current v1 spirit data contains four elemental identities worth preserving c
 - **Water:** magic/spell/skill effectiveness.
 - **Earth:** defense and crafting effectiveness.
 
-The old implementation used 3%, 5% and 10% bond tiers. That scale is **not yet approved for v2**. The current design discussion treats **5% as a major reward**, meaning a straight return to an automatic 10% passive is questionable.
+The v2 direction is to treat **5% as the major permanent mature-bond ceiling**, while preserving the old 10% power level as a limited top-end state rather than a permanently stacked passive.
 
-A likely v2 direction is that deeper/rarer spirits gain identity through unique abilities, interactions, techniques and relationship depth rather than simply doubling the same passive percentage. Exact cap remains open.
+At the highest bond/training stage, a spirit can unlock a **Spirit Manifestation** or equivalent capstone. During that limited state, the spirit's effect can temporarily rise from the normal 5% ceiling toward the old 10% level. Exact duration, cost, cooldown and activation rules will be balanced later against mana, combat pacing and the wider modifier economy.
+
+This preserves the useful shape of the old progression without allowing permanent 10% spirit bonuses to pile on top of education, equipment, mastery, Legacy perks, enhancements, consumables and future systems. Deeper spirit content can later add unique techniques, interactions, research, spell variants, crafting hooks, dialogue and adventure chains without those being required for the first coherent v2 Spirit system.
+
+### 8.4 One active spirit and frozen inactive bonds
+
+Players may discover and earn the favour of multiple spirits, potentially all available spirits over a long enough character history, but **only one spirit can be equipped/actively attuned at a time**.
+
+Bond progression follows a Pokémon GO-style active-companion rule:
+
+- Only the currently equipped spirit gains Bond progression.
+- Unequipping a spirit immediately pauses its Bond progression.
+- Its accumulated Bond level/progress is permanently preserved while inactive.
+- Re-equipping that spirit later resumes progression from exactly where it stopped.
+- Inactive spirits do not decay, reset, or progress in the background.
+- A player therefore cannot develop Fire, Wind, Water and Earth bonds simultaneously simply because they have found all four.
+- Switching which spirit is active is a strategic progression choice: time spent deepening one bond is time not spent deepening another.
+
+Whether the equipped-spirit restriction also controls **which spirit bonus and Spirit Manifestation are currently active** is the next balance decision to settle.
 
 ## 9. Practical Mastery: Martial, Ranged and Shadow
 
@@ -329,7 +347,7 @@ Initial structural findings:
 
 These are intentionally unresolved and should be answered one at a time during the continuing brainstorm:
 
-- Is 5% the absolute v2 spirit passive cap, replacing the old 10% high-tier bonus?
+- Does only the equipped spirit provide its passive bonus and access to Spirit Manifestation, or do inactive bonded spirits continue providing their learned passive effects?
 - What happens when a player fails a spirit's favour/bond challenge?
 - What is CIEL's true in-world/product role?
 - Which formal schools of magic exist?
