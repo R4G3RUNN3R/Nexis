@@ -43,7 +43,18 @@ Possible elemental temperament, still illustrative rather than final:
 - Water: patience, empathy, perception, adaptability.
 - Earth: resolve, reliability, craftsmanship, protection.
 
-The exact consequence of failing a favour challenge remains open.
+### 2.1 Failed favour attempt
+
+Failing a Spirit's favour challenge does **not** destroy or reroll the rare encounter.
+
+- The discovered Spirit remains available to that player.
+- The player does not need to rediscover that Spirit or repeat the rare encounter roll.
+- A failed favour attempt starts a **7-day real-time retry cooldown**.
+- During those seven days, the player cannot attempt to earn that Spirit's favour again.
+- Once the seven days have elapsed, the player may retry the favour challenge.
+- Repeated failures can repeat this same seven-day lockout rather than permanently closing the Spirit path.
+
+This preserves the significance of an extremely rare discovery while still making the Spirit's acceptance something the player must earn rather than receive automatically.
 
 ## 3. Silverbough Training
 
@@ -185,7 +196,6 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 
 ## 10. Open Spirit Questions
 
-- What happens when a player fails a spirit's favour challenge?
 - What exact attunement/switch cooldown should spirits use?
 - How quickly does Bond progress while a spirit is equipped?
 - Does Bond progress passively with real equipped time, through qualifying actions, or through a hybrid of both?
