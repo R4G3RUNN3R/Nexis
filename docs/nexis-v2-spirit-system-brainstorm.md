@@ -120,7 +120,21 @@ Illustrative affinity-aligned activity themes:
 - **Light:** healing, cleansing, warding, protection and rescue-oriented actions.
 - **Dark:** curses, debuffs, concealment, pressure and other thematically dark actions.
 
-These examples describe direction, not a final list of Bond-awarding actions. The exact baseline speed and the maximum acceleration from active play remain open balance decisions.
+These examples describe direction, not a final list of Bond-awarding actions.
+
+### 4.3 Bond timeline
+
+The mature 5% Spirit Bond is deliberately long-term progression.
+
+- A Spirit developed through passive equipped time alone should take approximately **9 months of cumulative equipped time** to reach its mature 5% Bond.
+- Affinity-appropriate activity can accelerate that progression.
+- Activity can reduce the total effective development time by at most roughly one-third of the passive baseline.
+- The **absolute fastest intended path to a mature 5% Bond is approximately 6 months**.
+- A regularly active player should commonly land between those extremes, roughly in the **7-8 month** range.
+- Unequipping the Spirit pauses both the passive clock and all activity-based progress for that Spirit; previously earned progress remains intact.
+- No amount of repetitive grinding should be able to push maturation below the 6-month floor.
+
+This keeps a permanent 5% Spirit boon genuinely significant while still rewarding players who actively behave in ways aligned with their chosen Spirit.
 
 This prevents players from simultaneously maxing every spirit simply because they have found them all.
 
@@ -230,8 +244,7 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 
 ## 10. Open Spirit Questions
 
-- How quickly does the passive baseline Bond progress while a Spirit is equipped?
-- How much can affinity-appropriate activity accelerate Bond development, and should there be a daily/weekly acceleration cap?
+- How should the passive boon scale before the mature 5% endpoint: continuous growth, milestone tiers, or a hybrid?
 - What exact Spirit Manifestation effects, duration and cooldown does each affinity receive?
 - How rare are Light and Dark relative to Fire/Water/Wind/Earth?
 - Can particular spirit individuals have unique personalities or variants within the same affinity?
