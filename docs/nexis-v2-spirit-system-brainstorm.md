@@ -1,0 +1,192 @@
+# Nexis v2 Spirit System Brainstorm
+
+> **Status:** Living product brainstorm, not an implementation specification.
+>
+> This file captures the Spirit-system decisions made during the wider Nexis v2 redesign. It is intentionally separate from the final implementation spec so the system can continue evolving without pretending every number is settled.
+
+_Last updated: 2026-08-21_
+
+## 1. Core Direction
+
+The old Spirit Binding system is being rebuilt as a combination of **real spirit entities** and **formal Elemental Spirit Magic** taught through Silverbough.
+
+A spirit is not simply a passive stat item. It is a rare being that must be found, approached, and persuaded to favour the player before any bond can exist.
+
+The core progression loop is:
+
+1. Adventure/explore.
+2. Encounter a spirit at very low probability.
+3. Complete that spirit's favour test.
+4. Establish a Bond.
+5. Equip/attune that spirit.
+6. Travel to Silverbough.
+7. Train the matching Elemental Spirit Magic discipline.
+8. Deepen the Bond over real time while that spirit remains equipped.
+9. Gain the spirit's passive boon as Bond/training matures.
+10. At the highest stage, unlock a limited Spirit Manifestation capable of temporarily pushing the spirit's effect toward the old 10% power level.
+
+## 2. Discovery and Favour
+
+- Spirits are found through adventuring/exploration rather than purchased from a normal vendor or unlocked automatically by level.
+- Encounters should be **very rare**.
+- Region, environment, hidden sites, world events and elemental context can affect where different spirits may appear.
+- Finding a spirit does **not** immediately grant it.
+- The spirit presents a favour challenge, such as several questions, a dilemma, a requested action, or some other test of the player's behaviour.
+- Different spirit types should care about different values rather than sharing one universal answer pattern.
+- Success earns the spirit's favour and establishes the initial Bond.
+- The spirit remains an individual entity/companion in the world, not merely an inventory object.
+
+Possible elemental temperament, still illustrative rather than final:
+
+- Fire: courage, decisiveness, passion, action.
+- Wind: freedom, instinct, adaptability, refusal to be controlled.
+- Water: patience, empathy, perception, adaptability.
+- Earth: resolve, reliability, craftsmanship, protection.
+
+The exact consequence of failing a favour challenge remains open.
+
+## 3. Silverbough Training
+
+A Bond is an educational prerequisite.
+
+Players cannot simply enrol in Elemental Spirit Magic because they have enough gold or completed a generic course. The spirit must first have accepted them.
+
+Silverbough then teaches the player how to actually channel and work with that Bond.
+
+This intentionally separates:
+
+- **Discovery:** finding the rare spirit.
+- **Favour:** convincing the spirit to accept the player.
+- **Bond:** establishing the relationship.
+- **Training:** learning how to use that relationship safely and effectively.
+- **Development:** deepening the active Bond over time.
+
+## 4. One Active Spirit
+
+Players can eventually discover and bond with multiple spirits, potentially all available spirits, but **only one spirit can be equipped/actively attuned at a time**.
+
+Bond progression follows a Pokémon GO-style active-companion rule:
+
+- Only the currently equipped spirit gains Bond progress.
+- Unequipping a spirit freezes its progress immediately.
+- The exact Bond level is preserved permanently while inactive.
+- Re-equipping it later resumes from exactly where it stopped.
+- Inactive spirits do not decay or reset.
+- Inactive spirits do not progress in the background.
+- Only the currently equipped spirit provides its passive boon.
+- Only the currently equipped spirit can use Spirit Manifestation.
+- Inactive spirits provide no combat or utility benefit until equipped again.
+
+This prevents players from simultaneously maxing every spirit simply because they have found them all.
+
+## 5. Ordinary Elemental Spirits
+
+The four ordinary elemental identities currently being preserved are:
+
+- **Fire:** offensive / attack effectiveness.
+- **Water:** magical / spell / skill effectiveness.
+- **Wind:** evasion / avoidance / dodge.
+- **Earth:** defense and crafting effectiveness.
+
+The mature permanent Spirit boon should be treated as a major reward around a **5% total power budget**.
+
+The old permanent 10% endpoint should not simply return as a permanently stacked passive. Instead, the top-end relationship/training stage can unlock **Spirit Manifestation**, a limited state that temporarily pushes the spirit toward the old 10% power level.
+
+Exact Manifestation duration, mana/resource cost, cooldown and activation rules remain open.
+
+## 6. Elemental Affinity in PvP
+
+Spirits should create a **soft counter system** in PvP rather than hard rock-paper-scissors that overrides the rest of a player's build.
+
+Working ordinary-element wheel:
+
+| Active Spirit | Advantage over | Disadvantage against | Neutral against |
+|---|---|---|---|
+| Fire | Earth | Water | Fire / Wind |
+| Water | Fire | Wind | Water / Earth |
+| Wind | Water | Earth | Wind / Fire |
+| Earth | Wind | Fire | Earth / Water |
+
+Affinity modifies the **active Spirit boon**, not the player's entire character.
+
+Working mature-spirit example:
+
+- disadvantage: about 4% effective boon
+- neutral: 5%
+- advantage: about 6%
+
+Exact values remain subject to later combat balancing.
+
+Spirit selection should be locked once a PvP encounter begins. The old 12-hour switching cooldown is a candidate for v2 attunement, but the exact cooldown remains open.
+
+## 7. Light and Dark Apex Spirits
+
+Add **Light** and **Dark** as rare Apex Spirit affinities outside the normal four-element wheel.
+
+Agreed affinity rules:
+
+- Light has an advantage against Fire, Water, Wind and Earth.
+- Dark has an advantage against Fire, Water, Wind and Earth.
+- Ordinary elements do **not** gain an advantage against Light or Dark.
+- Light and Dark are both strong against each other.
+- Light vs Light is neutral.
+- Dark vs Dark is neutral.
+- Light and Dark should be much rarer and harder to earn favour from than ordinary spirits.
+- Rarity alone must not be relied on as their primary balance mechanism.
+
+This makes Light and Dark prestigious Apex affinities without giving the four ordinary elements a mirrored weakness bonus against them.
+
+## 8. Light and Dark Opposed Specialisations
+
+The chosen direction is **split specialisation within the same total mature power budget**.
+
+Light and Dark do **not** each receive a simple universal +5% general combat buff. Instead, their mature boon is divided across their identity while keeping the combined power budget approximately equivalent to one ordinary mature Spirit.
+
+### Light Spirit
+
+Primary identity:
+
+- protection / mitigation
+- restoration / healing support
+- cleansing / harmful-effect resistance
+- warding / magical resistance
+
+Possible secondary identity later:
+
+- perception or accuracy
+
+### Dark Spirit
+
+Primary identity:
+
+- offensive pressure
+- critical / finishing pressure
+- curse and debuff effectiveness
+- concealment / suppression
+
+Possible advanced identity later:
+
+- life manipulation
+- mana manipulation
+
+The exact split of the 5% mature power budget is **not yet final**. A likely direction is an asymmetric split, such as a larger primary effect and a smaller secondary effect, rather than two unrelated full-strength bonuses.
+
+## 9. Balance Principles
+
+- The active Spirit should matter, but it must not outweigh the player's total build.
+- Fire/Water/Wind/Earth must remain worthwhile even after Light/Dark exist.
+- Light/Dark should feel prestigious because of their affinity relationships and specialised identity, not because they simply have more raw permanent percentage than everything else.
+- Spirit effects must coexist safely with Education, equipment, Practical Mastery, Magic School Mastery, Legacy perks, consumables, enhancements and future systems.
+- Spirit Manifestation is the preferred place for dramatic temporary power, rather than escalating permanent passive stacking.
+
+## 10. Open Spirit Questions
+
+- Should the split mature boon for Light/Dark be roughly **3% primary + 2% secondary**, or an even **2.5% + 2.5%** style split?
+- What happens when a player fails a spirit's favour challenge?
+- What exact attunement/switch cooldown should spirits use?
+- How quickly does Bond progress while a spirit is equipped?
+- Does Bond progress passively with real equipped time, through qualifying actions, or through a hybrid of both?
+- What exact Spirit Manifestation effects, duration and cooldown does each affinity receive?
+- How rare are Light and Dark relative to Fire/Water/Wind/Earth?
+- Can particular spirit individuals have unique personalities or variants within the same affinity?
+- How are Spirit discoveries represented in Chronicle/Codex/Bestiary-style knowledge systems?
