@@ -165,7 +165,19 @@ The mature permanent Spirit boon should be treated as a major reward around a **
 
 The old permanent 10% endpoint should not simply return as a permanently stacked passive. Instead, the top-end relationship/training stage can unlock **Spirit Manifestation**, a limited state that temporarily pushes the spirit toward the old 10% power level.
 
-Exact Manifestation duration, mana/resource cost, cooldown and activation rules remain open.
+### 5.1 Manual Spirit Manifestation
+
+Spirit Manifestation is a **manual tactical activation**, not an automatic emergency trigger and not a build-up meter.
+
+- Manifestation becomes available only after the Spirit has reached the required mature Bond/training stage.
+- The player deliberately chooses when to activate it through a dedicated Manifest action.
+- While active, the equipped Spirit temporarily rises from its normal mature 5% total boon toward the old 10% power level.
+- For Light and Dark, the same even split is preserved during Manifestation: the normal 2.5% + 2.5% mature boon can rise toward 5% + 5% while manifested.
+- Only the currently equipped Spirit can Manifest.
+- Manifestation cannot be transferred to another Spirit by switching; Spirit switching remains governed by the separate 12-hour attunement cooldown.
+- Exact duration, cooldown, cost and whether the ability is restricted in any specific PvP or economic contexts remain open balance decisions.
+
+The purpose is to give the player agency over when to spend the Spirit's dramatic temporary power rather than letting the game trigger it automatically at an arbitrary health threshold.
 
 ## 6. Elemental Affinity in PvP
 
@@ -258,7 +270,8 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 
 ## 10. Open Spirit Questions
 
-- What exact Spirit Manifestation effects, duration and cooldown does each affinity receive?
+- What exact duration and cooldown should manual Spirit Manifestation use?
+- Should Manifestation consume mana, a separate Spirit resource, or no extra resource beyond its cooldown?
 - How rare are Light and Dark relative to Fire/Water/Wind/Earth?
 - Can particular spirit individuals have unique personalities or variants within the same affinity?
 - How are Spirit discoveries represented in Chronicle/Codex/Bestiary-style knowledge systems?
