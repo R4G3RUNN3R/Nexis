@@ -176,9 +176,11 @@ Spirit Manifestation is a **manual tactical activation**, not an automatic emerg
 - Only the currently equipped Spirit can Manifest.
 - Manifestation lasts **15 minutes** once manually activated.
 - After activation, Spirit Manifestation enters a **24-hour real-time cooldown** before it can be used again.
-- The cooldown belongs to the Manifestation system rather than to a particular combat encounter, so activating it is a meaningful daily tactical decision.
+- The cooldown starts at the moment Manifestation is activated, not when the 15-minute active window ends.
+- **Manifestation consumes no mana and no separate Spirit resource.** The 24-hour cooldown is the complete activation cost.
+- This keeps Manifestation equally available to martial, ranged, shadow and magical builds rather than making a long-developed Spirit capstone depend on a caster resource.
 - Manifestation cannot be transferred to another Spirit by switching; Spirit switching remains governed by the separate 12-hour attunement cooldown.
-- The exact activation cost, if any, and whether the ability is restricted in any specific PvP or economic contexts remain open balance decisions.
+- Whether Manifestation requires restrictions in any specific PvP or economic contexts remains a later balance decision.
 
 The purpose is to give the player agency over when to spend the Spirit's dramatic temporary power rather than letting the game trigger it automatically at an arbitrary health threshold. The 15-minute window is long enough to support a serious combat, adventure or specialist activity burst, while the 24-hour cooldown prevents the 10% state from becoming the player's normal operating condition.
 
@@ -273,7 +275,6 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 
 ## 10. Open Spirit Questions
 
-- Should Manifestation consume mana, a separate Spirit resource, or no extra resource beyond its cooldown?
 - How rare are Light and Dark relative to Fire/Water/Wind/Earth?
 - Can particular spirit individuals have unique personalities or variants within the same affinity?
 - How are Spirit discoveries represented in Chronicle/Codex/Bestiary-style knowledge systems?
