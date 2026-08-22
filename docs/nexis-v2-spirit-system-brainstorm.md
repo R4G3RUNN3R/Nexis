@@ -4,7 +4,7 @@
 >
 > This file captures the Spirit-system decisions made during the wider Nexis v2 redesign. It is intentionally separate from the final implementation spec so the system can continue evolving without pretending every number is settled.
 
-_Last updated: 2026-08-21_
+_Last updated: 2026-08-22_
 
 ## 1. Core Direction
 
@@ -136,6 +136,20 @@ The mature 5% Spirit Bond is deliberately long-term progression.
 
 This keeps a permanent 5% Spirit boon genuinely significant while still rewarding players who actively behave in ways aligned with their chosen Spirit.
 
+### 4.4 Continuous boon growth
+
+The Spirit's permanent boon grows **continuously** with Bond progress rather than jumping only at milestone dates.
+
+The intended passive curve preserves the useful shape of the old system:
+
+- from Bond start to roughly the first **3 months** of passive-equivalent progress, the boon rises smoothly from **0% to 3%**;
+- over the following roughly **6 months** of passive-equivalent progress, the boon rises smoothly from **3% to the mature 5%**;
+- affinity-appropriate activity advances the same underlying Bond progress faster, while the absolute 6-month maturation floor still applies;
+- the UI may therefore show precise intermediate values such as **+1.47%**, **+3.62%**, or **+4.91%** rather than only 0%, 3% and 5%;
+- inactive Spirits freeze at their exact current value and resume from that exact value when re-equipped.
+
+For Light and Dark, the combined 5% budget follows the same continuous curve and remains evenly split between the two specialisations at every point. For example, when the total Apex boon has reached 3%, each component is 1.5%; at full maturity the two components become 2.5% + 2.5%.
+
 This prevents players from simultaneously maxing every spirit simply because they have found them all.
 
 ## 5. Ordinary Elemental Spirits
@@ -244,7 +258,6 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 
 ## 10. Open Spirit Questions
 
-- How should the passive boon scale before the mature 5% endpoint: continuous growth, milestone tiers, or a hybrid?
 - What exact Spirit Manifestation effects, duration and cooldown does each affinity receive?
 - How rare are Light and Dark relative to Fire/Water/Wind/Earth?
 - Can particular spirit individuals have unique personalities or variants within the same affinity?
