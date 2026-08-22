@@ -56,6 +56,25 @@ Failing a Spirit's favour challenge does **not** destroy or reroll the rare enco
 
 This preserves the significance of an extremely rare discovery while still making the Spirit's acceptance something the player must earn rather than receive automatically.
 
+### 2.2 Affinity rarity after a Spirit encounter
+
+The game should separate **whether a Spirit encounter occurs** from **which affinity that Spirit has**.
+
+Once the already-rare Spirit encounter has succeeded, affinity is rolled using this distribution:
+
+| Affinity | Chance after Spirit encounter |
+|---|---:|
+| Fire | 24% |
+| Water | 24% |
+| Wind | 24% |
+| Earth | 24% |
+| **Light** | **2%** |
+| **Dark** | **2%** |
+
+This means each individual Apex affinity is approximately **1 in 50 Spirit encounters**, while encountering either Light or Dark is approximately **1 in 25 Spirit encounters**. Because the Spirit encounter itself is already rare, Light and Dark become extremely scarce without requiring absurdly tiny raw percentages.
+
+A failed favour challenge does not reroll the affinity or destroy that rare Apex discovery; the normal seven-day retry rule applies.
+
 ## 3. Silverbough Training
 
 A Bond is an educational prerequisite.
@@ -275,6 +294,6 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 
 ## 10. Open Spirit Questions
 
-- How rare are Light and Dark relative to Fire/Water/Wind/Earth?
+- Should the working 4% / 5% / 6% ordinary PvP affinity numbers become the final baseline, and how should affinity interact with the 10% Manifestation ceiling?
 - Can particular spirit individuals have unique personalities or variants within the same affinity?
 - How are Spirit discoveries represented in Chronicle/Codex/Bestiary-style knowledge systems?
