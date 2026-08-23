@@ -288,55 +288,147 @@ Course V     Greater Communion
 Course VI    Manifestation training
 ```
 
-This shared structure applies to:
+#### Ordinary affinity course durations
 
-- Fire;
-- Water;
-- Wind;
-- Earth;
-- Light;
-- Dark.
+Fire, Water, Wind and Earth use:
 
-Light and Dark may use somewhat longer or more demanding course durations because they are Apex affinities, but they do not gain extra course slots merely to inflate the calendar.
+| Course | Duration |
+|---|---:|
+| I | 10 days |
+| II | 12 days |
+| III | 14 days |
+| IV | 16 days |
+| V | 18 days |
+| VI | 22 days |
 
-Illustrative ordinary-school direction includes:
+Total: **92 days** per ordinary affinity school.
 
-**Fire Spirit Magic**
+#### Apex affinity course durations
 
-- Ember Channeling;
-- Flame Ward;
-- Combustive Projection;
-- Infernal Resonance;
-- Greater Fire Communion;
-- Fire Manifestation.
+Light and Dark use:
 
-**Earth Spirit Magic**
+| Course | Duration |
+|---|---:|
+| I | 12 days |
+| II | 14 days |
+| III | 16 days |
+| IV | 18 days |
+| V | 21 days |
+| VI | 24 days |
 
-- Stone Communion;
-- Earthen Ward;
-- Reinforcement;
-- Artisan's Resonance;
-- Greater Earth Communion;
-- Earth Manifestation.
+Total: **105 days** per Apex affinity school.
 
-Equivalent six-course schools will exist for Water, Wind, Light and Dark. Exact names and individual ability mechanics remain part of the next design step rather than being silently invented here.
+Apex schools are therefore somewhat longer without adding filler courses merely to inflate the calendar.
 
-### 3.6 Courses unlock capabilities, not Bond percentage
+### 3.6 Fire Spirit Magic
 
-Affinity-specific Spirit Magic education should unlock **real capabilities** rather than simply adding more passive percentage at every course.
+1. **Ember Channeling** — manipulate minor flame, ignite mundane materials, and sense abnormal heat or fire sources.
+2. **Flame Ward** — temporary protection against fire, burning and severe heat.
+3. **Combustive Projection** — an active Spirit-powered offensive fire technique.
+4. **Infernal Resonance** — temporarily infuse an attack or weapon with Spirit flame for stronger offensive pressure.
+5. **Greater Fire Communion** — a powerful temporary communion focused on aggression, flame control and resistance to hostile fire.
+6. **Fire Manifestation** — completes the educational half of Fire Manifestation.
 
-The intended progression is:
+### 3.7 Water Spirit Magic
 
-- Course I: learn to channel the affinity;
-- Course II: unlock a defensive or utility capability;
-- Course III: unlock an active affinity technique;
-- Course IV: unlock an advanced affinity technique;
-- Course V: unlock Greater Communion or another major capability;
-- Course VI: complete Manifestation training.
+1. **Flow Channeling** — manipulate small quantities of water and sense nearby water or impurities.
+2. **Tidal Veil** — a defensive technique that cushions or redirects incoming force.
+3. **Binding Current** — a control technique that impedes, slows or restrains a target.
+4. **Restorative Current** — Spirit-assisted recovery capable of healing or removing lesser harmful conditions.
+5. **Greater Water Communion** — a major restorative/control state allowing stronger healing, cleansing and battlefield control.
+6. **Water Manifestation** — completes the educational half of Water Manifestation.
+
+### 3.8 Wind Spirit Magic
+
+1. **Breeze Channeling** — manipulate airflow and sense changes in weather or air movement.
+2. **Slipstream** — a movement/evasion technique allowing rapid repositioning or escape.
+3. **Gale Step** — a stronger burst-movement technique with combat and exploration applications.
+4. **Cutting Gale** — offensive pressure through concentrated Spirit wind.
+5. **Greater Wind Communion** — a major mobility state improving movement, escape, evasion and wind control.
+6. **Wind Manifestation** — completes the educational half of Wind Manifestation.
+
+### 3.9 Earth Spirit Magic
+
+1. **Stone Communion** — sense stone, minerals, instability and structural weaknesses.
+2. **Earthen Ward** — a defensive barrier or reinforcement technique.
+3. **Stonebind** — restrain, obstruct or impede movement through earth and stone.
+4. **Artisan's Resonance** — Spirit-assisted crafting affecting smithing, materials and structural work.
+5. **Greater Earth Communion** — a major defensive/crafting communion improving fortification and material control.
+6. **Earth Manifestation** — completes the educational half of Earth Manifestation.
+
+### 3.10 Light Spirit Magic
+
+1. **Luminous Channeling** — produce and manipulate Spirit light and reveal some unnatural darkness or corruption.
+2. **Radiant Ward** — a strong protection-oriented Spirit technique.
+3. **Purifying Touch** — remove or weaken poisons, curses, debuffs or other harmful effects.
+4. **Sanctuary** — create a temporary protected area focused on mitigation and recovery.
+5. **Greater Light Communion** — a major protection/restoration state capable of powerful cleansing and defensive support.
+6. **Light Manifestation** — completes the educational half of Light Manifestation.
+
+### 3.11 Dark Spirit Magic
+
+1. **Umbral Channeling** — manipulate shadow, suppress presence and sense some hostile magical influence.
+2. **Veil of Gloom** — a concealment/suppression technique useful in combat and Shadow activities.
+3. **Spirit Hex** — apply a meaningful curse or debuff to a target.
+4. **Life Siphon** — an offensive Spirit technique that drains vitality or weakens an opponent while benefiting the user in a limited fashion.
+5. **Greater Dark Communion** — a major offensive/debuff state increasing the Spirit's ability to suppress, curse and pressure targets.
+6. **Dark Manifestation** — completes the educational half of Dark Manifestation.
+
+### 3.12 Courses unlock capabilities, not Bond percentage
+
+Affinity-specific Spirit Magic education unlocks **real capabilities** rather than simply adding more passive percentage at every course.
 
 The permanent 0-5% Spirit boon still comes from **Bond progression**, not these course completions.
 
-### 3.7 Education and Bond measure different things
+### 3.13 Spirit techniques use cooldowns, not mana
+
+Active Spirit Magic techniques are governed by **cooldowns**, not by the character's mana pool.
+
+This is intentional because Spirits are a cross-build system. A fighter, archer, rogue, crafter or other non-caster may form and develop a Spirit Bond long before they ever acquire meaningful mana. Requiring mana for Spirit techniques would unnecessarily turn Spirit progression into a caster-dependent subsystem.
+
+Rules:
+
+- Spirit techniques do **not** require mana by default;
+- Spirit techniques do **not** use a separate Spirit Energy resource;
+- stronger techniques receive longer cooldowns than lighter utility techniques;
+- cooldown duration is the main limiter on active Spirit abilities;
+- the passive Bond boon remains resource-free;
+- Spirit Manifestation remains resource-free and continues to use its separate 24-hour cooldown;
+- future exceptional techniques may have contextual requirements, but the baseline Spirit system must remain usable by non-casters.
+
+The working cooldown bands are:
+
+| Technique class | Cooldown band |
+|---|---:|
+| Minor utility | **5-10 minutes** |
+| Standard active technique | **1-3 minutes** |
+| Advanced technique | **10-20 minutes** |
+| Greater Communion | **6 hours** |
+| Spirit Manifestation | **24 hours** |
+
+Exact technique cooldowns can be selected within those bands when combat/action pacing is designed.
+
+### 3.14 Normal Magic vs Spirit Magic vs Manifestation
+
+The three systems are deliberately distinct:
+
+```text
+NORMAL MAGIC
+Learned and powered by the character.
+
+SPIRIT MAGIC
+Learned by the character, but channelled through the bonded Spirit.
+No normal mana requirement by default.
+
+MANIFESTATION
+Temporary maximum expression of the Bond.
+```
+
+A non-caster can therefore use Spirit techniques such as Stonebind, Gale Step or Flame Ward because the supernatural capability is being provided through the Bonded Spirit rather than the character's conventional spellcasting pathway.
+
+A conventional mage may later combine normal magic and Spirit Magic in interesting ways, but Spirit Magic itself does not require the normal spellcasting progression.
+
+### 3.15 Education and Bond measure different things
 
 Spirit education and Bond progression are deliberately separate systems:
 
@@ -354,7 +446,7 @@ Bond determines the depth and numerical strength of the relationship, including 
 
 The two systems must not duplicate the same progression under different names.
 
-### 3.8 Manifestation requires both mastery and maturity
+### 3.16 Manifestation requires both mastery and maturity
 
 The final affinity-specific Manifestation course does **not** grant immediate Manifestation by itself.
 
@@ -372,24 +464,6 @@ Spirit Manifestation unlocked
 ```
 
 This prevents a player from completing the academic curriculum and instantly bypassing the long relationship progression. Likewise, reaching 5% Bond without the formal capstone training does not unlock Manifestation.
-
-### 3.9 Spirit techniques use cooldowns, not mana
-
-Active Spirit Magic techniques are governed primarily by **cooldowns**, not by the character's mana pool.
-
-This is intentional because Spirits are a cross-build system. A fighter, archer, rogue, crafter or other non-caster may form and develop a Spirit Bond long before they ever acquire meaningful mana. Requiring mana for Spirit techniques would unnecessarily turn Spirit progression into a caster-dependent subsystem.
-
-Rules:
-
-- Spirit techniques do **not** require mana by default;
-- Spirit techniques do **not** use a separate Spirit Energy resource;
-- stronger techniques receive longer cooldowns than lighter utility techniques;
-- cooldown duration is the main limiter on active Spirit abilities;
-- the passive Bond boon remains resource-free;
-- Spirit Manifestation remains resource-free and continues to use its separate 24-hour cooldown;
-- future exceptional techniques may have contextual requirements, but the baseline Spirit system must remain usable by non-casters.
-
-This keeps the system understandable and avoids adding another resource bar or forcing every Spirit user to develop a mana build simply to access the capabilities their Spirit education already unlocked.
 
 ## 4. One Active Spirit
 
@@ -729,20 +803,18 @@ The separation is intentional:
 - Spirit education and Bond progression must remain distinct: one unlocks capabilities, the other measures relationship depth and boon strength.
 - Spirit clues may improve search direction and encounter context, but must never become exact deterministic spawn coordinates.
 - Spirit Magic must remain accessible to non-caster builds; active Spirit techniques therefore use cooldowns rather than requiring mana or a dedicated Spirit resource.
+- Spirit Magic and conventional character spellcasting are separate progression/resource concepts even when a character eventually learns both.
 
 ## 12. Remaining Spirit Questions
 
-The core Spirit loop, rarity model, Bond economy, curriculum architecture, relationship milestones, discovery philosophy and active-ability resource model are now largely defined.
+The core Spirit loop, rarity model, Bond economy, curriculum architecture, relationship milestones, discovery philosophy, active-ability resource model, six school identities, course durations and cooldown bands are now largely defined.
 
-Remaining design work is concentrated around the **actual six affinity curricula, ability identities, cooldowns and course durations**.
+Remaining design work is concentrated around **interaction rules and exact combat/action tuning**, which should be resolved alongside the systems they affect rather than guessed in isolation.
 
 Open questions include:
 
-- What exact six-course ability progression should Fire unlock?
-- What exact six-course ability progression should Water unlock?
-- What exact six-course ability progression should Wind unlock?
-- What exact six-course ability progression should Earth unlock?
-- What exact six-course ability progression should Light unlock?
-- What exact six-course ability progression should Dark unlock?
-- What cooldown bands should utility, active, advanced and Greater Communion techniques use?
-- What durations should ordinary affinity courses use, and how much longer should Light/Dark courses take?
+- Are Spirit techniques usable only while their matching Spirit is currently equipped/attuned?
+- Do active Spirit techniques have fixed effectiveness once learned, or scale numerically with Bond progress?
+- Do Spirit-technique cooldowns persist while a Spirit is unequipped and after switching to another Spirit?
+- Can Greater Communion and Spirit Manifestation overlap, or should they be mutually exclusive Spirit states?
+- What exact values, durations and status formulas should individual techniques use once the v2 combat, healing, crafting and status systems are defined?
