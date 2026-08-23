@@ -75,6 +75,37 @@ This means each individual Apex affinity is approximately **1 in 50 Spirit encou
 
 A failed favour challenge does not reroll the affinity or destroy that rare Apex discovery; the normal seven-day retry rule applies.
 
+### 2.3 Individual Spirit identity
+
+Spirits are **unique individuals within a shared mechanical affinity**.
+
+Two Spirits of the same affinity can differ in:
+
+- name;
+- appearance;
+- temperament;
+- dialogue style;
+- favour questions, dilemmas or requested actions;
+- personal history;
+- preferred regions, environments or encounter conditions.
+
+Those differences are narrative and discovery-facing rather than a hidden power-roll system. A Fire Spirit still uses the same Fire-affinity mechanics as any other Fire Spirit at the same Bond progress. Players should never need to reroll Spirits looking for a mechanically superior individual.
+
+### 2.4 One Bond per affinity
+
+A player can establish **at most one active permanent Bond per affinity**.
+
+The eventual maximum bonded collection is therefore:
+
+- Fire;
+- Water;
+- Wind;
+- Earth;
+- Light;
+- Dark.
+
+Players may still encounter other individual Spirits belonging to an affinity they have already bonded with. Those encounters can expand Codex/discovery knowledge and world lore, but they do not create a second Bond, stack bonuses or create a Spirit reroll economy.
+
 ## 3. Silverbough Training
 
 A Bond is an educational prerequisite.
@@ -170,6 +201,21 @@ The intended passive curve preserves the useful shape of the old system:
 For Light and Dark, the combined 5% budget follows the same continuous curve and remains evenly split between the two specialisations at every point. For example, when the total Apex boon has reached 3%, each component is 1.5%; at full maturity the two components become 2.5% + 2.5%.
 
 This prevents players from simultaneously maxing every spirit simply because they have found them all.
+
+### 4.5 Bond permanence and ownership
+
+Once a Spirit has granted favour and a Bond has been established, that Bond is **permanent character progression**.
+
+An established Bond:
+
+- cannot be traded;
+- cannot be sold;
+- cannot be stolen;
+- cannot be reset by switching Spirits;
+- cannot be permanently destroyed by ordinary gameplay;
+- cannot be erased by the Spirit being permanently killed as a punishment mechanic.
+
+Story content may temporarily separate a Spirit from the player or temporarily prevent attunement, but such events do not erase Bond progress or months of development. The Spirit is a relationship and progression system, not a disposable inventory item.
 
 ## 5. Ordinary Elemental Spirits
 
@@ -290,7 +336,58 @@ Broader identity for abilities and later Spirit Magic:
 
 The exact mechanical definitions of "protection/mitigation effectiveness", "restoration/cleansing effectiveness", "offensive pressure", and "curse/debuff effectiveness" should be defined when the v2 combat and status-effect math is designed. The important locked decision here is that Light and Dark each receive **two equally weighted 2.5% mature boon components**, not one dominant effect and one minor effect.
 
-## 9. Balance Principles
+## 9. Spirit Records, Codex and Chronicle
+
+Spirit discovery and relationship history should be represented in several layers rather than collapsed into one generic achievement entry.
+
+### Encountered
+
+When a Spirit is first encountered:
+
+- unlock a Codex entry;
+- record affinity;
+- record encounter location;
+- record encounter date;
+- expose basic known lore.
+
+### Favour earned
+
+When the Spirit grants favour and the Bond is established:
+
+- unlock the full Spirit profile;
+- reveal its individual name;
+- reveal its personality and known history;
+- record that the player has formed the permanent Bond for that affinity.
+
+### Bond developing
+
+The Spirit profile should display relationship/progression state such as:
+
+- current Bond progress;
+- current boon percentage;
+- active/inactive attunement state;
+- progress toward maturity;
+- Manifestation availability/cooldown once unlocked.
+
+### Mature Bond
+
+Reaching the mature 5% Bond becomes a **Chronicle milestone**.
+
+### First Manifestation
+
+A Spirit's first successful Manifestation becomes a **Chronicle milestone**.
+
+### Light and Dark discovery
+
+Discovering a Light or Dark Spirit should be treated as a rare historical event in the player's record, suitable for a Chronicle milestone and a Feat-of-Strength-style prestige entry without granting extra mechanical power merely for owning the record.
+
+The separation is intentional:
+
+- **Codex:** what the character knows about Spirits and the world;
+- **Spirit profile:** the specific ongoing relationship;
+- **Chronicle:** important events in that character's personal history.
+
+## 10. Balance Principles
 
 - The active Spirit should matter, but it must not outweigh the player's total build.
 - Fire/Water/Wind/Earth must remain worthwhile even after Light/Dark exist.
@@ -298,10 +395,14 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 - Spirit effects must coexist safely with Education, equipment, Practical Mastery, Magic School Mastery, Legacy perks, consumables, enhancements and future systems.
 - Spirit Manifestation is the preferred place for dramatic temporary power, rather than escalating permanent passive stacking.
 - **10% is the absolute Spirit boon ceiling**, including advantage matchups during Manifestation.
+- Individual Spirit personality must not become a hidden mechanical rarity roll.
+- Permanent Bond progress must not be invalidated by trading, theft, routine death states or narrative punishment.
 
-## 10. Open Spirit Questions
+## 11. Open Spirit Questions
 
-- Can particular spirit individuals have unique personalities or variants within the same affinity?
-- Should a player be able to bond with more than one Spirit of the same affinity, or only one per affinity?
-- Can an established Spirit Bond ever be traded, permanently lost, dismissed or killed?
-- How are Spirit discoveries represented in Chronicle/Codex/Bestiary-style knowledge systems?
+- What is the base probability of getting any Spirit encounter before the 24/24/24/24/2/2 affinity roll?
+- When does the numerical Spirit boon begin: immediately after favour, when Silverbough training begins, or only after the prerequisite training is completed?
+- Can Bond time progress before the player completes the matching Silverbough Elemental Spirit Magic training?
+- Are Light/Dark favour tests mechanically harder than ordinary favour tests, or is their rarity enough?
+- If a player already has a Bond for an affinity and encounters another Spirit of that affinity, should that encounter be purely Codex/lore or offer some non-power relationship content?
+- Should Manifestation be available everywhere its underlying boon is relevant, or should specific competitive/economic contexts suppress it?
