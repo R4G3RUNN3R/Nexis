@@ -39,7 +39,7 @@ The canonical progression loop is:
 6. Success establishes a permanent but dormant Bond.
 7. The player equips/attunes that Spirit.
 8. The player travels to Silverbough.
-9. The player completes Spirit Attunement.
+9. The player completes Spirit Attunement for that bonded Spirit.
 10. The Bond becomes mechanically active and begins at 0% boon strength.
 11. The player develops the Bond through active-equipped time plus qualifying affinity-aligned actions.
 12. The player completes the affinity-specific Spirit Magic curriculum.
@@ -216,9 +216,9 @@ Bond activates
 Affinity-specific Spirit Magic school
 ```
 
-The first three courses may be completed before a player has found a Spirit.
+**Spirit Lore, Spirit Communication, and Bond Theory are global theoretical courses and are completed only once per character.** They may be completed before the player has found any Spirit.
 
-Spirit Attunement requires a real permanent Bond.
+**Spirit Attunement is performed separately for each permanent Spirit Bond.** Every newly bonded affinity therefore requires its own 21-day Attunement before that specific Bond becomes mechanically active and its affinity curriculum opens.
 
 ### 8.2 Shared foundation durations
 
@@ -227,18 +227,18 @@ Spirit Attunement requires a real permanent Bond.
 | Spirit Lore | 10 days |
 | Spirit Communication | 14 days |
 | Bond Theory | 18 days |
-| Spirit Attunement | 21 days |
+| Spirit Attunement | 21 days per bonded Spirit |
 
-The pre-Bond theoretical preparation totals 42 days. Attunement adds 21 days once the player has a valid Bond.
+The one-time pre-Bond theoretical preparation totals 42 days. Each permanent Bond then requires its own 21-day Attunement.
 
 ### 8.3 Spirit Attunement effect
 
-Completing Spirit Attunement:
+Completing Spirit Attunement for a specific Bond:
 
-- changes the Bond from dormant to active;
-- starts numerical Bond progression at 0%;
-- starts active-equipped time accumulation;
-- enables activity-based Bond acceleration;
+- changes that Bond from dormant to active;
+- starts that Bond's numerical progression at 0%;
+- starts active-equipped time accumulation for that Bond;
+- enables activity-based Bond acceleration for that Bond;
 - unlocks the matching affinity-specific Spirit Magic school.
 
 ## 9. Affinity-Specific Spirit Magic Schools
@@ -499,12 +499,22 @@ Mature ordinary values:
 
 ### 16.2 Apex relationships
 
+Light and Dark use the same total-boon matchup scale while preserving their even two-part specialisation split.
+
 - Light has advantage over Fire, Water, Wind, and Earth.
 - Dark has advantage over Fire, Water, Wind, and Earth.
-- Ordinary elements do not gain advantage over Light or Dark.
-- Light and Dark are both strong against each other.
+- Ordinary elements do not gain advantage over Light or Dark; their own Spirit boon remains at the neutral **5%** level against an Apex Spirit.
+- Light and Dark are both advantaged against each other.
 - Light vs Light is neutral.
 - Dark vs Dark is neutral.
+
+At mature Bond:
+
+- an Apex Spirit in an advantaged matchup uses **6% total boon**, split evenly as **3% + 3%** across its two specialisations;
+- an Apex Spirit in a neutral matchup uses **5% total boon**, split as the normal **2.5% + 2.5%**;
+- there is no ordinary-element matchup that gives Fire, Water, Wind, or Earth an advantage over Light or Dark.
+
+While Manifested, both neutral and advantaged Apex matchups cap at **10% total boon**, split **5% + 5%**, consistent with the absolute Spirit ceiling.
 
 Spirit choice is locked when PvP begins.
 
@@ -521,7 +531,7 @@ Spirit techniques:
 - are limited by cooldowns and contextual rules;
 - remain unavailable when their Spirit is not equipped.
 
-The working cooldown bands are:
+The approved cooldown bands are:
 
 | Technique class | Cooldown band |
 |---|---:|
@@ -546,7 +556,7 @@ Course V of each affinity unlocks a powerful temporary Greater Communion state a
 Greater Communion:
 
 - uses the currently equipped Spirit;
-- uses the working **6-hour cooldown**;
+- uses the approved **6-hour cooldown**;
 - has its exact duration and numerical effects defined by the connected combat/healing/crafting/status spec;
 - cannot overlap with Spirit Manifestation.
 
@@ -666,7 +676,7 @@ Server persists discovery/favour/Bond state
         ↓
 Education engine validates course prerequisites and timers
         ↓
-Server activates Bond after completed Attunement
+Server activates Bond after completed per-Bond Attunement
         ↓
 Server accrues Bond progress from elapsed equipped time
         +
@@ -695,7 +705,7 @@ Recommended domain responsibilities:
 - **SpiritDiscoveryService:** eligible encounter checks, contextual encounter chances, affinity resolution.
 - **SpiritFavourService:** trial state, retry cooldown, favour completion.
 - **SpiritBondService:** Bond ownership, active/inactive state, equipped-time progression, maturity curve.
-- **SpiritAttunementService:** active Spirit selection and 12-hour switch lock.
+- **SpiritAttunementService:** per-Bond activation plus active Spirit selection and 12-hour switch lock.
 - **SpiritTechniqueService:** technique access, equipped-affinity validation, cooldown persistence, Greater Communion/Manifestation exclusivity.
 - **SpiritManifestationService:** maturity/training validation, 15-minute active state, 24-hour cooldown, 10% ceiling.
 - **SpiritRecordService:** Codex, Spirit profile, Chronicle, and Feats-of-Strength events.
@@ -712,7 +722,7 @@ Examples include:
 - Spirit switching unavailable because attunement cooldown remains;
 - favour retry unavailable until the seven-day cooldown expires;
 - Spirit Attunement unavailable because no permanent Bond exists;
-- affinity school unavailable because Attunement is incomplete;
+- affinity school unavailable because that Bond's Attunement is incomplete;
 - Manifestation unavailable because Bond is below 5%;
 - Manifestation unavailable because the capstone course is incomplete;
 - Manifestation unavailable because its 24-hour cooldown remains;
@@ -759,8 +769,9 @@ The implementation plan must include automated coverage for at least the followi
 ### 26.3 Bond and Attunement
 
 - Bond begins dormant;
-- Attunement requires a real Bond;
-- completing Attunement activates the Bond at 0%;
+- the three theory courses are one-time character education;
+- Spirit Attunement is required separately for each permanent Bond;
+- completing a Bond's Attunement activates that Bond at 0%;
 - only equipped Spirit progresses;
 - inactive Spirit freezes exactly;
 - switching preserves prior Bond values;
@@ -783,17 +794,26 @@ The implementation plan must include automated coverage for at least the followi
 - starting Manifestation cancels Greater Communion;
 - active techniques do not silently scale with every Bond fraction.
 
-### 26.6 Manifestation
+### 26.6 PvP affinity
+
+- ordinary wheel applies 4/5/6 mature values correctly;
+- an ordinary Spirit receives no advantage against Light or Dark;
+- Light/Dark use 6% total in advantaged matchups and preserve an even 3% + 3% split;
+- Light vs Dark treats both sides as advantaged;
+- same-Apex matchups are neutral at 2.5% + 2.5%;
+- Manifested Apex matchups never exceed 5% + 5%.
+
+### 26.7 Manifestation
 
 - requires both 5% Bond and completed capstone course;
 - lasts 15 minutes;
 - starts 24-hour cooldown at activation;
 - consumes no mana or separate Spirit resource;
 - cannot be transferred to another Spirit;
-- respects 8/10/10 PvP values;
+- respects 8/10/10 ordinary PvP values;
 - never exceeds the 10% Spirit ceiling.
 
-### 26.7 Records
+### 26.8 Records
 
 - encounter creates Codex history;
 - favour creates the Spirit relationship profile;
@@ -841,17 +861,18 @@ The Spirit subsystem design is considered implemented correctly when:
 2. affinity distribution uses 24/24/24/24/2/2 after encounter success;
 3. failed favour attempts preserve the discovered Spirit and impose a seven-day retry cooldown;
 4. each player may form only one permanent Bond per affinity;
-5. Bond begins dormant and activates only after Silverbough Spirit Attunement;
-6. only one Spirit is active at a time and switching is locked for 12 hours;
-7. only the active Spirit progresses and inactive Spirits freeze exactly;
-8. Bond growth follows the long-term 9-month passive / roughly 6-month minimum model;
-9. mature ordinary boon is 5% and Apex boon is split 2.5% + 2.5%;
-10. Spirit Magic is cooldown-based and does not require mana;
-11. only the equipped Spirit's techniques are usable;
-12. cooldowns persist through switching and logout;
-13. Greater Communion and Manifestation cannot overlap;
-14. Manifestation requires both mature Bond and capstone training;
-15. Manifestation lasts 15 minutes, has a 24-hour cooldown, and never exceeds a 10% Spirit boon ceiling;
-16. PvP affinity uses the locked ordinary wheel and 4/5/6 mature values, with 8/10/10 while Manifested;
-17. Codex, Spirit profile, Chronicle, and Feats of Strength record different aspects of the system;
-18. all state-changing Spirit operations are validated by the server and covered by automated tests.
+5. the three theoretical Spirit Studies courses are one-time character education, while every new permanent Bond requires its own 21-day Spirit Attunement;
+6. Bond begins dormant and activates only after its own Silverbough Spirit Attunement;
+7. only one Spirit is active at a time and switching is locked for 12 hours;
+8. only the active Spirit progresses and inactive Spirits freeze exactly;
+9. Bond growth follows the long-term 9-month passive / roughly 6-month minimum model;
+10. mature ordinary boon is 5% and Apex boon is split 2.5% + 2.5%;
+11. Spirit Magic is cooldown-based and does not require mana;
+12. only the equipped Spirit's techniques are usable;
+13. cooldowns persist through switching and logout;
+14. Greater Communion and Manifestation cannot overlap;
+15. Manifestation requires both mature Bond and capstone training;
+16. Manifestation lasts 15 minutes, has a 24-hour cooldown, and never exceeds a 10% Spirit boon ceiling;
+17. ordinary PvP affinity uses the locked 4/5/6 mature values, while Apex advantage uses 6% total split 3% + 3% and ordinary elements never gain advantage over Apex Spirits;
+18. Codex, Spirit profile, Chronicle, and Feats of Strength record different aspects of the system;
+19. all state-changing Spirit operations are validated by the server and covered by automated tests.
