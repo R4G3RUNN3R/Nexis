@@ -10,57 +10,49 @@ _Last updated: 2026-08-23_
 
 The old Spirit Binding system is being rebuilt as a combination of **real spirit entities** and **formal Elemental Spirit Magic** taught through Silverbough.
 
-A spirit is not simply a passive stat item. It is a rare being that must be found, approached, and persuaded to favour the player before any bond can exist.
+A Spirit is not simply a passive stat item. It is a rare being that must be found, approached and persuaded to favour the player before any Bond can exist.
 
 The core progression loop is:
 
 1. Adventure/explore.
-2. Encounter a spirit at very low probability.
-3. Complete that spirit's favour test.
-4. Establish a Bond.
-5. Equip/attune that spirit.
-6. Travel to Silverbough.
-7. Train the matching Elemental Spirit Magic discipline.
-8. Deepen the Bond over real time while that spirit remains equipped.
-9. Gain the spirit's passive boon as Bond/training matures.
-10. At the highest stage, unlock a limited Spirit Manifestation capable of temporarily pushing the spirit's effect toward the old 10% power level.
+2. Hit a qualifying Spirit-discovery opportunity.
+3. Roll the rare Spirit encounter.
+4. Resolve the Spirit's affinity.
+5. Complete that Spirit's favour test.
+6. Establish a permanent but initially dormant Bond.
+7. Equip/attune that Spirit.
+8. Travel to Silverbough.
+9. Complete foundational Spirit Attunement training for that affinity.
+10. Activate the Bond and begin numerical Bond progression.
+11. Deepen the Bond over real equipped time plus affinity-aligned activity.
+12. Gain the Spirit's passive boon continuously as Bond matures.
+13. At mature Bond/training, unlock Spirit Manifestation for a limited temporary power state.
+
+The system intentionally separates **discovery, favour, Bond ownership, formal training, Bond development and manifestation**.
 
 ## 2. Discovery and Favour
 
-- Spirits are found through adventuring/exploration rather than purchased from a normal vendor or unlocked automatically by level.
-- Encounters should be **very rare**.
-- Region, environment, hidden sites, world events and elemental context can affect where different spirits may appear.
-- Finding a spirit does **not** immediately grant it.
-- The spirit presents a favour challenge, such as several questions, a dilemma, a requested action, or some other test of the player's behaviour.
-- Different spirit types should care about different values rather than sharing one universal answer pattern.
-- Success earns the spirit's favour and establishes the initial Bond.
-- The spirit remains an individual entity/companion in the world, not merely an inventory object.
+### 2.1 Qualifying encounter chance
 
-Possible elemental temperament, still illustrative rather than final:
+The game separates **whether a Spirit encounter occurs** from **which affinity the Spirit has**.
 
-- Fire: courage, decisiveness, passion, action.
-- Wind: freedom, instinct, adaptability, refusal to be controlled.
-- Water: patience, empathy, perception, adaptability.
-- Earth: resolve, reliability, craftsmanship, protection.
+Only genuine server-validated discovery opportunities make a Spirit encounter roll. Ordinary button clicks, refreshes, cancelled actions or trivial loops do not.
 
-### 2.1 Failed favour attempt
+The standard encounter rate is:
 
-Failing a Spirit's favour challenge does **not** destroy or reroll the rare encounter.
+- **0.25% per qualifying exploration/adventure resolution** (roughly 1 in 400 eligible opportunities).
 
-- The discovered Spirit remains available to that player.
-- The player does not need to rediscover that Spirit or repeat the rare encounter roll.
-- A failed favour attempt starts a **7-day real-time retry cooldown**.
-- During those seven days, the player cannot attempt to earn that Spirit's favour again.
-- Once the seven days have elapsed, the player may retry the favour challenge.
-- Repeated failures can repeat this same seven-day lockout rather than permanently closing the Spirit path.
+Context can legitimately improve the chance:
 
-This preserves the significance of an extremely rare discovery while still making the Spirit's acceptance something the player must earn rather than receive automatically.
+- normal qualifying exploration: **0.25%**;
+- strong elemental region/event/context: roughly **0.50%**;
+- rare Spirit-focused site/event: up to roughly **1.00%**.
+
+These percentages are encounter chances, not affinity chances. Region, hidden-site, world-event and elemental context may affect eligibility or the encounter rate, but the system should remain extremely rare overall.
 
 ### 2.2 Affinity rarity after a Spirit encounter
 
-The game should separate **whether a Spirit encounter occurs** from **which affinity that Spirit has**.
-
-Once the already-rare Spirit encounter has succeeded, affinity is rolled using this distribution:
+Once the Spirit encounter itself succeeds, affinity is rolled using this distribution:
 
 | Affinity | Chance after Spirit encounter |
 |---|---:|
@@ -71,11 +63,61 @@ Once the already-rare Spirit encounter has succeeded, affinity is rolled using t
 | **Light** | **2%** |
 | **Dark** | **2%** |
 
-This means each individual Apex affinity is approximately **1 in 50 Spirit encounters**, while encountering either Light or Dark is approximately **1 in 25 Spirit encounters**. Because the Spirit encounter itself is already rare, Light and Dark become extremely scarce without requiring absurdly tiny raw percentages.
+Each individual Apex affinity is therefore approximately **1 in 50 Spirit encounters**, while either Light or Dark is approximately **1 in 25 Spirit encounters**.
 
-A failed favour challenge does not reroll the affinity or destroy that rare Apex discovery; the normal seven-day retry rule applies.
+Because the Spirit encounter itself is already rare, Light and Dark become extremely scarce without requiring absurd raw percentages.
 
-### 2.3 Individual Spirit identity
+### 2.3 Favour challenge
+
+Finding a Spirit does **not** immediately grant it.
+
+The Spirit presents a favour challenge such as:
+
+- several questions;
+- a dilemma;
+- a requested action;
+- proof of a value or behaviour;
+- a short multi-stage test where appropriate.
+
+Different affinities care about different qualities rather than sharing one universal answer pattern.
+
+Illustrative temperament direction:
+
+- **Fire:** courage, decisiveness, passion, action.
+- **Wind:** freedom, instinct, adaptability, refusal to be controlled.
+- **Water:** patience, empathy, perception, adaptability.
+- **Earth:** resolve, reliability, craftsmanship, protection.
+
+These are themes, not final dialogue trees.
+
+### 2.4 Light and Dark favour difficulty
+
+Light and Dark are harder to earn favour from than ordinary elemental Spirits, but **not through an extra RNG success roll**.
+
+Their increased difficulty comes from the content of the trial:
+
+- more demanding questions;
+- stricter behavioural requirements;
+- potentially multiple stages;
+- harder requested actions;
+- more complex dilemmas or proofs of character.
+
+If the player performs the required actions correctly, success should not then be denied by another hidden dice roll.
+
+### 2.5 Failed favour attempt
+
+Failing a Spirit's favour challenge does **not** destroy or reroll the rare encounter.
+
+- The discovered Spirit remains available to that player.
+- The player does not need to rediscover that Spirit or repeat the rare encounter roll.
+- A failed favour attempt starts a **7-day real-time retry cooldown**.
+- During those seven days, the player cannot attempt to earn that Spirit's favour again.
+- Once the cooldown expires, the player may retry.
+- Repeated failures may repeat the same seven-day lockout rather than permanently closing the Spirit path.
+
+The same retry rule applies to Light and Dark.
+
+### 2.6 Individual Spirit identity
 
 Spirits are **unique individuals within a shared mechanical affinity**.
 
@@ -89,11 +131,13 @@ Two Spirits of the same affinity can differ in:
 - personal history;
 - preferred regions, environments or encounter conditions.
 
-Those differences are narrative and discovery-facing rather than a hidden power-roll system. A Fire Spirit still uses the same Fire-affinity mechanics as any other Fire Spirit at the same Bond progress. Players should never need to reroll Spirits looking for a mechanically superior individual.
+Those differences are narrative and discovery-facing, not a hidden power-roll system. A Fire Spirit still uses the same Fire-affinity mechanics as any other Fire Spirit at equivalent Bond progress.
 
-### 2.4 One Bond per affinity
+Players should never need to reroll Spirits looking for a mechanically superior individual.
 
-A player can establish **at most one active permanent Bond per affinity**.
+### 2.7 One Bond per affinity
+
+A player can establish **at most one permanent Bond per affinity**.
 
 The eventual maximum bonded collection is therefore:
 
@@ -104,39 +148,74 @@ The eventual maximum bonded collection is therefore:
 - Light;
 - Dark.
 
-Players may still encounter other individual Spirits belonging to an affinity they have already bonded with. Those encounters can expand Codex/discovery knowledge and world lore, but they do not create a second Bond, stack bonuses or create a Spirit reroll economy.
+### 2.8 Duplicate-affinity encounters
 
-## 3. Silverbough Training
+Already owning a Bond for an affinity does **not** make future encounters of that affinity reroll into something else.
 
-A Bond is an educational prerequisite.
+For example, a player with a Fire Bond can still encounter another Fire Spirit.
 
-Players cannot simply enrol in Elemental Spirit Magic because they have enough gold or completed a generic course. The spirit must first have accepted them.
+A duplicate-affinity Spirit:
 
-Silverbough then teaches the player how to actually channel and work with that Bond.
+- cannot create a second Bond;
+- cannot stack another boon;
+- cannot replace the existing Spirit with a mechanically superior roll;
+- does not trigger duplicate protection or an automatic reroll toward missing affinities;
+- can unlock a new individual Codex entry;
+- can reveal new personality, history, ecology, dialogue, clues or world lore;
+- may provide non-power relationship/discovery content later.
 
-This intentionally separates:
+This preserves the rarity of Light and Dark and keeps individual Spirits meaningful without creating a Spirit reroll economy.
 
-- **Discovery:** finding the rare spirit.
-- **Favour:** convincing the spirit to accept the player.
-- **Bond:** establishing the relationship.
-- **Training:** learning how to use that relationship safely and effectively.
-- **Development:** deepening the active Bond over time.
+## 3. Silverbough Training and Bond Activation
+
+### 3.1 Favour creates a dormant Bond
+
+When a Spirit grants favour, the permanent Bond exists but begins **dormant**.
+
+The player owns the relationship, but the numerical boon and Bond-development clock do not start merely because the Spirit accepted them.
+
+The flow is:
+
+```text
+Spirit grants favour
+        ↓
+Permanent dormant Bond established
+        ↓
+Travel to Silverbough
+        ↓
+Complete foundational Spirit Attunement training
+        ↓
+Bond becomes active
+        ↓
+0% → 5% Bond progression begins
+```
+
+### 3.2 Bond is an educational prerequisite
+
+The player cannot simply enrol in a matching Elemental Spirit Magic discipline because they have enough gold or completed a generic course. The Spirit must first have accepted them.
+
+Silverbough then teaches the player how to channel and work with that Bond safely and effectively.
+
+This produces a two-way gate:
+
+- **Spirit favour is required to access that affinity's Spirit training.**
+- **Foundational Spirit Attunement training is required before numerical Bond progression and its boon become active.**
+
+This keeps Education as the progression spine instead of letting a rare encounter bypass the rest of Nexis.
 
 ## 4. One Active Spirit
 
-Players can eventually discover and bond with multiple spirits, potentially all available spirits, but **only one spirit can be equipped/actively attuned at a time**.
+Players can eventually discover and bond with multiple Spirits, potentially all six affinities, but **only one Spirit can be equipped/actively attuned at a time**.
 
-Bond progression follows a Pokémon GO-style active-companion rule:
-
-- Only the currently equipped spirit gains Bond progress.
-- Unequipping a spirit freezes its progress immediately.
-- The exact Bond level is preserved permanently while inactive.
+- Only the currently equipped Spirit gains Bond progress.
+- Unequipping a Spirit freezes its progress immediately.
+- The exact Bond value is preserved permanently while inactive.
 - Re-equipping it later resumes from exactly where it stopped.
-- Inactive spirits do not decay or reset.
-- Inactive spirits do not progress in the background.
-- Only the currently equipped spirit provides its passive boon.
-- Only the currently equipped spirit can use Spirit Manifestation.
-- Inactive spirits provide no combat or utility benefit until equipped again.
+- Inactive Spirits do not decay or reset.
+- Inactive Spirits do not progress in the background.
+- Only the currently equipped Spirit provides its passive boon.
+- Only the currently equipped Spirit can use Spirit Manifestation.
+- Inactive Spirits provide no combat or utility benefit until equipped again.
 
 ### 4.1 Attunement switching cooldown
 
@@ -144,80 +223,95 @@ Switching to another bonded Spirit starts a **12-hour real-time attunement coold
 
 - The newly selected Spirit becomes active immediately.
 - Its boon, affinity and Bond progression apply immediately after the switch.
-- The 12-hour cooldown prevents the player from switching to yet another Spirit until it expires.
+- The 12-hour cooldown prevents another Spirit switch until it expires.
 - The cooldown does not pause or weaken the newly equipped Spirit.
-- Spirit selection is also locked once a PvP encounter begins, so an active fight cannot become an endless counter-swapping exercise.
+- Spirit selection is locked once a PvP encounter begins.
 
-This makes Spirit choice strategically meaningful without trapping a player in a poor selection for an excessive period.
+This prevents scouting-and-counter-swapping without trapping a player in one choice for an excessive period.
 
-### 4.2 Hybrid Bond progression
+## 5. Bond Development
+
+### 5.1 Hybrid progression
 
 Bond development uses a **hybrid real-time + activity model**.
 
-- The currently equipped Spirit gains a slow baseline amount of Bond progress continuously over real equipped time.
-- Relevant, server-validated actions can grant additional Bond progress and therefore accelerate development.
-- Only the currently equipped Spirit receives either form of progress.
-- Unequipped Spirits remain completely frozen even if the player performs actions that would normally suit them.
-- Activity bonuses should reward playing in ways that fit the Spirit's nature rather than encourage one universal repetitive grind.
-- Repeated low-value actions must not become an exploitable infinite Bond farm; exact diminishing returns, caps or eligibility rules will be designed later with the underlying activity systems.
+The currently equipped Spirit gains:
 
-Illustrative affinity-aligned activity themes:
+1. a slow baseline amount of Bond progress continuously over real equipped time; and
+2. additional Bond progress from qualifying affinity-aligned actions.
+
+Illustrative aligned activity themes:
 
 - **Fire:** combat, dangerous encounters, decisive/offensive actions.
 - **Wind:** travel, evasion, exploration, mobility-oriented actions.
-- **Water:** spellcasting, support, adaptive or restorative actions where appropriate.
+- **Water:** spellcasting, support, adaptive/restorative actions where appropriate.
 - **Earth:** crafting, defense, endurance, protection-oriented actions.
-- **Light:** healing, cleansing, warding, protection and rescue-oriented actions.
-- **Dark:** curses, debuffs, concealment, pressure and other thematically dark actions.
+- **Light:** healing, cleansing, warding, protection, rescue-oriented actions.
+- **Dark:** curses, debuffs, concealment, pressure and thematically dark actions.
 
-These examples describe direction, not a final list of Bond-awarding actions.
+The exact action catalogue is deferred until the connected systems are designed.
 
-### 4.3 Bond timeline
+### 5.2 Server authority and anti-farming
+
+All Spirit encounter checks and activity-based Bond gains are **server-authoritative**.
+
+The server evaluates completed, meaningful actions rather than client clicks.
+
+Examples that should not generate legitimate Bond progress simply by repetition include:
+
+- repeated trivial fights;
+- zero-value crafting loops;
+- refresh spam;
+- cancelled journeys;
+- fake healing where no meaningful damage existed;
+- duplicated/replayed requests;
+- client-side timer manipulation.
+
+Activity-based acceleration may use eligibility rules, diminishing returns, daily contribution ceilings or contextual weighting as needed later, but no exploit may push total maturation below the hard minimum.
+
+### 5.3 Bond timeline
 
 The mature 5% Spirit Bond is deliberately long-term progression.
 
-- A Spirit developed through passive equipped time alone should take approximately **9 months of cumulative equipped time** to reach its mature 5% Bond.
-- Affinity-appropriate activity can accelerate that progression.
-- Activity can reduce the total effective development time by at most roughly one-third of the passive baseline.
-- The **absolute fastest intended path to a mature 5% Bond is approximately 6 months**.
-- A regularly active player should commonly land between those extremes, roughly in the **7-8 month** range.
-- Unequipping the Spirit pauses both the passive clock and all activity-based progress for that Spirit; previously earned progress remains intact.
-- No amount of repetitive grinding should be able to push maturation below the 6-month floor.
+- Passive equipped time alone: approximately **9 months of cumulative active-equipped time** to reach 5%.
+- Affinity-appropriate activity accelerates development.
+- Activity can shave at most roughly one-third off the passive baseline.
+- Absolute fastest intended maturation: approximately **6 months**.
+- Regular active player: commonly around **7-8 months**.
+- Unequipping pauses passive and activity progress for that Spirit.
+- Previously earned progress is never lost by simply switching Spirits.
 
-This keeps a permanent 5% Spirit boon genuinely significant while still rewarding players who actively behave in ways aligned with their chosen Spirit.
-
-### 4.4 Continuous boon growth
+### 5.4 Continuous boon growth
 
 The Spirit's permanent boon grows **continuously** with Bond progress rather than jumping only at milestone dates.
 
-The intended passive curve preserves the useful shape of the old system:
+The passive-equivalent curve preserves the useful shape of the old system:
 
-- from Bond start to roughly the first **3 months** of passive-equivalent progress, the boon rises smoothly from **0% to 3%**;
-- over the following roughly **6 months** of passive-equivalent progress, the boon rises smoothly from **3% to the mature 5%**;
-- affinity-appropriate activity advances the same underlying Bond progress faster, while the absolute 6-month maturation floor still applies;
-- the UI may therefore show precise intermediate values such as **+1.47%**, **+3.62%**, or **+4.91%** rather than only 0%, 3% and 5%;
-- inactive Spirits freeze at their exact current value and resume from that exact value when re-equipped.
+- Bond start to roughly first **3 months** of passive-equivalent progress: **0% → 3%** smoothly;
+- following roughly **6 months**: **3% → 5%** smoothly;
+- aligned activity advances the same underlying progress faster;
+- the 6-month absolute minimum remains in force;
+- the UI may show precise values such as **+1.47%**, **+3.62%**, or **+4.91%**.
 
-For Light and Dark, the combined 5% budget follows the same continuous curve and remains evenly split between the two specialisations at every point. For example, when the total Apex boon has reached 3%, each component is 1.5%; at full maturity the two components become 2.5% + 2.5%.
+For Light and Dark, the total boon follows the same curve and stays evenly split at all times. At a 3% total Apex boon, each component is 1.5%; at maturity the split is 2.5% + 2.5%.
 
-This prevents players from simultaneously maxing every spirit simply because they have found them all.
+### 5.5 Bond permanence and ownership
 
-### 4.5 Bond permanence and ownership
+Once favour is earned and the Bond is established, the Bond is **permanent character progression**.
 
-Once a Spirit has granted favour and a Bond has been established, that Bond is **permanent character progression**.
-
-An established Bond:
+It:
 
 - cannot be traded;
 - cannot be sold;
 - cannot be stolen;
-- cannot be reset by switching Spirits;
+- cannot be reset by switching;
 - cannot be permanently destroyed by ordinary gameplay;
-- cannot be erased by the Spirit being permanently killed as a punishment mechanic.
+- cannot be erased through routine character death;
+- cannot be deleted because the Spirit is permanently killed as a punishment mechanic.
 
-Story content may temporarily separate a Spirit from the player or temporarily prevent attunement, but such events do not erase Bond progress or months of development. The Spirit is a relationship and progression system, not a disposable inventory item.
+Story content may temporarily separate a Spirit from the player or prevent attunement, but it cannot erase months of Bond progress.
 
-## 5. Ordinary Elemental Spirits
+## 6. Ordinary Elemental Spirits
 
 The four ordinary elemental identities currently being preserved are:
 
@@ -226,32 +320,53 @@ The four ordinary elemental identities currently being preserved are:
 - **Wind:** evasion / avoidance / dodge.
 - **Earth:** defense and crafting effectiveness.
 
-The mature permanent Spirit boon should be treated as a major reward around a **5% total power budget**.
+A mature ordinary Spirit has a permanent **5% total boon budget** before PvP affinity adjustment.
 
-The old permanent 10% endpoint should not simply return as a permanently stacked passive. Instead, the top-end relationship/training stage can unlock **Spirit Manifestation**, a limited state that temporarily pushes the spirit toward the old 10% power level.
+The old permanent 10% endpoint does not return as a permanently stacked passive. The dramatic 10% state belongs to Spirit Manifestation.
 
-### 5.1 Manual Spirit Manifestation
+## 7. Spirit Manifestation
 
-Spirit Manifestation is a **manual tactical activation**, not an automatic emergency trigger and not a build-up meter.
+Spirit Manifestation is a **manual tactical activation**.
 
-- Manifestation becomes available only after the Spirit has reached the required mature Bond/training stage.
-- The player deliberately chooses when to activate it through a dedicated Manifest action.
-- While active, the equipped Spirit temporarily rises from its normal mature 5% total boon toward the old 10% power level.
-- For Light and Dark, the same even split is preserved during Manifestation: the normal 2.5% + 2.5% mature boon can rise toward 5% + 5% while manifested.
-- Only the currently equipped Spirit can Manifest.
-- Manifestation lasts **15 minutes** once manually activated.
-- After activation, Spirit Manifestation enters a **24-hour real-time cooldown** before it can be used again.
-- The cooldown starts at the moment Manifestation is activated, not when the 15-minute active window ends.
-- **Manifestation consumes no mana and no separate Spirit resource.** The 24-hour cooldown is the complete activation cost.
-- This keeps Manifestation equally available to martial, ranged, shadow and magical builds rather than making a long-developed Spirit capstone depend on a caster resource.
-- Manifestation cannot be transferred to another Spirit by switching; Spirit switching remains governed by the separate 12-hour attunement cooldown.
-- Whether Manifestation requires restrictions in any specific PvP or economic contexts remains a later balance decision.
+It is not an automatic emergency trigger and not a separate build-up meter.
 
-The purpose is to give the player agency over when to spend the Spirit's dramatic temporary power rather than letting the game trigger it automatically at an arbitrary health threshold. The 15-minute window is long enough to support a serious combat, adventure or specialist activity burst, while the 24-hour cooldown prevents the 10% state from becoming the player's normal operating condition.
+Rules:
 
-## 6. Elemental Affinity in PvP
+- available only after the Spirit reaches the required mature Bond/training stage;
+- deliberately activated by the player;
+- only the currently equipped Spirit can Manifest;
+- lasts **15 minutes**;
+- has a **24-hour real-time cooldown**;
+- cooldown begins the moment Manifestation is activated;
+- consumes **no mana**;
+- consumes **no separate Spirit resource**;
+- the cooldown itself is the full activation cost;
+- cannot be transferred between Spirits by switching;
+- the separate 12-hour attunement-switch cooldown still applies.
 
-Spirits create a **soft counter system** in PvP rather than hard rock-paper-scissors that overrides the rest of a player's build.
+### 7.1 Where Manifestation works
+
+Manifestation works **anywhere the underlying Spirit boon legitimately works**.
+
+Potentially relevant contexts include:
+
+- PvP;
+- PvE;
+- adventures;
+- exploration;
+- healing;
+- crafting;
+- spellcasting;
+- shadow activities;
+- other systems affected by that Spirit's boon.
+
+There is no arbitrary global "combat only" restriction.
+
+A future competitive or economic mode may explicitly disable, normalize or cap Spirit effects as part of that mode's own rules, but such a restriction belongs to the mode rather than being a weakness built into Manifestation itself.
+
+## 8. Elemental Affinity in PvP
+
+Spirits create a **soft counter system** in PvP rather than hard rock-paper-scissors that overrides the player's entire build.
 
 Ordinary-element wheel:
 
@@ -262,29 +377,29 @@ Ordinary-element wheel:
 | Wind | Water | Earth | Wind / Fire |
 | Earth | Wind | Fire | Earth / Water |
 
-Affinity modifies the **active Spirit boon**, not the player's entire character.
+Affinity modifies the **active Spirit boon**, not all character stats.
 
-The ordinary mature PvP values are now locked as:
+Locked mature values:
 
-- **disadvantage: 4% effective boon**
-- **neutral: 5% effective boon**
-- **advantage: 6% effective boon**
+- **disadvantage: 4% effective boon**;
+- **neutral: 5% effective boon**;
+- **advantage: 6% effective boon**.
 
-During Spirit Manifestation, the same matchup logic is preserved but the Spirit system has an absolute **10% boon ceiling**:
+During Manifestation:
 
-- **disadvantage while manifested: 8%**
-- **neutral while manifested: 10%**
-- **advantage while manifested: 10%**
+- **disadvantage: 8%**;
+- **neutral: 10%**;
+- **advantage: 10%**.
 
-The advantage case therefore caps at 10% instead of scaling to 12%. This preserves matchup value during normal play while ensuring Manifestation never exceeds the intended maximum Spirit power budget.
+**10% is the absolute Spirit boon ceiling.** The advantaged manifested case caps at 10% instead of scaling to 12%.
 
-Spirit selection is locked once a PvP encounter begins, and the general **12-hour attunement cooldown** prevents players from repeatedly scouting and counter-swapping outside combat as well.
+Spirit selection is locked after PvP begins, and the 12-hour general attunement cooldown prevents repeated pre-fight counter-swapping.
 
-## 7. Light and Dark Apex Spirits
+## 9. Light and Dark Apex Spirits
 
-Add **Light** and **Dark** as rare Apex Spirit affinities outside the normal four-element wheel.
+Light and Dark sit outside the normal four-element wheel.
 
-Agreed affinity rules:
+Affinity rules:
 
 - Light has an advantage against Fire, Water, Wind and Earth.
 - Dark has an advantage against Fire, Water, Wind and Earth.
@@ -292,51 +407,46 @@ Agreed affinity rules:
 - Light and Dark are both strong against each other.
 - Light vs Light is neutral.
 - Dark vs Dark is neutral.
-- Light and Dark should be much rarer and harder to earn favour from than ordinary spirits.
-- Rarity alone must not be relied on as their primary balance mechanism.
+- Their rarity and favour difficulty make them prestigious, but rarity alone is not their balance mechanism.
 
-This makes Light and Dark prestigious Apex affinities without giving the four ordinary elements a mirrored weakness bonus against them.
-
-## 8. Light and Dark Opposed Specialisations
-
-The chosen direction is **split specialisation within the same total mature power budget**.
-
-Light and Dark do **not** each receive a simple universal +5% general combat buff. Instead, their mature boon is split **evenly at 2.5% + 2.5%**, keeping the combined power budget equivalent to one ordinary mature 5% Spirit.
-
-### Light Spirit
+### 9.1 Light specialisation
 
 Mature boon direction:
 
-- **+2.5% protection / mitigation effectiveness**
-- **+2.5% restoration / cleansing effectiveness**
+- **+2.5% protection / mitigation effectiveness**;
+- **+2.5% restoration / cleansing effectiveness**.
 
-Broader identity for abilities and later Spirit Magic:
+Broader identity:
 
-- protection and mitigation
-- restoration/healing support
-- cleansing and resistance to harmful effects
-- warding/magical resistance
-- possibly perception or accuracy as a secondary advanced theme
+- protection and mitigation;
+- restoration/healing support;
+- cleansing and resistance to harmful effects;
+- warding/magical resistance;
+- possibly perception or accuracy as a secondary advanced theme.
 
-### Dark Spirit
+During Manifestation, the split can rise toward **5% + 5%**, subject to the same absolute 10% total Spirit ceiling.
+
+### 9.2 Dark specialisation
 
 Mature boon direction:
 
-- **+2.5% offensive pressure**
-- **+2.5% curse / debuff effectiveness**
+- **+2.5% offensive pressure**;
+- **+2.5% curse / debuff effectiveness**.
 
-Broader identity for abilities and later Spirit Magic:
+Broader identity:
 
-- offensive pressure
-- critical/finishing pressure
-- curses and debuffs
-- concealment/suppression
-- life manipulation as a possible advanced theme
-- mana manipulation as a possible advanced theme
+- offensive pressure;
+- critical/finishing pressure;
+- curses and debuffs;
+- concealment/suppression;
+- life manipulation as a possible advanced theme;
+- mana manipulation as a possible advanced theme.
 
-The exact mechanical definitions of "protection/mitigation effectiveness", "restoration/cleansing effectiveness", "offensive pressure", and "curse/debuff effectiveness" should be defined when the v2 combat and status-effect math is designed. The important locked decision here is that Light and Dark each receive **two equally weighted 2.5% mature boon components**, not one dominant effect and one minor effect.
+During Manifestation, the split can rise toward **5% + 5%**, subject to the same absolute 10% total Spirit ceiling.
 
-## 9. Spirit Records, Codex and Chronicle
+The exact combat/status formulas behind these labels are intentionally deferred until the v2 combat and status-effect systems are designed.
+
+## 10. Spirit Records, Codex and Chronicle
 
 Spirit discovery and relationship history should be represented in several layers rather than collapsed into one generic achievement entry.
 
@@ -361,11 +471,12 @@ When the Spirit grants favour and the Bond is established:
 
 ### Bond developing
 
-The Spirit profile should display relationship/progression state such as:
+The Spirit profile should display:
 
 - current Bond progress;
 - current boon percentage;
-- active/inactive attunement state;
+- dormant/active state;
+- equipped/inactive attunement state;
 - progress toward maturity;
 - Manifestation availability/cooldown once unlocked.
 
@@ -379,30 +490,40 @@ A Spirit's first successful Manifestation becomes a **Chronicle milestone**.
 
 ### Light and Dark discovery
 
-Discovering a Light or Dark Spirit should be treated as a rare historical event in the player's record, suitable for a Chronicle milestone and a Feat-of-Strength-style prestige entry without granting extra mechanical power merely for owning the record.
+Discovering a Light or Dark Spirit is suitable for both:
+
+- a rare Chronicle milestone; and
+- a Feat-of-Strength-style prestige entry.
+
+The record itself grants no extra mechanical power.
 
 The separation is intentional:
 
 - **Codex:** what the character knows about Spirits and the world;
 - **Spirit profile:** the specific ongoing relationship;
-- **Chronicle:** important events in that character's personal history.
+- **Chronicle:** important events in that character's personal history;
+- **Feat of Strength:** exceptional prestige/history, not a power source.
 
-## 10. Balance Principles
+## 11. Balance Principles
 
-- The active Spirit should matter, but it must not outweigh the player's total build.
-- Fire/Water/Wind/Earth must remain worthwhile even after Light/Dark exist.
-- Light/Dark should feel prestigious because of their affinity relationships and specialised identity, not because they simply have more raw permanent percentage than everything else.
+- The active Spirit should matter, but must not outweigh the player's total build.
+- Fire/Water/Wind/Earth must remain worthwhile after Light/Dark exist.
+- Light/Dark should feel prestigious through affinity relationships and specialised identity, not larger permanent raw percentages.
 - Spirit effects must coexist safely with Education, equipment, Practical Mastery, Magic School Mastery, Legacy perks, consumables, enhancements and future systems.
-- Spirit Manifestation is the preferred place for dramatic temporary power, rather than escalating permanent passive stacking.
-- **10% is the absolute Spirit boon ceiling**, including advantage matchups during Manifestation.
+- Spirit Manifestation is where dramatic temporary power belongs, instead of escalating permanent passive stacking.
+- **10% is the absolute Spirit boon ceiling.**
 - Individual Spirit personality must not become a hidden mechanical rarity roll.
 - Permanent Bond progress must not be invalidated by trading, theft, routine death states or narrative punishment.
+- Duplicate affinities must not become a deterministic path toward missing Apex Spirits.
+- Rare systems must be server-authoritative and resistant to repetitive trivial-action farming.
 
-## 11. Open Spirit Questions
+## 12. Remaining Spirit Questions
 
-- What is the base probability of getting any Spirit encounter before the 24/24/24/24/2/2 affinity roll?
-- When does the numerical Spirit boon begin: immediately after favour, when Silverbough training begins, or only after the prerequisite training is completed?
-- Can Bond time progress before the player completes the matching Silverbough Elemental Spirit Magic training?
-- Are Light/Dark favour tests mechanically harder than ordinary favour tests, or is their rarity enough?
-- If a player already has a Bond for an affinity and encounters another Spirit of that affinity, should that encounter be purely Codex/lore or offer some non-power relationship content?
-- Should Manifestation be available everywhere its underlying boon is relevant, or should specific competitive/economic contexts suppress it?
+The core Spirit loop is now largely defined. Remaining design work is mostly about the **Silverbough Spirit Magic curriculum and presentation**, rather than changing the Bond economy itself.
+
+Open questions include:
+
+- Should Silverbough teach one common Spirit Magic curriculum followed by affinity specialisations, or six mostly separate affinity curricula?
+- What exact courses/prerequisites unlock foundational Spirit Attunement and later Manifestation?
+- Do individual Spirits gain additional purely narrative relationship scenes as Bond grows?
+- How should Spirit-focused clues, quests and discoveries surface in the world and Codex without turning Spirit hunting into a guaranteed farm?
