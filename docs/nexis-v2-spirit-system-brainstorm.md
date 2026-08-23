@@ -373,6 +373,24 @@ Spirit Manifestation unlocked
 
 This prevents a player from completing the academic curriculum and instantly bypassing the long relationship progression. Likewise, reaching 5% Bond without the formal capstone training does not unlock Manifestation.
 
+### 3.9 Spirit techniques use cooldowns, not mana
+
+Active Spirit Magic techniques are governed primarily by **cooldowns**, not by the character's mana pool.
+
+This is intentional because Spirits are a cross-build system. A fighter, archer, rogue, crafter or other non-caster may form and develop a Spirit Bond long before they ever acquire meaningful mana. Requiring mana for Spirit techniques would unnecessarily turn Spirit progression into a caster-dependent subsystem.
+
+Rules:
+
+- Spirit techniques do **not** require mana by default;
+- Spirit techniques do **not** use a separate Spirit Energy resource;
+- stronger techniques receive longer cooldowns than lighter utility techniques;
+- cooldown duration is the main limiter on active Spirit abilities;
+- the passive Bond boon remains resource-free;
+- Spirit Manifestation remains resource-free and continues to use its separate 24-hour cooldown;
+- future exceptional techniques may have contextual requirements, but the baseline Spirit system must remain usable by non-casters.
+
+This keeps the system understandable and avoids adding another resource bar or forcing every Spirit user to develop a mana build simply to access the capabilities their Spirit education already unlocked.
+
 ## 4. One Active Spirit
 
 Players can eventually discover and bond with multiple Spirits, potentially all six affinities, but **only one Spirit can be equipped/actively attuned at a time**.
@@ -710,12 +728,13 @@ The separation is intentional:
 - Rare systems must be server-authoritative and resistant to repetitive trivial-action farming.
 - Spirit education and Bond progression must remain distinct: one unlocks capabilities, the other measures relationship depth and boon strength.
 - Spirit clues may improve search direction and encounter context, but must never become exact deterministic spawn coordinates.
+- Spirit Magic must remain accessible to non-caster builds; active Spirit techniques therefore use cooldowns rather than requiring mana or a dedicated Spirit resource.
 
 ## 12. Remaining Spirit Questions
 
-The core Spirit loop, rarity model, Bond economy, curriculum architecture, relationship milestones and discovery philosophy are now largely defined.
+The core Spirit loop, rarity model, Bond economy, curriculum architecture, relationship milestones, discovery philosophy and active-ability resource model are now largely defined.
 
-Remaining design work is concentrated around the **actual six affinity curricula and their ability identities**.
+Remaining design work is concentrated around the **actual six affinity curricula, ability identities, cooldowns and course durations**.
 
 Open questions include:
 
@@ -725,4 +744,5 @@ Open questions include:
 - What exact six-course ability progression should Earth unlock?
 - What exact six-course ability progression should Light unlock?
 - What exact six-course ability progression should Dark unlock?
+- What cooldown bands should utility, active, advanced and Greater Communion techniques use?
 - What durations should ordinary affinity courses use, and how much longer should Light/Dark courses take?
