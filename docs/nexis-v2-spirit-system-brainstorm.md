@@ -25,10 +25,11 @@ The core progression loop is:
 9. Complete foundational Spirit Attunement training for that affinity.
 10. Activate the Bond and begin numerical Bond progression.
 11. Deepen the Bond over real equipped time plus affinity-aligned activity.
-12. Gain the Spirit's passive boon continuously as Bond matures.
-13. At mature Bond/training, unlock Spirit Manifestation for a limited temporary power state.
+12. Complete the affinity-specific Spirit Magic curriculum to unlock advanced capabilities.
+13. Gain the Spirit's passive boon continuously as Bond matures.
+14. At mature Bond plus completed Manifestation training, unlock Spirit Manifestation for a limited temporary power state.
 
-The system intentionally separates **discovery, favour, Bond ownership, formal training, Bond development and manifestation**.
+The system intentionally separates **discovery, favour, Bond ownership, formal training, Bond development, Spirit Magic capability and manifestation**.
 
 ## 2. Discovery and Favour
 
@@ -190,18 +191,110 @@ Bond becomes active
 0% → 5% Bond progression begins
 ```
 
-### 3.2 Bond is an educational prerequisite
+### 3.2 Common Spirit Studies foundation
 
-The player cannot simply enrol in a matching Elemental Spirit Magic discipline because they have enough gold or completed a generic course. The Spirit must first have accepted them.
+Silverbough uses a **shared foundational curriculum followed by affinity-specific Spirit Magic schools**, rather than six wholly separate tracks starting from nothing.
 
-Silverbough then teaches the player how to channel and work with that Bond safely and effectively.
+The broad foundation is:
 
-This produces a two-way gate:
+```text
+Spirit Studies
+      ↓
+Spirit Lore
+      ↓
+Spirit Communication
+      ↓
+Bond Theory
+      ↓
+[Spirit favour / permanent Bond required]
+      ↓
+Spirit Attunement
+      ↓
+Bond activates
+      ↓
+Affinity-specific Spirit Magic school
+```
 
-- **Spirit favour is required to access that affinity's Spirit training.**
-- **Foundational Spirit Attunement training is required before numerical Bond progression and its boon become active.**
+The early theoretical courses can be studied **before the player has found a Spirit**. This allows deliberate preparation without granting Spirit power from study alone.
 
-This keeps Education as the progression spine instead of letting a rare encounter bypass the rest of Nexis.
+**Spirit Attunement itself requires a real permanent Bond.** A player cannot complete the activation course merely because they have finished the theory.
+
+### 3.3 Spirit Attunement duration and effect
+
+Foundational **Spirit Attunement takes approximately 21 real-time days**.
+
+Completing it is the point at which the dormant Bond becomes mechanically active:
+
+- numerical Bond progression begins;
+- the boon begins at 0% and starts growing continuously;
+- equipped-time progression begins counting;
+- affinity-aligned activity can begin accelerating Bond development;
+- the matching affinity-specific Spirit Magic curriculum becomes available.
+
+The 21-day course is intentionally substantial because it converts a rare narrative relationship into a usable long-term progression system.
+
+### 3.4 Affinity-specific Spirit Magic schools
+
+After Spirit Attunement, the player enters the school matching the bonded Spirit's affinity.
+
+Each affinity has its own curriculum and capabilities. Illustrative direction includes:
+
+**Fire Spirit Magic**
+
+- Ember Channeling;
+- Flame Ward;
+- Combustive Projection;
+- Infernal Resonance;
+- Greater Fire Communion;
+- Fire Manifestation.
+
+**Earth Spirit Magic**
+
+- Stone Communion;
+- Earthen Ward;
+- Reinforcement;
+- Artisan's Resonance;
+- Greater Earth Communion;
+- Earth Manifestation.
+
+Equivalent structured schools will exist for Water, Wind, Light and Dark. Exact names, course counts, durations and individual ability unlocks remain design work rather than being assumed from these examples.
+
+### 3.5 Education and Bond measure different things
+
+Spirit education and Bond progression are deliberately separate systems:
+
+```text
+EDUCATION
+What can I do with this Spirit?
+
+BOND
+How deeply connected am I to this Spirit?
+```
+
+Education unlocks capabilities, techniques and eventually Manifestation training.
+
+Bond determines the depth and numerical strength of the relationship, including the continuously growing passive boon.
+
+The two systems must not duplicate the same progression under different names.
+
+### 3.6 Manifestation requires both mastery and maturity
+
+The final affinity-specific Manifestation course does **not** grant immediate Manifestation by itself.
+
+Spirit Manifestation unlocks only when both conditions are true:
+
+1. the player has completed the affinity's required Manifestation training; and
+2. that Spirit has reached its mature **5% Bond**.
+
+```text
+Manifestation education complete
+        +
+5% mature Bond
+        ↓
+Spirit Manifestation unlocked
+```
+
+This prevents a player from completing the academic curriculum and instantly bypassing the long relationship progression. Likewise, reaching 5% Bond without the formal capstone training does not unlock Manifestation.
 
 ## 4. One Active Spirit
 
@@ -516,14 +609,16 @@ The separation is intentional:
 - Permanent Bond progress must not be invalidated by trading, theft, routine death states or narrative punishment.
 - Duplicate affinities must not become a deterministic path toward missing Apex Spirits.
 - Rare systems must be server-authoritative and resistant to repetitive trivial-action farming.
+- Spirit education and Bond progression must remain distinct: one unlocks capabilities, the other measures relationship depth and boon strength.
 
 ## 12. Remaining Spirit Questions
 
-The core Spirit loop is now largely defined. Remaining design work is mostly about the **Silverbough Spirit Magic curriculum and presentation**, rather than changing the Bond economy itself.
+The core Spirit loop and curriculum architecture are now largely defined. Remaining design work is mostly about the **exact course content, relationship presentation and world-discovery hooks**.
 
 Open questions include:
 
-- Should Silverbough teach one common Spirit Magic curriculum followed by affinity specialisations, or six mostly separate affinity curricula?
-- What exact courses/prerequisites unlock foundational Spirit Attunement and later Manifestation?
+- What exact shared-foundation course durations and prerequisites should Spirit Lore, Spirit Communication and Bond Theory use?
+- How many courses should each affinity-specific Spirit Magic school contain, and should ordinary/Apex schools have the same course count?
+- What concrete abilities or passive capabilities should each affinity school unlock before Manifestation?
 - Do individual Spirits gain additional purely narrative relationship scenes as Bond grows?
 - How should Spirit-focused clues, quests and discoveries surface in the world and Codex without turning Spirit hunting into a guaranteed farm?
