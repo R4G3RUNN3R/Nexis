@@ -4,7 +4,7 @@
 >
 > This file captures the Spirit-system decisions made during the wider Nexis v2 redesign. It is intentionally separate from the final implementation spec so the system can continue evolving without pretending every number is settled.
 
-_Last updated: 2026-08-22_
+_Last updated: 2026-08-23_
 
 ## 1. Core Direction
 
@@ -205,9 +205,9 @@ The purpose is to give the player agency over when to spend the Spirit's dramati
 
 ## 6. Elemental Affinity in PvP
 
-Spirits should create a **soft counter system** in PvP rather than hard rock-paper-scissors that overrides the rest of a player's build.
+Spirits create a **soft counter system** in PvP rather than hard rock-paper-scissors that overrides the rest of a player's build.
 
-Working ordinary-element wheel:
+Ordinary-element wheel:
 
 | Active Spirit | Advantage over | Disadvantage against | Neutral against |
 |---|---|---|---|
@@ -218,13 +218,19 @@ Working ordinary-element wheel:
 
 Affinity modifies the **active Spirit boon**, not the player's entire character.
 
-Working mature-spirit example:
+The ordinary mature PvP values are now locked as:
 
-- disadvantage: about 4% effective boon
-- neutral: 5%
-- advantage: about 6%
+- **disadvantage: 4% effective boon**
+- **neutral: 5% effective boon**
+- **advantage: 6% effective boon**
 
-Exact values remain subject to later combat balancing.
+During Spirit Manifestation, the same matchup logic is preserved but the Spirit system has an absolute **10% boon ceiling**:
+
+- **disadvantage while manifested: 8%**
+- **neutral while manifested: 10%**
+- **advantage while manifested: 10%**
+
+The advantage case therefore caps at 10% instead of scaling to 12%. This preserves matchup value during normal play while ensuring Manifestation never exceeds the intended maximum Spirit power budget.
 
 Spirit selection is locked once a PvP encounter begins, and the general **12-hour attunement cooldown** prevents players from repeatedly scouting and counter-swapping outside combat as well.
 
@@ -291,9 +297,11 @@ The exact mechanical definitions of "protection/mitigation effectiveness", "rest
 - Light/Dark should feel prestigious because of their affinity relationships and specialised identity, not because they simply have more raw permanent percentage than everything else.
 - Spirit effects must coexist safely with Education, equipment, Practical Mastery, Magic School Mastery, Legacy perks, consumables, enhancements and future systems.
 - Spirit Manifestation is the preferred place for dramatic temporary power, rather than escalating permanent passive stacking.
+- **10% is the absolute Spirit boon ceiling**, including advantage matchups during Manifestation.
 
 ## 10. Open Spirit Questions
 
-- Should the working 4% / 5% / 6% ordinary PvP affinity numbers become the final baseline, and how should affinity interact with the 10% Manifestation ceiling?
 - Can particular spirit individuals have unique personalities or variants within the same affinity?
+- Should a player be able to bond with more than one Spirit of the same affinity, or only one per affinity?
+- Can an established Spirit Bond ever be traded, permanently lost, dismissed or killed?
 - How are Spirit discoveries represented in Chronicle/Codex/Bestiary-style knowledge systems?
