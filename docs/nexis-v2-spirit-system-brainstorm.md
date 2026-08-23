@@ -465,6 +465,25 @@ Spirit Manifestation unlocked
 
 This prevents a player from completing the academic curriculum and instantly bypassing the long relationship progression. Likewise, reaching 5% Bond without the formal capstone training does not unlock Manifestation.
 
+### 3.17 Spirit technique interaction rules
+
+Spirit techniques obey four shared interaction rules:
+
+1. **Only the currently equipped Spirit's affinity techniques are usable.** Learned techniques from inactive Spirits remain permanently learned, but cannot be activated until the matching Spirit is equipped again.
+2. **Technique effectiveness does not continuously scale with Bond percentage.** Bond controls the passive boon and the maturity requirement for Manifestation. Learned active techniques use their own explicitly designed values and formulas rather than being recalculated at every intermediate Bond value.
+3. **Technique cooldowns persist through switching and unequipping.** Cooldowns are server-authoritative elapsed-time states. Unequipping a Spirit, switching affinity, logging out, or re-equipping later cannot reset or shorten them.
+4. **Greater Communion and Spirit Manifestation are mutually exclusive Spirit states.** Greater Communion cannot be activated while Manifestation is active. Activating Manifestation immediately ends any active Greater Communion effect before Manifestation begins.
+
+This keeps the system legible:
+
+```text
+Bond = passive relationship strength
+Education = learned Spirit capabilities
+Cooldowns = limits on active Spirit techniques
+Greater Communion = powerful long-cooldown affinity state
+Manifestation = ultimate temporary expression of the Bond
+```
+
 ## 4. One Active Spirit
 
 Players can eventually discover and bond with multiple Spirits, potentially all six affinities, but **only one Spirit can be equipped/actively attuned at a time**.
@@ -804,17 +823,21 @@ The separation is intentional:
 - Spirit clues may improve search direction and encounter context, but must never become exact deterministic spawn coordinates.
 - Spirit Magic must remain accessible to non-caster builds; active Spirit techniques therefore use cooldowns rather than requiring mana or a dedicated Spirit resource.
 - Spirit Magic and conventional character spellcasting are separate progression/resource concepts even when a character eventually learns both.
+- Only techniques belonging to the currently equipped Spirit may be activated.
+- Spirit-technique cooldowns persist across switching, unequipping and logout and cannot be reset through attunement changes.
+- Bond percentage does not silently scale every active technique; active ability values are defined explicitly in their connected system specs.
+- Greater Communion and Spirit Manifestation cannot stack.
 
 ## 12. Remaining Spirit Questions
 
-The core Spirit loop, rarity model, Bond economy, curriculum architecture, relationship milestones, discovery philosophy, active-ability resource model, six school identities, course durations and cooldown bands are now largely defined.
+The **Spirit subsystem architecture is now considered design-complete enough for formal specification**.
 
-Remaining design work is concentrated around **interaction rules and exact combat/action tuning**, which should be resolved alongside the systems they affect rather than guessed in isolation.
+The remaining unresolved values are deliberately deferred because they depend on other Nexis v2 systems that have not yet been fully designed. These include:
 
-Open questions include:
+- exact damage/healing/mitigation numbers for individual Spirit techniques;
+- exact durations for temporary technique effects and Greater Communion states;
+- exact status-effect formulas for slow, restraint, cleansing, curses and similar mechanics;
+- exact crafting modifiers for Earth techniques;
+- mode-specific suppression or normalization rules, if any future competitive/economic mode requires them.
 
-- Are Spirit techniques usable only while their matching Spirit is currently equipped/attuned?
-- Do active Spirit techniques have fixed effectiveness once learned, or scale numerically with Bond progress?
-- Do Spirit-technique cooldowns persist while a Spirit is unequipped and after switching to another Spirit?
-- Can Greater Communion and Spirit Manifestation overlap, or should they be mutually exclusive Spirit states?
-- What exact values, durations and status formulas should individual techniques use once the v2 combat, healing, crafting and status systems are defined?
+Those values should be resolved in the combat, healing, crafting, status-effect and mode-specific specs rather than guessed independently inside the Spirit subsystem.
