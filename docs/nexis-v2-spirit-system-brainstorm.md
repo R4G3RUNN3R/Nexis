@@ -167,6 +167,37 @@ A duplicate-affinity Spirit:
 
 This preserves the rarity of Light and Dark and keeps individual Spirits meaningful without creating a Spirit reroll economy.
 
+### 2.9 Knowledge-guided Spirit hunting
+
+Players may learn where Spirits are **more plausibly encountered**, but knowledge never becomes exact spawn coordinates or a guaranteed farming route.
+
+Useful clues can come from:
+
+- Codex entries;
+- History-related education;
+- ruins and relic discoveries;
+- NPC rumours;
+- Spirit relationship scenes;
+- old journals or expedition records;
+- world events;
+- unusual environmental signs.
+
+Clues should describe environments and conditions rather than exact map tiles. Examples of the intended style include reports that Fire Spirits favour old battlefields or volcanic fissures, or rumours of strange lights in Silverbough woods during storms.
+
+Knowledge therefore works as:
+
+```text
+Knowledge / clues
+      ↓
+better places and conditions to search
+      ↓
+more qualifying or boosted discovery opportunities
+      ↓
+still requires the rare Spirit encounter roll
+```
+
+The aim is to reward investigation and world knowledge without allowing a community guide to reduce Spirit hunting to standing on one coordinate and repeating the same action forever.
+
 ## 3. Silverbough Training and Bond Activation
 
 ### 3.1 Favour creates a dormant Bond
@@ -195,23 +226,21 @@ Bond becomes active
 
 Silverbough uses a **shared foundational curriculum followed by affinity-specific Spirit Magic schools**, rather than six wholly separate tracks starting from nothing.
 
-The broad foundation is:
+The foundation is linear:
 
 ```text
-Spirit Studies
-      ↓
 Spirit Lore
-      ↓
+   ↓
 Spirit Communication
-      ↓
+   ↓
 Bond Theory
-      ↓
-[Spirit favour / permanent Bond required]
-      ↓
+   ↓
+[Real Spirit Bond required]
+   ↓
 Spirit Attunement
-      ↓
+   ↓
 Bond activates
-      ↓
+   ↓
 Affinity-specific Spirit Magic school
 ```
 
@@ -219,11 +248,22 @@ The early theoretical courses can be studied **before the player has found a Spi
 
 **Spirit Attunement itself requires a real permanent Bond.** A player cannot complete the activation course merely because they have finished the theory.
 
-### 3.3 Spirit Attunement duration and effect
+### 3.3 Shared foundation durations
 
-Foundational **Spirit Attunement takes approximately 21 real-time days**.
+The shared Silverbough foundation uses substantial real-time education durations:
 
-Completing it is the point at which the dormant Bond becomes mechanically active:
+| Course | Duration |
+|---|---:|
+| **Spirit Lore** | **10 days** |
+| **Spirit Communication** | **14 days** |
+| **Bond Theory** | **18 days** |
+| **Spirit Attunement** | **21 days** |
+
+The first three theoretical courses therefore require **42 days** in total. Once the player has a real Spirit Bond, Spirit Attunement adds a further **21 days** before the Bond becomes mechanically active.
+
+### 3.4 Spirit Attunement effect
+
+Completing Spirit Attunement is the point at which the dormant Bond becomes mechanically active:
 
 - numerical Bond progression begins;
 - the boon begins at 0% and starts growing continuously;
@@ -233,11 +273,33 @@ Completing it is the point at which the dormant Bond becomes mechanically active
 
 The 21-day course is intentionally substantial because it converts a rare narrative relationship into a usable long-term progression system.
 
-### 3.4 Affinity-specific Spirit Magic schools
+### 3.5 Affinity-specific Spirit Magic schools
 
 After Spirit Attunement, the player enters the school matching the bonded Spirit's affinity.
 
-Each affinity has its own curriculum and capabilities. Illustrative direction includes:
+Each of the six affinities uses the same **six-course structural length**:
+
+```text
+Course I     Initial channeling
+Course II    Defensive / utility technique
+Course III   Active affinity technique
+Course IV    Advanced affinity technique
+Course V     Greater Communion
+Course VI    Manifestation training
+```
+
+This shared structure applies to:
+
+- Fire;
+- Water;
+- Wind;
+- Earth;
+- Light;
+- Dark.
+
+Light and Dark may use somewhat longer or more demanding course durations because they are Apex affinities, but they do not gain extra course slots merely to inflate the calendar.
+
+Illustrative ordinary-school direction includes:
 
 **Fire Spirit Magic**
 
@@ -257,9 +319,24 @@ Each affinity has its own curriculum and capabilities. Illustrative direction in
 - Greater Earth Communion;
 - Earth Manifestation.
 
-Equivalent structured schools will exist for Water, Wind, Light and Dark. Exact names, course counts, durations and individual ability unlocks remain design work rather than being assumed from these examples.
+Equivalent six-course schools will exist for Water, Wind, Light and Dark. Exact names and individual ability mechanics remain part of the next design step rather than being silently invented here.
 
-### 3.5 Education and Bond measure different things
+### 3.6 Courses unlock capabilities, not Bond percentage
+
+Affinity-specific Spirit Magic education should unlock **real capabilities** rather than simply adding more passive percentage at every course.
+
+The intended progression is:
+
+- Course I: learn to channel the affinity;
+- Course II: unlock a defensive or utility capability;
+- Course III: unlock an active affinity technique;
+- Course IV: unlock an advanced affinity technique;
+- Course V: unlock Greater Communion or another major capability;
+- Course VI: complete Manifestation training.
+
+The permanent 0-5% Spirit boon still comes from **Bond progression**, not these course completions.
+
+### 3.7 Education and Bond measure different things
 
 Spirit education and Bond progression are deliberately separate systems:
 
@@ -277,7 +354,7 @@ Bond determines the depth and numerical strength of the relationship, including 
 
 The two systems must not duplicate the same progression under different names.
 
-### 3.6 Manifestation requires both mastery and maturity
+### 3.8 Manifestation requires both mastery and maturity
 
 The final affinity-specific Manifestation course does **not** grant immediate Manifestation by itself.
 
@@ -388,7 +465,29 @@ The passive-equivalent curve preserves the useful shape of the old system:
 
 For Light and Dark, the total boon follows the same curve and stays evenly split at all times. At a 3% total Apex boon, each component is 1.5%; at maturity the split is 2.5% + 2.5%.
 
-### 5.5 Bond permanence and ownership
+### 5.5 Narrative relationship milestones
+
+Each bonded Spirit can gain additional **purely narrative relationship scenes** as the Bond deepens.
+
+Recommended milestones:
+
+- **1% Bond:** first deeper interaction;
+- **3% Bond:** established-relationship scene;
+- **5% Bond:** mature-Bond scene;
+- **first Manifestation:** unique post-Manifestation interaction.
+
+These scenes can reveal:
+
+- personality;
+- backstory;
+- memories;
+- opinions about the player;
+- Spirit lore;
+- clues about places, history or other Spirits.
+
+They do **not** grant hidden stat bonuses, stronger individual Spirit rolls or other mechanical advantages. Individuality remains narrative rather than becoming another optimisation layer.
+
+### 5.6 Bond permanence and ownership
 
 Once favour is earned and the Bond is established, the Bond is **permanent character progression**.
 
@@ -610,15 +709,20 @@ The separation is intentional:
 - Duplicate affinities must not become a deterministic path toward missing Apex Spirits.
 - Rare systems must be server-authoritative and resistant to repetitive trivial-action farming.
 - Spirit education and Bond progression must remain distinct: one unlocks capabilities, the other measures relationship depth and boon strength.
+- Spirit clues may improve search direction and encounter context, but must never become exact deterministic spawn coordinates.
 
 ## 12. Remaining Spirit Questions
 
-The core Spirit loop and curriculum architecture are now largely defined. Remaining design work is mostly about the **exact course content, relationship presentation and world-discovery hooks**.
+The core Spirit loop, rarity model, Bond economy, curriculum architecture, relationship milestones and discovery philosophy are now largely defined.
+
+Remaining design work is concentrated around the **actual six affinity curricula and their ability identities**.
 
 Open questions include:
 
-- What exact shared-foundation course durations and prerequisites should Spirit Lore, Spirit Communication and Bond Theory use?
-- How many courses should each affinity-specific Spirit Magic school contain, and should ordinary/Apex schools have the same course count?
-- What concrete abilities or passive capabilities should each affinity school unlock before Manifestation?
-- Do individual Spirits gain additional purely narrative relationship scenes as Bond grows?
-- How should Spirit-focused clues, quests and discoveries surface in the world and Codex without turning Spirit hunting into a guaranteed farm?
+- What exact six-course ability progression should Fire unlock?
+- What exact six-course ability progression should Water unlock?
+- What exact six-course ability progression should Wind unlock?
+- What exact six-course ability progression should Earth unlock?
+- What exact six-course ability progression should Light unlock?
+- What exact six-course ability progression should Dark unlock?
+- What durations should ordinary affinity courses use, and how much longer should Light/Dark courses take?
