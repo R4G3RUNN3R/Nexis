@@ -84,9 +84,58 @@ Future writing should preserve both sides of that relationship:
 
 **deep cognitive familiarity** + **independent personality**.
 
-## 6. Implications for Nexis v2
+## 6. Hennet Uthellien Is the Primary Administrator Account
 
-### 6.1 CIEL is part of the world's metaphysics
+**Hennet Uthellien is the primary Nexis account and the Administrator account.**
+
+This is an intentional convergence of two identities:
+
+- the canonical in-world identity of Hennet Uthellien, The Absolute, and
+- the trusted out-of-world administrative account used to operate Nexis.
+
+The game should preserve that relationship without allowing lore to become security logic.
+
+### 6.1 Administrative authority must be technical, not name-based
+
+Administrator privileges must be attached to trusted server-side account identity and authorization data, such as an internal account ID, role, or explicit privilege record.
+
+They must **never** be granted because:
+
+- a character is named `Hennet Uthellien`,
+- a display name matches the administrator,
+- a title says `The Absolute`,
+- a Chronicle entry or lore flag identifies the character as Hennet,
+- or client-side state claims administrator status.
+
+A player cannot obtain administrative authority by imitating Hennet's public-facing identity.
+
+### 6.2 Hennet can still appear as an ordinary player-facing character
+
+Unless administrative mode or a deliberate admin action is being used, Hennet's account should be capable of participating in the game through the same world-facing presentation as a character.
+
+That is consistent with his canonical preference for operating as an incognito mortal rather than displaying ultimate authority constantly.
+
+Administrative tools, diagnostics, bypasses, world controls, moderation controls, and development functions should therefore be visually and technically separated from Hennet's normal in-world presentation.
+
+### 6.3 Administrator powers are not ordinary game mechanics
+
+The fact that the Hennet account has administrative authority does not mean ordinary players can acquire equivalent powers through progression.
+
+Administrator capabilities exist to operate, maintain, test, moderate, repair, inspect, and deliberately alter Nexis when required. They are not part of the normal progression ladder and should not be balanced as player abilities.
+
+Where an admin action causes a visible world change, the resulting world state may be represented naturally in the fiction, but the authorization that permitted the action remains an operational concern rather than an in-world resource.
+
+### 6.4 CIEL may distinguish Hennet from ordinary accounts
+
+Because CIEL's true relationship with Hennet predates Nexis and is foundational canon, future CIEL design may legitimately give her a distinct relationship, tone, context, or level of recognition when interacting with the Hennet Administrator account.
+
+That distinction should arise from their canonical relationship, not from generic administrator messaging.
+
+CIEL should not address every administrator as though they are Hennet, and ordinary players should not receive Hennet-specific CIEL context merely by obtaining elevated moderation permissions.
+
+## 7. Implications for Nexis v2
+
+### 7.1 CIEL is part of the world's metaphysics
 
 CIEL should not merely sit on top of Nexis as a UI helper.
 
@@ -106,7 +155,7 @@ Her presence can legitimately intersect with:
 
 However, this must not turn CIEL into a universal spoiler system. Her knowledge, what she chooses to reveal, what she considers appropriate to reveal, what Hennet has asked her to conceal, and what ordinary player characters are capable of understanding must remain separate questions.
 
-### 6.2 CIEL must never feel like generic game software
+### 7.2 CIEL must never feel like generic game software
 
 Even when she performs useful UI functions, her presentation should feel like **CIEL interpreting the world**, not a detached operating system displaying a tooltip.
 
@@ -118,7 +167,7 @@ CIEL may present the information analytically but contextually, with awareness t
 
 The exact voice remains a separate writing/design subject, but the underlying identity is non-negotiable.
 
-### 6.3 Hennet must not become a conventional quest-giver god
+### 7.3 Hennet must not become a conventional quest-giver god
 
 Hennet's true status is too fundamental to waste by placing him in ordinary public lore as a transparent omnipotent mascot.
 
@@ -126,7 +175,7 @@ If Hennet appears directly or indirectly in Nexis content, his established patte
 
 His authorship of the world can support mysteries, impossible artifacts, cosmological contradictions, ancient traces, CIEL anomalies, hidden knowledge, world-scale revelations, and endgame truths without requiring public NPCs to understand who created reality.
 
-### 6.4 Objective truth and in-world scholarship must remain separate
+### 7.4 Objective truth and in-world scholarship must remain separate
 
 Because Nexis v2 places heavy emphasis on Education, Research, Archaeology, the Codex, historical interpretation, Grimoires, discoveries, and knowledge progression, this distinction becomes especially valuable.
 
@@ -142,7 +191,7 @@ Hennet can recognize the actual answer and still choose not to reveal it.
 
 This allows knowledge progression without turning Education into automatic omniscience.
 
-## 7. Canonical Design Constraints
+## 8. Canonical Design Constraints
 
 Future Nexis work should therefore follow these constraints:
 
@@ -154,21 +203,25 @@ Future Nexis work should therefore follow these constraints:
 6. **CIEL developed true individuality over immense time.** She is not merely an echo or puppet of Hennet.
 7. **CIEL historically assisted Hennet with analysis, casting, awareness, and delegated cognition.** Her game role should feel like an evolution of that history.
 8. **CIEL and Hennet share extreme familiarity but remain distinguishable personalities.**
-9. **The inhabitants of Nexis do not automatically know any of the above.** Public knowledge must be designed deliberately.
-10. **Knowledge systems should support incomplete and conflicting models of reality.** The Codex should distinguish observation, hypothesis, accepted scholarship, hidden knowledge, and objective canon where appropriate internally.
+9. **Hennet Uthellien is the primary Nexis Administrator account.** This is a fixed account identity, not a privilege obtainable through normal progression.
+10. **Administrator authority must be server-authoritative and account-bound.** Never infer administrator access from names, lore, titles, client state, or character presentation.
+11. **Hennet's ordinary in-world presentation and his administrator tooling must remain separable.** Admin privileges should not force his public character to behave like an omnipotent game-master avatar.
+12. **The inhabitants of Nexis do not automatically know any of the above.** Public knowledge must be designed deliberately.
+13. **Knowledge systems should support incomplete and conflicting models of reality.** The Codex should distinguish observation, hypothesis, accepted scholarship, hidden knowledge, and objective canon where appropriate internally.
 
-## 8. Current Open Lore Questions
+## 9. Current Open Lore Questions
 
 These are deliberately **not** answered by this canon record yet:
 
 - How much does present-day CIEL remember about the exact act of Nexis's creation?
 - Does CIEL know every design intention Hennet had for Nexis, or only what she personally witnessed/retained?
-- Is Hennet currently physically present within Nexis, absent, intermittently present, or operating through an incognito identity?
+- How visible is Hennet's ordinary character presence to the inhabitants and players of Nexis, and how often does he operate openly under his own name versus incognito identities?
 - Does any living NPC, god, institution, ancient civilization, Spirit, or hidden faction know Hennet's true identity?
 - What creation myths do the major Nexis cultures currently believe?
 - Did Hennet create Nexis personally from nothing, reshape an existing substrate, or construct it using deeper cosmological mechanisms?
 - What is the relationship between local gods/Overgods and Hennet if those entities exist within Nexis?
 - Are there artifacts, locations, laws of magic, or metaphysical anomalies that retain unmistakable traces of the creator?
 - How much of CIEL's true nature should ever become discoverable to ordinary player characters?
+- Should CIEL's Hennet-specific relationship be visible only to the Administrator account, or can carefully chosen public moments expose fragments of that familiarity without revealing the underlying truth?
 
 Those questions should be answered intentionally during lore/world-system design rather than accidentally by implementation.
