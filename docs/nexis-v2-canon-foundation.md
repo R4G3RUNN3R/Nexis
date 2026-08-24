@@ -133,6 +133,25 @@ That distinction should arise from their canonical relationship, not from generi
 
 CIEL should not address every administrator as though they are Hennet, and ordinary players should not receive Hennet-specific CIEL context merely by obtaining elevated moderation permissions.
 
+### 6.5 Hennet has one account with two profile projections
+
+Hennet uses one underlying account and one underlying character state, but the server exposes two different profile projections depending on the authenticated viewer.
+
+**Public Hennet** is the only projection visible to every other player, moderator, organization member, marketplace user, search result, ranking view, PvP record, public Chronicle view, and ordinary game surface. It presents Hennet as an ordinary player and must not reveal:
+
+- The Absolute identity;
+- creator-of-Nexis canon;
+- Administrator status or operational privilege;
+- private/true attributes;
+- private CIEL context;
+- hidden admin controls or diagnostic state.
+
+**True Hennet** is visible only to the authenticated primary owner of the Hennet account. It may expose the true profile, Administrator controls, private diagnostics and Hennet-specific CIEL context.
+
+This separation must be enforced by the server. Unauthorized clients must never receive the true profile and merely hide it in the UI.
+
+CIEL must preserve the same boundary. In public-facing contexts she must not accidentally reveal Hennet's identity through wording, familiarity, titles, omniscient references or special treatment that would expose the truth. Her full recognition of Hennet belongs to the private authorized view.
+
 ## 7. Implications for Nexis v2
 
 ### 7.1 CIEL is part of the world's metaphysics
@@ -206,8 +225,11 @@ Future Nexis work should therefore follow these constraints:
 9. **Hennet Uthellien is the primary Nexis Administrator account.** This is a fixed account identity, not a privilege obtainable through normal progression.
 10. **Administrator authority must be server-authoritative and account-bound.** Never infer administrator access from names, lore, titles, client state, or character presentation.
 11. **Hennet's ordinary in-world presentation and his administrator tooling must remain separable.** Admin privileges should not force his public character to behave like an omnipotent game-master avatar.
-12. **The inhabitants of Nexis do not automatically know any of the above.** Public knowledge must be designed deliberately.
-13. **Knowledge systems should support incomplete and conflicting models of reality.** The Codex should distinguish observation, hypothesis, accepted scholarship, hidden knowledge, and objective canon where appropriate internally.
+12. **Hennet has one underlying account with public and private server-generated profile projections.** Everyone except the authenticated primary owner receives only the ordinary public facade.
+13. **The true Hennet profile must never be transmitted to unauthorized clients.** Visibility is enforced at the API/domain boundary, not by hiding fields in frontend code.
+14. **CIEL must not publicly expose Hennet through special wording or knowledge.** Full Hennet-specific recognition belongs to the private authorized context.
+15. **The inhabitants of Nexis do not automatically know any of the above.** Public knowledge must be designed deliberately.
+16. **Knowledge systems should support incomplete and conflicting models of reality.** The Codex should distinguish observation, hypothesis, accepted scholarship, hidden knowledge, and objective canon where appropriate internally.
 
 ## 9. Current Open Lore Questions
 
@@ -215,13 +237,11 @@ These are deliberately **not** answered by this canon record yet:
 
 - How much does present-day CIEL remember about the exact act of Nexis's creation?
 - Does CIEL know every design intention Hennet had for Nexis, or only what she personally witnessed/retained?
-- How visible is Hennet's ordinary character presence to the inhabitants and players of Nexis, and how often does he operate openly under his own name versus incognito identities?
 - Does any living NPC, god, institution, ancient civilization, Spirit, or hidden faction know Hennet's true identity?
 - What creation myths do the major Nexis cultures currently believe?
 - Did Hennet create Nexis personally from nothing, reshape an existing substrate, or construct it using deeper cosmological mechanisms?
 - What is the relationship between local gods/Overgods and Hennet if those entities exist within Nexis?
 - Are there artifacts, locations, laws of magic, or metaphysical anomalies that retain unmistakable traces of the creator?
 - How much of CIEL's true nature should ever become discoverable to ordinary player characters?
-- Should CIEL's Hennet-specific relationship be visible only to the Administrator account, or can carefully chosen public moments expose fragments of that familiarity without revealing the underlying truth?
 
 Those questions should be answered intentionally during lore/world-system design rather than accidentally by implementation.
