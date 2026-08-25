@@ -14,8 +14,11 @@ Before implementing foundation code, read and preserve:
 
 - `v2/docs/FOUNDATION.md`
 - `v2/docs/COMMAND-EXECUTION.md`
+- `v2/docs/IDENTITY-AUTHORIZATION.md`
 
 `COMMAND-EXECUTION.md` is the approved authoritative mutation/concurrency design. Do not simplify it into one mega-handler, blanket optimistic concurrency, blanket locking, direct scheduler SQL writes, or client-authoritative state.
+
+`IDENTITY-AUTHORIZATION.md` is the approved identity/security boundary. Preserve Account/Character separation, the initial one-playable-character-per-account policy, immutable public player identity, capability/policy-based staff authorization, entitlement separation, and the prohibition on character-name/client-state privilege.
 
 ## First actions for Claude Code / Codex
 
@@ -26,6 +29,7 @@ Before implementing foundation code, read and preserve:
 5. Convert `Nexis.Architecture.Tests` from a placeholder into a real automated test project using an approved, current .NET test stack.
 6. Add dependency-boundary tests before adding gameplay modules.
 7. Read `v2/docs/COMMAND-EXECUTION.md` and implement foundation work against its command identity, execution-lane, concurrency, transaction and idempotency constraints rather than inventing a separate request model.
+8. Read `v2/docs/IDENTITY-AUTHORIZATION.md` before changing the current placeholder Identity contracts; split public Identity contracts from implementation rather than allowing the placeholder module assembly to become the permanent integration boundary.
 
 ## Required architecture tests
 
@@ -38,6 +42,7 @@ Prove at minimum that:
 - no authorization decision grants privilege from character name, display name, title or client-supplied role state.
 - query paths cannot mutate authoritative state.
 - background/system workers cannot bypass the command/domain boundary to write authoritative game state directly.
+- account/platform capabilities, gameplay-domain roles and commercial entitlements remain separate authorization concepts.
 
 ## Next foundation slices
 
@@ -46,12 +51,16 @@ After the solution is green, proceed in this order:
 1. **Command execution + identity/security foundation**
    - universal command identity/correlation primitives only where genuinely cross-domain;
    - authenticated account context and trusted actor-context construction;
-   - explicit authorization policy contracts;
+   - explicit authorization policy/capability contracts rather than ordinal-role privilege checks;
+   - permanent AccountId/CharacterId separation while enforcing one playable character per normal account initially;
+   - immutable public player identity independent of mutable display name;
    - module-owned typed command contracts rather than one global gameplay command assembly;
+   - split `Nexis.Identity.Contracts` from Identity implementation before broad module integration;
    - execution-lane orchestration seams without domain gameplay rules in the dispatcher;
    - Hennet public/private server-generated profile projection boundary;
    - tests proving unauthorized callers never receive private Hennet/admin fields;
-   - tests proving client payloads cannot supply or escalate actor/account/role authority.
+   - tests proving client payloads cannot supply or escalate actor/account/role authority;
+   - tests proving guild/consortium roles and commercial entitlements cannot become platform admin privilege.
 
 2. **Event/audit + command lifecycle foundation**
    - event envelope/factory using `IGameClock`;
@@ -69,7 +78,8 @@ After the solution is green, proceed in this order:
    - implement idempotency registry/receipt persistence, transaction boundaries and durable outbox behind abstractions;
    - use optimistic revisions by default and selective ordered locks for contested/high-value mutations as defined in `COMMAND-EXECUTION.md`;
    - provide bounded whole-transaction retry classification for retryable PostgreSQL concurrency failures;
-   - do not expose EF Core/Npgsql-specific types through domain contracts;
+   - external auth-provider mappings attach to AccountId behind infrastructure adapters and never become game-domain identity;
+   - do not expose EF Core/Npgsql/auth-provider-specific types through domain contracts;
    - no v2 persistence code may alter the live v1 database.
 
 4. **Migration harness foundation**
@@ -86,6 +96,7 @@ Do not begin broad Education, Combat, Economy, Magic, Spirit, World or Organizat
 - the solution builds cleanly;
 - dependency architecture tests exist and pass;
 - identity/Hennet projection security tests exist and pass;
+- Account/Character/public-identity boundaries and capability authorization are represented and tested;
 - command identity/execution-lane boundaries are represented and tested;
 - duplicate command execution is demonstrably prevented at the foundation level;
 - event/audit primitives have stable contracts;
@@ -95,6 +106,10 @@ Do not begin broad Education, Combat, Economy, Magic, Spirit, World or Organizat
 
 - C#/.NET is the primary authoritative engine implementation, not a requirement that every future client or specialist subsystem use C#.
 - one authoritative owner exists for each game-state domain;
+- Account is the authentication/security/entitlement principal; Character is the in-world gameplay identity; the two identifiers are never collapsed even while the initial product permits one playable character per account;
+- public player identity is stable and separate from mutable display name/internal account identity;
+- staff privilege is evaluated through trusted server-side capabilities/policies, not names, client claims or ordinal role comparisons;
+- in-world guild/consortium/job roles remain domain authorization, not platform RBAC;
 - cross-domain interaction uses stable contracts, orchestration, snapshots/value objects or domain events rather than concrete implementation coupling;
 - all authoritative state mutations enter through an approved execution lane and the owning domain module;
 - read-only queries use a separate path and cannot become mutations through supplied payload fields;
