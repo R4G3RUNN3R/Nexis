@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nexis.Kernel\Nexis.Kernel.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Core\Nexis.Core.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Modules.Identity\Nexis.Modules.Identity.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Modules.Audit\Nexis.Modules.Audit.csproj" />
+  </ItemGroup>
+</Project>
