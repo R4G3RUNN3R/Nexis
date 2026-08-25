@@ -27,6 +27,18 @@ Do not casually rename, merge, split, relocate or reinterpret canonical cities, 
 
 If a task would materially change canon, it requires an explicit canon/design decision rather than an implementation-side assumption.
 
+### Additive world-expansion rule
+
+When the human asks to **add**, **create**, **introduce** or **expand** a city, region, academy, faction, culture or other canonical world element, the default meaning is additive.
+
+The implementer must not make room for the new element by silently replacing, merging, aliasing, renaming, relocating or retiring an existing canonical element.
+
+A fixed enum, compass slot, UI layout, database shape, route model or other implementation limitation is a software constraint to be redesigned. It is never authority to rewrite canon.
+
+Replacing or merging an existing canonical world element requires explicit human approval stating that the existing element is being replaced, merged, retired or reinterpreted.
+
+The Ironhall/Akai Tetsu incident is the standing example: Ironhall was requested as a new city; replacing Akai Tetsu with Ironhall was not requested and was canon drift.
+
 ## Core academy/world canon
 
 ### Nexis City
@@ -55,7 +67,9 @@ Exact spell lists, Mana values, course durations, costs and balance numbers are 
 
 ### Ironhall
 
-**Canonical identity:** the principal crafting, engineering and building academy/city culture.
+**Canonical identity:** a separately intended dwarven/tinkering-race city and the principal crafting, engineering and building centre.
+
+Ironhall was conceived as an **additional city** during expansion of the original Nexis world. It was not intended to replace, rename or absorb Akai Tetsu.
 
 Ironhall is home to dwarves and other tinkering/building peoples such as gnomes and equivalent setting-appropriate crafting cultures.
 
@@ -69,7 +83,9 @@ Ironhall teaches broadly:
 - material handling;
 - construction and creation-oriented practical skills.
 
-Ironhall is not primarily the combat/tactics academy. Any old implementation that makes Ironhall's academy chiefly a battle-stat school is legacy mechanics, not current canon.
+Ironhall is not primarily the combat/tactics academy. Any implementation that replaces Akai Tetsu with Ironhall or makes Ironhall's academy chiefly a battle-stat school is legacy AI drift, not approved canon.
+
+The exact geographic placement of Ironhall relative to the original five world anchors remains available for deliberate map/world design; lack of a free legacy compass slot must never be solved by deleting another city.
 
 ### Akai Tetsu Dojo
 
@@ -83,6 +99,8 @@ Akai Tetsu Dojo teaches:
 - battlefield awareness and related martial/tactical progression.
 
 Akai Tetsu is a distinct academy identity. It must not be silently folded into Ironhall merely because old code used an alias tying `akai_tetsu_war_dojo` to the eastern/Ironhall location model.
+
+Akai Tetsu predates Ironhall in the surviving early Nexis material. The later request to create Ironhall was additive and did not supersede Akai Tetsu.
 
 The exact geographic placement, city/settlement relationship and detailed curriculum beyond the approved identity above remain subject to later canon/specification where not already established elsewhere.
 
@@ -181,7 +199,7 @@ The exact base monetary/material/reputation requirements and base cooldown durat
 The following are **canon/product identity** and should survive implementation changes:
 
 - Silverbough = magic, Mana, item infusion/enhancement;
-- Ironhall = dwarven/tinkering-race crafting, engineering and building;
+- Ironhall = a separately added dwarven/tinkering-race crafting, engineering and building city, not an Akai Tetsu replacement;
 - Akai Tetsu Dojo = Edo-Japan-inspired combat/tactics academy;
 - Sacred Grove = island directly south of Nexis City, Druid/Shaman healing and gifted resurrection path;
 - Blackharbor + Highcourt = one shared city identity for academy/progression purposes;
@@ -189,7 +207,8 @@ The following are **canon/product identity** and should survive implementation c
 - Light = bounty hunter/capture identity;
 - Shadow = headhunter/assassin kill-or-capture identity;
 - switching paths is possible but costly, cooldown-gated and increasingly punitive with repeated switching;
-- completed path training is remembered permanently even when inactive.
+- completed path training is remembered permanently even when inactive;
+- requests to add new world content are additive unless explicit human approval says an existing canonical element is to be replaced/merged/retired.
 
 The following are **mechanics/balance** unless separately approved and may change:
 
@@ -208,9 +227,12 @@ The following are **mechanics/balance** unless separately approved and may chang
 
 The following existing v1 data is preservation evidence but is **not authoritative where it conflicts with this document**:
 
-- `server/data/cityData.js` models Blackharbor and Highcourt as separate primary city identities and aliases Akai Tetsu into the eastern/Ironhall bucket.
-- `src/data/academyData.ts` assigns combat-heavy progression to Ironhall, combines broad healing with Silverbough, and models separate Blackharbor/Highcourt academy identities rather than the approved unified academy divergence.
-- `src/data/worldMapData.ts` contains useful coordinates, regions, routes and continuity evidence, but any city/academy association that conflicts with this document must be transformed during v2 canon migration rather than copied blindly.
+- early April Nexis material correctly preserves Akai Tetsu as the eastern combat/tactics academy and the Sacred Grove/Spiritwood Sacred Isle as the southern healing/revival academy;
+- Ironhall was later requested as a new additional dwarven/tinkering/crafting city; the request did not authorize replacement of Akai Tetsu;
+- the 17 May 2026 `Implement city-local hubs and travel encounters` change introduced a five-slot normalized city model that replaced Akai Tetsu with Ironhall in the east slot and replaced the Sacred Isle with Highcourt in the south slot, while aliasing the old locations into those replacements; those substitutions are AI implementation drift, not canon evolution;
+- `server/data/cityData.js` models Blackharbor and Highcourt as separate primary city identities and aliases Akai Tetsu into the eastern/Ironhall bucket;
+- later `src/data/academyData.ts` assigns combat-heavy progression to Ironhall, combines broad healing with Silverbough, and models separate Blackharbor/Highcourt academy identities rather than the approved unified academy divergence;
+- `src/data/worldMapData.ts` contains useful coordinates, regions, routes and continuity evidence, but any city/academy association that conflicts with this document must be transformed during v2 canon migration rather than copied blindly;
 - legacy aliases that collapse Sacred Grove/Spiritwood into Highcourt are superseded for canon purposes.
 
 Do not delete these legacy sources merely because they are wrong for current canon. They remain useful migration/history evidence and may contain valid non-conflicting lore.
@@ -220,14 +242,17 @@ Do not delete these legacy sources merely because they are wrong for current can
 Before world/education/travel migration is considered complete:
 
 1. inventory legacy city, region, academy, Codex and map content;
-2. classify each datum as `CANON`, `COMPATIBLE_LEGACY`, `SUPERSEDED`, `RUMOURED`, `EXPANDABLE`, `RETIRED` or `UNRESOLVED`;
+2. classify each datum as `ORIGINAL_CANON`, `APPROVED_EVOLUTION`, `COMPATIBLE_EXPANSION`, `AI_DRIFT`, `SUPERSEDED`, `RUMOURED`, `EXPANDABLE`, `RETIRED` or `UNRESOLVED`;
 3. preserve non-conflicting lore and named-world history;
-4. transform conflicting academy/city mappings into this approved canon;
-5. never silently drop meaningful worldbuilding because its old implementation model changed;
-6. keep source references/provenance where practical so future engineers can tell which world facts were inherited versus newly expanded.
+4. distinguish additive approved expansions such as Ironhall from unauthorized replacement/merging decisions introduced during implementation;
+5. transform conflicting academy/city mappings into this approved canon;
+6. never silently drop meaningful worldbuilding because its old implementation model changed;
+7. keep source references/provenance where practical so future engineers can tell which world facts were inherited versus newly expanded.
 
 ## Agent rule
 
 Any Claude/Codex/other agent working on World, Travel, Education, Academies, Magic, Crafting, Combat, Justice/Bounties, Contracts, Healing/Recovery, Codex, CIEL lore synthesis or migration must read this document before implementation.
 
 An agent may identify a contradiction or propose a richer canon model. It may not silently rewrite these approved facts while implementing code.
+
+When asked to add a new canonical world element, the agent must preserve existing canonical elements by default and expand the model to accommodate the addition. It may not treat an implementation limit as permission to overwrite canon.
