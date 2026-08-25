@@ -1,6 +1,6 @@
 # Nexis 2.0 Core Architecture
 
-_Status: approved architecture decision, 2026-08-25._
+_Status: approved architecture decision, reconciled 2026-08-25 with State Ownership._
 
 ## Definition
 
@@ -11,6 +11,8 @@ It is not the database, API, scheduler, UI, persistence layer, authentication se
 The concrete Core implementation is intentionally replaceable.
 
 If a future `Nexis.Core vNext`, another .NET implementation, a Rust/C++/Go engine, a separate process, or any superior implementation receives the same compatible contracts/state/content and passes the required conformance tests, the rest of Nexis must continue operating without source rewrites. Replacing Core should improve the engine, not collapse the surrounding systems.
+
+`STATE-OWNERSHIP.md` is authoritative for persistent-state and versioned-content ownership. Core evaluates those facts; it does not become their write owner.
 
 ## Research basis
 
@@ -40,29 +42,31 @@ The Core owns the executable meaning of Nexis rules, including as appropriate:
 
 Domain-specific rule packages may be organized internally by area such as Combat, Economy, Travel, Education, Magic or Organizations, but those rule packages remain part of the selected Core implementation rather than becoming compile-time dependencies of the surrounding systems.
 
-## Surrounding systems own
+## Surrounding systems and Content Registry own
 
 Each surrounding system remains separately replaceable and owns its non-Core responsibilities, for example:
 
-- authoritative persistent state for its domain;
+- authoritative persistent state for the facts assigned to it by `STATE-OWNERSHIP.md`;
 - state loading/snapshot creation;
 - persistence and transactions through adapters;
-- domain data/content definitions where applicable;
+- system-specific non-static configuration/data where applicable;
 - read projections and query models;
 - external/API contracts belonging to that system;
 - system-specific background scheduling inputs;
 - UI/client presentation contracts;
 - integration with external services.
 
+Versioned static gameplay definitions such as item, spell, skill, course, route/location, NPC/monster, recipe and title/achievement definitions belong to the Content Registry defined by `STATE-OWNERSHIP.md`. A system may consume those definitions but does not become their duplicate authoritative owner.
+
 Examples:
 
-- Inventory owns item/ownership state; Core decides whether an equip/use/transfer intent is legal and calculates the transition.
+- Inventory owns item instances/ownership state; Content Registry owns item definitions; Core decides whether an equip/use/transfer intent is legal and calculates the transition.
 - Economy owns balances/ledger/escrow state; Core evaluates purchase/transfer rules and produces the required state changes.
-- Combat owns persistent encounter/combat state; Core calculates legal actions, hit/damage/effects and resulting transitions.
-- Education owns course/enrollment/progress state and course definitions; Core evaluates prerequisites, timing and reward transitions.
-- Travel owns route/location/travel state and route data; Core evaluates eligibility, cost, timing and arrival transitions.
+- Combat owns persistent encounter/combat state; Core calculates legal actions, hit/damage/effects and resulting transitions using snapshots from the relevant owners and versioned content.
+- Education owns enrollment/completion/progress state; Content Registry owns course definitions; Core evaluates prerequisites, timing and reward transitions.
+- Travel owns current location/journey state; Content Registry owns route/location definitions; Core evaluates eligibility, cost, timing and arrival transitions.
 
-The exact module boundaries remain subject to the separate State Ownership design, but this Core/system responsibility split is already fixed.
+The exact ownership boundaries are fixed by `STATE-OWNERSHIP.md` unless deliberately superseded by an approved architecture decision. Core/system responsibility remains: Core decides; owners persist their own facts.
 
 ## Contract boundary
 
@@ -82,6 +86,8 @@ The boundary must be expressed through stable, versioned contracts. The final na
 
 Module/system contract packages may define their own snapshots, intents and transition shapes. The Core implementation consumes/produces those contracts but the system implementation never references Core internals.
 
+There is no universal mutable `PlayerSnapshot`/`RuntimeState` contract containing the whole game. Application assembles only the typed owner snapshots required for a specific evaluation.
+
 ## Required interaction shape
 
 Conceptually:
@@ -92,7 +98,8 @@ Client / System / Admin request
             v
 Application / Command Lane
             |
-            +--> load trusted state from independent systems
+            +--> load trusted state from independent owners
+            +--> resolve versioned Content Registry inputs
             +--> assemble immutable snapshots/context
             |
             v
@@ -104,19 +111,19 @@ Application / Command Lane
             |
             v
  Authoritative Decision
- / Transition Plan / Events
+ / Owner-addressed Transition Plan / Events
             |
             v
 Application transaction boundary
             |
-            +--> owning systems persist their state changes
-            +--> ledger/outbox/audit commit atomically
+            +--> owning systems persist only their state changes
+            +--> ledger/outbox/audit commit atomically where required
             |
             v
         projections/UI
 ```
 
-Core therefore decides; surrounding systems persist and expose.
+Core therefore decides; surrounding owners persist and expose; Application coordinates.
 
 ## No Core-owned database truth
 
@@ -246,6 +253,7 @@ If a future design intentionally changes a public contract, that is a versioned 
 - Core is not authentication/authorization storage;
 - Core is not frontend/client state;
 - Core is not a second copy of every system database;
+- Core is not the Content Registry;
 - surrounding systems must not call concrete Core classes directly;
 - Core must not read/write another system's private tables directly;
 - replacing Core must not require replacing Combat/Economy/Inventory/Education/etc. implementations solely due to compile-time coupling.
@@ -254,4 +262,4 @@ If a future design intentionally changes a public contract, that is a versioned 
 
 The earlier simplified dependency picture `feature modules -> Nexis.Core` is superseded.
 
-The permanent model is contracts-first composition: independent systems and the selected rules engine meet through stable contracts, with Application/Host composition selecting concrete implementations.
+The permanent model is contracts-first composition: independent authoritative owners, the versioned Content Registry and the selected rules engine meet through stable contracts, with Application/Host composition selecting concrete implementations and coordinating transitions.
