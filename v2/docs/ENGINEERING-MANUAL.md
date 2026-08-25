@@ -38,11 +38,12 @@ Every agent doing non-trivial v2 work must read the documents relevant to its ta
 - `docs/STATE-OWNERSHIP.md`
 - `docs/COMMAND-EXECUTION.md`
 - `docs/IDENTITY-AUTHORIZATION.md`
+- `docs/CANON-AND-LORE.md` for world/gameplay/content/lore/migration work
 - `docs/CORE-RELEASE-GATE.md`
 - `docs/COMPONENT-RELEASE-GATE.md`
 - `docs/AGENT-HANDOFF.md`
 
-This manual governs workflow and implementation discipline. The listed documents govern the specialized architecture decisions.
+This manual governs workflow and implementation discipline. The listed documents govern the specialized architecture and product-canon decisions.
 
 ## Permanent project identity
 
@@ -183,6 +184,8 @@ Every delegated work unit must state at minimum:
 - deployment prohibition/permission;
 - documentation/changelog expectation.
 
+For world/gameplay/content tasks the packet must also identify the relevant `CANON-AND-LORE.md` constraints and whether the requested change is additive, transformative, or explicitly superseding existing canon.
+
 A child agent that does not know these things is not ready to modify code.
 
 ### Parallel editing rules
@@ -192,7 +195,7 @@ A child agent that does not know these things is not ready to modify code.
 - Shared-contract changes are serialized through one owner/integrator and then consumed by parallel agents.
 - Parent/integrator reviews every child result against the same Definition of Done before integration.
 - Sub-agents cannot expand scope because they discovered an interesting adjacent redesign.
-- A child agent may report a better architectural idea; it may not silently implement it when it changes an approved boundary.
+- A child agent may report a better architectural idea; it may not silently implement it when it changes an approved boundary or canon.
 
 There is no upper architectural limit on agent count. Coordination and rule consistency, not the number of agents, is the constraint.
 
@@ -207,7 +210,8 @@ There is no upper architectural limit on agent count. Coordination and rule cons
 5. Identify authoritative owners and Core responsibilities involved.
 6. Identify cross-owner transaction/concurrency implications.
 7. Check for existing patterns/contracts before inventing new ones.
-8. Identify how completion will be verified.
+8. For world/gameplay/content work, confirm the existing canon elements that must survive and whether the request is additive or explicitly replaces something.
+9. Identify how completion will be verified.
 
 Do not begin by scaffolding a replacement application, new architecture, new framework or alternate backend unless the task explicitly requests and approves that change.
 
@@ -225,10 +229,12 @@ Do not begin by scaffolding a replacement application, new architecture, new fra
 - Do not perform unrelated cleanup merely because the file is open.
 - Do not change an approved public contract for local convenience.
 - Do not silently add dependencies, services, databases, caches or queues that were not justified by the task.
+- When asked to add/create/introduce world content, expand the model to accommodate it; do not replace, merge, alias, rename, relocate or retire existing canon unless the task explicitly authorizes that change.
+- Never treat a fixed enum, compass slot, route table, UI layout or persistence shape as permission to overwrite canon. Change the implementation model instead.
 
 ### When a better design is discovered
 
-A better internal implementation is welcome when it preserves approved behaviour/contracts and task scope.
+A better internal implementation is welcome when it preserves approved behaviour/contracts, canon and task scope.
 
 If the improvement changes any of the following, stop implementation of that redesign and surface it as a proposal rather than silently applying it:
 
@@ -241,9 +247,10 @@ If the improvement changes any of the following, stop implementation of that red
 - release/upgrade policy;
 - runtime/framework/platform direction;
 - cross-system transaction semantics;
-- security boundary.
+- security boundary;
+- canonical city/region/academy/faction/culture identity, geography or purpose.
 
-The quality floor is fixed. The architecture is not a playground for whichever model happens to be running today.
+The quality floor is fixed. The architecture and world are not playgrounds for whichever model happens to be running today.
 
 ## No-rogue-rewrite rules
 
@@ -261,10 +268,13 @@ Unless explicitly requested and approved, an agent must not:
 - introduce Redis/queues merely as fashionable infrastructure;
 - change auth/identity semantics;
 - expose Core/system internals through public APIs;
+- rewrite established canon during an implementation task;
+- replace/merge/alias an existing city, region, academy, faction or culture merely to fit a fixed data structure;
+- interpret "add/create/introduce" as permission to remove or overwrite an existing canonical element;
 - touch/deploy live production because tests passed locally;
 - merge/rebase/cherry-pick into production branches unless the human explicitly requested it.
 
-If an approved task genuinely requires one of these, the task must state so explicitly and the relevant architecture documents must be updated deliberately.
+If an approved task genuinely requires one of these, the task must state so explicitly and the relevant architecture/canon documents must be updated deliberately.
 
 ## C# / .NET implementation standard
 
@@ -416,8 +426,8 @@ An implementation that cannot be tested cleanly is evidence that its boundaries 
 A task is complete only when all applicable conditions are true:
 
 1. requested behaviour is implemented and no requested requirement is silently omitted;
-2. implementation conforms to this manual and binding architecture;
-3. no unrelated architecture/scope was changed;
+2. implementation conforms to this manual and binding architecture/canon;
+3. no unrelated architecture, scope or canon was changed;
 4. authoritative state owners remain unambiguous;
 5. no new concrete Core/foreign persistence coupling was introduced;
 6. tests were added/updated for changed behaviour;
@@ -441,14 +451,15 @@ Before handing work back, the implementing agent performs a self-review against:
 - client/server authority;
 - concurrency/idempotency;
 - data/privacy/security;
+- canon preservation where applicable;
 - tests/build evidence;
 - accidental scope expansion;
 - migration/backward-compatibility impact;
 - changelog/documentation.
 
-For substantial or high-risk changes, prefer an independent reviewer/agent that did not write the implementation. The reviewer uses the same manual and architecture, not its own preferences.
+For substantial or high-risk changes, prefer an independent reviewer/agent that did not write the implementation. The reviewer uses the same manual and architecture/canon, not its own preferences.
 
-A reviewer may reject code that passes tests if it violates architecture/security/replaceability. Tests are evidence, not permission to violate design.
+A reviewer may reject code that passes tests if it violates architecture/security/replaceability/canon. Tests are evidence, not permission to violate design.
 
 ## Git and branch discipline
 
@@ -462,15 +473,15 @@ A reviewer may reject code that passes tests if it violates architecture/securit
 
 ## Documentation discipline
 
-Binding architecture documents are executable constraints for humans/agents, not decorative notes.
+Binding architecture/canon documents are executable constraints for humans/agents, not decorative notes.
 
-When an approved architecture decision changes:
+When an approved architecture or canon decision changes:
 
-- update the canonical design document;
+- update the canonical design/canon document;
 - reconcile conflicting older wording rather than leaving contradictory instructions;
 - update `AGENT-HANDOFF.md`/this manual when the workflow or universal rules changed;
 - update changelog;
-- update the canonical Voidsmith Source of Truth through the standing workflow.
+- update the canonical Voidsmith Source of Truth through the standing workflow when the change falls within that document's infrastructure/operations scope.
 
 Do not turn open brainstorming into a binding decision without human approval.
 
@@ -496,13 +507,13 @@ Normal feature implementation does not automatically trigger deployment.
 
 ## When blocked or ambiguous
 
-Do not invent product/architecture decisions merely to keep moving.
+Do not invent product/architecture/canon decisions merely to keep moving.
 
 For a genuine blocking ambiguity:
 
-- first inspect existing binding docs/contracts/code;
-- choose the safest interpretation that does not expand scope or alter architecture when the requirement is already inferable;
-- if the ambiguity changes product semantics/public contracts/ownership/security and cannot be safely inferred, report the exact unresolved decision rather than implementing competing architectures;
+- first inspect existing binding docs/contracts/code/canon evidence;
+- choose the safest interpretation that does not expand scope or alter architecture/canon when the requirement is already inferable;
+- if the ambiguity changes product semantics/public contracts/ownership/security/canon and cannot be safely inferred, report the exact unresolved decision rather than implementing competing architectures;
 - complete independent, non-blocked portions where possible.
 
 Never create two implementations "just in case" unless explicitly asked to prototype alternatives.
@@ -532,6 +543,6 @@ Do not dump large code diffs unless the human asks for them.
 
 Every agent should be replaceable too.
 
-A different model should be able to open the same repository, read the same manual and binding documents, receive the same task, and understand the same expected system boundaries, quality bar and completion criteria.
+A different model should be able to open the same repository, read the same manual and binding documents, receive the same task, and understand the same expected system boundaries, world/canon constraints, quality bar and completion criteria.
 
 If successful implementation depends on "Claude knows what I meant" or "Codex usually does it this way", the repository instructions are incomplete.
