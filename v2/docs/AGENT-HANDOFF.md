@@ -14,20 +14,27 @@ Before implementing foundation code, read and preserve:
 
 - `v2/docs/FOUNDATION.md`
 - `v2/docs/CORE-ARCHITECTURE.md`
+- `v2/docs/STATE-OWNERSHIP.md`
 - `v2/docs/CORE-RELEASE-GATE.md`
 - `v2/docs/COMPONENT-RELEASE-GATE.md`
 - `v2/docs/COMMAND-EXECUTION.md`
 - `v2/docs/IDENTITY-AUTHORIZATION.md`
 
-`CORE-ARCHITECTURE.md` is the binding definition of Core. `Nexis.Core` is the authoritative rules, logic and calculation machine, while remaining independently replaceable behind stable versioned contracts. Surrounding systems own persistent state/data/interfaces and must never compile against concrete Core internals. If older wording in another foundation document implies that gameplay rules belong to surrounding module implementations, `CORE-ARCHITECTURE.md` supersedes that wording.
+### Precedence
 
-`CORE-RELEASE-GATE.md` is the Core-specific proving policy. Candidate Core builds require production-derived replay, deterministic conformance, diverse AI adversarial testing, independent Voidsmith staff manual testing, a fresh production-like isolated environment, at least 30 days of exact-build soak, explicit human sign-off and rollback readiness.
+`CORE-ARCHITECTURE.md` is the binding definition of Core. `Nexis.Core` is the authoritative rules, logic and calculation machine while remaining independently replaceable behind stable versioned contracts.
 
-`COMPONENT-RELEASE-GATE.md` generalizes that discipline to every material Nexis component replacement/version upgrade. Never treat Core as the only moving part that needs proving. Every replaceable module/system/service/adapter is tested through deterministic automation, diverse AI testing and independent Voidsmith human testing in parallel, with findings compared/cross-reproduced and a minimum 30-day exact-build soak in a brand-new production-like isolated environment before cutover. Emergency hotfixes/ordinary low-risk maintenance are a separate release class, not a loophole for calling an upgrade a patch.
+`STATE-OWNERSHIP.md` is the binding definition of persistent state/data ownership. It supersedes older examples that imply a system may own another system's facts, static content that belongs to Content Registry, or a global mutable `PlayerState`/`RuntimeState`/qualities/counters container. The permanent rule is one state concept, one authoritative write owner.
 
-`COMMAND-EXECUTION.md` is the approved authoritative mutation/concurrency design. Preserve its execution lanes, idempotency, server authority, transaction and concurrency rules, but interpret domain rule evaluation through the Core boundary defined by `CORE-ARCHITECTURE.md`.
+`COMMAND-EXECUTION.md` defines how Application loads current owner snapshots, invokes the selected Core, coordinates concurrency/transactions and routes typed transitions to the authoritative owners. It has been reconciled with Core and State Ownership; do not recreate the older model where an owning module both contains all gameplay rules and mutates shared player state.
 
-`IDENTITY-AUTHORIZATION.md` is the approved identity/security boundary. Preserve Account/Character separation, the initial one-playable-character-per-account policy, immutable public player identity, capability/policy-based staff authorization, entitlement separation, and the prohibition on character-name/client-state privilege.
+`IDENTITY-AUTHORIZATION.md` is the approved identity/security boundary. Preserve Account/Character separation, one playable character per normal account initially, immutable public player identity, capability/policy-based staff authorization, entitlement separation and the prohibition on character-name/client-state privilege.
+
+`CORE-RELEASE-GATE.md` is the Core-specific proving policy. Candidate Core builds require production-derived replay, deterministic conformance, diverse AI adversarial testing, independent Voidsmith staff manual testing, a fresh production-like isolated environment, at least 30 days of exact-build soak, human sign-off and rollback readiness.
+
+`COMPONENT-RELEASE-GATE.md` generalizes the same discipline to every material Nexis component replacement/version upgrade. Never treat Core as the only moving part requiring proof. Emergency hotfixes/ordinary low-risk maintenance are a separate release class, not a loophole for calling an upgrade a patch.
+
+If wording in an older document conflicts with a newer binding ownership/Core decision, stop and reconcile the documents rather than choosing whichever sentence is convenient.
 
 ## First actions for Claude Code / Codex
 
@@ -35,121 +42,155 @@ Before implementing foundation code, read and preserve:
 2. Restore `v2/Nexis.slnx`.
 3. Build the complete solution with warnings treated as errors.
 4. If the pinned SDK policy cannot be satisfied, fix the environment or deliberately update `global.json`; do not silently retarget the engine.
-5. Convert `Nexis.Architecture.Tests` from a placeholder into a real automated test project using an approved, current .NET test stack.
-6. Add dependency-boundary tests before adding gameplay systems.
-7. Split stable engine-facing public contracts from the concrete `Nexis.Core` implementation before surrounding systems integrate against Core behavior. The current skeleton has not completed this contracts/implementation split yet.
-8. Add a Core conformance-test seam so a fake/replacement Core can be composed without changing surrounding systems.
-9. Read `v2/docs/COMMAND-EXECUTION.md` and implement foundation work against its command identity, execution-lane, concurrency, transaction and idempotency constraints rather than inventing a separate request model.
-10. Read `v2/docs/IDENTITY-AUTHORIZATION.md` before changing the current placeholder Identity contracts; split public Identity contracts from implementation rather than allowing the placeholder module assembly to become the permanent integration boundary.
+5. Convert `Nexis.Architecture.Tests` from a placeholder into a real automated test project using an approved current .NET test stack.
+6. Add dependency/ownership architecture tests before adding gameplay systems.
+7. Split stable engine-facing public contracts from the concrete `Nexis.Core` implementation before surrounding systems integrate against Core behaviour.
+8. Split `Nexis.Identity.Contracts` from Identity implementation before broad integration.
+9. Establish typed owner snapshot/transition contract seams required by `STATE-OWNERSHIP.md`; do not create a universal PlayerSnapshot/PlayerState.
+10. Add a Core conformance-test seam so a fake/replacement Core can be composed without changing surrounding systems.
+11. Implement command identity/execution-lane/concurrency/transaction/idempotency behaviour exactly through the reconciled `COMMAND-EXECUTION.md` model.
+12. Prove one deliberately multi-owner vertical scenario end-to-end before broad feature fan-out.
 
 ## Required architecture tests
 
 Prove at minimum that:
 
 - `Nexis.Kernel` does not depend on other Nexis projects or infrastructure libraries;
-- stable Core/system contract packages do not depend on their concrete implementations;
-- surrounding system implementations do **not** reference concrete `Nexis.Core`;
-- concrete `Nexis.Core` does **not** reference surrounding system implementation/private persistence assemblies;
-- a replacement/fake Core implementation can be composed with surrounding systems without modifying those systems;
-- surrounding systems do not reference the API host or concrete persistence/network implementations except through designated adapters;
-- the API/Application layer contains composition/transport/orchestration only and does not become a second rules engine;
-- Core can evaluate deterministic golden scenarios from normalized snapshots/context without reaching directly into system databases;
-- no authorization decision grants privilege from character name, display name, title or client-supplied role state;
-- query paths cannot mutate authoritative state;
-- background/system workers cannot bypass the command/Core/system boundary to write authoritative game state directly;
-- account/platform capabilities, gameplay-domain roles and commercial entitlements remain separate authorization concepts.
+- stable Core/system contract packages do not depend on concrete implementations;
+- surrounding system implementations do not reference concrete `Nexis.Core`;
+- concrete `Nexis.Core` does not reference private system persistence/implementation assemblies;
+- a replacement/fake Core can be composed without modifying surrounding systems;
+- a replacement/fake authoritative owner can satisfy its contract without consumer source changes;
+- public contracts contain no EF Core/Npgsql/HTTP/frontend implementation types;
+- API/Application contains composition/transport/orchestration only and not gameplay formulas;
+- Application/Host cannot directly write owner-private tables;
+- Core evaluates deterministic scenarios from normalized typed snapshots/context without reaching into owner databases;
+- no global authoritative `PlayerState`, `RuntimeState`, `CharacterState`, generic qualities or counters write model exists;
+- Inventory is the sole authoritative item-ownership writer;
+- Economy is the sole authoritative currency-balance writer;
+- Travel is the sole authoritative current-location/journey writer;
+- Resources is the sole authoritative resource-bar writer;
+- Equipment cannot create/delete item ownership;
+- Marketplace/Guilds/Consortiums cannot directly mutate Economy/Inventory state;
+- Combat cannot become the owner of base stats, HP/Mana/Energy or equipment ownership;
+- Hospital cannot become the owner of Life/resource bars or cooldown state;
+- Scheduler/background workers cannot update gameplay tables directly;
+- CIEL cannot directly mutate unrelated gameplay owner state;
+- projections/read models cannot mutate authoritative owner state;
+- client DTOs are not reused as trusted persistence entities;
+- no authorization decision grants privilege from character name, title or client-supplied role state;
+- Account/platform capabilities, gameplay-domain roles and commercial entitlements remain separate;
+- a multi-owner command proves full atomic rollback when any participating transition cannot commit.
 
 ## Next foundation slices
 
-After the solution is green, proceed in this order:
+After the solution is green, proceed in this order.
 
-1. **Core-contract separation + conformance + command execution + identity/security foundation**
-   - introduce the stable public engine-facing contract boundary required to replace `Nexis.Core` independently;
-   - keep concrete Core out of surrounding-system compile-time dependencies;
-   - represent normalized trusted state snapshots/inputs and authoritative transition/results without leaking persistence types;
-   - establish deterministic time/RNG seams required by Core;
-   - create a Core conformance/golden-scenario test harness and prove a fake/replacement engine can be substituted;
-   - universal command identity/correlation primitives only where genuinely cross-domain;
-   - authenticated account context and trusted actor-context construction;
-   - explicit authorization policy/capability contracts rather than ordinal-role privilege checks;
-   - permanent AccountId/CharacterId separation while enforcing one playable character per normal account initially;
-   - immutable public player identity independent of mutable display name;
-   - system-owned typed state/content contracts rather than one global mutable player blob;
-   - split `Nexis.Identity.Contracts` from Identity implementation before broad integration;
-   - execution-lane orchestration without gameplay formulas in Application/Host;
-   - Hennet public/private server-generated profile projection boundary;
-   - tests proving unauthorized callers never receive private Hennet/admin fields;
-   - tests proving client payloads cannot supply or escalate actor/account/role authority;
-   - tests proving guild/consortium roles and commercial entitlements cannot become platform admin privilege.
+### 1. Core contracts + ownership contracts + command execution + identity/security
 
-2. **Event/audit + command lifecycle foundation**
-   - event envelope/factory using `IGameClock`;
-   - append-only ledger abstraction;
-   - command receipt/terminal-outcome contracts tied to stable CommandId;
-   - admin audit writer abstraction;
-   - player-log projection contracts;
-   - knowledge-aware visibility/filtering seams;
-   - compensating/corrective event contract rather than history mutation;
-   - duplicate-command behavior defined by the approved command-execution document.
+- introduce stable `Nexis.Core.Contracts` or equivalent engine-facing contract boundary;
+- keep concrete Core out of surrounding-system compile-time dependencies;
+- represent immutable trusted owner snapshots and owner-addressed transition results without persistence types;
+- establish deterministic authoritative time/RNG seams;
+- create Core conformance/golden-scenario harness;
+- preserve universal CommandId/CorrelationId primitives only where genuinely cross-domain;
+- implement trusted ActorContext construction and capability/policy authorization;
+- preserve permanent AccountId/CharacterId separation and one playable character per normal account initially;
+- preserve immutable public player identity independent of display name;
+- build Identity contracts/implementation split;
+- prohibit global mutable player blobs, qualities/counters dumping grounds and generic path/value mutation;
+- prove Hennet public/private projection boundary;
+- prove client payloads cannot supply/escalate actor/account/role authority.
 
-3. **Persistence/concurrency boundary**
-   - introduce persistence projects/adapters outside Core/systems;
-   - PostgreSQL remains the planned primary store;
-   - implement idempotency registry/receipt persistence, transaction boundaries and durable outbox behind abstractions;
-   - use optimistic revisions by default and selective ordered locks for contested/high-value mutations as defined in `COMMAND-EXECUTION.md`;
-   - provide bounded whole-transaction retry classification for retryable PostgreSQL concurrency failures;
-   - external auth-provider mappings attach to AccountId behind infrastructure adapters and never become game-domain identity;
-   - do not expose EF Core/Npgsql/auth-provider-specific types through public contracts;
-   - Core must never require a private hidden database containing duplicate authoritative truth;
-   - no v2 persistence code may alter the live v1 database.
+### 2. History/event/audit + command lifecycle
 
-4. **Migration harness foundation**
-   - read-only source export contract;
-   - versioned manifest/checksums/counts;
-   - explicit transforms;
-   - anomaly reporting;
-   - repeatable reconciliation against disposable v2 databases.
+- event envelope/factory using authoritative game time;
+- append-only authoritative ledger abstraction;
+- command receipt/terminal-outcome contracts tied to CommandId;
+- replay-grade trace/snapshot reference seams;
+- Admin Audit writer abstraction;
+- Player Log projection contracts;
+- knowledge-aware visibility/filtering;
+- compensating/corrective events instead of history mutation;
+- durable outbox and idempotent post-commit consumers.
+
+### 3. Persistence/concurrency boundary
+
+- introduce persistence projects/adapters outside Core/public contracts;
+- PostgreSQL remains planned primary store;
+- each authoritative owner gets private persistence boundaries; no foreign owner direct-table writes;
+- implement owner revisions, command receipts/idempotency state, transaction coordination, locking, outbox and retry classification;
+- optimistic concurrency by default and selective ordered locks for contested/high-value operations;
+- bounded whole-transaction retry for retryable PostgreSQL concurrency failures;
+- no EF/Npgsql/auth-provider-specific types in public contracts;
+- Core must never require a private duplicate gameplay datastore;
+- no v2 persistence code may alter the live v1 database.
+
+### 4. Ownership proof vertical slice
+
+Before broad gameplay implementation, prove the full architecture with a narrow set:
+
+1. Core contract and selected Core implementation seam;
+2. Identity contract/implementation split;
+3. Application command transaction boundary;
+4. History/Event/Audit foundation;
+5. Progression contracts;
+6. Resources contracts;
+7. Economy contracts;
+8. Inventory contracts;
+9. Equipment contracts;
+10. one multi-owner scenario such as EquipItem or a synthetic purchase demonstrating snapshots -> Core -> typed transitions -> atomic owner persistence -> events/outbox -> projection.
+
+### 5. Migration harness foundation
+
+- read-only v1 source export contract;
+- versioned manifest/checksums/counts;
+- explicit transforms from v1 broad runtime/player state into owner-specific v2 state;
+- anomaly reporting for duplicated/conflicting v1 fields;
+- repeatable reconciliation against disposable v2 databases;
+- no `misc` bucket for fields without a clear owner.
 
 ## Stop conditions
 
-Do not begin broad Education, Combat, Economy, Magic, Spirit, World or Organization implementation until:
+Do not begin broad Education, Combat, Economy, Magic, Spirits, World, Travel, Marketplace, Guild or Consortium implementation until:
 
-- the solution builds cleanly;
-- dependency architecture tests exist and pass;
-- Core public contracts are separated from the concrete Core implementation;
-- surrounding systems can be proven independent of concrete Core;
-- a Core conformance/golden-scenario harness exists;
-- identity/Hennet projection security tests exist and pass;
-- Account/Character/public-identity boundaries and capability authorization are represented and tested;
-- command identity/execution-lane boundaries are represented and tested;
-- duplicate command execution is demonstrably prevented at the foundation level;
-- event/audit primitives have stable contracts;
-- persistence/concurrency behavior is isolated behind adapters rather than leaking into Core or public contracts.
+- solution restores/builds cleanly;
+- dependency and ownership architecture tests exist and pass;
+- Core public contracts are separated from concrete Core;
+- owner snapshot/transition boundaries are represented without a universal player blob;
+- surrounding systems are demonstrably independent of concrete Core and foreign private persistence;
+- Core conformance/golden-scenario harness exists;
+- Identity/Hennet security tests pass;
+- Account/Character/public-identity and capability boundaries are represented/tested;
+- command identity/execution-lane/idempotency boundaries are represented/tested;
+- one atomic multi-owner vertical scenario passes, including rollback-on-failure;
+- event/audit/history primitives have stable contracts;
+- persistence/concurrency is isolated behind adapters;
+- Scheduler and CIEL bypass protections are testable.
 
 ## Permanent constraints
 
-- C#/.NET is the primary current authoritative engine implementation, not a permanent dependency that every feature/client/specialist subsystem must share;
+- C#/.NET is the current primary authoritative engine implementation, not a requirement for every future client/specialist subsystem;
 - `Nexis.Core` is the authoritative rules, logic and calculation machine;
-- the concrete `Nexis.Core` implementation is replaceable; surrounding systems depend on stable contracts, never Core internals;
-- replacing Core with `Core vNext`, another runtime or a separate service must not require surrounding-system rewrites while contracts/rule versions remain compatible;
-- surrounding systems own persistent state/data/interfaces; Core evaluates rules and returns authoritative decisions/transitions;
-- Core must not own a hidden duplicate database that makes replacement require state reconstruction;
-- every material replaceable-component version upgrade follows `COMPONENT-RELEASE-GATE.md`: brand-new production-like isolated proving environment, deterministic automation, diverse AI testing, independent Voidsmith human testing in parallel, cross-reproduction, minimum 30-day exact-build soak and rollback readiness;
-- AI never runs all tests and never has sole release authority;
-- one authoritative owner exists for each persistent game-state domain;
-- Account is the authentication/security/entitlement principal; Character is the in-world gameplay identity; the two identifiers are never collapsed even while the initial product permits one playable character per account;
-- public player identity is stable and separate from mutable display name/internal account identity;
-- staff privilege is evaluated through trusted server-side capabilities/policies, not names, client claims or ordinal role comparisons;
-- in-world guild/consortium/job roles remain domain authorization, not platform RBAC;
-- cross-system interaction uses stable contracts, normalized snapshots/value objects, orchestration and domain events rather than concrete implementation coupling;
-- all authoritative state mutations enter through an approved execution lane, are evaluated by the selected Core rules engine, and are persisted through the owning systems;
-- read-only queries use a separate path and cannot become mutations through supplied payload fields;
-- meaningful commands/actions resolve through the selected authoritative engine implementation, not client state;
-- commands use stable identity/idempotency protection and current authoritative state is revalidated at execution time;
-- concurrency is hybrid: optimistic by default, selective deterministic locking/atomic constraints for contested resources;
-- state + durable events/outbox commit atomically for successful durable commands;
+- concrete Core is replaceable behind stable contracts;
+- surrounding systems own persistent facts/data/interfaces; Core evaluates rules and returns typed decisions/transitions;
+- one authoritative write owner exists for each persistent state concept;
+- no global writable PlayerState/RuntimeState/qualities/counters aggregate is permitted;
+- Core owns no hidden duplicate authoritative gameplay database;
+- Inventory alone owns item ownership; Economy alone owns currency; Travel alone owns current location/journey; Resources alone owns resource bars;
+- Equipment owns slot placement but not items; Marketplace owns listings but not money/items; Combat owns encounters but not HP/base stats/equipment; Hospital owns hospitalization but not Life/cooldowns; Guilds/Consortiums own governance/business state but not money/items;
+- Content Registry owns versioned static content definitions; player unlock/progress remains with its gameplay owner;
+- public profiles, dashboards, Player Log, leaderboards, search and admin dossiers are projections, not write owners;
+- global action availability is computed by Core from current relevant owner snapshots, not persisted as one universal condition flag;
+- cross-owner operations are explicitly orchestrated and atomic where the gameplay promise requires it;
+- all authoritative mutations enter an approved lane, are evaluated by selected Core and persisted by authoritative owners;
+- read-only queries cannot become mutations through payload fields;
+- command identity/idempotency and current-state revalidation are mandatory;
+- concurrency is hybrid: optimistic by default, selective deterministic locking/constraints for contested resources;
+- successful required state + command outcome + events/outbox commit atomically;
 - authoritative history is append-oriented and immutable in normal operation;
-- player-facing history is a knowledge-aware projection, never the raw internal audit stream;
-- all meaningful privileged admin activity remains internally auditable;
-- only material admin/system effects on a player are eligible for that player's visible log;
+- Player Log remains knowledge-aware projection, not raw audit;
+- all meaningful privileged admin activity is internally auditable;
+- material component upgrades follow the Universal Component Release Gate: brand-new production-like isolated environment, deterministic automation, diverse AI testing, independent Voidsmith human testing in parallel, cross-reproduction, minimum 30-day exact-build soak and rollback readiness;
+- AI never runs all tests and never has sole release authority;
 - no secrets belong in source control or documentation.
