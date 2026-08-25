@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-25
+
+### Nexis 2.0 foundation skeleton
+- created an isolated `v2/` implementation root so the live/current Nexis code remains untouched during the parallel rebuild
+- established a .NET 10 solution with `Nexis.Kernel`, `Nexis.Core`, initial Identity and Audit modules, an API composition host, and an architecture-test project placeholder
+- added authoritative game-clock and immutable domain-event metadata contracts with event ID, UTC occurrence time, correlation, causation and schema version
+- established server-side account/character identity and role vocabulary without name-based authority
+- established the approved administrator audit visibility boundary: all meaningful privileged activity remains internally auditable, while only material player-state effects are eligible for player-facing projection
+- documented strict dependency direction, persistence separation, migration isolation and pre-gameplay testing gates in `v2/docs/FOUNDATION.md`
+- player impact: none yet; this is parallel Nexis 2.0 engineering infrastructure and does not alter the live game
+- risk level: low because the new tree is isolated from the current application and no live schema or runtime path is changed
+
 ## 2026-04-19
 
 ### Ashen Crown page-enrichment and shell pass
