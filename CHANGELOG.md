@@ -9,6 +9,8 @@
 - established server-side account/character identity and role vocabulary without name-based authority
 - established the approved administrator audit visibility boundary: all meaningful privileged activity remains internally auditable, while only material player-state effects are eligible for player-facing projection
 - documented strict dependency direction, persistence separation, migration isolation and pre-gameplay testing gates in `v2/docs/FOUNDATION.md`
+- added `v2/docs/COMMAND-EXECUTION.md`, defining the researched authoritative mutation model: specialized player/admin/system/realtime execution lanes, a separate query path, stable CommandId/idempotency, server-derived actor context, authoritative-time revalidation, hybrid optimistic/selective-lock concurrency, canonical multi-resource lock ordering, atomic state/event/outbox commits and bounded whole-transaction retries
+- updated the Claude Code/Codex handoff so agents must preserve the command-execution contract and prove duplicate-execution, stale-state, concurrency and scheduler-bypass protections before broad gameplay modules begin
 - player impact: none yet; this is parallel Nexis 2.0 engineering infrastructure and does not alter the live game
 - risk level: low because the new tree is isolated from the current application and no live schema or runtime path is changed
 
