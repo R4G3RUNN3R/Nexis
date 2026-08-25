@@ -15,4 +15,6 @@ app.MapHealthChecks("/health");
 
 app.Run();
 
-public partial class Program;
+public partial class Program
+{
+}
