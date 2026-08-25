@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-26
+
+### Nexis 2.0 gameplay-mode clarification
+- corrected the v2 design record so **Adventures** preserve their original instant-resolution role, closest in interaction pattern to Torn Crimes: choose an action and receive an immediate server-authoritative result
+- moved the recently discussed timed expedition model to its intended home under **Excursions**, including preparation, supplies, standing orders, asynchronous encounters, discoveries, injuries and return/resolution
+- kept **DMOS One-Shots / Scenarios** as a third distinct player-facing mode for curated scene-by-scene interactive narrative
+- explicitly allowed these modes to share lower-level Core components such as combat, checks, rewards, encounters and history while prohibiting them from being collapsed into one undifferentiated Adventure engine
+- clarified that deeper exploration and rare world discovery belong primarily to Excursions/world content rather than redefining Adventures as long-duration expeditions
+- player impact: none yet; this corrects the Nexis 2.0 design record before implementation
+- risk level: low; documentation-only change on the isolated v2 branch
+
 ## 2026-08-25
 
 ### Nexis 2.0 foundation skeleton
