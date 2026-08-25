@@ -11,10 +11,13 @@ Before non-trivial work anywhere under `v2/`, read and obey:
 3. `docs/STATE-OWNERSHIP.md` - one authoritative write owner per state concept.
 4. `docs/COMMAND-EXECUTION.md` - command/Core/owner orchestration, idempotency, concurrency and atomic commit rules.
 5. `docs/IDENTITY-AUTHORIZATION.md` - Account/Character/public identity and authorization boundary.
-6. `docs/CORE-RELEASE-GATE.md` and `docs/COMPONENT-RELEASE-GATE.md` when upgrade/replacement/release work is involved.
-7. `docs/AGENT-HANDOFF.md` for current foundation order and stop conditions.
+6. `docs/CANON-AND-LORE.md` - authoritative world/city/academy/lore identity and legacy-canon precedence for gameplay/world/content work.
+7. `docs/CORE-RELEASE-GATE.md` and `docs/COMPONENT-RELEASE-GATE.md` when upgrade/replacement/release work is involved.
+8. `docs/AGENT-HANDOFF.md` for current foundation order and stop conditions.
 
 `docs/ENGINEERING-MANUAL.md` is the canonical instruction manual for Codex, Claude and every other engineering agent. Do not invent a Codex-specific Nexis architecture or quality bar.
+
+For World, Travel, Education, Academies, Magic, Crafting, Combat, Justice/Bounties, Contracts, Healing/Recovery, Codex, CIEL lore synthesis or migration, `docs/CANON-AND-LORE.md` is mandatory. Legacy v1 data is evidence, not permission to overwrite current approved canon.
 
 ## Absolute constraints
 
@@ -28,13 +31,14 @@ Before non-trivial work anywhere under `v2/`, read and obey:
 - No client-authoritative gameplay state, time, RNG, ownership or privilege.
 - No scheduler/CIEL/admin bypass around command/Core/owner boundaries.
 - No rogue rewrite, second app, new runtime, microservice split or architecture change unless explicitly approved.
+- Do not silently change approved world/city/academy/lore canon during implementation.
 - Do not deploy/merge to production/live refs unless explicitly requested.
 - Add/update tests and `CHANGELOG.md` for direct code/repo changes.
 - Never claim restore/build/test success without observed evidence.
 
 ## Parallel agents
 
-You may delegate independent work freely. Every sub-agent must receive the same canonical manual, relevant binding docs, explicit scope, owners/contracts involved, acceptance criteria and verification requirements. Shared public-contract or architecture edits require one designated integrator.
+You may delegate independent work freely. Every sub-agent must receive the same canonical manual, relevant binding docs, explicit scope, owners/contracts involved, acceptance criteria and verification requirements. Shared public-contract or architecture edits require one designated integrator. Gameplay/world/content sub-agents must also inherit the relevant `CANON-AND-LORE.md` constraints.
 
 ## Verification baseline
 
