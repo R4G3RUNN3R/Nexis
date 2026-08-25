@@ -30,9 +30,11 @@ Examples include, without limitation:
 
 A component upgrade must not become production authority merely because it builds, passes unit tests, or looks better in code review.
 
+This gate is for **material component replacements/version upgrades**. Emergency hotfixes and ordinary low-risk maintenance are a separate release class and do not redefine what counts as an upgrade merely to bypass this policy.
+
 ## Principle
 
-Every material replacement or major upgrade is treated as a candidate implementation that must prove compatibility, correctness, stability and operational fitness before cutover.
+Every material replacement or version upgrade is treated as a candidate implementation that must prove compatibility, correctness, stability and operational fitness before cutover.
 
 The exact tests depend on the component, but the release philosophy is universal:
 
@@ -42,16 +44,20 @@ The exact tests depend on the component, but the release philosophy is universal
 4. run diverse AI-assisted adversarial/exploratory testing;
 5. run independent Voidsmith human manual testing in parallel;
 6. compare and cross-reproduce findings between lanes;
-7. soak the exact candidate build in a production-like environment;
+7. soak the exact candidate build for at least 30 continuous days in a production-like environment;
 8. block promotion on unexplained material divergence or invariant violations;
 9. cut over through stable contracts/configuration/deployment boundaries rather than rewriting unrelated systems;
 10. retain a proven rollback path to the previous compatible implementation.
 
 ## Production-like proving environment
 
-For a material upgrade, provision an isolated proving environment that resembles production closely enough to expose realistic correctness and performance issues.
+For **every material component replacement/version upgrade**, provision a brand-new dedicated pre-production VPS that resembles the current production Nexis server and relevant topology as closely as practical.
 
-For high-impact components this normally means a brand-new pre-production VPS or equivalent isolated host. Lower-impact components may use an equivalently isolated environment when a dedicated VPS would add no meaningful evidence, but the reason must be documented.
+If a future component runs on infrastructure that cannot meaningfully be represented by one VPS, provision the equivalent brand-new isolated environment that mirrors that component's production topology. This is not a weaker test path; it is the same principle applied to the component's real deployment shape.
+
+The environment should match or closely model the production characteristics that materially affect the component, including applicable CPU, RAM, swap, storage/I/O, operating system, runtime, database, process supervision, network/reverse-proxy path, queues/caches and observability.
+
+Material differences from production must be documented so performance results are interpreted correctly.
 
 The environment uses separate databases, credentials, service accounts, queues, storage, endpoints and secrets. It has no write path to production authoritative state.
 
@@ -61,7 +67,9 @@ Production secrets are never copied merely for realism.
 
 The exact candidate build is identified immutably by version/commit/package/hash.
 
-A material code/configuration change that can alter the candidate's behaviour creates a new candidate and resets the required soak period for that component unless the release policy for that specific component explicitly defines a narrower safe exception.
+A material code/configuration change that can alter the candidate's behaviour creates a new candidate and resets the 30-day soak for that candidate build.
+
+Changes strictly to external test-harness instrumentation may be handled separately only when they provably cannot alter candidate semantics or runtime behaviour; that exception is documented as test infrastructure, not silently treated as candidate continuity.
 
 ## Historical production evidence
 
@@ -109,7 +117,7 @@ Voidsmith Industries staff or explicitly authorized human testers run manual tes
 
 Human testing covers realistic end-to-end use, exploratory behaviour, admin/support workflows, stale-state/user-error patterns, long sessions, recovery behaviour and exploit-minded sequences that automation or AI may miss.
 
-No component may pass solely from AI testing. Human validation is a required independent evidence source for material upgrades.
+No component may pass solely from AI testing. Human validation is a required independent evidence source for every material replacement/version upgrade.
 
 ## Parallel comparison and cross-reproduction
 
@@ -130,11 +138,11 @@ Material AI findings should be manually reproduced where practical. Material hum
 
 ## Soak duration
 
-The default proving period for a **major/high-risk component replacement** is a minimum continuous **30-day soak** of the exact candidate build in the isolated production-like environment.
+Every material Nexis component replacement/version upgrade must complete a minimum continuous **30-day soak** of the exact candidate build in its brand-new isolated production-like proving environment.
 
-The candidate should be exercised continuously through representative, burst, stress, recovery and adversarial workloads rather than running tests once and idling.
+The candidate is exercised continuously through representative, burst, stress, recovery and adversarial workloads rather than running tests once and idling.
 
-A future component-specific policy may define a shorter soak only for objectively lower-risk changes, but shortening the default must be explicit, evidence-based and recorded. Core replacements and other high-risk authoritative components remain subject to the full 30-day minimum unless a later approved policy says otherwise.
+This 30-day minimum is universal for material version upgrades under this policy. A component-specific policy may add stricter gates or a longer soak, but may not silently shorten the universal minimum. A future deliberate decision to change this rule must explicitly supersede this policy rather than being inferred from convenience.
 
 ## Component-specific success criteria
 
@@ -172,7 +180,7 @@ A material candidate cannot be promoted while any applicable blocker remains unr
 - inadequate required human test coverage;
 - inadequate required automated/replay coverage;
 - missing rollback compatibility;
-- incomplete required soak for the exact candidate build.
+- incomplete 30-day soak for the exact candidate build.
 
 ## Cutover and rollback
 
