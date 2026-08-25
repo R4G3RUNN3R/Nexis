@@ -1,6 +1,6 @@
 # Nexis 2.0 Foundation Contract
 
-_Status: initial implementation skeleton, corrected 2026-08-25 to enforce Core replaceability._
+_Status: initial implementation skeleton, corrected 2026-08-25 to enforce Core replaceability and rules-engine ownership._
 
 ## Dependency direction
 
@@ -12,13 +12,13 @@ The intended dependency shape is:
 Nexis.Host.Api / Nexis.Application
         |
         +--> selected Nexis.Core implementation
-        +--> selected feature-module implementations
+        +--> selected feature/system implementations
         +--> persistence/infrastructure adapters
 
 Stable public contracts
         |
         +--> Nexis.Core.Contracts
-        +--> Nexis.<Module>.Contracts
+        +--> Nexis.<System>.Contracts
         |
         v
 Nexis.Kernel
@@ -28,14 +28,14 @@ Rules:
 
 - `Nexis.Kernel` is the deliberately tiny universal substrate.
 - public contracts are separated from implementations;
-- feature modules may depend on `Nexis.Kernel`, their own public contract packages, and deliberately approved stable integration contracts;
-- feature modules must **not** depend on the concrete `Nexis.Core` implementation;
-- `Nexis.Core` must not depend on concrete feature-module implementations;
+- surrounding systems may depend on `Nexis.Kernel`, their own public contract packages, and deliberately approved stable integration contracts;
+- surrounding systems must **not** depend on the concrete `Nexis.Core` implementation;
+- the concrete Core must not depend on surrounding system implementation classes or private persistence models;
 - composition/application code selects and wires compatible implementations at runtime/build composition;
-- replacing `Nexis.Core` with a newer implementation or even a different runtime must not require feature modules to be rewritten when the stable contracts remain compatible;
-- domain projects must not reference the web host, EF Core, PostgreSQL drivers, Redis clients, Caddy concerns, SMTP, payment SDKs, filesystem adapters or frontend code.
+- replacing `Nexis.Core` with a newer implementation or even a different runtime must not require surrounding systems to be rewritten when the stable contracts remain compatible;
+- domain/system projects must not reference the web host, EF Core, PostgreSQL drivers, Redis clients, Caddy concerns, SMTP, payment SDKs, filesystem adapters or frontend code unless they are explicitly infrastructure adapters.
 
-The implementation skeleton does not yet contain the final `Nexis.Core.Contracts` split. That split is a foundation requirement before broad gameplay modules are allowed to integrate against Core.
+The implementation skeleton does not yet contain the final `Nexis.Core.Contracts` split. That split is a foundation requirement before broad gameplay systems are allowed to integrate against Core.
 
 ## Kernel
 
@@ -51,26 +51,32 @@ Every meaningful domain event carries:
 
 ## Core
 
-`Nexis.Core` is a **replaceable authoritative engine/runtime capability**, not the owner of every game's feature logic and not a mandatory compile-time parent of the modules.
+`Nexis.Core` is the replaceable authoritative **rules, logic and calculation machine** of Nexis.
 
-Its implementation may provide engine-level concerns such as standardized command execution, deterministic orchestration, global policy composition and other cross-cutting runtime behavior defined by stable contracts. It must not absorb Combat, Items, Economy, Education, Travel, Organizations, Magic or other feature-specific rules merely because those features execute through the engine.
+Core owns the executable meaning of gameplay rules: calculations, formula execution, prerequisite evaluation, legal/illegal transition decisions, resource-cost/result calculations, deterministic RNG consumption, time/cooldown rule evaluation, and composition of rules that need trusted snapshots from more than one system.
 
-A future `Nexis.Core vNext`, Rust/Go/C++ implementation, separate process, or other superior engine may replace the current Core implementation behind compatible contracts. The rest of Nexis must continue operating without source changes unless a contract itself is deliberately versioned or replaced.
+Core does **not** own the database, UI, API transport, scheduler, authentication provider, persistence implementation, external integrations or private system state stores. Surrounding systems provide trusted state/content through stable contracts and persist the authoritative transition produced by Core through the approved application/transaction boundary.
 
-Core replacement therefore means replacing an implementation, not rebuilding the game around a new foundation.
+Domain-specific rules may be organized inside Core by areas such as Combat, Economy, Travel, Education, Magic or Organizations. Their existence inside the rules engine does not permit surrounding systems to reference concrete Core classes.
 
-## Feature modules
+A future `Nexis.Core vNext`, Rust/Go/C++ implementation, separate process, or other superior engine may replace the current Core behind compatible contracts. Given the same compatible state/content/contracts and required rule versions, the surrounding Nexis systems must continue operating without source changes.
 
-Each feature is an independently understandable, testable and replaceable capability with one authoritative owner for its state.
+Core replacement therefore means replacing the rules machine, not rebuilding the game around a new foundation.
+
+The binding detailed specification is `v2/docs/CORE-ARCHITECTURE.md`.
+
+## Surrounding feature/system modules
+
+Each surrounding system is an independently understandable, testable and replaceable capability with one authoritative owner for its persistent state and external system responsibilities.
 
 Initial modules prove the pattern:
 
 - `Nexis.Modules.Identity`: current placeholder implementation for account/character identity and authorization vocabulary. This is planned to split into stable Identity contracts plus implementation before broad integration.
 - `Nexis.Modules.Audit`: current placeholder implementation for append-oriented privileged-action audit vocabulary and the approved internal-vs-player visibility boundary. It should follow the same contracts/implementation split.
 
-Later modules should follow the same pattern, including Education, Knowledge, Research, Economy, Contracts, World, Organizations, Combat, Magic and Spirits.
+Later systems should follow the same pattern, including Education, Knowledge, Research, Economy, Contracts, World, Organizations, Combat, Magic and Spirits.
 
-Modules interact through stable contracts, prepared snapshots/value objects, application orchestration and domain events. They do not read another module's private tables or concrete classes.
+Systems own their persistent state, state-loading/snapshot boundaries, projections, persistence adapters and external interfaces. They hand immutable trusted inputs to Core and consume authoritative decisions/transitions from Core through stable contracts. They do not read another system's private tables/classes and do not embed irreplaceable dependencies on Core internals.
 
 ## Audit invariant
 
@@ -78,26 +84,27 @@ All meaningful administrator activity is internally auditable. Privileged reads,
 
 ## Host and application composition
 
-`Nexis.Host.Api` is composition and transport, not the game. It may wire selected Core, module and infrastructure implementations but must not contain authoritative gameplay rules.
+`Nexis.Host.Api` is composition and transport, not the game. It may wire selected Core, system and infrastructure implementations but must not contain authoritative gameplay rules.
 
-`Nexis.Application`/composition owns wiring and orchestration across compatible contracts. It must not turn into a second domain layer or hard-code one concrete Core implementation as an irreplaceable dependency.
+`Nexis.Application`/composition owns wiring and orchestration across compatible contracts. It loads/coordinates trusted system state, invokes the selected Core rules engine, and coordinates persistence of accepted transitions. It must not turn into a second rules engine or hard-code one concrete Core implementation as an irreplaceable dependency.
 
 ## Persistence
 
-Persistence implementation is deliberately not added in this first skeleton. PostgreSQL remains the planned primary datastore, but domain contracts are being established before persistence technology is allowed to shape them. Event/audit storage will be append-oriented and corrections will use new compensating/corrective events rather than mutation of history.
+Persistence implementation is deliberately not added in this first skeleton. PostgreSQL remains the planned primary datastore, but contracts are being established before persistence technology is allowed to shape them. Event/audit storage will be append-oriented and corrections will use new compensating/corrective events rather than mutation of history.
 
-Persistence adapters implement storage concerns behind contracts and must remain replaceable without leaking EF Core/Npgsql types into Core or feature-module public boundaries.
+Persistence adapters implement storage concerns behind contracts and must remain replaceable without leaking EF Core/Npgsql types into Core or system public boundaries.
 
 ## Testing gate
 
-Before gameplay modules are implemented, architecture tests must enforce at minimum:
+Before broad gameplay systems are implemented, architecture tests must enforce at minimum:
 
-- `Nexis.Kernel` has no dependency on Core, modules or infrastructure;
-- feature-module implementations do not reference concrete `Nexis.Core`;
-- `Nexis.Core` does not reference concrete feature-module implementations;
-- Core/module public contract packages do not reference their implementation assemblies;
+- `Nexis.Kernel` has no dependency on Core, systems or infrastructure;
+- system implementations do not reference concrete `Nexis.Core`;
+- concrete `Nexis.Core` does not reference system implementation/private persistence assemblies;
+- Core/system public contract packages do not reference their implementation assemblies;
 - the API/Application composition layer is the place where implementations are selected;
-- a test replacement/fake Core can be composed with feature modules without changing those modules;
+- a replacement/fake Core can be composed with surrounding systems without changing those systems;
+- Core conformance/golden tests prove compatible rule semantics before replacement;
 - infrastructure dependencies do not leak into domain/public contracts;
 - authorization, audit visibility and Hennet public/private projection boundaries remain enforced.
 
