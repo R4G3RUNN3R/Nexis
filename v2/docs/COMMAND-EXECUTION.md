@@ -1,346 +1,346 @@
 # Nexis 2.0 Authoritative Command Execution Contract
 
-_Status: approved foundation design for implementation after build verification._
+_Status: approved foundation design, reconciled 2026-08-25 with Core and State Ownership._
 
 ## Purpose
 
-Nexis 2.0 uses one standardized authoritative command model without forcing every action through one giant handler, one global queue, or one concurrency strategy.
+Nexis 2.0 uses one standardized authoritative command model without forcing every action through one giant handler, one global queue, one mutable player object or one concurrency strategy.
 
-Every authoritative state mutation enters through an approved execution lane. Shared concerns are applied consistently by the lane; the owning domain module alone decides its gameplay invariants and state transition.
+Every authoritative mutation enters through an approved execution lane. The Application layer gathers current trusted snapshots from the authoritative state owners, the selected `Nexis.Core` implementation evaluates gameplay rules and produces typed owner-addressed transitions, and the owning systems persist only their own facts under the required concurrency/transaction boundary.
 
 Read-only queries are separate and never acquire mutation semantics merely because they crossed an API boundary.
 
+`CORE-ARCHITECTURE.md` is authoritative for rule ownership. `STATE-OWNERSHIP.md` is authoritative for persistent-state ownership. This document defines how commands execute across those boundaries.
+
 ## Research basis
 
-This design was selected after comparing the patterns used by the games and systems Nexis has borrowed from and the failure modes already observed in Nexis v1.
+This design combines the strongest patterns from Nexis's inspiration set and the useful safeguards already present in v1 without repeating v1's shared-state coupling.
 
-- **Torn** keeps its public API read-only and resolves player mutations inside the authoritative game service. Its gameplay also demonstrates why global states such as travel, hospitalization, resource bars and cooldowns must influence many otherwise unrelated actions consistently.
-- **WoW-like server architecture / TrinityCore** uses common session/packet ingress, specialized gameplay handlers, action throttling and transactional persistence for sensitive operations. Auction commodity flow also uses short-lived authoritative quotes rather than trusting stale client price state.
-- **Fallen London / StoryNexus** models actions as current-state prerequisites followed by consequences that change world/player state. The important lesson is to re-evaluate authoritative prerequisites at execution time rather than trust what the client previously saw.
-- **DarkThrone and similar browser RPGs** combine player actions with timed world processing, reinforcing that scheduler-driven mutations are still game actions and must not bypass the game rules.
-- **NationStates** shows the value of data-driven decision effects inside an appropriate domain, but not as a replacement for strong transactional invariants in economy, inventory or identity.
-- **Existing Nexis v1** already uses PostgreSQL transactions, row locking and canonical multi-player lock ordering in marketplace, PvP, item and organization flows. Those safeguards are worth preserving as principles, not as scattered feature-specific code.
-- **.NET/PostgreSQL guidance** supports identified/idempotent commands, optimistic concurrency for ordinary conflicts, explicit locking where contention demands it, bounded full-transaction retries for serialization/deadlock failures, and atomic state/event persistence.
-
-The result is a hybrid model deliberately adapted to Nexis rather than a copy of one source game.
+- **Torn** keeps external APIs observational/read-oriented while authoritative gameplay resolves server-side. Shared states such as travel, hospitalization, resources and cooldowns affect otherwise unrelated actions, reinforcing current-state server evaluation.
+- **WoW-like / TrinityCore** server patterns use centralized authoritative ingress with specialized rules/handlers and explicit transactions/locking for contested flows such as auctions.
+- **Fallen London / StoryNexus** demonstrates state prerequisite evaluation followed by state consequences, reinforcing re-evaluation from current authoritative state rather than trusting what the client previously saw.
+- **Existing Nexis v1** already uses PostgreSQL transactions, row locks and canonical multi-player lock ordering in sensitive flows. Those safeguards are preserved as principles while the broad mutable `player_state` ownership model is rejected.
+- **PostgreSQL/.NET** support optimistic revisions for ordinary conflicts, explicit locking for contested resources, bounded whole-transaction retry for retryable DB failures, and atomic durable state/event/outbox commits.
 
 ## Permanent rules
 
-1. No controller, scheduler, client, background worker, admin surface or infrastructure adapter may mutate authoritative game state by bypassing the owning domain module.
-2. A command is a request and may be accepted, rejected, conflicted, cancelled or fail. A domain event is a fact that already happened. Do not blur them.
-3. The actor is derived from trusted server authentication/system context. Client payloads never grant account, role, admin, ownership or character authority.
-4. The server's game clock is authoritative. Client timestamps may be retained as untrusted diagnostics only and never decide cooldowns, expiry, ordering or rewards.
-5. Current authoritative state is reloaded/revalidated at execution time. A screen the player opened five seconds ago is evidence of what they saw, not permission to mutate stale state.
-6. Every meaningful command attempt has a stable command identity and is protected against duplicate execution.
-7. State changes and the durable events/outbox records caused by a successful command commit atomically.
-8. External side effects such as email, WebSocket pushes, analytics and webhooks happen after commit through durable post-commit delivery mechanisms; they do not sit inside the authoritative game transaction.
-9. Concurrency protection is chosen by domain risk/contention. Nexis does not lock everything and does not pretend optimistic concurrency solves every contested transfer.
-10. Multi-resource locks use deterministic canonical ordering.
+1. No controller, scheduler, client, worker, admin surface, CIEL workflow or infrastructure adapter may mutate authoritative gameplay state by bypassing the approved command lane, Core evaluation and owning-system transition boundary.
+2. A command is a request. A domain event is a committed fact. Do not blur them.
+3. Actor identity/authority is server-derived. Client payloads never grant account, character, role, ownership or admin authority.
+4. Server game time is authoritative. Client timestamps are diagnostics only.
+5. Current owner snapshots are loaded/revalidated at execution time. UI state is never mutation authority.
+6. Every meaningful mutation command has stable command identity/idempotency protection.
+7. Core returns typed transition intent; it does not write owner databases directly.
+8. Each authoritative owner applies only transitions addressed to its own state and protects structural/revision invariants.
+9. Logically coupled owner state + terminal command outcome + authoritative events + outbox commit atomically where the gameplay promise requires atomicity.
+10. External side effects happen after commit through durable delivery.
+11. Concurrency protection is selected by contention/risk rather than applied uniformly.
+12. Multi-resource locks use deterministic canonical ordering.
+13. No execution path may reconstruct a universal mutable `PlayerState`/`RuntimeState` and write it back as the command result.
 
 ## Execution lanes
 
 ### Player command lane
 
-For commands initiated by an authenticated player, for example BuyListing, AttackPlayer, EquipItem, StartEducation, TravelTo or CastSpell.
+For authenticated player intents such as BuyListing, AttackPlayer, EquipItem, StartEducation, TravelTo or CastSpell.
 
 Shared stages:
 
 1. establish trusted account/session context;
-2. resolve the active character and entitlement context;
-3. establish command identity/idempotency;
-4. validate command schema and size/rate constraints;
-5. apply universal/global game policies;
-6. load authoritative state needed by the owning domain;
-7. execute domain-specific validation and rules;
-8. apply the selected concurrency strategy;
-9. commit state + events + outbox atomically;
-10. persist the terminal command outcome;
-11. return/push the authoritative result.
+2. resolve active Character and entitlement context;
+3. establish CommandId/idempotency receipt;
+4. validate contract schema, size and rate constraints;
+5. resolve the set of authoritative owners required by the intent;
+6. load current immutable typed snapshots/revisions from those owners;
+7. assemble trusted Core evaluation context, including authoritative time and controlled RNG where required;
+8. invoke the selected Core implementation to evaluate rules and produce Succeeded/Rejected/Conflict/DomainFailed/etc. plus typed owner-addressed transitions/events;
+9. if no committed mutation is warranted, persist the appropriate command outcome/history and return;
+10. if mutation is warranted, enter the selected concurrency/transaction boundary and revalidate/reload any state whose contention policy requires it;
+11. apply each typed transition through its authoritative owner, never by direct foreign-table writes;
+12. atomically commit owner state + terminal command/idempotency state + authoritative events + outbox;
+13. return/push authoritative projections/results.
+
+Core rule evaluation may be repeated inside the transaction after contested state is locked/reloaded when required for correctness. The pre-transaction evaluation is not permission to commit a stale decision.
 
 ### Admin command lane
 
-For state-changing privileged actions such as corrections, sanctions, grants, reversals or repairs.
+For state-changing privileged operations such as corrections, sanctions, grants, reversals and repairs.
 
-It uses the same core command identity/concurrency/transaction guarantees plus:
+It uses the same command/Core/owner guarantees plus:
 
-- elevated server-derived authorization;
-- mandatory reason/case metadata where required;
+- elevated current server-side capability checks;
+- mandatory reason/case metadata where policy requires it;
 - mandatory Admin Audit output;
-- impact-based decision on whether a safe player-facing log projection is created;
-- no hidden bypass that writes directly to domain tables.
+- safe player-facing material-effect projection where appropriate;
+- no silent impersonation and no direct owner-table bypass.
 
-Privileged read-only inspection remains on the authorized query path but is still recorded in the internal Admin Audit according to the existing audit decision.
+Privileged read-only inspection stays on the authorized query path and remains auditable.
 
 ### System command lane
 
-For authoritative timer/scheduler/world actions such as CompleteEducation, FinishTravel, ExpireListing, ResolveCooldown or ProcessWorldEvent.
+For timer/scheduler/world occurrences such as CompleteEducation, FinishTravel, ExpireListing, ResolveCooldown or ProcessWorldEvent.
 
-System jobs do not mutate tables directly. They issue domain commands using a trusted system actor and a stable occurrence identity so retries cannot resolve the same scheduled event twice.
+Schedulers own due-work mechanics, not gameplay outcomes. They issue trusted System Commands with stable occurrence identity. Application loads current owner snapshots, Core evaluates, and owners persist the result exactly as with other authoritative commands.
 
 ### Realtime command lane
 
-Reserved for future high-frequency native/Steam/WebGL gameplay where an HTTP-style request pipeline would be too heavy.
+Reserved for future high-frequency native/Steam/WebGL flows where HTTP-style ingress would be too heavy.
 
-A realtime session loop may dispatch commands differently, but it must preserve the same identity, server-time, authority, domain ownership, idempotency where applicable, state-transition and durable-event contracts. It is not permission to create a second authoritative rules engine.
+A realtime dispatcher may differ operationally but must preserve identity, authority, authoritative time, state ownership, Core rule evaluation, concurrency, event and persistence invariants. It is not permission to create a second rules engine or second write owner.
 
 ### Query lane
 
-Read-only requests such as opening inventory, viewing a profile, browsing the marketplace or reading the Player Log do not enter the mutation pipeline.
+Read-only operations such as inventory/profile/marketplace/log views do not enter mutation semantics.
 
-They still enforce authentication/authorization/knowledge filtering where required, but do not acquire idempotency, mutation transactions or domain-event semantics simply because data was requested.
+They enforce identity/authorization/knowledge filtering but do not gain idempotency or mutation transactions merely because data was requested. Query/projection code cannot write authoritative owner state.
 
 ## Command envelope
 
-The exact C# types may evolve during implementation, but every external or internally scheduled authoritative command must resolve to an execution envelope with these concepts.
+Every external or internally scheduled authoritative command resolves to these concepts. Exact C# types may evolve behind stable contracts.
 
 ### CommandId
 
-- immutable unique identity for one command intent;
-- stable across network retries;
-- client/session SDK may generate it for player/admin commands, but the server validates its shape and binds it to the authenticated actor;
-- system commands use server-generated or deterministic occurrence IDs;
-- reusing the same CommandId with a different actor, command type or payload fingerprint is an integrity violation and must be rejected;
-- duplicate delivery of the same command returns/reconstructs the prior authoritative outcome rather than executing again.
+- immutable identity for one command intent;
+- stable across retries;
+- may be generated by an approved client/session SDK for player/admin requests but is validated and bound to the authenticated actor;
+- system commands use server-generated or deterministic occurrence identity;
+- same CommandId + same actor/type/payload returns/reconstructs the prior outcome rather than executing again;
+- reuse with a different actor/type/payload fingerprint is an integrity/security violation;
+- intentionally repeating an action requires a new CommandId.
 
 ### CorrelationId
 
-- groups the complete causal operation for diagnostics, Player Log grouping and downstream events;
-- created/normalized by trusted server infrastructure at ingress;
+- groups one causal operation for diagnostics/history/downstream events;
+- created/normalized by trusted infrastructure at ingress;
 - propagated through child commands/events;
-- untrusted clients cannot choose a correlation identifier that grants access to another operation.
+- never grants authority.
 
-### Command type and contract version
+### Contract type/version
 
-- identifies the owning command contract and its schema version;
-- public command contracts are module-owned and versioned deliberately;
-- implementations may change without silently changing the public meaning of an existing contract.
+- identifies the versioned intent contract;
+- system/domain public contracts are owned by the relevant contract boundary;
+- implementation changes must not silently change existing contract meaning.
 
-### Actor context
+### ActorContext
 
-Created by the server, not accepted as authoritative command payload.
+Created by trusted server infrastructure, not accepted as authoritative payload. It may contain AccountId, active CharacterId, actor kind/lane, validated capabilities/entitlements and security/session revocation context.
 
-It may contain trusted concepts such as:
+Names, titles, public lore and client-supplied roles never establish authority.
 
-- AccountId;
-- active CharacterId where applicable;
-- execution lane/actor kind;
-- validated authorization/entitlement context;
-- session/security context needed by policy evaluation.
+### Authoritative receive/evaluation time
 
-Character name, display name, title or client-supplied role fields never establish authority.
+Recorded from `IGameClock`. Client time is diagnostic only and cannot determine cooldowns, expiry, ordering or rewards.
 
-### Authoritative receive time
+### Payload / intent
 
-Recorded from `IGameClock` when the engine accepts the command. It is used for audit ordering and command-lifecycle records.
+Typed requested intent and player-supplied domain inputs only. It does not contain server-derived privilege or calculated authoritative results.
 
-A client-supplied time may be retained for diagnostics/UI latency analysis only. It cannot determine gameplay truth.
+### Optional preconditions / quotes
 
-### Payload
+Expected revisions, quote IDs, listing versions, reservations or similar tokens may protect stale multi-step flows. They are assertions to validate, never values to trust.
 
-Typed module-owned command data containing only the player's requested intent and domain inputs. It must not contain server-derived privileges or calculated authoritative results.
-
-### Optional preconditions
-
-Commands may carry explicit preconditions when a workflow benefits from stale-state protection, such as an expected aggregate revision, quote identifier, listing identifier/version or other domain-specific token.
-
-These are assertions to validate, never instructions to trust.
-
-Nexis will not require every client mutation to send one global `ExpectedVersion`; different domains have different contention models.
+There is no required global `ExpectedPlayerVersion`; each owner/operation defines the concurrency preconditions it genuinely needs.
 
 ## Command receipt and lifecycle
 
-Nexis already requires every meaningful gameplay command attempt to appear in permanent history, including success, rejection and failure. Idempotency must therefore work with that audit requirement rather than sit beside it as an unrelated cache.
+Every meaningful gameplay command attempt remains durably traceable.
 
-Recommended lifecycle:
+1. **Receive** - establish unique CommandId and durable receipt bound to actor/type/payload fingerprint.
+2. **Evaluate/Execute** - load owner snapshots, invoke Core, then apply any accepted typed owner transitions under the selected transaction/concurrency strategy.
+3. **Terminate** - durably record Succeeded, Rejected, Conflict, Cancelled, DomainFailed or TechnicalFailure and link resulting events through correlation/causation metadata.
 
-1. **Receive** - establish a unique CommandId and durable receipt for the authenticated actor/command/payload fingerprint.
-2. **Execute** - run the owning domain through the selected transaction/concurrency strategy.
-3. **Terminate** - append a terminal outcome such as Succeeded, Rejected, Conflict, Cancelled or DomainFailed and link emitted domain events through correlation/causation metadata.
+If the process crashes after durable receipt but before terminal outcome, recovery resumes/retries the same CommandId. It must not invent a new identity and risk duplicate mutation.
 
-The idempotency registry may maintain operational status for efficient lookup, but the canonical historical command attempt/outcome is append-oriented and must remain reconstructable from the authoritative ledger.
-
-If the engine crashes after receipt but before a terminal outcome, recovery may safely resume/retry that same CommandId. It must never invent a new command ID and risk applying the intent twice.
-
-Transport failures that occur before the command is durably accepted are operational telemetry, not proof that the engine received a gameplay command.
+Transport failure before durable acceptance is operational telemetry, not proof that a gameplay command was received.
 
 ## Idempotency behaviour
 
-Idempotency is mandatory for authoritative mutation commands unless a command is provably naturally idempotent and the contract explicitly documents why.
+Idempotency is mandatory for authoritative mutation commands unless a contract is explicitly proven naturally idempotent.
 
 For a repeated CommandId:
 
-- same actor + same command type + same payload fingerprint + completed result -> return/reconstruct the existing outcome;
-- same identity while still executing -> return/wait according to lane policy without re-executing;
-- same CommandId with changed actor/type/payload -> reject and record an integrity/security signal;
-- a caller wanting to perform the same gameplay action again intentionally must create a new CommandId.
+- same actor + type + payload fingerprint + completed outcome -> return/reconstruct original outcome;
+- same identity while executing -> return/wait according to lane policy without a second execution;
+- changed actor/type/payload -> reject and record integrity/security signal;
+- deliberate repeat action -> new CommandId.
 
-This prevents double purchases, duplicate rewards, repeated refills, repeated transfers and the classic "the first response timed out so the browser bought it twice" failure.
+This prevents duplicate purchases, rewards, refills, transfers, crafting completions and timer resolutions.
+
+## Core evaluation and owner transitions
+
+Core receives only immutable current snapshots/content/context needed by the intent. It returns typed results and transitions addressed to specific owners.
+
+Examples:
+
+- Marketplace purchase -> Marketplace listing transition + Economy debit/credit + Inventory ownership transfer.
+- Equip item -> Equipment slot transition, with Inventory ownership/revision precondition.
+- Use consumable -> Inventory decrement + Resources change + Cooldown transition + Effects transition as applicable.
+- Paid education -> Economy debit + Education enrollment.
+
+There is no generic path/value patch such as `player.gold -= 20` or `player.inventory.sword += 1`.
+
+The owner may reject malformed/stale/impossible transition envelopes or DB constraint violations. That is storage/state integrity, not a second gameplay rules implementation.
 
 ## Concurrency strategy
 
-Nexis uses a **hybrid** strategy.
+Nexis uses a hybrid strategy.
 
 ### Default: optimistic concurrency
 
-Use aggregate/domain revision tokens or equivalent compare-and-swap protection for ordinary low-contention state changes.
+Use owner/aggregate revision tokens or conditional updates for ordinary low-contention state.
 
-Good fits include:
+Good fits include preferences, many single-character progression changes and education state where only one actor normally mutates the record.
 
-- profile/game preferences;
-- education enrollment state when only the owner can mutate it;
-- many single-character progression updates;
-- configuration-style domain state.
-
-If the state changed since it was loaded, the operation re-evaluates from current authoritative state or returns a defined conflict according to domain semantics. Do not silently overwrite another valid mutation.
+On conflict, reload current owner snapshots and re-evaluate through Core or return defined Conflict semantics. Never silently overwrite newer state.
 
 ### Selective pessimistic locking
 
-Use explicit row/resource locks for scarce or highly contested authoritative resources where two simultaneous operations must not both believe they won.
+Use explicit short-lived locks for scarce, contested or high-value resources where two operations cannot both win.
 
-Likely fits include:
+Likely fits:
 
-- buying/cancelling the same marketplace listing;
-- player-to-player transfers/trades;
-- guild/consortium treasury operations;
+- one marketplace listing purchase/cancel race;
+- direct trades/transfers;
+- organization treasury operations;
 - unique item ownership transfer;
 - escrow settlement;
-- limited-stock/limited-claim rewards;
-- some PvP or capture resolutions that atomically affect multiple actors.
+- limited claims/rewards;
+- some PvP/capture resolutions affecting multiple actors.
 
-Locks stay inside short database transactions and are never held while waiting on external network services.
+Locks are never held across external network calls.
 
 ### Canonical lock ordering
 
-When one command must lock multiple players/resources, resources are acquired in deterministic canonical order. The existing v1 marketplace/PvP pattern of sorting player identities before locking is retained as a design principle.
+When multiple owners/resources must be locked, Application/persistence infrastructure obtains them in deterministic canonical order defined by stable resource keys. The useful v1 practice of ordered player locking is preserved without preserving the v1 giant player-state row.
 
-Domain modules define the canonical key ordering for their resource types; application/persistence infrastructure enforces it consistently.
+### Database constraints
 
-### Database constraints as final invariants
+Unique constraints, FKs, checks and atomic conditional updates are final structural guardrails where appropriate. Application/Core checks provide gameplay semantics; DB constraints protect impossible persisted shape/ownership/uniqueness.
 
-Unique constraints, foreign keys, check constraints and atomic conditional updates should protect invariants that the database can enforce cheaply.
+### Isolation and retries
 
-Application checks improve errors and domain semantics; they do not replace the final database guardrail for uniqueness/ownership/one-time claims.
+Do not use blanket PostgreSQL `SERIALIZABLE` merely because it sounds safe.
 
-### Transaction isolation and retries
+Use short transactions plus explicit owner concurrency rules. Infrastructure provides bounded whole-operation retry for retryable DB serialization/deadlock failures (for example SQLSTATE 40001/40P01). Each retry reloads current snapshots and re-runs rule evaluation as required.
 
-Do not make PostgreSQL `SERIALIZABLE` the blanket default merely because it is the strongest label.
-
-Start from normal short transactions with explicit domain concurrency protection. Where a domain genuinely benefits from stronger isolation, choose it deliberately and test contention.
-
-Infrastructure must provide a bounded full-transaction retry policy for retryable PostgreSQL concurrency failures such as serialization failures and deadlocks. A retry restarts the entire domain operation from current authoritative state, not merely the last SQL statement.
-
-Never automatically retry:
-
-- authorization failures;
-- insufficient resources;
-- invalid command state;
-- business-rule rejection;
-- permanent unique/constraint violations that represent a real domain conflict.
-
-After bounded technical retries are exhausted, return a defined retryable technical/conflict result and preserve operational diagnostics.
+Never automatically retry authorization failures, insufficient resources, invalid state, business-rule rejection or permanent constraint conflicts.
 
 ## Stale-state protection and quotes
 
-A client-visible price, inventory count, target status or cooldown snapshot can become stale before the click reaches the engine.
+Client-visible prices, balances, inventory, target status and cooldowns are snapshots, not authority.
 
 Therefore:
 
-- authoritative domain rules are always re-evaluated at execution time;
-- high-risk multi-step flows may issue short-lived server-side quote/reservation/precondition tokens;
-- a valid quote guarantees only the domain properties explicitly stated by that quote;
-- expiry and quote validation use authoritative engine time;
-- quote IDs/tokens do not replace the command's own CommandId.
-
-This is particularly suitable for future marketplace commodity purchases, expensive crafting, travel fares or other flows where the player should be shown a firm value briefly before committing.
+- current owner state is reloaded and Core rules are re-evaluated at execution;
+- high-risk multi-step flows may issue short-lived server-side quotes/reservations;
+- a quote guarantees only the properties explicitly stated by its contract;
+- expiry uses authoritative game time;
+- quote/reservation identity never replaces CommandId.
 
 ## Atomic persistence and outbox
 
-For a successful durable command, one authoritative transaction must commit the logically coupled durable state together:
+For a successful durable command, one authoritative transaction commits all state that the gameplay promise requires to move together:
 
-- domain state mutations;
-- durable terminal command outcome/idempotency state needed to prevent replay;
-- authoritative domain/audit events caused by the command;
-- outbox records for downstream delivery.
+- all participating owner state transitions;
+- terminal command/idempotency outcome;
+- authoritative domain/audit/history records required by the command;
+- durable outbox records.
 
-No successful response may be sent before that durable commit is known to have succeeded.
+No success response is sent before commit succeeds.
 
-Post-commit consumers may then update projections, notifications, websocket feeds, achievements or external integrations according to their consistency requirements. Consumers are themselves idempotent by EventId.
+Post-commit consumers may update notifications, WebSocket feeds, analytics, search, dashboards and other rebuildable projections. Consumers are idempotent by EventId/contract identity.
+
+If future service extraction prevents a single ACID transaction, that specific workflow requires an explicit saga/compensation/idempotency design before extraction. Service boundaries do not excuse broken gameplay invariants.
 
 ## Failure/result vocabulary
 
-The exact result types are implementation work, but the engine must distinguish at least:
+Core/execution distinguishes at least:
 
-- **Succeeded** - authoritative state transition committed;
-- **Rejected** - command was understood but a domain/policy prerequisite was not satisfied;
-- **Conflict** - current authoritative state or concurrency made the requested transition invalid/stale;
-- **Cancelled** - a supported cancellation path ended the intent without the requested final transition;
-- **DomainFailed** - the game's defined resolution itself produced a failure outcome, such as a failed risky action, but processing was technically successful;
+- **Succeeded** - required authoritative transition committed;
+- **Rejected** - intent understood but rule/policy prerequisite not satisfied;
+- **Conflict** - current authoritative state/concurrency made requested transition stale/invalid;
+- **Cancelled** - supported cancellation ended the intent without requested final transition;
+- **DomainFailed** - technically successful gameplay resolution produced an in-world failure;
 - **TechnicalFailure** - infrastructure prevented completion and no success is claimed.
 
-A `DomainFailed` action is still a valid resolved gameplay event. A `TechnicalFailure` must never masquerade as an in-world failure and consume resources unless the authoritative transaction actually committed that outcome.
+A DomainFailed action may legitimately consume resources if that is the committed game rule. A TechnicalFailure must not masquerade as an in-world failure or consume resources unless an explicit durable gameplay outcome was actually committed.
 
 ## Example concurrency matrix
 
 | Operation | Default strategy | Additional guardrails |
 | --- | --- | --- |
-| Update player preference | optimistic revision | actor ownership |
-| Start education | optimistic/domain revision | current prerequisites rechecked |
-| Equip item | optimistic inventory/equipment revision | ownership + slot invariants |
-| Buy marketplace listing | ordered pessimistic locks | listing status, funds, inventory, unique/conditional update |
-| Direct player transfer | ordered pessimistic locks | balance/ownership constraints, idempotent CommandId |
-| Guild treasury withdrawal | treasury/member lock | permission snapshot rechecked, audit |
-| Claim one-time reward | atomic conditional/unique constraint | CommandId + claim key |
-| Finish travel timer | system command + optimistic/conditional transition | deterministic occurrence ID, server time |
-| Expire marketplace listing | system command + listing lock/conditional transition | stable occurrence/command identity |
-| Future realtime movement | realtime authoritative loop | sequence/state rules defined by realtime domain |
+| Update preference | optimistic revision | actor ownership |
+| Start education | optimistic/domain revision | current prerequisites + Economy debit atomicity |
+| Equip item | optimistic Inventory/Equipment revisions | ownership + slot invariants |
+| Buy marketplace listing | ordered pessimistic/conditional locks | Marketplace + Economy + Inventory atomicity |
+| Direct transfer | ordered locks/reservations | Economy/Inventory ownership constraints + CommandId |
+| Guild treasury withdrawal | Guild authority snapshot + Economy wallet lock | current domain permission rechecked + audit |
+| Claim one-time reward | conditional/unique claim | CommandId + claim key |
+| Finish travel | System Command + Travel conditional transition | stable occurrence ID + server time |
+| Expire listing | System Command + listing lock/conditional transition | stable occurrence ID |
+| Future realtime movement | realtime authoritative loop | same Core/owner/event invariants |
 
 ## Implementation boundaries
 
 ### Kernel
 
-May define only genuinely universal primitives/contracts needed by all commands, such as CommandId, CorrelationId and universal command metadata abstractions. It must not gain marketplace/combat/travel rules.
+Only genuinely universal primitives/contracts such as CommandId, CorrelationId and event/time abstractions. No combat/market/travel rules.
 
-### Module-owned contracts
+### Core contracts / Core implementation
 
-Each module owns its command payloads, public result contracts and any domain-specific precondition/quote types.
+Core contracts define the stable evaluation boundary. Concrete Core owns gameplay rule/calculation implementations and must not reference private persistence or owner implementation internals.
+
+### System-owned contracts
+
+Each authoritative owner defines stable snapshots, transition envelopes, public query/intent concepts and owner-specific preconditions/quotes as required. Contracts contain no EF/Npgsql/HTTP/frontend implementation types.
 
 ### Application/execution layer
 
-Owns lane orchestration, actor-context construction, idempotency orchestration, transaction policy selection hooks, correlation propagation and dispatch to the owning domain contract.
+Owns lane orchestration, ActorContext construction, current-snapshot loading coordination, Core invocation, idempotency, transaction/concurrency policy execution, correlation propagation and routing typed transitions to owners.
 
-It does not own domain gameplay rules.
+It does not contain gameplay formulas and does not write owner tables directly.
+
+### Authoritative owner systems
+
+Own persistent facts and apply only their typed transitions. They protect revision/structural/storage invariants but do not recreate Core gameplay calculations.
 
 ### Persistence adapters
 
-Own PostgreSQL/EF/Npgsql implementation details for command receipts, transactions, concurrency tokens, locking, outbox and retry classification.
-
-No EF Core/Npgsql types leak into Kernel/Core/module public contracts.
+Own PostgreSQL/EF/Npgsql implementation details for owner storage, command receipts, transactions, locking, outbox and retry classification. Those types never leak through public contracts.
 
 ## Required tests before broad gameplay work
 
 Add automated tests proving at minimum:
 
 1. identical CommandId + identical intent cannot mutate state twice;
-2. reused CommandId with a changed payload/actor is rejected;
-3. a duplicate completed command returns/reconstructs the original authoritative outcome;
-4. two concurrent purchases of one listing can produce at most one winner;
-5. opposite-direction two-player operations cannot deadlock because locks are acquired canonically;
-6. optimistic revision conflicts never silently overwrite newer state;
-7. a system job retry cannot complete the same timer/reward twice;
-8. a failed transaction emits no success event/outbox record;
-9. committed state and emitted durable events cannot diverge;
-10. technical failure is not converted into an in-world failure that consumes player resources;
-11. domain prerequisites are re-evaluated against current authoritative state, not trusted from client snapshots;
-12. query paths cannot invoke mutation handlers or acquire authority by supplying command-like fields.
+2. CommandId reuse with changed payload/actor is rejected;
+3. duplicate completed command reconstructs original outcome;
+4. two concurrent purchases of one listing produce at most one winner;
+5. opposite-direction multi-owner operations use canonical lock order and avoid preventable deadlock;
+6. optimistic conflicts never silently overwrite newer owner state;
+7. system-job retry cannot complete the same occurrence twice;
+8. failed transaction emits no success event/outbox record;
+9. committed owner state and durable events cannot diverge;
+10. TechnicalFailure is not converted into an in-world loss;
+11. prerequisites are re-evaluated from current authoritative owner snapshots, not client state;
+12. query paths cannot invoke mutation semantics;
+13. Core cannot write persistence directly;
+14. Application cannot directly mutate owner tables;
+15. Marketplace cannot directly edit Economy/Inventory state;
+16. Guilds/Consortiums cannot directly edit Economy/Inventory state;
+17. no global writable PlayerState/RuntimeState/qualities/counters object is introduced;
+18. a multi-owner command rolls back all participating owner transitions when one transition cannot commit.
 
 ## Explicit non-goals
 
 - no single mega-handler for every Nexis action;
+- no giant mutable player aggregate;
 - no global queue delaying ordinary synchronous gameplay;
 - no blanket table locking;
-- no blanket Serializable transaction policy without domain evidence;
-- no generic rules engine replacing strongly invariant economy/inventory/identity code;
+- no blanket Serializable policy without evidence;
+- no second gameplay rules engine inside Application or owner systems;
 - no client-authoritative expected state;
-- no direct scheduler SQL mutations;
-- no external service calls inside authoritative database transactions;
-- no duplicate authoritative owner for the same state domain.
+- no direct scheduler SQL gameplay mutations;
+- no external service calls inside authoritative DB transactions;
+- no duplicate authoritative owner for one state concept;
+- no generic path/value patch mechanism spanning systems.
