@@ -8,6 +8,17 @@ _Status: foundation branch ready for build verification and continued implementa
 
 The existing/current Nexis application outside `v2/` is reference material and must remain untouched unless a task explicitly concerns preservation analysis or migration tooling.
 
+## Canonical engineering instructions
+
+All coding agents and human engineers use the same canonical working rules:
+
+- `v2/docs/ENGINEERING-MANUAL.md` - universal workflow, quality bar, security, multi-agent rules, testing, documentation, Git/deployment discipline and Definition of Done.
+- `v2/docs/WORK-ORDER-TEMPLATE.md` - standard task packet so Claude, Codex and other agents receive the same objective, scope, owners, contracts, acceptance criteria and verification requirements.
+- `v2/AGENTS.md` - short Codex/agent entrypoint into the canonical docs.
+- `v2/CLAUDE.md` - Claude Code adapter importing the same canonical docs.
+
+Model-specific entry files must never become alternative rulebooks. Provider/model choice may change tools or parallelism, not Nexis architecture or the quality bar.
+
 ## Binding design documents
 
 Before implementing foundation code, read and preserve:
@@ -22,11 +33,13 @@ Before implementing foundation code, read and preserve:
 
 ### Precedence
 
+`ENGINEERING-MANUAL.md` is the binding universal working policy. It does not replace specialized architecture documents; it requires every agent to obey them consistently.
+
 `CORE-ARCHITECTURE.md` is the binding definition of Core. `Nexis.Core` is the authoritative rules, logic and calculation machine while remaining independently replaceable behind stable versioned contracts.
 
 `STATE-OWNERSHIP.md` is the binding definition of persistent state/data ownership. It supersedes older examples that imply a system may own another system's facts, static content that belongs to Content Registry, or a global mutable `PlayerState`/`RuntimeState`/qualities/counters container. The permanent rule is one state concept, one authoritative write owner.
 
-`COMMAND-EXECUTION.md` defines how Application loads current owner snapshots, invokes the selected Core, coordinates concurrency/transactions and routes typed transitions to the authoritative owners. It has been reconciled with Core and State Ownership; do not recreate the older model where an owning module both contains all gameplay rules and mutates shared player state.
+`COMMAND-EXECUTION.md` defines how Application loads current owner snapshots, invokes the selected Core, coordinates concurrency/transactions and routes typed transitions to authoritative owners. It has been reconciled with Core and State Ownership; do not recreate the older model where an owning module both contains all gameplay rules and mutates shared player state.
 
 `IDENTITY-AUTHORIZATION.md` is the approved identity/security boundary. Preserve Account/Character separation, one playable character per normal account initially, immutable public player identity, capability/policy-based staff authorization, entitlement separation and the prohibition on character-name/client-state privilege.
 
@@ -38,18 +51,19 @@ If wording in an older document conflicts with a newer binding ownership/Core de
 
 ## First actions for Claude Code / Codex
 
-1. Verify the available .NET SDK with `dotnet --info`.
-2. Restore `v2/Nexis.slnx`.
-3. Build the complete solution with warnings treated as errors.
-4. If the pinned SDK policy cannot be satisfied, fix the environment or deliberately update `global.json`; do not silently retarget the engine.
-5. Convert `Nexis.Architecture.Tests` from a placeholder into a real automated test project using an approved current .NET test stack.
-6. Add dependency/ownership architecture tests before adding gameplay systems.
-7. Split stable engine-facing public contracts from the concrete `Nexis.Core` implementation before surrounding systems integrate against Core behaviour.
-8. Split `Nexis.Identity.Contracts` from Identity implementation before broad integration.
-9. Establish typed owner snapshot/transition contract seams required by `STATE-OWNERSHIP.md`; do not create a universal PlayerSnapshot/PlayerState.
-10. Add a Core conformance-test seam so a fake/replacement Core can be composed without changing surrounding systems.
-11. Implement command identity/execution-lane/concurrency/transaction/idempotency behaviour exactly through the reconciled `COMMAND-EXECUTION.md` model.
-12. Prove one deliberately multi-owner vertical scenario end-to-end before broad feature fan-out.
+1. Read `v2/docs/ENGINEERING-MANUAL.md` and the current Work Order/task packet before editing.
+2. Verify the available .NET SDK with `dotnet --info`.
+3. Restore `v2/Nexis.slnx`.
+4. Build the complete solution with warnings treated as errors.
+5. If the pinned SDK policy cannot be satisfied, fix the environment or deliberately update `global.json`; do not silently retarget the engine.
+6. Convert `Nexis.Architecture.Tests` from a placeholder into a real automated test project using an approved current .NET test stack.
+7. Add dependency/ownership architecture tests before adding gameplay systems.
+8. Split stable engine-facing public contracts from the concrete `Nexis.Core` implementation before surrounding systems integrate against Core behaviour.
+9. Split `Nexis.Identity.Contracts` from Identity implementation before broad integration.
+10. Establish typed owner snapshot/transition contract seams required by `STATE-OWNERSHIP.md`; do not create a universal PlayerSnapshot/PlayerState.
+11. Add a Core conformance-test seam so a fake/replacement Core can be composed without changing surrounding systems.
+12. Implement command identity/execution-lane/concurrency/transaction/idempotency behaviour exactly through the reconciled `COMMAND-EXECUTION.md` model.
+13. Prove one deliberately multi-owner vertical scenario end-to-end before broad feature fan-out.
 
 ## Required architecture tests
 
@@ -170,6 +184,8 @@ Do not begin broad Education, Combat, Economy, Magic, Spirits, World, Travel, Ma
 
 ## Permanent constraints
 
+- all engineering agents, regardless of provider/model, use the same `ENGINEERING-MANUAL.md`, architecture documents, Work Order requirements and Definition of Done;
+- any sub-agent receives the same parent constraints and may not invent a different architecture/quality bar;
 - C#/.NET is the current primary authoritative engine implementation, not a requirement for every future client/specialist subsystem;
 - `Nexis.Core` is the authoritative rules, logic and calculation machine;
 - concrete Core is replaceable behind stable contracts;
