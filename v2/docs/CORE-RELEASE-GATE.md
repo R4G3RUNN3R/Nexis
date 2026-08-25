@@ -8,6 +8,14 @@ No new `Nexis.Core` implementation becomes production authority merely because u
 
 Every candidate Core release must first survive an isolated, production-like proving period on a newly provisioned VPS before production cutover is permitted.
 
+The proving process deliberately combines three independent evidence lanes:
+
+1. deterministic automated replay/conformance testing;
+2. diverse AI-assisted adversarial/exploratory testing;
+3. real manual testing by Voidsmith Industries staff or explicitly authorized human testers.
+
+No candidate Core may pass the release gate on AI testing alone. Human testing and AI testing run in parallel and their findings are compared, reproduced and reconciled before promotion.
+
 The goal is to prove three things with real historical evidence:
 
 1. the candidate preserves the required gameplay semantics and invariants;
@@ -97,13 +105,63 @@ AI output is evidence generation, not release authority. The deterministic test 
 
 Every AI-generated scenario worth retaining is normalized into the same machine-readable replay format and records provenance such as generator/model family, model/version when available, scenario generation strategy, source historical case(s), deterministic seed/input set and expected/invariant assertions. Valuable generated scenarios become permanent replay-corpus assets for future Core releases.
 
+## Voidsmith human validation lane
+
+Voidsmith Industries staff or explicitly authorized human testers run manual testing throughout the same proving period. Human testing is not a final-day smoke check and not a ceremonial sign-off after the AI work is complete; it is an independent parallel lane from the beginning of the soak.
+
+Human testers use dedicated test identities and the isolated environment only. They do not need or receive production secrets or a production write path merely to reproduce realistic workflows.
+
+Human testing should cover both scripted historical scenarios and unscripted exploratory use, including:
+
+- real player workflows from login through multi-step gameplay;
+- admin/support workflows and correction/reversal paths;
+- economy, inventory, equipment, combat, PvP, travel, education, skills, magic, organizations and other implemented domains;
+- attempts to act in unexpected orders or from stale screens/state;
+- repeated clicking, retrying, backing out and reconnecting as real users do;
+- exploit-minded behaviour, including intentionally confusing sequences a deterministic suite may not invent;
+- semantic judgement: whether a result is technically reproducible but obviously wrong for the game rule or player expectation;
+- UX-adjacent observations that expose incorrect Core assumptions even when the API contract itself remains valid;
+- recovery after restart/disconnect/error conditions;
+- long-session behaviour and state consistency across many actions.
+
+Human testers may create new scenarios directly from observed behaviour. Confirmed useful manual scenarios are normalized into the same replay format, provenance-tagged as human-authored/observed and added permanently to the production-derived corpus.
+
+Human findings cannot be dismissed because the AI swarm did not reproduce them. AI findings cannot be dismissed because staff did not notice them manually. Each finding is triaged on evidence.
+
+## Parallel comparison and cross-reproduction
+
+AI and human testing are intentionally compared rather than reported as unrelated workstreams.
+
+Where practical, selected historical/scenario packs are assigned independently to both lanes before either sees the other's conclusions. This preserves independent discovery and makes agreement/disagreement meaningful.
+
+Findings are classified at minimum as:
+
+- detected by deterministic harness;
+- detected independently by both human and AI lanes;
+- human-only discovery;
+- AI-only discovery;
+- performance/telemetry-only discovery;
+- expected rule-version difference;
+- unexplained divergence;
+- invalid/non-reproducible report.
+
+For material findings, the opposite lane should attempt reproduction where sensible:
+
+- AI agents try to minimize/reproduce human-discovered failures;
+- staff manually validate high-impact AI-discovered scenarios where practical;
+- the deterministic harness converts confirmed cases into permanent machine-repeatable tests.
+
+The release report therefore records not merely total test counts but what each lane found, what overlapped, what only humans found, what only AI found, and whether every material result has been resolved or deliberately accepted through an explicit documented rule change.
+
+Human judgement and AI diversity complement each other, but deterministic invariants remain non-negotiable. Neither staff nor AI may simply vote an invariant violation into acceptability.
+
 ## Thirty-day soak
 
 A candidate Core must complete a minimum continuous 30-day pre-production soak before production promotion.
 
-During the soak the environment repeatedly executes the historical corpus and approved stress/adversarial suites. The purpose is not to run each scenario once and then idle for the remaining month. Scenarios are continually replayed, shuffled, batched, mutated and stressed so long-duration problems can surface.
+During the soak the environment repeatedly executes the historical corpus and approved stress/adversarial suites while the AI swarm and Voidsmith human validation lane run in parallel. The purpose is not to run each scenario once and then idle for the remaining month. Scenarios are continually replayed, shuffled, batched, mutated and stressed so long-duration problems can surface.
 
-The test swarm may generate additional scenarios continuously from the replay corpus throughout the month. Newly discovered valid bugs, edge cases, exploits or performance pathologies are added to the permanent corpus and re-run against both the current production Core semantics and the candidate as appropriate.
+The test swarm and staff may generate additional scenarios continuously from the replay corpus and observed behaviour throughout the month. Newly discovered valid bugs, edge cases, exploits or performance pathologies are added to the permanent corpus and re-run against both the current production Core semantics and the candidate as appropriate.
 
 The soak should exercise:
 
@@ -145,6 +203,14 @@ Speed never excuses semantic regression.
 Track at minimum:
 
 - scenario counts and coverage by domain/category;
+- deterministic automated replay counts;
+- human manual scenario/session counts and coverage;
+- AI-generated scenario counts and coverage;
+- findings detected by both human and AI lanes;
+- human-only confirmed findings;
+- AI-only confirmed findings;
+- deterministic/telemetry-only findings;
+- cross-reproduction success/failure rates;
 - identical/equivalent result rate;
 - expected rule-version differences;
 - unexplained semantic divergences;
@@ -160,7 +226,8 @@ Track at minimum:
 - crash/restart count;
 - technical failure/error rate;
 - deterministic repeatability rate;
-- AI-generated unique scenario yield and confirmed defect yield.
+- AI-generated unique scenario yield and confirmed defect yield;
+- human-generated unique scenario yield and confirmed defect yield.
 
 Results are stored as release evidence linked to the immutable candidate build.
 
@@ -177,6 +244,9 @@ A candidate Core cannot be promoted while any of the following remains unresolve
 - material data-contract incompatibility;
 - unexplained crash or sustained resource leak;
 - material performance regression without an explicitly approved trade-off;
+- material unresolved finding from either the AI or human lane;
+- failure to complete both AI-assisted and Voidsmith manual testing coverage required for the candidate;
+- missing documented human release sign-off from the designated Voidsmith release authority/staff process;
 - missing rollback compatibility;
 - failure to complete the minimum 30-day soak for the exact candidate build.
 
@@ -185,16 +255,17 @@ A candidate Core cannot be promoted while any of the following remains unresolve
 After the candidate completes the release gate:
 
 1. freeze the approved candidate build;
-2. archive the complete soak/replay report and unresolved-none assertion;
-3. confirm compatible contracts/data/rule versions;
-4. confirm deployment and rollback packages for both candidate and previous Core;
-5. perform production cutover through configuration/composition/deployment, not surrounding-system rewrites;
-6. run immediate production smoke/invariant checks;
-7. retain the previous compatible Core for the defined rollback window;
-8. continue enhanced monitoring after cutover.
+2. archive the complete deterministic, AI and human soak/replay reports with their comparison/cross-reproduction results;
+3. record formal Voidsmith human release sign-off and confirm no material unresolved findings remain;
+4. confirm compatible contracts/data/rule versions;
+5. confirm deployment and rollback packages for both candidate and previous Core;
+6. perform production cutover through configuration/composition/deployment, not surrounding-system rewrites;
+7. run immediate production smoke/invariant checks;
+8. retain the previous compatible Core for the defined rollback window;
+9. continue enhanced monitoring after cutover.
 
 The isolated proving VPS remains non-authoritative. It may be retained briefly for post-release comparison or securely destroyed/reprovisioned according to operations policy after evidence is preserved.
 
 ## Core-release principle
 
-A new Core earns production authority through reproduced history, adversarial testing, sustained operation and measured evidence. It does not receive authority merely because it is newer, faster, written in a fashionable language, or has been admired enthusiastically by several AIs.
+A new Core earns production authority through reproduced history, deterministic evidence, diverse AI adversarial testing, real human testing, sustained operation and measured comparison between those lanes. It does not receive authority merely because it is newer, faster, written in a fashionable language, or has been admired enthusiastically by several AIs.
