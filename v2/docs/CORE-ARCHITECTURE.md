@@ -144,6 +144,55 @@ A faster/safer Core implementation may execute the same rule version without cha
 
 When gameplay rules intentionally change, rule/formula versions are explicit so historical events/support tools can identify what logic produced an old outcome. A new Core may support multiple rule versions during migrations/replays where needed.
 
+## Production-derived replay corpus
+
+Detailed authoritative logs are also a permanent Core-upgrade asset. Nexis should be able to turn real historical production scenarios into reproducible Core test cases instead of relying only on hand-written synthetic tests.
+
+For every meaningful Core evaluation, the internal replay record must preserve or be able to resolve enough structured information to reproduce the decision. The exact storage representation may use immutable content-addressed snapshots/references rather than duplicating large state blobs for every action, but the replay boundary must capture or resolve at least:
+
+- immutable CommandId, CorrelationId and causation links;
+- Core implementation version;
+- gameplay rule/formula version;
+- content/data version identifiers relevant to the decision;
+- normalized command intent;
+- trusted execution-context fields relevant to the rule decision;
+- immutable authoritative state/snapshot inputs, or durable references/checksums sufficient to reconstruct them exactly;
+- authoritative evaluation time and time-zone/reset context where relevant;
+- deterministic RNG stream/input information required to reproduce the result, kept in restricted internal storage and never exposed as exploitable player data;
+- authoritative result/status;
+- calculated costs, rewards, damage, timings and other relevant numerical outputs;
+- proposed/persisted state transitions and emitted events;
+- execution timing and performance telemetry suitable for Core comparison;
+- whether persistence committed, rejected, conflicted, failed technically or was later compensated/reversed.
+
+The replay-grade internal trace is not the Player Log. Player-facing logs remain knowledge-aware and privacy-filtered. Security secrets, authentication tokens, passwords and unrelated sensitive data must never be copied into replay records merely for completeness.
+
+Historical scenarios should be taggable into reusable replay packs, including ordinary production traffic, high-value economy operations, PvP/combat, timers, edge cases, incidents, known bugs, exploit attempts, concurrency races and previously repaired/corrected outcomes.
+
+A production bug that is fixed becomes a permanent regression scenario. A strange but valid edge case becomes a permanent compatibility scenario. A suspected exploit can become an adversarial scenario. The corpus should grow more valuable with the age of the game.
+
+## Core-vNext historical comparison
+
+A candidate Core may be evaluated against historical production traces in three distinct modes:
+
+1. **Semantic-equivalence replay** - same gameplay rule/content versions and same controlled inputs. Core vNext is expected to produce the same authoritative game result and invariant-preserving transitions as the active Core, subject only to explicitly declared non-semantic representation differences.
+2. **Intentional rule-evolution replay** - candidate Core executes a newer gameplay rule/formula version. Differences are expected only where the new rule specification says they should occur; all other divergence is investigated.
+3. **Performance replay** - correctness is established first, then the same scenarios are used to compare evaluation latency, throughput, CPU cost, memory/allocation behaviour and other engine metrics without letting speed hide semantic regressions.
+
+For each replay, the comparison tooling should classify:
+
+- identical result;
+- equivalent result with allowed representation differences;
+- expected rule-version difference;
+- unexplained semantic divergence;
+- invariant violation;
+- performance improvement/regression;
+- replay impossible because required historical context is missing.
+
+The final category is itself useful engineering evidence: it identifies logging/context gaps that should be fixed for future traces.
+
+Correctness and invariants always outrank speed. A Core that is faster because it skipped a rule is not an upgrade; it is an optimized bug.
+
 ## Core replacement standard
 
 A replacement Core is not accepted merely because it compiles.
@@ -163,7 +212,8 @@ At minimum the suite must test:
 9. stale/concurrent state handling expectations;
 10. no direct persistence/network/UI/auth dependencies;
 11. no secret state owned only by the outgoing Core;
-12. performance/regression thresholds appropriate to the candidate Core.
+12. performance/regression thresholds appropriate to the candidate Core;
+13. production-derived historical replay packs covering representative real gameplay, known incidents, prior bugs, edge cases and adversarial/exploit scenarios.
 
 ## Shadow comparison and cutover
 
