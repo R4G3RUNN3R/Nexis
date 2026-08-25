@@ -14,10 +14,16 @@ Before implementing foundation code, read and preserve:
 
 - `v2/docs/FOUNDATION.md`
 - `v2/docs/CORE-ARCHITECTURE.md`
+- `v2/docs/CORE-RELEASE-GATE.md`
+- `v2/docs/COMPONENT-RELEASE-GATE.md`
 - `v2/docs/COMMAND-EXECUTION.md`
 - `v2/docs/IDENTITY-AUTHORIZATION.md`
 
 `CORE-ARCHITECTURE.md` is the binding definition of Core. `Nexis.Core` is the authoritative rules, logic and calculation machine, while remaining independently replaceable behind stable versioned contracts. Surrounding systems own persistent state/data/interfaces and must never compile against concrete Core internals. If older wording in another foundation document implies that gameplay rules belong to surrounding module implementations, `CORE-ARCHITECTURE.md` supersedes that wording.
+
+`CORE-RELEASE-GATE.md` is the Core-specific proving policy. Candidate Core builds require production-derived replay, deterministic conformance, diverse AI adversarial testing, independent Voidsmith staff manual testing, a fresh production-like isolated environment, at least 30 days of exact-build soak, explicit human sign-off and rollback readiness.
+
+`COMPONENT-RELEASE-GATE.md` generalizes that discipline to every material Nexis component replacement/version upgrade. Never treat Core as the only moving part that needs proving. Every replaceable module/system/service/adapter is tested through deterministic automation, diverse AI testing and independent Voidsmith human testing in parallel, with findings compared/cross-reproduced and a minimum 30-day exact-build soak in a brand-new production-like isolated environment before cutover. Emergency hotfixes/ordinary low-risk maintenance are a separate release class, not a loophole for calling an upgrade a patch.
 
 `COMMAND-EXECUTION.md` is the approved authoritative mutation/concurrency design. Preserve its execution lanes, idempotency, server authority, transaction and concurrency rules, but interpret domain rule evaluation through the Core boundary defined by `CORE-ARCHITECTURE.md`.
 
@@ -128,6 +134,8 @@ Do not begin broad Education, Combat, Economy, Magic, Spirit, World or Organizat
 - replacing Core with `Core vNext`, another runtime or a separate service must not require surrounding-system rewrites while contracts/rule versions remain compatible;
 - surrounding systems own persistent state/data/interfaces; Core evaluates rules and returns authoritative decisions/transitions;
 - Core must not own a hidden duplicate database that makes replacement require state reconstruction;
+- every material replaceable-component version upgrade follows `COMPONENT-RELEASE-GATE.md`: brand-new production-like isolated proving environment, deterministic automation, diverse AI testing, independent Voidsmith human testing in parallel, cross-reproduction, minimum 30-day exact-build soak and rollback readiness;
+- AI never runs all tests and never has sole release authority;
 - one authoritative owner exists for each persistent game-state domain;
 - Account is the authentication/security/entitlement principal; Character is the in-world gameplay identity; the two identifiers are never collapsed even while the initial product permits one playable character per account;
 - public player identity is stable and separate from mutable display name/internal account identity;
