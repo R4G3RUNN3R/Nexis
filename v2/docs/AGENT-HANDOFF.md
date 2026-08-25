@@ -16,6 +16,8 @@ Before implementing foundation code, read and preserve:
 - `v2/docs/COMMAND-EXECUTION.md`
 - `v2/docs/IDENTITY-AUTHORIZATION.md`
 
+`FOUNDATION.md` now contains a hard architectural requirement: **the concrete `Nexis.Core` implementation is replaceable and feature modules must not depend on it directly.** Core, modules and infrastructure are composed through stable contracts. Do not recreate a `feature modules -> Nexis.Core` dependency chain.
+
 `COMMAND-EXECUTION.md` is the approved authoritative mutation/concurrency design. Do not simplify it into one mega-handler, blanket optimistic concurrency, blanket locking, direct scheduler SQL writes, or client-authoritative state.
 
 `IDENTITY-AUTHORIZATION.md` is the approved identity/security boundary. Preserve Account/Character separation, the initial one-playable-character-per-account policy, immutable public player identity, capability/policy-based staff authorization, entitlement separation, and the prohibition on character-name/client-state privilege.
@@ -28,27 +30,33 @@ Before implementing foundation code, read and preserve:
 4. If the pinned SDK policy cannot be satisfied, fix the environment or deliberately update `global.json`; do not silently retarget the engine.
 5. Convert `Nexis.Architecture.Tests` from a placeholder into a real automated test project using an approved, current .NET test stack.
 6. Add dependency-boundary tests before adding gameplay modules.
-7. Read `v2/docs/COMMAND-EXECUTION.md` and implement foundation work against its command identity, execution-lane, concurrency, transaction and idempotency constraints rather than inventing a separate request model.
-8. Read `v2/docs/IDENTITY-AUTHORIZATION.md` before changing the current placeholder Identity contracts; split public Identity contracts from implementation rather than allowing the placeholder module assembly to become the permanent integration boundary.
+7. Split stable engine-facing public contracts from the concrete `Nexis.Core` implementation before feature modules integrate against Core behavior. The current skeleton has not completed this contracts/implementation split yet.
+8. Read `v2/docs/COMMAND-EXECUTION.md` and implement foundation work against its command identity, execution-lane, concurrency, transaction and idempotency constraints rather than inventing a separate request model.
+9. Read `v2/docs/IDENTITY-AUTHORIZATION.md` before changing the current placeholder Identity contracts; split public Identity contracts from implementation rather than allowing the placeholder module assembly to become the permanent integration boundary.
 
 ## Required architecture tests
 
 Prove at minimum that:
 
-- `Nexis.Kernel` does not depend on other Nexis projects or infrastructure libraries.
-- `Nexis.Core` depends only on `Nexis.Kernel` and approved BCL/runtime libraries.
-- feature modules do not reference the API host or concrete persistence/network implementations.
-- the API host contains composition/transport only and does not become the owner of gameplay rules.
-- no authorization decision grants privilege from character name, display name, title or client-supplied role state.
-- query paths cannot mutate authoritative state.
-- background/system workers cannot bypass the command/domain boundary to write authoritative game state directly.
+- `Nexis.Kernel` does not depend on other Nexis projects or infrastructure libraries;
+- stable Core/module contract packages do not depend on their concrete implementations;
+- feature-module implementations do **not** reference concrete `Nexis.Core`;
+- concrete `Nexis.Core` does **not** reference concrete feature-module implementations;
+- a replacement/fake Core implementation can be composed with feature modules without modifying those modules;
+- feature modules do not reference the API host or concrete persistence/network implementations;
+- the API/Application layer contains composition/transport/orchestration only and does not become the owner of gameplay rules;
+- no authorization decision grants privilege from character name, display name, title or client-supplied role state;
+- query paths cannot mutate authoritative state;
+- background/system workers cannot bypass the command/domain boundary to write authoritative game state directly;
 - account/platform capabilities, gameplay-domain roles and commercial entitlements remain separate authorization concepts.
 
 ## Next foundation slices
 
 After the solution is green, proceed in this order:
 
-1. **Command execution + identity/security foundation**
+1. **Core-contract separation + command execution + identity/security foundation**
+   - introduce the stable public engine-facing contract boundary required to replace `Nexis.Core` independently;
+   - keep concrete Core out of feature-module compile-time dependencies;
    - universal command identity/correlation primitives only where genuinely cross-domain;
    - authenticated account context and trusted actor-context construction;
    - explicit authorization policy/capability contracts rather than ordinal-role privilege checks;
@@ -95,6 +103,8 @@ Do not begin broad Education, Combat, Economy, Magic, Spirit, World or Organizat
 
 - the solution builds cleanly;
 - dependency architecture tests exist and pass;
+- Core public contracts are separated from the concrete Core implementation;
+- feature modules can be proven independent of concrete Core;
 - identity/Hennet projection security tests exist and pass;
 - Account/Character/public-identity boundaries and capability authorization are represented and tested;
 - command identity/execution-lane boundaries are represented and tested;
@@ -104,7 +114,9 @@ Do not begin broad Education, Combat, Economy, Magic, Spirit, World or Organizat
 
 ## Permanent constraints
 
-- C#/.NET is the primary authoritative engine implementation, not a requirement that every future client or specialist subsystem use C#.
+- C#/.NET is the primary current authoritative engine implementation, not a permanent dependency that every feature/client/specialist subsystem must share;
+- the concrete `Nexis.Core` implementation is replaceable; feature modules depend on stable contracts, never Core internals;
+- replacing Core with `Core vNext`, another runtime or a separate service must not require feature-module rewrites while contracts remain compatible;
 - one authoritative owner exists for each game-state domain;
 - Account is the authentication/security/entitlement principal; Character is the in-world gameplay identity; the two identifiers are never collapsed even while the initial product permits one playable character per account;
 - public player identity is stable and separate from mutable display name/internal account identity;
@@ -113,7 +125,7 @@ Do not begin broad Education, Combat, Economy, Magic, Spirit, World or Organizat
 - cross-domain interaction uses stable contracts, orchestration, snapshots/value objects or domain events rather than concrete implementation coupling;
 - all authoritative state mutations enter through an approved execution lane and the owning domain module;
 - read-only queries use a separate path and cannot become mutations through supplied payload fields;
-- meaningful commands/actions resolve through the authoritative engine, not client state;
+- meaningful commands/actions resolve through the selected authoritative engine implementation, not client state;
 - commands use stable identity/idempotency protection and current authoritative state is revalidated at execution time;
 - concurrency is hybrid: optimistic by default, selective deterministic locking/atomic constraints for contested resources;
 - state + durable events/outbox commit atomically for successful durable commands;
