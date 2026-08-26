@@ -36,6 +36,31 @@ public sealed record EntitlementKey
 }
 
 /// <summary>
+/// Stable server-side identity for an automated authority source such as the scheduler or CIEL.
+/// This is not an Account and must never be accepted from an untrusted client.
+/// </summary>
+public sealed record SystemActorKey
+{
+    public static SystemActorKey Platform { get; } = new("nexis.system");
+
+    public SystemActorKey(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized.Length > 128)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "System actor keys cannot exceed 128 characters.");
+        }
+
+        Value = normalized;
+    }
+
+    public string Value { get; }
+
+    public override string ToString() => Value;
+}
+
+/// <summary>
 /// Server-created actor facts supplied to authoritative command/Core evaluation. This contract
 /// contains stable identity, current effective platform capabilities and commercial entitlements;
 /// it never accepts character names, titles, client roles or gameplay-domain ranks as authority.
@@ -47,6 +72,7 @@ public sealed class TrustedActorContext
         CommandExecutionLane lane,
         AccountId? accountId,
         CharacterId? characterId,
+        SystemActorKey? systemActorKey,
         long? securityVersion,
         IEnumerable<PlatformCapabilityKey>? capabilities,
         IEnumerable<EntitlementKey>? entitlements)
@@ -66,10 +92,24 @@ public sealed class TrustedActorContext
             throw new ArgumentOutOfRangeException(nameof(securityVersion), "Security version cannot be negative.");
         }
 
+        var validShape = kind switch
+        {
+            ActorKind.Player => accountId.HasValue && characterId.HasValue && systemActorKey is null,
+            ActorKind.Staff => accountId.HasValue && !characterId.HasValue && systemActorKey is null,
+            ActorKind.System => !accountId.HasValue && !characterId.HasValue && systemActorKey is not null,
+            _ => false
+        };
+
+        if (!validShape)
+        {
+            throw new ArgumentException("Trusted actor identity does not match its actor kind.");
+        }
+
         Kind = kind;
         Lane = lane;
         AccountId = accountId;
         CharacterId = characterId;
+        SystemActorKey = systemActorKey;
         SecurityVersion = securityVersion;
         Capabilities = Freeze(capabilities);
         Entitlements = Freeze(entitlements);
@@ -82,6 +122,8 @@ public sealed class TrustedActorContext
     public AccountId? AccountId { get; }
 
     public CharacterId? CharacterId { get; }
+
+    public SystemActorKey? SystemActorKey { get; }
 
     public long? SecurityVersion { get; }
 
@@ -124,6 +166,7 @@ public sealed class TrustedActorContext
             realtime ? CommandExecutionLane.Realtime : CommandExecutionLane.Player,
             accountId,
             characterId,
+            null,
             securityVersion,
             capabilities,
             entitlements);
@@ -145,20 +188,29 @@ public sealed class TrustedActorContext
             CommandExecutionLane.Admin,
             accountId,
             null,
+            null,
             securityVersion,
             capabilities,
             entitlements);
     }
 
     public static TrustedActorContext CreateSystem() =>
-        new(
+        CreateSystem(SystemActorKey.Platform);
+
+    public static TrustedActorContext CreateSystem(SystemActorKey systemActorKey)
+    {
+        ArgumentNullException.ThrowIfNull(systemActorKey);
+
+        return new TrustedActorContext(
             ActorKind.System,
             CommandExecutionLane.System,
             null,
             null,
+            systemActorKey,
             null,
             null,
             null);
+    }
 
     private static IReadOnlyList<T> Freeze<T>(IEnumerable<T>? values)
         where T : class
