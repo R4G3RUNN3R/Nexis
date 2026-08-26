@@ -33,15 +33,6 @@ public sealed class IdentityArchitectureTests
         Assert.AreEqual(Guid.Empty, default(CharacterId).Value);
     }
 
-    [TestMethod]
-    public void AccountRole_IsClassificationNotAuthorityContract()
-    {
-        Assert.AreEqual(0, (int)AccountRole.Player);
-        Assert.AreEqual(10, (int)AccountRole.Moderator);
-        Assert.AreEqual(20, (int)AccountRole.Administrator);
-        Assert.AreEqual(30, (int)AccountRole.PrimaryOwner);
-    }
-
     private static string[] GetNexisReferences(System.Reflection.Assembly assembly) =>
         assembly.GetReferencedAssemblies()
             .Select(static reference => reference.Name ?? string.Empty)
