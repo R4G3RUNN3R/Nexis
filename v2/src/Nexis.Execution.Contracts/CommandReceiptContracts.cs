@@ -8,18 +8,11 @@ using Nexis.Kernel.Events;
 
 namespace Nexis.Execution.Contracts;
 
-/// <summary>
-/// SHA-256 fingerprint of the canonical, trusted-server representation of a command payload.
-/// The digest is derived by trusted ingress code; a client-supplied digest is never authority.
-/// </summary>
 public sealed record CommandPayloadFingerprint
 {
     private const int Sha256HexLength = 64;
 
-    private CommandPayloadFingerprint(string value)
-    {
-        Value = value;
-    }
+    private CommandPayloadFingerprint(string value) => Value = value;
 
     public string Value { get; }
 
@@ -32,7 +25,6 @@ public sealed record CommandPayloadFingerprint
     public static CommandPayloadFingerprint Parse(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
-
         if (value.Length != Sha256HexLength || value.Any(static character => !Uri.IsHexDigit(character)))
         {
             throw new FormatException("Command payload fingerprints must be 64 hexadecimal SHA-256 characters.");
@@ -44,11 +36,6 @@ public sealed record CommandPayloadFingerprint
     public override string ToString() => Value;
 }
 
-/// <summary>
-/// Exact canonical JSON representation of one validated typed command intent. This is durable
-/// recovery input, not generic gameplay state. Trusted ingress code owns canonical serialization;
-/// a client-supplied JSON string or hash is never authoritative.
-/// </summary>
 public sealed record CanonicalCommandPayload
 {
     private CanonicalCommandPayload(string json, CommandPayloadFingerprint fingerprint)
@@ -64,7 +51,6 @@ public sealed record CanonicalCommandPayload
     public static CanonicalCommandPayload FromTrustedJson(string canonicalJson)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(canonicalJson);
-
         try
         {
             using var _ = JsonDocument.Parse(canonicalJson);
@@ -82,8 +68,7 @@ public sealed record CanonicalCommandPayload
 
 /// <summary>
 /// Stable actor identity bound to CommandId idempotency. Current capabilities, entitlements and
-/// security/session versions are deliberately excluded because they are revalidated execution facts,
-/// not part of the caller identity that owns a retry.
+/// security/session versions are deliberately excluded because they are revalidated execution facts.
 /// </summary>
 public sealed record CommandActorBinding
 {
@@ -110,7 +95,6 @@ public sealed record CommandActorBinding
     public static CommandActorBinding From(TrustedActorContext actor)
     {
         ArgumentNullException.ThrowIfNull(actor);
-
         return actor.Lane switch
         {
             CommandExecutionLane.Player or CommandExecutionLane.Realtime => FromPlayer(actor),
@@ -171,11 +155,8 @@ public sealed record CommandExecutionIdentity
     }
 
     public CommandId CommandId { get; }
-
     public CommandActorBinding Actor { get; }
-
     public ContractDescriptor IntentContract { get; }
-
     public CommandPayloadFingerprint PayloadFingerprint { get; }
 }
 
@@ -192,16 +173,10 @@ public readonly record struct CommandExecutionToken
     }
 
     public Guid Value { get; }
-
     public bool IsEmpty => Value == Guid.Empty;
-
     public static CommandExecutionToken New() => new(Guid.NewGuid());
 }
 
-/// <summary>
-/// Non-authoritative worker ownership for one execution attempt. The execution token remains the
-/// fencing identity; worker labels exist only for lease ownership/operations.
-/// </summary>
 public sealed record CommandExecutionLeaseRequest
 {
     public CommandExecutionLeaseRequest(string workerId, TimeSpan duration)
@@ -217,14 +192,9 @@ public sealed record CommandExecutionLeaseRequest
     }
 
     public string WorkerId { get; }
-
     public TimeSpan Duration { get; }
 }
 
-/// <summary>
-/// Complete first-acquisition request. The canonical payload fingerprint must match the identity,
-/// preventing storage/recovery material from drifting away from the CommandId idempotency identity.
-/// </summary>
 public sealed record CommandReceiptAcquireRequest
 {
     public CommandReceiptAcquireRequest(
@@ -258,16 +228,86 @@ public sealed record CommandReceiptAcquireRequest
     }
 
     public CommandExecutionIdentity Identity { get; }
-
     public CanonicalCommandPayload Payload { get; }
-
     public CorrelationId CorrelationId { get; }
-
     public DateTimeOffset ReceivedAtUtc { get; }
-
     public CommandExecutionLeaseRequest ExecutionLease { get; }
-
     public DateTimeOffset LeaseExpiresAtUtc => ReceivedAtUtc + ExecutionLease.Duration;
+}
+
+public enum CommandTerminalStatus
+{
+    Succeeded = 0,
+    Rejected = 1,
+    Conflict = 2,
+    Cancelled = 3,
+    DomainFailed = 4,
+    TechnicalFailure = 5
+}
+
+public sealed record CommandReasonCode
+{
+    public CommandReasonCode(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        Value = value;
+    }
+
+    public string Value { get; }
+    public override string ToString() => Value;
+}
+
+public sealed record CommandTerminalOutcome
+{
+    private CommandTerminalOutcome(
+        CommandTerminalStatus status,
+        CommandReasonCode? reason,
+        DateTimeOffset completedAtUtc)
+    {
+        if (!Enum.IsDefined(typeof(CommandTerminalStatus), status))
+        {
+            throw new ArgumentOutOfRangeException(nameof(status));
+        }
+
+        if (completedAtUtc.Offset != TimeSpan.Zero)
+        {
+            throw new ArgumentException("Command completion time must be UTC.", nameof(completedAtUtc));
+        }
+
+        if (status == CommandTerminalStatus.Succeeded && reason is not null)
+        {
+            throw new ArgumentException("Succeeded command outcomes cannot carry a failure reason.", nameof(reason));
+        }
+
+        if (status != CommandTerminalStatus.Succeeded && reason is null)
+        {
+            throw new ArgumentNullException(nameof(reason), "Non-success command outcomes require an explicit reason code.");
+        }
+
+        Status = status;
+        Reason = reason;
+        CompletedAtUtc = completedAtUtc;
+    }
+
+    public CommandTerminalStatus Status { get; }
+    public CommandReasonCode? Reason { get; }
+    public DateTimeOffset CompletedAtUtc { get; }
+
+    public static CommandTerminalOutcome Succeeded(DateTimeOffset completedAtUtc) =>
+        new(CommandTerminalStatus.Succeeded, null, completedAtUtc);
+
+    public static CommandTerminalOutcome Failed(
+        CommandTerminalStatus status,
+        CommandReasonCode reason,
+        DateTimeOffset completedAtUtc)
+    {
+        if (status == CommandTerminalStatus.Succeeded)
+        {
+            throw new ArgumentException("Use Succeeded for successful command outcomes.", nameof(status));
+        }
+
+        return new CommandTerminalOutcome(status, reason ?? throw new ArgumentNullException(nameof(reason)), completedAtUtc);
+    }
 }
 
 public enum CommandReceiptDisposition
@@ -286,6 +326,11 @@ public sealed record CommandReceiptClaim
         CommandExecutionToken? executionToken,
         CommandTerminalOutcome? terminalOutcome)
     {
+        if (originalCorrelationId.Value == Guid.Empty)
+        {
+            throw new ArgumentException("Original CorrelationId cannot be empty.", nameof(originalCorrelationId));
+        }
+
         Disposition = disposition;
         OriginalCorrelationId = originalCorrelationId;
         ExecutionToken = executionToken;
@@ -293,17 +338,19 @@ public sealed record CommandReceiptClaim
     }
 
     public CommandReceiptDisposition Disposition { get; }
-
     public CorrelationId OriginalCorrelationId { get; }
-
     public CommandExecutionToken? ExecutionToken { get; }
-
     public CommandTerminalOutcome? TerminalOutcome { get; }
 
-    public static CommandReceiptClaim Acquired(
-        CorrelationId originalCorrelationId,
-        CommandExecutionToken executionToken) =>
-        new(CommandReceiptDisposition.Acquired, originalCorrelationId, executionToken, null);
+    public static CommandReceiptClaim Acquired(CorrelationId correlationId, CommandExecutionToken executionToken)
+    {
+        if (executionToken.IsEmpty)
+        {
+            throw new ArgumentException("Acquired command claims require a non-empty execution token.", nameof(executionToken));
+        }
+
+        return new CommandReceiptClaim(CommandReceiptDisposition.Acquired, correlationId, executionToken, null);
+    }
 
     public static CommandReceiptClaim DuplicateInProgress(CorrelationId originalCorrelationId) =>
         new(CommandReceiptDisposition.DuplicateInProgress, originalCorrelationId, null, null);
@@ -311,11 +358,7 @@ public sealed record CommandReceiptClaim
     public static CommandReceiptClaim DuplicateCompleted(
         CorrelationId originalCorrelationId,
         CommandTerminalOutcome terminalOutcome) =>
-        new(
-            CommandReceiptDisposition.DuplicateCompleted,
-            originalCorrelationId,
-            null,
-            terminalOutcome ?? throw new ArgumentNullException(nameof(terminalOutcome)));
+        new(CommandReceiptDisposition.DuplicateCompleted, originalCorrelationId, null, terminalOutcome ?? throw new ArgumentNullException(nameof(terminalOutcome)));
 
     public static CommandReceiptClaim IntegrityViolation(CorrelationId originalCorrelationId) =>
         new(CommandReceiptDisposition.IntegrityViolation, originalCorrelationId, null, null);
