@@ -2,6 +2,17 @@
 
 ## 2026-08-26
 
+### Nexis 2.0 deterministic Core arithmetic
+- added `Nexis.Core.Numerics.DeterministicIntegerMath` as the reference Core's exact integer/rational calculation primitive for authoritative ratios, percentages and multipliers without default floating-point semantics
+- added explicit rounding modes for toward-zero, away-from-zero, floor, ceiling, nearest-even and nearest-away-from-zero behavior so each versioned gameplay formula must choose its rounding semantics deliberately
+- used `Int128` multiplication intermediates with checked narrowing back to `long`, preventing valid wide-intermediate calculations from overflowing early while also preventing final authoritative values from silently wrapping
+- invalid rounding modes and zero denominators now fail explicitly; overflow remains a technical/configuration error rather than being converted into an in-world result
+- added tests for positive/negative midpoint behavior, negative-denominator normalization, wide intermediates, checked overflow, invalid rounding configuration and exact ratio calculations
+- added `v2/docs/CORE-NUMERIC-DETERMINISM.md` defining the cross-runtime numeric contract, floating-point restrictions, overflow policy and formula-version implications without choosing any gameplay balance values
+- verification status: static review completed, but the environment still lacks the pinned .NET 10 SDK and the branch has no GitHub Actions run, so restore/build/test verification is still required
+- player impact: none; this establishes deterministic Core arithmetic infrastructure only and does not implement or change any live gameplay formula
+- risk level: low to moderate; this deliberately fixes numeric semantics before domain rules depend on them
+
 ### Nexis 2.0 Core conformance and deterministic replay seam
 - replaced the raw mutable RNG cursor in `CoreEvaluationContext` with an `IDeterministicRandomFactory`, so each Core evaluation receives a fresh deterministic stream from the same retained authoritative RNG inputs instead of silently advancing an earlier speculative evaluation
 - added explicit typed `ICoreContentInput` support to `CoreEvaluationRequest`, keeping versioned Content Registry definitions outside the concrete Core while still supplying the exact definitions required for one rule evaluation
