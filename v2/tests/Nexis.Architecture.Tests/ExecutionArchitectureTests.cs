@@ -30,7 +30,8 @@ public sealed class ExecutionArchitectureTests
             {
                 "Nexis.Core.Contracts",
                 "Nexis.Execution.Contracts",
-                "Nexis.Identity.Contracts"
+                "Nexis.Identity.Contracts",
+                "Nexis.Kernel"
             },
             references);
     }
