@@ -42,3 +42,7 @@ inspect-live.mjs
 list-orgs.mjs
 live-ui-setup.mjs
 site-redesign-test.txt
+
+# .NET generated outputs
+**/bin/
+**/obj/
