@@ -3,6 +3,13 @@
     <Project Path="src/Nexis.Kernel/Nexis.Kernel.csproj" />
     <Project Path="src/Nexis.Core.Contracts/Nexis.Core.Contracts.csproj" />
     <Project Path="src/Nexis.Core/Nexis.Core.csproj" />
+    <Project Path="src/Nexis.Content.Contracts/Nexis.Content.Contracts.csproj" />
+    <Project Path="src/Nexis.Content.Registry/Nexis.Content.Registry.csproj" />
+    <Project Path="src/Nexis.Items.Contracts/Nexis.Items.Contracts.csproj" />
+    <Project Path="src/Nexis.Inventory.Contracts/Nexis.Inventory.Contracts.csproj" />
+    <Project Path="src/Nexis.Equipment.Contracts/Nexis.Equipment.Contracts.csproj" />
+    <Project Path="src/Nexis.Combat.Contracts/Nexis.Combat.Contracts.csproj" />
+    <Project Path="src/Nexis.Modules.Equipment/Nexis.Modules.Equipment.csproj" />
     <Project Path="src/Nexis.Identity.Contracts/Nexis.Identity.Contracts.csproj" />
     <Project Path="src/Nexis.Modules.Identity/Nexis.Modules.Identity.csproj" />
     <Project Path="src/Nexis.Audit.Contracts/Nexis.Audit.Contracts.csproj" />
