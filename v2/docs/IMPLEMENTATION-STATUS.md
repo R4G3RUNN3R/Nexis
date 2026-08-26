@@ -36,7 +36,8 @@ The V2 branch now contains and has executable coverage for:
 - real PostgreSQL Equipment owner persistence, including optimistic revision enforcement and multi-slot bindings;
 - canonical value-equal `EquipmentSlotSet`, preventing replay/conformance divergence caused by collection reference identity;
 - narrow `IAutomatedCommandGateway`/`AutomatedCommandRequest` contracts allowing automated components to submit only a System principal, CommandId, CorrelationId and typed Core intent;
-- executable architecture guards preventing future `Nexis.Ciel*` and `Nexis.Scheduling*` projects from directly referencing concrete Core, concrete Execution, Execution internals, PostgreSQL or owner implementation modules.
+- executable architecture guards preventing future `Nexis.Ciel*` and `Nexis.Scheduling*` projects from directly referencing concrete Core, concrete Execution, Execution internals, PostgreSQL or owner implementation modules;
+- executable Identity capability policy derived from current server security facts with exact capability checks, explicit-deny precedence, account binding and security-version freshness; role ordinals and commercial entitlements cannot grant platform authority.
 
 ## First real gameplay vertical proof
 
@@ -103,13 +104,15 @@ That run covers, among other things:
 
 Earlier PostgreSQL tests exposed a wall-clock leak in initial outbox availability; normal command commits now write authoritative command completion time explicitly. This remains covered by the green integration suite.
 
+On `new-voidsmith`, checkpoint `ec9239a` additionally passed restore and a Debug solution build with **0 warnings, 0 errors**. The architecture/Core/execution/security suite passed **112/112** after adding seven Identity capability-policy adversarial tests. The full solution run reported **112 passed, 28 skipped, 0 failed**; all 28 skips were PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is not yet configured on that host. The earlier disposable-PostgreSQL proof above remains the latest complete database-backed run.
+
 The reference Core implementation version remains `0.5.0-foundation`; the stable Core contract remains V1.
 
 ## Foundation work still incomplete
 
 The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
 
-1. the remaining Identity capability/policy implementation and security tests without ordinal-role authorization;
+1. integration of the verified Identity capability policy into concrete Staff/Admin command entrypoints as those commands are introduced;
 2. Player Log/history projection and visibility contracts, including the player-facing boundary versus internal/admin-only events;
 3. production replay-corpus extraction/retention so real historical commands and known exploit/bug cases become permanent Core regression scenarios;
 4. migration/reconciliation tooling before any v1-to-v2 state movement;
@@ -121,20 +124,7 @@ Exact owner/domain contracts should continue to be introduced only when the corr
 
 ## Next safe implementation boundary
 
-The next safe foundation slice is **the executable Identity capability/policy boundary**.
-
-The required behavior is:
-
-- Account roles remain descriptive classifications and are never treated as numeric/ordinal authority;
-- trusted platform capabilities are derived server-side from current identity/security facts and explicit policy, never from client claims;
-- Staff/Admin commands require the exact capability relevant to the action rather than broad `IsAdmin` shortcuts;
-- PrimaryOwner remains an account authority fact, never a character name/title/public ID shortcut;
-- capability revocation/security-version changes take effect on fresh command evaluation and do not alter historical CommandId actor identity;
-- commercial entitlements remain completely separate from platform capabilities and cannot grant administrative authority;
-- policy evaluation remains outside gameplay-domain ownership and does not become a second Core;
-- tests must cover privilege revocation, stale security facts, capability isolation, entitlement confusion and ordinal-role bypass attempts.
-
-After that, continue Player Log/history projection and visibility work before broad system fan-out.
+The executable Identity capability/policy boundary is now implemented and adversarially covered. The next safe foundation slice is **Player Log/history projection and visibility contracts**, including a strict player-facing boundary versus internal/admin-only events. Concrete Staff/Admin command entrypoints must consume the verified Identity policy as they are introduced; they may not recreate authorization with role ordinals, broad `IsAdmin` shortcuts or client claims.
 
 ## Verification discipline
 
