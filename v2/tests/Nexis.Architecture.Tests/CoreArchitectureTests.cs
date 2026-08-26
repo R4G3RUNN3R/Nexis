@@ -1,3 +1,4 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nexis.Core;
 using Nexis.Core.Contracts;
 using Nexis.Kernel.Time;

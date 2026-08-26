@@ -1,3 +1,4 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nexis.Core;
 using Nexis.Core.Contracts;
 using Nexis.Kernel.Commands;
@@ -78,9 +79,14 @@ public sealed class CoreContractBehaviorTests
         new ContentVersion("test-content-v1"),
         new SequenceRandomSource(1, 2, 3));
 
-    private sealed class SequenceRandomSource(params ulong[] values) : IDeterministicRandomSource
+    private sealed class SequenceRandomSource : IDeterministicRandomSource
     {
-        private readonly Queue<ulong> _values = new(values);
+        private readonly Queue<ulong> _values;
+
+        public SequenceRandomSource(params ulong[] values)
+        {
+            _values = new Queue<ulong>(values);
+        }
 
         public ulong NextUInt64() =>
             _values.Count > 0
