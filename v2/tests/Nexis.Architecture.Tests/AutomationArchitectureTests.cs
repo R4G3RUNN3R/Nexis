@@ -68,7 +68,7 @@ public sealed class AutomationArchitectureTests
             .EnumerateFiles(sourceDirectory, "*.csproj", SearchOption.AllDirectories)
             .Where(static path =>
             {
-                var projectName = Path.GetFileNameWithoutExtension(path);
+                var projectName = Path.GetFileNameWithoutExtension(path) ?? string.Empty;
                 return projectName.StartsWith("Nexis.Ciel", StringComparison.OrdinalIgnoreCase) ||
                        projectName.StartsWith("Nexis.Scheduling", StringComparison.OrdinalIgnoreCase);
             })
@@ -88,7 +88,7 @@ public sealed class AutomationArchitectureTests
             var references = document
                 .Descendants("ProjectReference")
                 .Select(static element => element.Attribute("Include")?.Value ?? string.Empty)
-                .Select(Path.GetFileNameWithoutExtension)
+                .Select(static path => Path.GetFileNameWithoutExtension(path) ?? string.Empty)
                 .Where(static name => !string.IsNullOrWhiteSpace(name))
                 .ToArray();
 
