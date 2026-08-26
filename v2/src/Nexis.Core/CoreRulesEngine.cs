@@ -1,5 +1,6 @@
 using Nexis.Core.Contracts;
 using Nexis.Core.Rules;
+using Nexis.Core.Rules.Equipment;
 
 namespace Nexis.Core;
 
@@ -14,7 +15,7 @@ public sealed class CoreRulesEngine : ICoreRulesEngine
     private readonly IReadOnlyDictionary<ContractDescriptor, ICoreRuleEvaluator> _evaluators;
 
     public CoreRulesEngine()
-        : this(Array.Empty<ICoreRuleEvaluator>())
+        : this(CreateDefaultEvaluators())
     {
     }
 
@@ -78,4 +79,9 @@ public sealed class CoreRulesEngine : ICoreRulesEngine
             ?? throw new InvalidOperationException(
                 $"Core rule evaluator for '{intentContract.Name}' schema {intentContract.SchemaVersion} returned null.");
     }
+
+    private static ICoreRuleEvaluator[] CreateDefaultEvaluators() =>
+    [
+        new EquipItemRuleEvaluator()
+    ];
 }
