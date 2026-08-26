@@ -162,10 +162,11 @@ At minimum identify:
 Default from repository root where available:
 
 ```text
+cd v2
 dotnet --info
-dotnet restore v2/Nexis.slnx
-dotnet build v2/Nexis.slnx --no-restore
-dotnet test v2/Nexis.slnx --no-build
+dotnet restore Nexis.slnx
+dotnet build Nexis.slnx --no-restore
+dotnet test --solution Nexis.slnx --no-build
 ```
 
 Add task-specific checks here.
