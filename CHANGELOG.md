@@ -2,6 +2,17 @@
 
 ## 2026-08-26
 
+### Nexis 2.0 Core conformance and deterministic replay seam
+- replaced the raw mutable RNG cursor in `CoreEvaluationContext` with an `IDeterministicRandomFactory`, so each Core evaluation receives a fresh deterministic stream from the same retained authoritative RNG inputs instead of silently advancing an earlier speculative evaluation
+- added explicit typed `ICoreContentInput` support to `CoreEvaluationRequest`, keeping versioned Content Registry definitions outside the concrete Core while still supplying the exact definitions required for one rule evaluation
+- hardened `CoreContractVersion`/`CoreImplementationDescriptor` validity checks and bumped the reference Core implementation descriptor to `0.2.0-foundation` without changing the public Core contract version
+- added a reusable golden-scenario conformance harness that can run one implementation against expected semantics or compare baseline and candidate Core implementations using fresh equivalent requests
+- added tests proving compatible replacement equivalence, deliberate divergence detection, repeatable RNG-backed results on re-evaluation, immutable snapshot/content request capture and invalid default contract-version rejection
+- added `v2/docs/CORE-CONFORMANCE-HARNESS.md` documenting scenario construction, semantic comparison, replay-safe RNG requirements, Content Registry inputs and the ordered next Core slices
+- verification status: static review completed for this slice, but the current execution environment still has no .NET SDK and no GitHub Actions run exists, so restore/build/test evidence remains mandatory before the branch is green
+- player impact: none; this is isolated Nexis 2.0 architecture/test infrastructure and does not alter the current/live game
+- risk level: low to moderate; the changes deliberately tighten a pre-release contract before gameplay systems depend on it, but compilation/test verification is still pending
+
 ### Nexis 2.0 replaceable Core implementation foundation
 - introduced a separate `Nexis.Core.Contracts` assembly so surrounding systems can target a stable engine-facing boundary without compiling against the concrete `Nexis.Core` implementation
 - added universal `CommandId` and deterministic RNG abstractions to `Nexis.Kernel`, complementing the existing authoritative game-clock and event/correlation primitives
