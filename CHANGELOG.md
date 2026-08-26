@@ -2,6 +2,20 @@
 
 ## 2026-08-26
 
+### Nexis 2.0 Identity contracts and trusted Core actor boundary
+- split `AccountId`, `CharacterId` and `AccountRole` out of the placeholder Identity implementation into the stable `Nexis.Identity.Contracts` assembly, preserving permanent Account/Character type separation before other systems can couple to the implementation project
+- kept `AccountRole` as a named account/staff classification only; Core actor authority is represented by current server-derived capability keys rather than ordinal role comparisons
+- added universal Player/Admin/System/Realtime mutation-lane vocabulary to `Nexis.Kernel`; read-only query work remains outside mutation-lane semantics
+- added immutable server-created `TrustedActorContext` with distinct Player, Staff and System shapes, current security version, effective platform capabilities and separate commercial entitlements
+- Player/Realtime actor context carries AccountId + CharacterId; Staff/Admin context carries the acting Account but deliberately no Character impersonation identity; System context carries no account/character identity
+- integrated trusted actor context into every `CoreEvaluationContext` and internal rule-dispatch execution context so rules receive authoritative actor facts alongside time, versions, snapshots/content and deterministic RNG
+- updated dependency guards so concrete Core may consume `Nexis.Kernel` and stable `*.Contracts` packages while continuing to reject feature implementation/Host/persistence dependencies
+- CI caught and rejected tautological enum-value assertions through MSTest analyzer MSTEST0032; the ceremonial assertions were removed rather than suppressing the analyzer
+- Identity split and trusted actor changes are restore/build/test verified by the V2 CI workflow after their latest fixes; no v1/live code, database or deployment path was touched
+- added `v2/docs/IMPLEMENTATION-STATUS.md` and wired both `v2/AGENTS.md` and `v2/CLAUDE.md` to read it so Claude/Codex see current implementation progress without turning a status file into a competing architecture rulebook
+- player impact: none; this is isolated Nexis 2.0 authority/contract infrastructure
+- risk level: low to moderate; the boundary is pre-gameplay and test-covered, while the remaining foundation gates still block broad system implementation and PR #4 remains draft
+
 ### Nexis 2.0 Core CI verification and internal rule dispatch
 - added a V2-only GitHub Actions verification workflow that restores, builds and tests the isolated `v2/` solution without touching the current/live application
 - corrected CI so commands run from `v2/`, ensuring `v2/global.json` is discovered; the configured `latestFeature` roll-forward currently resolves .NET SDK 10.0.400 while preserving the approved .NET 10 line
@@ -9,10 +23,10 @@
 - CI caught obsolete MSTest 4 `Assert.ThrowsException` calls before merge; tests were corrected to `Assert.ThrowsExactly`
 - observed green baseline at commit `d5b83b1799691e9aa38266eb52279d74b0fea0bc`: restore succeeded, Release build completed with 0 warnings/0 errors, and all 25 architecture/Core conformance tests passed with 0 failures/skips
 - added explicit internal Core rule dispatch keyed by typed intent contract name + schema version; duplicate registrations are rejected and unregistered intents remain mutation-free TechnicalFailure outcomes
-- kept `CoreRuleExecutionContext` and `ICoreRuleEvaluator` internal to the concrete Core, with friend access only for architecture tests, so surrounding systems still depend exclusively on `ICoreRulesEngine`/`Nexis.Core.Contracts`
+- kept `CoreRuleExecutionContext` and `ICoreRuleEvaluator` internal to the concrete Core, with friend access only for architecture tests, so surrounding systems still depend exclusively on `ICoreRulesEngine`/stable contract assemblies
 - each dispatched evaluation receives exactly one fresh deterministic RNG stream; evaluator exceptions/null results are treated as implementation defects rather than converted into fake in-world outcomes
-- concrete `Nexis.Core` now directly references only the two approved foundation assemblies it requires: `Nexis.Core.Contracts` and `Nexis.Kernel`; it still has no feature-module, persistence, network or UI dependencies
-- dispatch commit under CI verification: `f316738197e54588310087c8b390d9facdff7c5c`; this section supersedes the older provisional verification-status notes below
+- concrete `Nexis.Core` may directly reference the tiny `Nexis.Kernel` substrate and stable `*.Contracts` assemblies required by typed rule inputs; it still has no feature-module, persistence, network or UI dependencies
+- dispatch commit `f316738197e54588310087c8b390d9facdff7c5c` passed the V2 restore/build/test workflow
 - player impact: none; these changes are isolated Nexis 2.0 Core architecture/verification infrastructure
 - risk level: low to moderate; broad gameplay implementation remains blocked by the larger foundation stop conditions and PR #4 remains draft
 
@@ -23,7 +37,7 @@
 - invalid rounding modes and zero denominators now fail explicitly; overflow remains a technical/configuration error rather than being converted into an in-world result
 - added tests for positive/negative midpoint behavior, negative-denominator normalization, wide intermediates, checked overflow, invalid rounding configuration and exact ratio calculations
 - added `v2/docs/CORE-NUMERIC-DETERMINISM.md` defining the cross-runtime numeric contract, floating-point restrictions, overflow policy and formula-version implications without choosing any gameplay balance values
-- verification status at the time of this entry was provisional; the newer Core CI verification entry above supersedes it
+- verification status at the time of this entry was provisional; the newer Core CI verification entries above supersede it
 - player impact: none; this establishes deterministic Core arithmetic infrastructure only and does not implement or change any live gameplay formula
 - risk level: low to moderate; this deliberately fixes numeric semantics before domain rules depend on them
 
@@ -34,7 +48,7 @@
 - added a reusable golden-scenario conformance harness that can run one implementation against expected semantics or compare baseline and candidate Core implementations using fresh equivalent requests
 - added tests proving compatible replacement equivalence, deliberate divergence detection, repeatable RNG-backed results on re-evaluation, immutable snapshot/content request capture and invalid default contract-version rejection
 - added `v2/docs/CORE-CONFORMANCE-HARNESS.md` documenting scenario construction, semantic comparison, replay-safe RNG requirements, Content Registry inputs and the ordered next Core slices
-- verification status at the time of this entry was provisional; the newer Core CI verification entry above supersedes it
+- verification status at the time of this entry was provisional; the newer Core CI verification entries above supersede it
 - player impact: none; this is isolated Nexis 2.0 architecture/test infrastructure and does not alter the current/live game
 - risk level: low to moderate; the changes deliberately tighten a pre-release contract before gameplay systems depend on it
 
@@ -44,10 +58,10 @@
 - added versioned typed Core contracts for intents, authoritative owner snapshots, owner-addressed transitions, semantic event descriptors and typed result payloads without introducing a universal mutable PlayerState/RuntimeState contract
 - added authoritative Core evaluation context carrying CommandId, CorrelationId, UTC evaluation time, gameplay rule version, content version and a controlled deterministic RNG source
 - added the initial `ICoreRulesEngine` replacement seam and a reference `CoreRulesEngine` shell which rejects unsupported contract/intent work as TechnicalFailure without producing state transitions
-- concrete `Nexis.Core` initially depended only on `Nexis.Core.Contracts`; later dispatch work deliberately adds the universal `Nexis.Kernel` substrate while preserving the prohibition on feature-module/persistence dependencies
+- concrete `Nexis.Core` initially depended only on `Nexis.Core.Contracts`; later foundation work deliberately added `Nexis.Kernel` and stable Identity contracts while preserving the prohibition on feature implementation/persistence dependencies
 - converted `Nexis.Architecture.Tests` from a placeholder project to `MSTest.Sdk/4.3.3` and added initial dependency-direction, infrastructure-leak, fake/replacement-Core and Core-decision behaviour tests
 - updated `v2/Nexis.slnx` and `v2/docs/FOUNDATION.md` to reflect the new contract boundary and explicitly preserve the no-global-player-state rule
-- verification status at the time of this entry was provisional; the newer Core CI verification entry above supersedes it
+- verification status at the time of this entry was provisional; the newer Core CI verification entries above supersede it
 - player impact: none; this is isolated Nexis 2.0 foundation code and does not alter the current/live game
 - risk level: low to moderate; architecture is isolated and intentionally minimal
 
