@@ -37,7 +37,8 @@ public sealed class HistoryArchitectureTests
                 "Nexis.Equipment.Contracts",
                 "Nexis.Eventing.Contracts",
                 "Nexis.History.Contracts",
-                "Nexis.Identity.Contracts"
+                "Nexis.Identity.Contracts",
+                "Nexis.Kernel"
             },
             references);
 
