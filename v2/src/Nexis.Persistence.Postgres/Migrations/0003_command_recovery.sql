@@ -1,5 +1,5 @@
 ALTER TABLE nexis_v2.command_receipts
-    ADD COLUMN IF NOT EXISTS canonical_payload jsonb NULL,
+    ADD COLUMN IF NOT EXISTS canonical_payload text NULL,
     ADD COLUMN IF NOT EXISTS execution_owner text NULL,
     ADD COLUMN IF NOT EXISTS execution_lease_expires_at_utc timestamptz NULL;
 
