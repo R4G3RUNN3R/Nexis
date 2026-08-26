@@ -2,6 +2,24 @@
 
 ## 2026-08-26
 
+### Nexis 2.0 first real gameplay vertical, recovery and durable delivery foundation
+- completed the missing default Core composition for the first real rule by registering `EquipItemRuleEvaluator` in `Nexis.Core.Reference`; unsupported intents still fail closed, while the reference engine now actually executes the approved Equipment vertical
+- added stable Items, Inventory, Equipment and Combat contract boundaries plus exact-version Content Registry contracts/implementation without introducing generic mutable state or content blobs
+- implemented `EquipItem` as a deterministic Core rule using trusted actor identity, Inventory possession, Equipment state, Combat participation and exact typed item content; Core emits only an Equipment-owner transition plus semantic event
+- added real PostgreSQL Equipment-owner persistence with optimistic revision enforcement, authoritative history/outbox integration and multi-slot binding support
+- added canonical value-equal `EquipmentSlotSet` semantics across Equipment placement/state/output contracts so replay/conformance compares domain values rather than backing collection object identity
+- implemented durable command execution leases, stale-claim recovery, lease renewal/fencing and ambiguous commit reconciliation while preserving the original CommandId/receipt authority
+- implemented leased at-least-once PostgreSQL outbox delivery with multi-worker `SKIP LOCKED` claiming, expiring leases, stable EventId redelivery identity, publication acknowledgement, failure-delay release and idempotent PostgreSQL projection checkpoints
+- corrected a nondeterministic outbox seam where `available_at_utc` relied on PostgreSQL wall-clock `now()`; normal atomic command commits now persist the authoritative command completion time explicitly as initial delivery availability
+- V2 CI caught two genuine integration defects during this pass: the real EquipItem evaluator was not registered in the default Core, and replay-equal Equipment outputs compared unequal because `ReadOnlyCollection` uses reference equality; both were fixed at the responsible boundaries rather than weakening tests
+- after the fixes, checkpoint `e1eaf9fe2e2afe9629cc2633ddb7dcf2e7ad767c` passed the complete workflow: Release build **0 warnings / 0 errors**, architecture/Core/execution/security suite **101 passed / 0 failed / 0 skipped**, PostgreSQL integration suite **28 passed / 0 failed / 0 skipped**
+- the PostgreSQL suite now proves the real EquipItem end-to-end commit, stale Equipment revision rollback, multi-slot persistence, command crash recovery, lease fencing, ambiguous reconciliation, independent outbox worker claiming, lease recovery/redelivery and atomic idempotent projection handling
+- refreshed `v2/docs/IMPLEMENTATION-STATUS.md` so Claude/Codex no longer treat already-completed outbox/recovery/first-owner work as pending; the next safe foundation boundary is scheduler/CIEL mutation-bypass prevention
+- bumped the reference Core implementation identifier to `0.5.0-foundation`; stable Core contract remains V1
+- no live/V1 code, production database, deployment or PR merge was performed; PR #4 remains draft
+- player impact: none yet; this is isolated Nexis 2.0 architecture, persistence and first-owner gameplay proof
+- risk level: moderate but contained; the first real gameplay vertical is green, while broad gameplay fan-out remains blocked by the remaining foundation stop conditions
+
 ### Nexis 2.0 command lifecycle, atomic execution and audit foundation
 - added separate `Nexis.Execution.Contracts` and `Nexis.Execution` boundaries for authoritative command receipt/idempotency and Application-layer execution coordination without introducing persistence types into Core or stable gameplay contracts
 - bound each CommandId to a stable trusted actor identity, typed intent contract and server-derived SHA-256 payload fingerprint; retries with changed actor/type/payload are explicit integrity violations, while capability/entitlement/security-version changes remain current facts to revalidate rather than changing command identity
