@@ -1,5 +1,6 @@
 using System.Data;
 using Nexis.Execution.Contracts;
+using Nexis.Identity.Contracts;
 using Nexis.Kernel.Events;
 using Npgsql;
 using NpgsqlTypes;
@@ -27,12 +28,12 @@ public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
 
         const string insertSql = """
             INSERT INTO nexis_v2.command_receipts (
-                command_id, lane, actor_account_id, actor_character_id,
+                command_id, lane, actor_account_id, actor_character_id, actor_system_key,
                 intent_name, intent_schema_version, payload_fingerprint,
                 original_correlation_id, execution_token, received_at_utc,
                 canonical_payload, execution_owner, execution_lease_expires_at_utc)
             VALUES (
-                @command_id, @lane, @actor_account_id, @actor_character_id,
+                @command_id, @lane, @actor_account_id, @actor_character_id, @actor_system_key,
                 @intent_name, @intent_schema_version, @payload_fingerprint,
                 @correlation_id, @execution_token, @received_at_utc,
                 @canonical_payload, @execution_owner, @execution_lease_expires_at_utc)
@@ -56,7 +57,7 @@ public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
         }
 
         const string selectSql = """
-            SELECT lane, actor_account_id, actor_character_id,
+            SELECT lane, actor_account_id, actor_character_id, actor_system_key,
                    intent_name, intent_schema_version, payload_fingerprint,
                    original_correlation_id, terminal_status, terminal_reason, completed_at_utc
             FROM nexis_v2.command_receipts
@@ -92,6 +93,7 @@ public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
         stored.Lane == (int)identity.Actor.Lane &&
         stored.ActorAccountId == identity.Actor.AccountId?.Value &&
         stored.ActorCharacterId == identity.Actor.CharacterId?.Value &&
+        string.Equals(stored.ActorSystemKey, identity.Actor.SystemActorKey?.Value, StringComparison.Ordinal) &&
         string.Equals(stored.IntentName, identity.IntentContract.Name, StringComparison.Ordinal) &&
         stored.IntentSchemaVersion == identity.IntentContract.SchemaVersion &&
         string.Equals(stored.PayloadFingerprint, identity.PayloadFingerprint.Value, StringComparison.Ordinal);
@@ -101,13 +103,14 @@ public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
             reader.GetInt32(0),
             reader.IsDBNull(1) ? null : reader.GetGuid(1),
             reader.IsDBNull(2) ? null : reader.GetGuid(2),
-            reader.GetString(3),
-            reader.GetInt32(4),
-            reader.GetString(5).TrimEnd(),
-            reader.GetGuid(6),
-            reader.IsDBNull(7) ? null : reader.GetInt32(7),
-            reader.IsDBNull(8) ? null : reader.GetString(8),
-            reader.IsDBNull(9) ? null : ToDateTimeOffset(reader.GetDateTime(9)));
+            reader.IsDBNull(3) ? null : reader.GetString(3),
+            reader.GetString(4),
+            reader.GetInt32(5),
+            reader.GetString(6).TrimEnd(),
+            reader.GetGuid(7),
+            reader.IsDBNull(8) ? null : reader.GetInt32(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            reader.IsDBNull(10) ? null : ToDateTimeOffset(reader.GetDateTime(10)));
 
     internal static CommandTerminalOutcome BuildTerminalOutcome(PostgresCommandReceiptRow stored)
     {
@@ -150,6 +153,10 @@ public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
             "actor_character_id",
             NpgsqlDbType.Uuid,
             identity.Actor.CharacterId.HasValue ? identity.Actor.CharacterId.Value.Value : DBNull.Value);
+        command.Parameters.AddWithValue(
+            "actor_system_key",
+            NpgsqlDbType.Text,
+            identity.Actor.SystemActorKey is not null ? identity.Actor.SystemActorKey.Value : DBNull.Value);
         command.Parameters.AddWithValue("intent_name", NpgsqlDbType.Text, identity.IntentContract.Name);
         command.Parameters.AddWithValue("intent_schema_version", NpgsqlDbType.Integer, identity.IntentContract.SchemaVersion);
         command.Parameters.AddWithValue("payload_fingerprint", NpgsqlDbType.Char, identity.PayloadFingerprint.Value);
@@ -163,6 +170,7 @@ internal sealed record PostgresCommandReceiptRow(
     int Lane,
     Guid? ActorAccountId,
     Guid? ActorCharacterId,
+    string? ActorSystemKey,
     string IntentName,
     int IntentSchemaVersion,
     string PayloadFingerprint,
