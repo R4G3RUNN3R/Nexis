@@ -30,11 +30,7 @@ public sealed class CommandReceiptCoordinator
             throw new ArgumentException("Authoritative command receive time must be UTC.", nameof(receivedAtUtc));
         }
 
-        var identity = new CommandExecutionIdentity(
-            request.Context.CommandId,
-            CommandActorBinding.From(request.Context.Actor),
-            request.Intent.Contract,
-            payloadFingerprint);
+        var identity = CommandExecutionIdentityFactory.Create(request, payloadFingerprint);
 
         return _receiptRepository.TryAcquireAsync(
             identity,
