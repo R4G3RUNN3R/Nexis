@@ -17,27 +17,15 @@ public sealed record EquippedItemBinding
         }
 
         PlacementKey = placementKey ?? throw new ArgumentNullException(nameof(placementKey));
-        ArgumentNullException.ThrowIfNull(occupiedSlots);
-        var frozen = occupiedSlots.ToArray();
-        if (frozen.Length == 0 || frozen.Any(static slot => slot is null))
-        {
-            throw new ArgumentException("Equipped bindings require at least one occupied slot.", nameof(occupiedSlots));
-        }
-
-        if (frozen.Distinct().Count() != frozen.Length)
-        {
-            throw new ArgumentException("Equipped bindings cannot occupy the same slot twice.", nameof(occupiedSlots));
-        }
-
         ItemInstanceId = itemInstanceId;
-        OccupiedSlots = Array.AsReadOnly(frozen);
+        OccupiedSlots = new EquipmentSlotSet(occupiedSlots);
     }
 
     public ItemInstanceId ItemInstanceId { get; }
 
     public EquipmentPlacementKey PlacementKey { get; }
 
-    public IReadOnlyList<EquipmentSlotKey> OccupiedSlots { get; }
+    public EquipmentSlotSet OccupiedSlots { get; }
 }
 
 public sealed record EquipmentSnapshot : IAuthoritativeSnapshot
