@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Nexis.Kernel/Nexis.Kernel.csproj" />
+    <Project Path="src/Nexis.Core.Contracts/Nexis.Core.Contracts.csproj" />
     <Project Path="src/Nexis.Core/Nexis.Core.csproj" />
     <Project Path="src/Nexis.Modules.Identity/Nexis.Modules.Identity.csproj" />
     <Project Path="src/Nexis.Modules.Audit/Nexis.Modules.Audit.csproj" />

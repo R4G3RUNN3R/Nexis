@@ -1,6 +1,10 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="MSTest.Sdk/4.3.3">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Nexis.Kernel\Nexis.Kernel.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Core.Contracts\Nexis.Core.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Core\Nexis.Core.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Modules.Identity\Nexis.Modules.Identity.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Modules.Audit\Nexis.Modules.Audit.csproj" />
