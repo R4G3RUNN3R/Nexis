@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\src\Nexis.Inventory.Contracts\Nexis.Inventory.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Equipment.Contracts\Nexis.Equipment.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Combat.Contracts\Nexis.Combat.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Automation.Contracts\Nexis.Automation.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Modules.Equipment\Nexis.Modules.Equipment.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Modules.Identity\Nexis.Modules.Identity.csproj" />
