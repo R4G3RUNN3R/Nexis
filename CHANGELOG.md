@@ -2,6 +2,19 @@
 
 ## 2026-08-26
 
+### Nexis 2.0 replaceable Core implementation foundation
+- introduced a separate `Nexis.Core.Contracts` assembly so surrounding systems can target a stable engine-facing boundary without compiling against the concrete `Nexis.Core` implementation
+- added universal `CommandId` and deterministic RNG abstractions to `Nexis.Kernel`, complementing the existing authoritative game-clock and event/correlation primitives
+- added versioned typed Core contracts for intents, authoritative owner snapshots, owner-addressed transitions, semantic event descriptors and typed result payloads without introducing a universal mutable PlayerState/RuntimeState contract
+- added authoritative Core evaluation context carrying CommandId, CorrelationId, UTC evaluation time, gameplay rule version, content version and a controlled deterministic RNG source
+- added the initial `ICoreRulesEngine` replacement seam and a reference `CoreRulesEngine` shell which rejects unsupported contract/intent work as TechnicalFailure without producing state transitions
+- changed concrete `Nexis.Core` so its only Nexis project dependency is `Nexis.Core.Contracts`; the contract assembly depends only on the deliberately small `Nexis.Kernel`
+- converted `Nexis.Architecture.Tests` from a placeholder project to `MSTest.Sdk/4.3.3` and added initial dependency-direction, infrastructure-leak, fake/replacement-Core and Core-decision behaviour tests
+- updated `v2/Nexis.slnx` and `v2/docs/FOUNDATION.md` to reflect the new contract boundary and explicitly preserve the no-global-player-state rule
+- verification status: code has been statically reviewed, but the current execution environment has no .NET SDK and cannot clone GitHub over outbound DNS; no GitHub workflow run exists for the pushed commit, so restore/build/test evidence remains required before the branch is considered green
+- player impact: none; this is isolated Nexis 2.0 foundation code and does not alter the current/live game
+- risk level: low to moderate; architecture is isolated and intentionally minimal, but compilation/test verification is still pending
+
 ### Nexis 2.0 gameplay-mode clarification
 - corrected the v2 design record so **Adventures** preserve their original instant-resolution role, closest in interaction pattern to Torn Crimes: choose an action and receive an immediate server-authoritative result
 - moved the recently discussed timed expedition model to its intended home under **Excursions**, including preparation, supplies, standing orders, asynchronous encounters, discoveries, injuries and return/resolution
