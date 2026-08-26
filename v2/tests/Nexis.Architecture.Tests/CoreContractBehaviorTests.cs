@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nexis.Core;
 using Nexis.Core.Contracts;
+using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
 using Nexis.Kernel.Randomness;
@@ -18,7 +19,21 @@ public sealed class CoreContractBehaviorTests
         Assert.ThrowsExactly<ArgumentException>(() => new CoreEvaluationContext(
             CommandId.New(),
             CorrelationId.New(),
+            TrustedActorContext.CreateSystem(),
             localOffset,
+            new RuleVersion("test-rules-v1"),
+            new ContentVersion("test-content-v1"),
+            new SequenceRandomFactory(1)));
+    }
+
+    [TestMethod]
+    public void EvaluationContext_RequiresTrustedActor()
+    {
+        Assert.ThrowsExactly<ArgumentNullException>(() => new CoreEvaluationContext(
+            CommandId.New(),
+            CorrelationId.New(),
+            null!,
+            new DateTimeOffset(2026, 8, 26, 7, 0, 0, TimeSpan.Zero),
             new RuleVersion("test-rules-v1"),
             new ContentVersion("test-content-v1"),
             new SequenceRandomFactory(1)));
@@ -104,6 +119,7 @@ public sealed class CoreContractBehaviorTests
     private static CoreEvaluationContext CreateContext() => new(
         CommandId.New(),
         CorrelationId.New(),
+        TrustedActorContext.CreateSystem(),
         new DateTimeOffset(2026, 8, 26, 7, 0, 0, TimeSpan.Zero),
         new RuleVersion("test-rules-v1"),
         new ContentVersion("test-content-v1"),
@@ -150,9 +166,7 @@ public sealed class CoreContractBehaviorTests
     private sealed record SyntheticSnapshot : IAuthoritativeSnapshot
     {
         public ContractDescriptor Contract { get; } = new("tests.synthetic.snapshot", 1);
-
         public OwnerKey Owner { get; } = new("Tests");
-
         public long Revision => 1;
     }
 
@@ -164,9 +178,7 @@ public sealed class CoreContractBehaviorTests
     private sealed record SyntheticTransition : IOwnerTransition
     {
         public ContractDescriptor Contract { get; } = new("tests.synthetic.transition", 1);
-
         public OwnerKey TargetOwner { get; } = new("Tests");
-
         public long? ExpectedRevision => 1;
     }
 

@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nexis.Core;
 using Nexis.Core.Contracts;
+using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
 using Nexis.Kernel.Randomness;
@@ -10,19 +11,13 @@ namespace Nexis.Architecture.Tests;
 [TestClass]
 public sealed class CoreConformanceTests
 {
-    private static readonly CommandId StableCommandId = new(
-        Guid.Parse("11111111-1111-1111-1111-111111111111"));
-
-    private static readonly CorrelationId StableCorrelationId = new(
-        Guid.Parse("22222222-2222-2222-2222-222222222222"));
+    private static readonly CommandId StableCommandId = new(Guid.Parse("11111111-1111-1111-1111-111111111111"));
+    private static readonly CorrelationId StableCorrelationId = new(Guid.Parse("22222222-2222-2222-2222-222222222222"));
 
     [TestMethod]
     public void ReferenceCore_MatchesGoldenUnsupportedIntentScenario()
     {
-        var observation = CoreConformanceHarness.Run(
-            new CoreRulesEngine(),
-            CreateUnsupportedIntentScenario());
-
+        var observation = CoreConformanceHarness.Run(new CoreRulesEngine(), CreateUnsupportedIntentScenario());
         Assert.IsTrue(observation.MatchesGolden, observation.Fingerprint);
     }
 
@@ -122,19 +117,14 @@ public sealed class CoreConformanceTests
     private static CoreEvaluationContext CreateContext(IDeterministicRandomFactory randomFactory) => new(
         StableCommandId,
         StableCorrelationId,
+        TrustedActorContext.CreateSystem(),
         new DateTimeOffset(2026, 8, 26, 8, 30, 0, TimeSpan.Zero),
         new RuleVersion("foundation-rules-v1"),
         new ContentVersion("foundation-content-v1"),
         randomFactory);
 
     private static string ProjectEnvelope(CoreDecision decision) =>
-        string.Join(
-            "|",
-            decision.Status,
-            decision.Reason?.Value ?? "-",
-            decision.Payload?.Contract.Name ?? "-",
-            decision.Transitions.Count,
-            decision.Events.Count);
+        string.Join("|", decision.Status, decision.Reason?.Value ?? "-", decision.Payload?.Contract.Name ?? "-", decision.Transitions.Count, decision.Events.Count);
 
     private static string ProjectProbe(CoreDecision decision)
     {
@@ -162,33 +152,17 @@ public sealed class CoreConformanceTests
     private sealed class SequenceRandomFactory : IDeterministicRandomFactory
     {
         private readonly ulong[] _values;
-
-        public SequenceRandomFactory(params ulong[] values)
-        {
-            _values = (ulong[])values.Clone();
-        }
-
+        public SequenceRandomFactory(params ulong[] values) => _values = (ulong[])values.Clone();
         public IDeterministicRandomSource Create() => new SequenceRandomSource(_values);
 
         private sealed class SequenceRandomSource : IDeterministicRandomSource
         {
             private readonly ulong[] _values;
             private int _index;
-
-            public SequenceRandomSource(ulong[] values)
-            {
-                _values = values;
-            }
-
-            public ulong NextUInt64()
-            {
-                if (_index >= _values.Length)
-                {
-                    throw new InvalidOperationException("The deterministic test RNG was exhausted.");
-                }
-
-                return _values[_index++];
-            }
+            public SequenceRandomSource(ulong[] values) => _values = values;
+            public ulong NextUInt64() => _index < _values.Length
+                ? _values[_index++]
+                : throw new InvalidOperationException("The deterministic test RNG was exhausted.");
         }
     }
 
@@ -196,37 +170,20 @@ public sealed class CoreConformanceTests
     {
         private static readonly CoreReasonCode UnsupportedContract = new("core.contract.unsupported");
         private static readonly CoreReasonCode UnsupportedIntent = new("core.intent.unsupported");
-
-        public CoreImplementationDescriptor Descriptor { get; } = new(
-            "Tests.EquivalentUnsupportedCore",
-            "1.0.0",
-            CoreContractVersion.V1);
-
-        public bool Supports(CoreContractVersion contractVersion) =>
-            contractVersion == CoreContractVersion.V1;
-
+        public CoreImplementationDescriptor Descriptor { get; } = new("Tests.EquivalentUnsupportedCore", "1.0.0", CoreContractVersion.V1);
+        public bool Supports(CoreContractVersion contractVersion) => contractVersion == CoreContractVersion.V1;
         public CoreDecision Evaluate(CoreEvaluationRequest request)
         {
             ArgumentNullException.ThrowIfNull(request);
-
-            return Supports(request.ContractVersion)
-                ? CoreDecision.TechnicalFailure(UnsupportedIntent)
-                : CoreDecision.TechnicalFailure(UnsupportedContract);
+            return Supports(request.ContractVersion) ? CoreDecision.TechnicalFailure(UnsupportedIntent) : CoreDecision.TechnicalFailure(UnsupportedContract);
         }
     }
 
     private sealed class DivergentUnsupportedCore : ICoreRulesEngine
     {
         private static readonly CoreReasonCode Divergence = new("tests.intent.rejected");
-
-        public CoreImplementationDescriptor Descriptor { get; } = new(
-            "Tests.DivergentUnsupportedCore",
-            "1.0.0",
-            CoreContractVersion.V1);
-
-        public bool Supports(CoreContractVersion contractVersion) =>
-            contractVersion == CoreContractVersion.V1;
-
+        public CoreImplementationDescriptor Descriptor { get; } = new("Tests.DivergentUnsupportedCore", "1.0.0", CoreContractVersion.V1);
+        public bool Supports(CoreContractVersion contractVersion) => contractVersion == CoreContractVersion.V1;
         public CoreDecision Evaluate(CoreEvaluationRequest request)
         {
             ArgumentNullException.ThrowIfNull(request);
@@ -239,40 +196,17 @@ public sealed class CoreConformanceTests
         private static readonly CoreReasonCode UnsupportedContract = new("core.contract.unsupported");
         private static readonly CoreReasonCode UnsupportedIntent = new("core.intent.unsupported");
         private readonly long _resultOffset;
-
-        public DeterministicProbeCore(long resultOffset = 0)
-        {
-            _resultOffset = resultOffset;
-        }
-
-        public CoreImplementationDescriptor Descriptor { get; } = new(
-            "Tests.DeterministicProbeCore",
-            "1.0.0",
-            CoreContractVersion.V1);
-
-        public bool Supports(CoreContractVersion contractVersion) =>
-            contractVersion == CoreContractVersion.V1;
-
+        public DeterministicProbeCore(long resultOffset = 0) => _resultOffset = resultOffset;
+        public CoreImplementationDescriptor Descriptor { get; } = new("Tests.DeterministicProbeCore", "1.0.0", CoreContractVersion.V1);
+        public bool Supports(CoreContractVersion contractVersion) => contractVersion == CoreContractVersion.V1;
         public CoreDecision Evaluate(CoreEvaluationRequest request)
         {
             ArgumentNullException.ThrowIfNull(request);
-
-            if (!Supports(request.ContractVersion))
-            {
-                return CoreDecision.TechnicalFailure(UnsupportedContract);
-            }
-
-            if (request.Intent is not ProbeIntent intent)
-            {
-                return CoreDecision.TechnicalFailure(UnsupportedIntent);
-            }
-
-            var random = request.Context.RandomFactory.Create()
-                ?? throw new InvalidOperationException("Deterministic random factory returned null.");
-
+            if (!Supports(request.ContractVersion)) return CoreDecision.TechnicalFailure(UnsupportedContract);
+            if (request.Intent is not ProbeIntent intent) return CoreDecision.TechnicalFailure(UnsupportedIntent);
+            var random = request.Context.RandomFactory.Create() ?? throw new InvalidOperationException("Deterministic random factory returned null.");
             var draw = random.NextUInt64();
             var result = checked(intent.BaseValue + (long)(draw % 100UL) + _resultOffset);
-
             return CoreDecision.Succeeded(new ProbePayload(result));
         }
     }

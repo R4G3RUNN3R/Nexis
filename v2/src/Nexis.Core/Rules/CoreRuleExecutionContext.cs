@@ -1,14 +1,11 @@
 using Nexis.Core.Contracts;
+using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
 using Nexis.Kernel.Randomness;
 
 namespace Nexis.Core.Rules;
 
-/// <summary>
-/// Concrete-Core execution context for one rule evaluation. This is intentionally internal so
-/// surrounding systems cannot depend on the selected Core implementation's evaluator machinery.
-/// </summary>
 internal sealed class CoreRuleExecutionContext
 {
     internal CoreRuleExecutionContext(
@@ -19,6 +16,7 @@ internal sealed class CoreRuleExecutionContext
 
         CommandId = request.Context.CommandId;
         CorrelationId = request.Context.CorrelationId;
+        Actor = request.Context.Actor;
         EvaluationTimeUtc = request.Context.EvaluationTimeUtc;
         RuleVersion = request.Context.RuleVersion;
         ContentVersion = request.Context.ContentVersion;
@@ -32,6 +30,8 @@ internal sealed class CoreRuleExecutionContext
 
     public CorrelationId CorrelationId { get; }
 
+    public TrustedActorContext Actor { get; }
+
     public DateTimeOffset EvaluationTimeUtc { get; }
 
     public RuleVersion RuleVersion { get; }
@@ -44,9 +44,5 @@ internal sealed class CoreRuleExecutionContext
 
     public IReadOnlyList<ICoreContentInput> Content { get; }
 
-    /// <summary>
-    /// One deterministic stream for this top-level evaluation. Evaluators cannot create competing
-    /// cursors from the factory or advance a stream retained by a previous evaluation.
-    /// </summary>
     public IDeterministicRandomSource Random { get; }
 }

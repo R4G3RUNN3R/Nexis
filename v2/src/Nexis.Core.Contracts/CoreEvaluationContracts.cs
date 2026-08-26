@@ -1,3 +1,4 @@
+using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
 using Nexis.Kernel.Randomness;
@@ -42,18 +43,10 @@ public interface IVersionedCoreContract
     ContractDescriptor Contract { get; }
 }
 
-/// <summary>
-/// Typed command intent presented to the rules engine. Implementations belong to stable
-/// domain/system contract assemblies, never to persistence or client DTO assemblies.
-/// </summary>
 public interface ICoreIntent : IVersionedCoreContract
 {
 }
 
-/// <summary>
-/// Immutable authoritative facts supplied by exactly one state owner for evaluation.
-/// There is deliberately no universal PlayerSnapshot implementation.
-/// </summary>
 public interface IAuthoritativeSnapshot : IVersionedCoreContract
 {
     OwnerKey Owner { get; }
@@ -61,18 +54,10 @@ public interface IAuthoritativeSnapshot : IVersionedCoreContract
     long Revision { get; }
 }
 
-/// <summary>
-/// Immutable, versioned Content Registry input required by one evaluation. Domain-specific
-/// contracts provide their own typed identity and fields; this interface is only the common seam.
-/// </summary>
 public interface ICoreContentInput : IVersionedCoreContract
 {
 }
 
-/// <summary>
-/// Typed state transition addressed to the owner permitted to persist that fact.
-/// Implementations must express domain fields explicitly and may not be generic path/value patches.
-/// </summary>
 public interface IOwnerTransition : IVersionedCoreContract
 {
     OwnerKey TargetOwner { get; }
@@ -80,17 +65,10 @@ public interface IOwnerTransition : IVersionedCoreContract
     long? ExpectedRevision { get; }
 }
 
-/// <summary>
-/// Semantic event description proposed by Core. Event identity/time and durable commit metadata
-/// are assigned by the authoritative command/history boundary when the result is committed.
-/// </summary>
 public interface ICoreEventDescriptor : IVersionedCoreContract
 {
 }
 
-/// <summary>
-/// Optional typed result data returned to the coordinating application layer.
-/// </summary>
 public interface ICoreResultPayload : IVersionedCoreContract
 {
 }
@@ -100,6 +78,7 @@ public sealed record CoreEvaluationContext
     public CoreEvaluationContext(
         CommandId commandId,
         CorrelationId correlationId,
+        TrustedActorContext actor,
         DateTimeOffset evaluationTimeUtc,
         RuleVersion ruleVersion,
         ContentVersion contentVersion,
@@ -122,6 +101,7 @@ public sealed record CoreEvaluationContext
 
         CommandId = commandId;
         CorrelationId = correlationId;
+        Actor = actor ?? throw new ArgumentNullException(nameof(actor));
         EvaluationTimeUtc = evaluationTimeUtc;
         RuleVersion = ruleVersion ?? throw new ArgumentNullException(nameof(ruleVersion));
         ContentVersion = contentVersion ?? throw new ArgumentNullException(nameof(contentVersion));
@@ -132,16 +112,14 @@ public sealed record CoreEvaluationContext
 
     public CorrelationId CorrelationId { get; }
 
+    public TrustedActorContext Actor { get; }
+
     public DateTimeOffset EvaluationTimeUtc { get; }
 
     public RuleVersion RuleVersion { get; }
 
     public ContentVersion ContentVersion { get; }
 
-    /// <summary>
-    /// Creates a fresh deterministic random stream for each evaluation. The request never exposes
-    /// one shared mutable RNG cursor, so re-evaluating identical inputs can replay identical draws.
-    /// </summary>
     public IDeterministicRandomFactory RandomFactory { get; }
 }
 

@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nexis.Core;
 using Nexis.Core.Contracts;
 using Nexis.Core.Rules;
+using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
 using Nexis.Kernel.Randomness;
@@ -18,9 +19,7 @@ public sealed class CoreRuleDispatchTests
     {
         var engine = new CoreRulesEngine(new ICoreRuleEvaluator[] { new ProbeEvaluator() });
         var decision = engine.Evaluate(CreateRequest(new ProbeIntent(10), new SequenceRandomFactory(7)));
-
         var payload = decision.Payload as ProbePayload;
-
         Assert.IsNotNull(payload);
         Assert.AreEqual(CoreOutcomeStatus.Succeeded, decision.Status);
         Assert.AreEqual(17L, payload.Value);
@@ -29,8 +28,7 @@ public sealed class CoreRuleDispatchTests
     [TestMethod]
     public void DuplicateIntentRegistration_IsRejected()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CoreRulesEngine(
-            new ICoreRuleEvaluator[] { new ProbeEvaluator(), new ProbeEvaluator() }));
+        Assert.ThrowsExactly<ArgumentException>(() => new CoreRulesEngine(new ICoreRuleEvaluator[] { new ProbeEvaluator(), new ProbeEvaluator() }));
     }
 
     [TestMethod]
@@ -38,10 +36,8 @@ public sealed class CoreRuleDispatchTests
     {
         var engine = new CoreRulesEngine(new ICoreRuleEvaluator[] { new ProbeEvaluator() });
         var request = CreateRequest(new ProbeIntent(10), new SequenceRandomFactory(7, 99));
-
         var first = (ProbePayload?)engine.Evaluate(request).Payload;
         var second = (ProbePayload?)engine.Evaluate(request).Payload;
-
         Assert.IsNotNull(first);
         Assert.IsNotNull(second);
         Assert.AreEqual(17L, first.Value);
@@ -49,11 +45,20 @@ public sealed class CoreRuleDispatchTests
     }
 
     [TestMethod]
+    public void TrustedActor_IsPassedToRegisteredEvaluator()
+    {
+        var expectedActor = TrustedActorContext.CreatePlayer(AccountId.New(), CharacterId.New(), 1);
+        var engine = new CoreRulesEngine(new ICoreRuleEvaluator[] { new ActorProbeEvaluator(expectedActor) });
+        var request = CreateRequest(new ActorProbeIntent(), new SequenceRandomFactory(1), expectedActor);
+        var decision = engine.Evaluate(request);
+        Assert.AreEqual(CoreOutcomeStatus.Succeeded, decision.Status);
+    }
+
+    [TestMethod]
     public void UnsupportedIntent_RemainsTechnicalFailureWithoutMutation()
     {
         var engine = new CoreRulesEngine(new ICoreRuleEvaluator[] { new ProbeEvaluator() });
         var decision = engine.Evaluate(CreateRequest(new UnknownIntent(), new SequenceRandomFactory(1)));
-
         Assert.AreEqual(CoreOutcomeStatus.TechnicalFailure, decision.Status);
         Assert.AreEqual("core.intent.unsupported", decision.Reason?.Value);
         Assert.AreEqual(0, decision.Transitions.Count);
@@ -65,7 +70,6 @@ public sealed class CoreRuleDispatchTests
     {
         var engine = new CoreRulesEngine(new ICoreRuleEvaluator[] { new ThrowingEvaluator() });
         var request = CreateRequest(new ThrowingIntent(), new SequenceRandomFactory(1));
-
         Assert.ThrowsExactly<InvalidOperationException>(() => engine.Evaluate(request));
     }
 
@@ -74,18 +78,19 @@ public sealed class CoreRuleDispatchTests
     {
         var engine = new CoreRulesEngine(new ICoreRuleEvaluator[] { new ProbeEvaluator() });
         var request = CreateRequest(new ProbeIntent(10), new NullRandomFactory());
-
         Assert.ThrowsExactly<InvalidOperationException>(() => engine.Evaluate(request));
     }
 
     private static CoreEvaluationRequest CreateRequest(
         ICoreIntent intent,
-        IDeterministicRandomFactory randomFactory) =>
+        IDeterministicRandomFactory randomFactory,
+        TrustedActorContext? actor = null) =>
         new(
             CoreContractVersion.V1,
             new CoreEvaluationContext(
                 new CommandId(Guid.Parse("33333333-3333-3333-3333-333333333333")),
                 new CorrelationId(Guid.Parse("44444444-4444-4444-4444-444444444444")),
+                actor ?? TrustedActorContext.CreateSystem(),
                 new DateTimeOffset(2026, 8, 26, 8, 45, 0, TimeSpan.Zero),
                 new RuleVersion("dispatch-rules-v1"),
                 new ContentVersion("dispatch-content-v1"),
@@ -94,46 +99,38 @@ public sealed class CoreRuleDispatchTests
             Array.Empty<IAuthoritativeSnapshot>(),
             Array.Empty<ICoreContentInput>());
 
-    private sealed record ProbeIntent(long BaseValue) : ICoreIntent
-    {
-        public ContractDescriptor Contract => ProbeContract;
-    }
-
-    private sealed record UnknownIntent : ICoreIntent
-    {
-        public ContractDescriptor Contract { get; } = new("tests.dispatch.unknown", 1);
-    }
-
-    private sealed record ThrowingIntent : ICoreIntent
-    {
-        public ContractDescriptor Contract { get; } = new("tests.dispatch.throwing", 1);
-    }
-
-    private sealed record ProbePayload(long Value) : ICoreResultPayload
-    {
-        public ContractDescriptor Contract { get; } = new("tests.dispatch.probe-result", 1);
-    }
+    private sealed record ProbeIntent(long BaseValue) : ICoreIntent { public ContractDescriptor Contract => ProbeContract; }
+    private sealed record UnknownIntent : ICoreIntent { public ContractDescriptor Contract { get; } = new("tests.dispatch.unknown", 1); }
+    private sealed record ThrowingIntent : ICoreIntent { public ContractDescriptor Contract { get; } = new("tests.dispatch.throwing", 1); }
+    private sealed record ActorProbeIntent : ICoreIntent { public ContractDescriptor Contract { get; } = new("tests.dispatch.actor", 1); }
+    private sealed record ProbePayload(long Value) : ICoreResultPayload { public ContractDescriptor Contract { get; } = new("tests.dispatch.probe-result", 1); }
 
     private sealed class ProbeEvaluator : ICoreRuleEvaluator
     {
         public ContractDescriptor IntentContract => ProbeContract;
-
         public CoreDecision Evaluate(CoreRuleExecutionContext context)
         {
-            if (context.Intent is not ProbeIntent intent)
-            {
-                throw new InvalidOperationException("Probe evaluator received the wrong typed intent.");
-            }
-
+            if (context.Intent is not ProbeIntent intent) throw new InvalidOperationException("Probe evaluator received the wrong typed intent.");
             var draw = context.Random.NextUInt64();
             return CoreDecision.Succeeded(new ProbePayload(checked(intent.BaseValue + (long)(draw % 100UL))));
+        }
+    }
+
+    private sealed class ActorProbeEvaluator : ICoreRuleEvaluator
+    {
+        private readonly TrustedActorContext _expected;
+        public ActorProbeEvaluator(TrustedActorContext expected) => _expected = expected;
+        public ContractDescriptor IntentContract { get; } = new("tests.dispatch.actor", 1);
+        public CoreDecision Evaluate(CoreRuleExecutionContext context)
+        {
+            if (!ReferenceEquals(_expected, context.Actor)) throw new InvalidOperationException("Trusted actor context was not propagated unchanged.");
+            return CoreDecision.Succeeded();
         }
     }
 
     private sealed class ThrowingEvaluator : ICoreRuleEvaluator
     {
         public ContractDescriptor IntentContract { get; } = new("tests.dispatch.throwing", 1);
-
         public CoreDecision Evaluate(CoreRuleExecutionContext context)
         {
             ArgumentNullException.ThrowIfNull(context);
@@ -144,33 +141,14 @@ public sealed class CoreRuleDispatchTests
     private sealed class SequenceRandomFactory : IDeterministicRandomFactory
     {
         private readonly ulong[] _values;
-
-        public SequenceRandomFactory(params ulong[] values)
-        {
-            _values = (ulong[])values.Clone();
-        }
-
+        public SequenceRandomFactory(params ulong[] values) => _values = (ulong[])values.Clone();
         public IDeterministicRandomSource Create() => new SequenceRandomSource(_values);
-
         private sealed class SequenceRandomSource : IDeterministicRandomSource
         {
             private readonly ulong[] _values;
             private int _index;
-
-            public SequenceRandomSource(ulong[] values)
-            {
-                _values = values;
-            }
-
-            public ulong NextUInt64()
-            {
-                if (_index >= _values.Length)
-                {
-                    throw new InvalidOperationException("Synthetic random stream exhausted.");
-                }
-
-                return _values[_index++];
-            }
+            public SequenceRandomSource(ulong[] values) => _values = values;
+            public ulong NextUInt64() => _index < _values.Length ? _values[_index++] : throw new InvalidOperationException("Synthetic random stream exhausted.");
         }
     }
 

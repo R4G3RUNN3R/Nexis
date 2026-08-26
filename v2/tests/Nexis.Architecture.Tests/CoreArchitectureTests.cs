@@ -22,18 +22,22 @@ public sealed class CoreArchitectureTests
         var references = GetNexisReferences(typeof(ICoreRulesEngine).Assembly);
 
         Assert.IsTrue(references.Contains("Nexis.Kernel", StringComparer.Ordinal));
+        Assert.IsTrue(references.Contains("Nexis.Identity.Contracts", StringComparer.Ordinal));
         Assert.IsFalse(references.Contains("Nexis.Core", StringComparer.Ordinal));
         Assert.IsFalse(references.Any(static name => name.StartsWith("Nexis.Modules.", StringComparison.Ordinal)));
     }
 
     [TestMethod]
-    public void ConcreteCore_DependsOnlyOnApprovedNexisFoundationAssemblies()
+    public void ConcreteCore_DependsOnlyOnKernelAndStableContractAssemblies()
     {
         var references = GetNexisReferences(typeof(CoreAssemblyMarker).Assembly);
+        var forbidden = references
+            .Where(static name => name != "Nexis.Kernel" && !name.EndsWith(".Contracts", StringComparison.Ordinal))
+            .ToArray();
 
-        CollectionAssert.AreEquivalent(
-            new[] { "Nexis.Core.Contracts", "Nexis.Kernel" },
-            references);
+        Assert.AreEqual(0, forbidden.Length, $"Concrete Core references forbidden Nexis assemblies: {string.Join(", ", forbidden)}");
+        Assert.IsTrue(references.Contains("Nexis.Core.Contracts", StringComparer.Ordinal));
+        Assert.IsTrue(references.Contains("Nexis.Identity.Contracts", StringComparer.Ordinal));
     }
 
     [TestMethod]
