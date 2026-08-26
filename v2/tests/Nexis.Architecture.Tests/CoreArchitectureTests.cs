@@ -32,7 +32,7 @@ public sealed class CoreArchitectureTests
         var references = GetNexisReferences(typeof(CoreAssemblyMarker).Assembly);
 
         CollectionAssert.AreEquivalent(
-            new[] { "Nexis.Core.Contracts" },
+            new[] { "Nexis.Core.Contracts", "Nexis.Kernel" },
             references);
     }
 
