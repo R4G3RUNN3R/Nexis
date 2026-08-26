@@ -69,10 +69,11 @@ The binding detailed specification is `v2/docs/CORE-ARCHITECTURE.md`.
 
 Each surrounding system is an independently understandable, testable and replaceable capability with one authoritative owner for its persistent state and external system responsibilities.
 
-Initial modules prove the pattern:
+Implemented foundation capabilities prove the pattern:
 
-- `Nexis.Modules.Identity`: current placeholder implementation for account/character identity and authorization vocabulary. This is planned to split into stable Identity contracts plus implementation before broad integration.
-- `Nexis.Modules.Audit`: current placeholder implementation for append-oriented privileged-action audit vocabulary and the approved internal-vs-player visibility boundary. It should follow the same contracts/implementation split.
+- `Nexis.Identity.Contracts` and `Nexis.Modules.Identity` separate stable identity/authorization vocabulary from implementation policy.
+- `Nexis.Audit.Contracts` and `Nexis.Modules.Audit` separate immutable privileged-action contracts from the replaceable audit implementation.
+- `Nexis.History.Contracts` and `Nexis.History.Projection` separate safe Player Log contracts from a fail-closed, rebuildable projection implementation; neither project owns current gameplay state or persistence.
 
 Later systems should follow the same pattern, including Education, Knowledge, Research, Economy, Contracts, World, Organizations, Combat, Magic and Spirits.
 
@@ -90,7 +91,7 @@ All meaningful administrator activity is internally auditable. Privileged reads,
 
 ## Persistence
 
-Persistence implementation is deliberately not added in this first skeleton. PostgreSQL remains the planned primary datastore, but contracts are being established before persistence technology is allowed to shape them. Event/audit storage will be append-oriented and corrections will use new compensating/corrective events rather than mutation of history.
+PostgreSQL persistence adapters now exist behind stable contracts for command receipts, owner transitions, authoritative events, outbox, Admin Audit and generic projection checkpoints. Those adapters remain private infrastructure and do not shape Core, owner or Player Log public contracts. Authoritative history is append-oriented, and corrections use new compensating/corrective events rather than mutation of history. Player Log storage and runtime consumer wiring are not introduced by the current History projection slice.
 
 Persistence adapters implement storage concerns behind contracts and must remain replaceable without leaking EF Core/Npgsql types into Core or system public boundaries.
 
@@ -108,7 +109,7 @@ Before broad gameplay systems are implemented, architecture tests must enforce a
 - infrastructure dependencies do not leak into domain/public contracts;
 - authorization, audit visibility and Hennet public/private projection boundaries remain enforced.
 
-The architecture-test project now contains the first automated Core dependency/replaceability checks. Restore/build/test execution is still required before the branch can be treated as verified.
+The architecture-test project contains executable dependency, replaceability, ownership, authorization, audit and Player Log projection checks. Current verification evidence is recorded in `IMPLEMENTATION-STATUS.md`; every dependent slice must rerun the full workflow.
 
 ## Migration boundary
 

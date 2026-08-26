@@ -14,7 +14,7 @@ Existing/current Nexis outside `v2/` remains reference/migration source only. No
 
 The V2 branch now contains and has executable coverage for:
 
-- separate stable Core, Identity, Execution, Audit, Eventing, Content, Items, Inventory, Equipment, Combat and Automation contract assemblies;
+- separate stable Core, Identity, Execution, Audit, Eventing, History, Content, Items, Inventory, Equipment, Combat and Automation contract assemblies;
 - replaceable `ICoreRulesEngine` with explicit internal evaluator dispatch and no feature implementation, persistence, network or UI dependencies;
 - trusted Player/Admin/System/Realtime actor context with Account/Character separation, capability-based platform authority and commercial entitlements kept separate;
 - stable `SystemActorKey` identities for automated authorities, kept separate from Account/Character identity and retained through idempotency, persistence and crash recovery;
@@ -73,6 +73,23 @@ The current foundation proves:
 
 CIEL therefore remains advisory/interpretive, and schedulers remain responsible for due-work mechanics rather than authoritative gameplay outcomes.
 
+## Player Log / history projection proof
+
+The Player Log boundary is now represented by separate stable contracts and a replaceable projection implementation.
+
+The current slice proves:
+
+1. Account and Character audiences are exact, mutually exclusive typed identities;
+2. unregistered event contracts and schema versions produce no player entry;
+3. registered event projectors preserve EventId, CorrelationId and authoritative occurrence time;
+4. the Item Equipped V1 projector validates the complete typed event before exposing only its safe placement label;
+5. incomplete/malformed typed event payloads fail closed;
+6. internal Admin Audit entries never project, while material effects require an exact target Account and explicit safe player reason;
+7. acting staff identity, internal action/outcome, case metadata, item-instance identity and raw payloads remain undisclosed;
+8. the History contract/projection assemblies reference no concrete Core, concrete Execution or PostgreSQL implementation.
+
+The slice adds no Player Log persistence, query API, runtime consumer registration or authoritative mutation path. `PLAYER-LOG-BOUNDARY.md` is the focused contract record.
+
 ## Current verification evidence
 
 Checkpoint `4de3b830c19c5659c042aa342d86e3361a0c05a7` passed the complete V2 workflow against disposable PostgreSQL 18.6 after the automated-authority/bypass changes:
@@ -106,6 +123,8 @@ Earlier PostgreSQL tests exposed a wall-clock leak in initial outbox availabilit
 
 On `new-voidsmith`, checkpoint `ec9239a` additionally passed restore and a Debug solution build with **0 warnings, 0 errors**. The architecture/Core/execution/security suite passed **112/112** after adding seven Identity capability-policy adversarial tests. The full solution run reported **112 passed, 28 skipped, 0 failed**; all 28 skips were PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is not yet configured on that host. The earlier disposable-PostgreSQL proof above remains the latest complete database-backed run.
 
+The Player Log finishing review independently reran the required workflow from `v2/` with .NET SDK 10.0.111: restore passed; Debug build passed with **0 warnings, 0 errors**; the full solution reported **154 total, 126 passed, 28 skipped, 0 failed**. All 28 skips are PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is absent; this review created or used no database. The Player Log/History in-memory and architecture tests are included in the 126 passing tests.
+
 The reference Core implementation version remains `0.5.0-foundation`; the stable Core contract remains V1.
 
 ## Foundation work still incomplete
@@ -113,18 +132,17 @@ The reference Core implementation version remains `0.5.0-foundation`; the stable
 The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
 
 1. integration of the verified Identity capability policy into concrete Staff/Admin command entrypoints as those commands are introduced;
-2. Player Log/history projection and visibility contracts, including the player-facing boundary versus internal/admin-only events;
-3. production replay-corpus extraction/retention so real historical commands and known exploit/bug cases become permanent Core regression scenarios;
-4. migration/reconciliation tooling before any v1-to-v2 state movement;
-5. additional real owner-specific multi-owner gameplay proof where a legitimate rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
-6. observability/operational readiness around recovery workers, outbox workers, poison events, retry exhaustion and invariant failures;
-7. final threat-model/security review and the wider foundation stop-condition audit before broad gameplay implementation.
+2. production replay-corpus extraction/retention so real historical commands and known exploit/bug cases become permanent Core regression scenarios;
+3. migration/reconciliation tooling before any v1-to-v2 state movement;
+4. additional real owner-specific multi-owner gameplay proof where a legitimate rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
+5. observability/operational readiness around recovery workers, outbox workers, poison events, retry exhaustion and invariant failures;
+6. final threat-model/security review and the wider foundation stop-condition audit before broad gameplay implementation.
 
 Exact owner/domain contracts should continue to be introduced only when the corresponding gameplay design is sufficiently settled. Do not create generic state bags merely to make the architecture look more complete.
 
 ## Next safe implementation boundary
 
-The executable Identity capability/policy boundary is now implemented and adversarially covered. The next safe foundation slice is **Player Log/history projection and visibility contracts**, including a strict player-facing boundary versus internal/admin-only events. Concrete Staff/Admin command entrypoints must consume the verified Identity policy as they are introduced; they may not recreate authorization with role ordinals, broad `IsAdmin` shortcuts or client claims.
+The Player Log/history projection visibility boundary is now implemented and adversarially covered. The next safe foundation slice is **production replay-corpus extraction and retention**, using existing typed command/event/trace contracts so real historical commands and known exploit/bug cases can become permanent Core regression scenarios. This boundary must preserve privacy and restricted RNG/security data, and it does not authorize new gameplay rules or world/lore design. Concrete Staff/Admin command entrypoints must still consume the verified Identity policy when introduced.
 
 ## Verification discipline
 

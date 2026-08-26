@@ -3,6 +3,7 @@ using Nexis.Equipment.Contracts;
 using Nexis.Eventing.Contracts;
 using Nexis.History.Contracts;
 using Nexis.Identity.Contracts;
+using Nexis.Items.Contracts;
 
 namespace Nexis.History.Projection;
 
@@ -29,13 +30,16 @@ public sealed class ItemEquippedPlayerLogProjector : IPlayerLogEventProjector
         {
             using var document = JsonDocument.Parse(message.PayloadJson);
             var root = document.RootElement;
-            var characterId = new CharacterId(ReadGuidValue(root, "CharacterId"));
-            var placement = ReadStringValue(root, "PlacementKey");
+            var descriptor = new ItemEquippedEvent(
+                new CharacterId(ReadGuidValue(root, "CharacterId")),
+                new ItemInstanceId(ReadGuidValue(root, "ItemInstanceId")),
+                new EquipmentPlacementKey(ReadStringValue(root, "PlacementKey")),
+                ReadSlotValues(root, "OccupiedSlots"));
 
             return new[]
             {
                 new PlayerLogEntry(
-                    PlayerLogAudience.ForCharacter(characterId),
+                    PlayerLogAudience.ForCharacter(descriptor.CharacterId),
                     PlayerLogSource.FromEvent(message.EventId),
                     message.CorrelationId,
                     message.OccurredAtUtc,
@@ -43,14 +47,27 @@ public sealed class ItemEquippedPlayerLogProjector : IPlayerLogEventProjector
                     ItemEquippedTemplate,
                     new[]
                     {
-                        new PlayerLogArgument("placement", new PlayerLogPlainText(placement))
+                        new PlayerLogArgument("placement", new PlayerLogPlainText(descriptor.PlacementKey.Value))
                     })
             };
         }
-        catch (JsonException exception)
+        catch (Exception exception) when (exception is JsonException or ArgumentException)
         {
             throw new InvalidOperationException("Item Equipped event payload does not match its versioned Player Log projection schema.", exception);
         }
+    }
+
+    private static IReadOnlyList<EquipmentSlotKey> ReadSlotValues(JsonElement root, string propertyName)
+    {
+        var value = ReadProperty(root, propertyName);
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException($"'{propertyName}' is not an array.");
+        }
+
+        return value.EnumerateArray()
+            .Select(element => new EquipmentSlotKey(ReadStringElementValue(element, propertyName)))
+            .ToArray();
     }
 
     private static Guid ReadGuidValue(JsonElement root, string propertyName)
@@ -71,7 +88,11 @@ public sealed class ItemEquippedPlayerLogProjector : IPlayerLogEventProjector
 
     private static string ReadStringValue(JsonElement root, string propertyName)
     {
-        var value = ReadProperty(root, propertyName);
+        return ReadStringElementValue(ReadProperty(root, propertyName), propertyName);
+    }
+
+    private static string ReadStringElementValue(JsonElement value, string propertyName)
+    {
         if (value.ValueKind == JsonValueKind.Object)
         {
             value = ReadProperty(value, "Value");

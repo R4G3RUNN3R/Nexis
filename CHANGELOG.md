@@ -2,6 +2,20 @@
 
 ## 2026-08-26
 
+### Nexis 2.0 Player Log / history projection boundary
+- added stable `Nexis.History.Contracts` and replaceable `Nexis.History.Projection` projects for rebuildable player-facing history without creating authoritative state or persistence
+- enforced exact, mutually exclusive Account/Character audiences; exact event-contract/schema registration; authoritative EventId/CorrelationId/time provenance; bounded plain-text values; and canonical value-equal arguments
+- kept projection fail closed: unregistered events, internal Admin Audit, unknown visibility and malformed disclosure inputs produce no entry or an explicit failure, with no raw payload fallback
+- projected Player-material Admin effects only to the exact target Account using the explicit safe reason; acting staff identity, internal action/outcome, case reference, capabilities, security/anti-cheat data and raw audit records remain internal
+- projected Item Equipped only to the exact Character and exposed only its normalized placement; item-instance identity, occupied slots and raw event payload remain internal
+- audit found and fixed one typed-event defect: an incomplete Item Equipped payload could previously project after only Character/placement parsing; a red-before/green-after regression now requires reconstruction of the complete V1 `ItemEquippedEvent`
+- added architecture and adversarial tests covering dependency isolation, no mutation contracts, fail-closed registration, forged provenance, disclosure boundaries, canonical ordering and malformed typed payloads
+- added `v2/docs/PLAYER-LOG-BOUNDARY.md`; reconciled Foundation, Audit and implementation-status truth; nominated the already-approved production replay-corpus extraction/retention boundary next without adding gameplay or canon
+- verification from `v2/`: .NET SDK 10.0.111; restore passed; Debug build passed with 0 warnings and 0 errors; full solution passed 154 total, 126 passed, 28 skipped, 0 failed
+- limitation: all 28 skips are PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is absent; no database was created or used, and the prior disposable-PostgreSQL evidence remains the latest database-backed run
+- player impact: no live impact or deployment; this V2-only slice establishes safe future Player Log entries for equipped-item events and material Admin effects
+- risk level: low to moderate; contracts and in-memory projection behavior are covered, while Player Log persistence, runtime consumer wiring, query authorization, localization and knowledge-dependent projector inputs remain unimplemented
+
 ### Nexis 2.0 executable Identity capability policy
 - added immutable current-security snapshots and typed authorization outcomes for server-side Staff/Admin capability evaluation
 - added exact role-to-capability bundles without numeric or ordinal role comparisons; explicit grants are additive and explicit denies always win

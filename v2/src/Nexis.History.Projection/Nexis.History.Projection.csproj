@@ -6,6 +6,7 @@
     <ProjectReference Include="..\Nexis.Eventing.Contracts\Nexis.Eventing.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.History.Contracts\Nexis.History.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Kernel\Nexis.Kernel.csproj" />
   </ItemGroup>
 </Project>

@@ -25,4 +25,4 @@ State-changing admin operations must not call that append boundary independently
 
 ## Visibility
 
-`AuditVisibility.InternalOnly` and `AuditVisibility.PlayerMaterialEffect` preserve the existing policy distinction. The internal audit record is not itself a Player Log entry. Player-facing disclosure remains a safe, knowledge-aware projection and may expose only material effects appropriate for the affected player.
+`AuditVisibility.InternalOnly` and `AuditVisibility.PlayerMaterialEffect` preserve the existing policy distinction. The internal audit record is not itself a Player Log entry. `SafeAdminAuditPlayerLogProjector` emits nothing for internal-only records and requires an exact target Account plus explicit `SafePlayerReason` for a material-effect entry; acting staff identity, internal action/outcome and case metadata are never copied. The complete player-facing rules are in `PLAYER-LOG-BOUNDARY.md`.

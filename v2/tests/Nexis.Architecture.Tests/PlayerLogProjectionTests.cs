@@ -83,6 +83,23 @@ public sealed class PlayerLogProjectionTests
     }
 
     [TestMethod]
+    public void ItemEquippedEvent_WithIncompleteTypedPayload_FailsClosed()
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            CharacterId = CharacterId.New(),
+            PlacementKey = new EquipmentPlacementKey("main-hand")
+        });
+        var message = Message(ItemEquippedEvent.EventContract, payload);
+        var registry = new PlayerLogProjectionRegistry(new IPlayerLogEventProjector[]
+        {
+            new ItemEquippedPlayerLogProjector()
+        });
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => registry.Project(message));
+    }
+
+    [TestMethod]
     public void InternalAdminAudit_IsNeverProjectedToPlayerLog()
     {
         var projector = new SafeAdminAuditPlayerLogProjector();
