@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\src\Nexis.Audit.Contracts\Nexis.Audit.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Execution.Contracts\Nexis.Execution.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Execution\Nexis.Execution.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Eventing.Contracts\Nexis.Eventing.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Persistence.Postgres\Nexis.Persistence.Postgres.csproj" />
   </ItemGroup>
 </Project>

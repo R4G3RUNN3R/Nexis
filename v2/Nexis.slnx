@@ -9,6 +9,7 @@
     <Project Path="src/Nexis.Modules.Audit/Nexis.Modules.Audit.csproj" />
     <Project Path="src/Nexis.Execution.Contracts/Nexis.Execution.Contracts.csproj" />
     <Project Path="src/Nexis.Execution/Nexis.Execution.csproj" />
+    <Project Path="src/Nexis.Eventing.Contracts/Nexis.Eventing.Contracts.csproj" />
     <Project Path="src/Nexis.Persistence.Postgres/Nexis.Persistence.Postgres.csproj" />
     <Project Path="src/Nexis.Host.Api/Nexis.Host.Api.csproj" />
   </Folder>

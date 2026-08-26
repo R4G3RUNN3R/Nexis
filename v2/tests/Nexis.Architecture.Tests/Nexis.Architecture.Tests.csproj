@@ -12,5 +12,6 @@
     <ProjectReference Include="..\..\src\Nexis.Modules.Audit\Nexis.Modules.Audit.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Execution.Contracts\Nexis.Execution.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Execution\Nexis.Execution.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Eventing.Contracts\Nexis.Eventing.Contracts.csproj" />
   </ItemGroup>
 </Project>
