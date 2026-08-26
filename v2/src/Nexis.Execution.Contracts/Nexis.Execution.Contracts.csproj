@@ -3,5 +3,6 @@
     <ProjectReference Include="..\Nexis.Kernel\Nexis.Kernel.csproj" />
     <ProjectReference Include="..\Nexis.Core.Contracts\Nexis.Core.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Audit.Contracts\Nexis.Audit.Contracts.csproj" />
   </ItemGroup>
 </Project>

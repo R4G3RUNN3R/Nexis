@@ -1,10 +1,10 @@
 # Nexis 2.0 Atomic Command Commit Boundary
 
-_Status: foundation implementation slice, 2026-08-26. This document narrows `COMMAND-EXECUTION.md`; it does not replace owner-specific persistence design._
+_Status: foundation implementation slice, updated 2026-08-26. This document narrows `COMMAND-EXECUTION.md`; it does not replace owner-specific persistence design._
 
 ## Purpose
 
-This slice establishes the one-call persistence boundary for a resolved authoritative command. It prevents Application code from independently committing owner state, terminal command status, history events or outbox rows.
+This slice establishes the one-call persistence boundary for a resolved authoritative command. It prevents Application code from independently committing owner state, terminal command status, history events, state-changing Admin audit records or outbox rows.
 
 The central distinction is permanent:
 
@@ -20,9 +20,14 @@ The central distinction is permanent:
 - authoritative evaluation timestamp;
 - proposed terminal command outcome;
 - typed owner-addressed transitions;
-- authoritative event envelopes with immutable EventId/metadata and typed semantic descriptors.
+- authoritative event envelopes with immutable EventId/metadata and typed semantic descriptors;
+- state-changing Admin audit entries where the command lane is Admin.
 
 The plan contains no EF, Npgsql, HTTP, Redis or frontend types.
+
+Every Admin command attempt requires at least one atomic audit entry. The audit entry must use the original command CorrelationId and its acting AccountId must match the trusted Admin actor. This applies even when the Admin command is rejected: privileged attempts remain auditable without pretending a rejected command mutated gameplay state.
+
+Read-only privileged inspection is not a mutation command and uses the separate append-only audit boundary from `Nexis.Audit.Contracts`.
 
 ## Atomic committer guarantee
 
@@ -32,8 +37,9 @@ The plan contains no EF, Npgsql, HTTP, Redis or frontend types.
 2. apply every owner transition through its authoritative owner persistence boundary;
 3. persist the terminal command outcome;
 4. append authoritative immutable event/history records;
-5. create durable outbox records for the committed events;
-6. commit once.
+5. append state-changing Admin audit records included in the plan;
+6. create durable outbox records for the committed events;
+7. commit once.
 
 If any step fails before commit, none of those effects may become durable.
 

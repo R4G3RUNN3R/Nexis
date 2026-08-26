@@ -1,3 +1,4 @@
+using Nexis.Audit.Contracts;
 using Nexis.Core.Contracts;
 using Nexis.Execution.Contracts;
 using Nexis.Kernel.Events;
@@ -16,7 +17,8 @@ public sealed class CommandCommitPlanBuilder
         CommandReceiptClaim receiptClaim,
         CoreDecision decision,
         CoreImplementationDescriptor coreImplementation,
-        DateTimeOffset completedAtUtc)
+        DateTimeOffset completedAtUtc,
+        IEnumerable<AuditEntry>? auditEntries = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(payloadFingerprint);
@@ -66,7 +68,8 @@ public sealed class CommandCommitPlanBuilder
             receiptClaim.ExecutionToken.Value,
             terminalOutcome,
             decision.Transitions,
-            eventEnvelopes);
+            eventEnvelopes,
+            auditEntries);
     }
 
     private static CommandTerminalOutcome MapTerminalOutcome(

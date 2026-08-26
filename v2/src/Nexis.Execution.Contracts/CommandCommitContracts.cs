@@ -1,4 +1,6 @@
+using Nexis.Audit.Contracts;
 using Nexis.Core.Contracts;
+using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
 
 namespace Nexis.Execution.Contracts;
@@ -116,7 +118,8 @@ public sealed class CommandCommitPlan
         CommandExecutionToken executionToken,
         CommandTerminalOutcome terminalOutcome,
         IEnumerable<IOwnerTransition>? transitions,
-        IEnumerable<AuthoritativeEventEnvelope>? events)
+        IEnumerable<AuthoritativeEventEnvelope>? events,
+        IEnumerable<AuditEntry>? auditEntries = null)
     {
         if (executionToken.IsEmpty)
         {
@@ -128,6 +131,7 @@ public sealed class CommandCommitPlan
         TerminalOutcome = terminalOutcome ?? throw new ArgumentNullException(nameof(terminalOutcome));
         Transitions = Freeze(transitions, nameof(transitions));
         Events = Freeze(events, nameof(events));
+        AuditEntries = Freeze(auditEntries, nameof(auditEntries));
 
         foreach (var transition in Transitions)
         {
@@ -144,6 +148,32 @@ public sealed class CommandCommitPlan
                 throw new ArgumentException("All committed events must use the command's original CorrelationId.", nameof(events));
             }
         }
+
+        foreach (var auditEntry in AuditEntries)
+        {
+            if (auditEntry.CorrelationId != Trace.CorrelationId)
+            {
+                throw new ArgumentException("All atomic command audit entries must use the command's original CorrelationId.", nameof(auditEntries));
+            }
+        }
+
+        if (Trace.Identity.Actor.Lane == CommandExecutionLane.Admin)
+        {
+            if (!Trace.Identity.Actor.AccountId.HasValue)
+            {
+                throw new ArgumentException("Admin command traces require an acting AccountId.", nameof(trace));
+            }
+
+            if (AuditEntries.Count == 0)
+            {
+                throw new ArgumentException("Every Admin command attempt requires at least one atomic audit entry.", nameof(auditEntries));
+            }
+
+            if (AuditEntries.Any(entry => entry.ActingAccountId != Trace.Identity.Actor.AccountId.Value))
+            {
+                throw new ArgumentException("Admin command audit actor must match the trusted command actor AccountId.", nameof(auditEntries));
+            }
+        }
     }
 
     public CommandExecutionTrace Trace { get; }
@@ -155,6 +185,8 @@ public sealed class CommandCommitPlan
     public IReadOnlyList<IOwnerTransition> Transitions { get; }
 
     public IReadOnlyList<AuthoritativeEventEnvelope> Events { get; }
+
+    public IReadOnlyList<AuditEntry> AuditEntries { get; }
 
     private static IReadOnlyList<T> Freeze<T>(IEnumerable<T>? values, string parameterName)
         where T : class
@@ -216,9 +248,9 @@ public sealed record CommandCommitResult
 /// <summary>
 /// Persistence boundary for one authoritative command. Implementations must verify that the
 /// CommandId/identity/execution-token still own the durable receipt and then atomically commit:
-/// all owner transitions, terminal command outcome, immutable authoritative events/history, and
-/// durable outbox records for those events. Any failure before commit must leave all of those
-/// effects uncommitted.
+/// all owner transitions, terminal command outcome, immutable authoritative events/history,
+/// mandatory state-changing Admin audit records, and durable outbox records for committed events.
+/// Any failure before commit must leave all of those effects uncommitted.
 /// </summary>
 public interface IAtomicCommandCommitter
 {

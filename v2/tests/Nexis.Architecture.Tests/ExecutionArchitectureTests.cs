@@ -12,6 +12,7 @@ public sealed class ExecutionArchitectureTests
     {
         var references = GetNexisReferences(typeof(ICommandReceiptRepository).Assembly);
 
+        Assert.IsTrue(references.Contains("Nexis.Audit.Contracts", StringComparer.Ordinal));
         Assert.IsTrue(references.Contains("Nexis.Core.Contracts", StringComparer.Ordinal));
         Assert.IsTrue(references.Contains("Nexis.Identity.Contracts", StringComparer.Ordinal));
         Assert.IsTrue(references.Contains("Nexis.Kernel", StringComparer.Ordinal));
@@ -28,6 +29,7 @@ public sealed class ExecutionArchitectureTests
         CollectionAssert.AreEquivalent(
             new[]
             {
+                "Nexis.Audit.Contracts",
                 "Nexis.Core.Contracts",
                 "Nexis.Execution.Contracts",
                 "Nexis.Identity.Contracts",
