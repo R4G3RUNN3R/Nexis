@@ -1,0 +1,55 @@
+name: Nexis V2 CI
+
+on:
+  push:
+    branches:
+      - feature/nexis-v2-foundation-skeleton
+    paths:
+      - 'v2/**'
+      - '.github/workflows/nexis-v2-ci.yml'
+  pull_request:
+    paths:
+      - 'v2/**'
+      - '.github/workflows/nexis-v2-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexis-v2-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-v2:
+    name: Restore, build and test Nexis V2
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pinned .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.100'
+
+      - name: Show .NET environment
+        run: dotnet --info
+
+      - name: Restore
+        run: dotnet restore v2/Nexis.slnx
+
+      - name: Build with warnings as errors
+        run: dotnet build v2/Nexis.slnx --configuration Release --no-restore
+
+      - name: Run architecture and Core conformance tests
+        run: >-
+          dotnet test
+          v2/tests/Nexis.Architecture.Tests/Nexis.Architecture.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --logger "console;verbosity=normal"
