@@ -2,6 +2,17 @@
 
 ## 2026-08-26
 
+### Nexis 2.0 executable Identity capability policy
+- added immutable current-security snapshots and typed authorization outcomes for server-side Staff/Admin capability evaluation
+- added exact role-to-capability bundles without numeric or ordinal role comparisons; explicit grants are additive and explicit denies always win
+- reject stale security versions, mismatched accounts, non-staff actors and missing exact capabilities before privileged execution
+- kept commercial entitlements entirely outside platform authorization, including adversarial coverage for same-string entitlement/capability confusion
+- added seven security tests covering ordinal bypass, revocation, stale facts, account binding, entitlement isolation and actor-lane isolation
+- verified on `new-voidsmith`: restore passed, build completed with 0 warnings/0 errors, architecture suite passed 112/112, and the full solution reported 112 passed, 28 PostgreSQL tests skipped, 0 failed because the isolated PostgreSQL test connection is not configured on that host
+- corrected the work-order test command for the .NET 10 Microsoft Testing Platform runner and ignored generated .NET `bin/obj` outputs
+- player impact: none; this is isolated Nexis 2.0 authorization infrastructure and no live deployment or v1 mutation occurred
+- risk level: low to moderate; concrete Staff/Admin command entrypoints must use this policy when introduced, and database-backed integration remains to be rerun on the new host
+
 ### Nexis 2.0 automated authority and scheduler/CIEL bypass boundary
 - introduced stable `SystemActorKey` identity for trusted automated authorities so scheduler, CIEL and future system services no longer collapse into one anonymous `SYSTEM` actor while still remaining completely separate from Account/Character identity
 - bound the System principal into CommandId idempotency identity, durable PostgreSQL command receipts, atomic receipt verification and crash recovery so an automated command retains the same source authority across retries, restarts and recovery workers
