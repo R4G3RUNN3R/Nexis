@@ -47,7 +47,7 @@ public sealed class CoreRulesEngine : ICoreRulesEngine
 
     public CoreImplementationDescriptor Descriptor { get; } = new(
         "Nexis.Core.Reference",
-        "0.3.0-foundation",
+        "0.4.0-foundation",
         CoreContractVersion.V1);
 
     public bool Supports(CoreContractVersion contractVersion) =>
