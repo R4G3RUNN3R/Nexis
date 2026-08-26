@@ -16,6 +16,8 @@ public readonly record struct CoreContractVersion
 
     public int Value { get; }
 
+    public bool IsValid => Value > 0;
+
     public override string ToString() => Value.ToString();
 }
 
@@ -54,6 +56,11 @@ public sealed record CoreImplementationDescriptor
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(implementationName);
         ArgumentException.ThrowIfNullOrWhiteSpace(implementationVersion);
+
+        if (!contractVersion.IsValid)
+        {
+            throw new ArgumentOutOfRangeException(nameof(contractVersion), "Core contract version must be positive.");
+        }
 
         ImplementationName = implementationName;
         ImplementationVersion = implementationVersion;

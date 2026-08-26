@@ -21,7 +21,37 @@ public sealed class CoreContractBehaviorTests
             localOffset,
             new RuleVersion("test-rules-v1"),
             new ContentVersion("test-content-v1"),
-            new SequenceRandomSource(1)));
+            new SequenceRandomFactory(1)));
+    }
+
+    [TestMethod]
+    public void EvaluationRequest_RejectsInvalidDefaultContractVersion()
+    {
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => new CoreEvaluationRequest(
+            default,
+            CreateContext(),
+            new SyntheticIntent(),
+            Array.Empty<IAuthoritativeSnapshot>()));
+    }
+
+    [TestMethod]
+    public void EvaluationRequest_FreezesSnapshotsAndContentInputs()
+    {
+        var snapshots = new List<IAuthoritativeSnapshot> { new SyntheticSnapshot() };
+        var content = new List<ICoreContentInput> { new SyntheticContent() };
+
+        var request = new CoreEvaluationRequest(
+            CoreContractVersion.V1,
+            CreateContext(),
+            new SyntheticIntent(),
+            snapshots,
+            content);
+
+        snapshots.Clear();
+        content.Clear();
+
+        Assert.AreEqual(1, request.Snapshots.Count);
+        Assert.AreEqual(1, request.Content.Count);
     }
 
     [TestMethod]
@@ -77,26 +107,58 @@ public sealed class CoreContractBehaviorTests
         new DateTimeOffset(2026, 8, 26, 7, 0, 0, TimeSpan.Zero),
         new RuleVersion("test-rules-v1"),
         new ContentVersion("test-content-v1"),
-        new SequenceRandomSource(1, 2, 3));
+        new SequenceRandomFactory(1, 2, 3));
 
-    private sealed class SequenceRandomSource : IDeterministicRandomSource
+    private sealed class SequenceRandomFactory : IDeterministicRandomFactory
     {
-        private readonly Queue<ulong> _values;
+        private readonly ulong[] _values;
 
-        public SequenceRandomSource(params ulong[] values)
+        public SequenceRandomFactory(params ulong[] values)
         {
-            _values = new Queue<ulong>(values);
+            _values = (ulong[])values.Clone();
         }
 
-        public ulong NextUInt64() =>
-            _values.Count > 0
-                ? _values.Dequeue()
-                : throw new InvalidOperationException("The deterministic test RNG was exhausted.");
+        public IDeterministicRandomSource Create() => new SequenceRandomSource(_values);
+
+        private sealed class SequenceRandomSource : IDeterministicRandomSource
+        {
+            private readonly ulong[] _values;
+            private int _index;
+
+            public SequenceRandomSource(ulong[] values)
+            {
+                _values = values;
+            }
+
+            public ulong NextUInt64()
+            {
+                if (_index >= _values.Length)
+                {
+                    throw new InvalidOperationException("The deterministic test RNG was exhausted.");
+                }
+
+                return _values[_index++];
+            }
+        }
     }
 
     private sealed record SyntheticIntent : ICoreIntent
     {
         public ContractDescriptor Contract { get; } = new("tests.synthetic.intent", 1);
+    }
+
+    private sealed record SyntheticSnapshot : IAuthoritativeSnapshot
+    {
+        public ContractDescriptor Contract { get; } = new("tests.synthetic.snapshot", 1);
+
+        public OwnerKey Owner { get; } = new("Tests");
+
+        public long Revision => 1;
+    }
+
+    private sealed record SyntheticContent : ICoreContentInput
+    {
+        public ContractDescriptor Contract { get; } = new("tests.synthetic.content", 1);
     }
 
     private sealed record SyntheticTransition : IOwnerTransition

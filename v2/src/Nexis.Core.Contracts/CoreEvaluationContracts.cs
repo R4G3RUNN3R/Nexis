@@ -62,6 +62,14 @@ public interface IAuthoritativeSnapshot : IVersionedCoreContract
 }
 
 /// <summary>
+/// Immutable, versioned Content Registry input required by one evaluation. Domain-specific
+/// contracts provide their own typed identity and fields; this interface is only the common seam.
+/// </summary>
+public interface ICoreContentInput : IVersionedCoreContract
+{
+}
+
+/// <summary>
 /// Typed state transition addressed to the owner permitted to persist that fact.
 /// Implementations must express domain fields explicitly and may not be generic path/value patches.
 /// </summary>
@@ -95,7 +103,7 @@ public sealed record CoreEvaluationContext
         DateTimeOffset evaluationTimeUtc,
         RuleVersion ruleVersion,
         ContentVersion contentVersion,
-        IDeterministicRandomSource random)
+        IDeterministicRandomFactory randomFactory)
     {
         if (commandId.IsEmpty)
         {
@@ -117,7 +125,7 @@ public sealed record CoreEvaluationContext
         EvaluationTimeUtc = evaluationTimeUtc;
         RuleVersion = ruleVersion ?? throw new ArgumentNullException(nameof(ruleVersion));
         ContentVersion = contentVersion ?? throw new ArgumentNullException(nameof(contentVersion));
-        Random = random ?? throw new ArgumentNullException(nameof(random));
+        RandomFactory = randomFactory ?? throw new ArgumentNullException(nameof(randomFactory));
     }
 
     public CommandId CommandId { get; }
@@ -130,7 +138,11 @@ public sealed record CoreEvaluationContext
 
     public ContentVersion ContentVersion { get; }
 
-    public IDeterministicRandomSource Random { get; }
+    /// <summary>
+    /// Creates a fresh deterministic random stream for each evaluation. The request never exposes
+    /// one shared mutable RNG cursor, so re-evaluating identical inputs can replay identical draws.
+    /// </summary>
+    public IDeterministicRandomFactory RandomFactory { get; }
 }
 
 public sealed class CoreEvaluationRequest
@@ -139,14 +151,21 @@ public sealed class CoreEvaluationRequest
         CoreContractVersion contractVersion,
         CoreEvaluationContext context,
         ICoreIntent intent,
-        IEnumerable<IAuthoritativeSnapshot> snapshots)
+        IEnumerable<IAuthoritativeSnapshot> snapshots,
+        IEnumerable<ICoreContentInput>? content = null)
     {
+        if (!contractVersion.IsValid)
+        {
+            throw new ArgumentOutOfRangeException(nameof(contractVersion), "Core contract version must be positive.");
+        }
+
         ContractVersion = contractVersion;
         Context = context ?? throw new ArgumentNullException(nameof(context));
         Intent = intent ?? throw new ArgumentNullException(nameof(intent));
         ArgumentNullException.ThrowIfNull(snapshots);
 
-        Snapshots = Array.AsReadOnly(snapshots.ToArray());
+        Snapshots = Freeze(snapshots, nameof(snapshots));
+        Content = Freeze(content ?? Array.Empty<ICoreContentInput>(), nameof(content));
     }
 
     public CoreContractVersion ContractVersion { get; }
@@ -156,4 +175,22 @@ public sealed class CoreEvaluationRequest
     public ICoreIntent Intent { get; }
 
     public IReadOnlyList<IAuthoritativeSnapshot> Snapshots { get; }
+
+    public IReadOnlyList<ICoreContentInput> Content { get; }
+
+    private static IReadOnlyList<T> Freeze<T>(IEnumerable<T> values, string parameterName)
+        where T : class
+    {
+        var items = values.ToArray();
+
+        for (var index = 0; index < items.Length; index++)
+        {
+            if (items[index] is null)
+            {
+                throw new ArgumentException("Core evaluation collections cannot contain null entries.", parameterName);
+            }
+        }
+
+        return Array.AsReadOnly(items);
+    }
 }
