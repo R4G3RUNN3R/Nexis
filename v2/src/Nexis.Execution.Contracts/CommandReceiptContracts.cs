@@ -90,11 +90,13 @@ public sealed record CommandActorBinding
     private CommandActorBinding(
         CommandExecutionLane lane,
         AccountId? accountId,
-        CharacterId? characterId)
+        CharacterId? characterId,
+        SystemActorKey? systemActorKey)
     {
         Lane = lane;
         AccountId = accountId;
         CharacterId = characterId;
+        SystemActorKey = systemActorKey;
     }
 
     public CommandExecutionLane Lane { get; }
@@ -102,6 +104,8 @@ public sealed record CommandActorBinding
     public AccountId? AccountId { get; }
 
     public CharacterId? CharacterId { get; }
+
+    public SystemActorKey? SystemActorKey { get; }
 
     public static CommandActorBinding From(TrustedActorContext actor)
     {
@@ -118,32 +122,32 @@ public sealed record CommandActorBinding
 
     private static CommandActorBinding FromPlayer(TrustedActorContext actor)
     {
-        if (actor.Kind != ActorKind.Player || !actor.AccountId.HasValue || !actor.CharacterId.HasValue)
+        if (actor.Kind != ActorKind.Player || !actor.AccountId.HasValue || !actor.CharacterId.HasValue || actor.SystemActorKey is not null)
         {
-            throw new InvalidOperationException("Player/realtime command actors require trusted AccountId and CharacterId identity.");
+            throw new InvalidOperationException("Player/realtime command actors require trusted AccountId and CharacterId identity only.");
         }
 
-        return new CommandActorBinding(actor.Lane, actor.AccountId.Value, actor.CharacterId.Value);
+        return new CommandActorBinding(actor.Lane, actor.AccountId.Value, actor.CharacterId.Value, null);
     }
 
     private static CommandActorBinding FromStaff(TrustedActorContext actor)
     {
-        if (actor.Kind != ActorKind.Staff || !actor.AccountId.HasValue || actor.CharacterId.HasValue)
+        if (actor.Kind != ActorKind.Staff || !actor.AccountId.HasValue || actor.CharacterId.HasValue || actor.SystemActorKey is not null)
         {
-            throw new InvalidOperationException("Admin command actors require a trusted AccountId and cannot impersonate a CharacterId.");
+            throw new InvalidOperationException("Admin command actors require a trusted AccountId and cannot impersonate a CharacterId or System principal.");
         }
 
-        return new CommandActorBinding(actor.Lane, actor.AccountId.Value, null);
+        return new CommandActorBinding(actor.Lane, actor.AccountId.Value, null, null);
     }
 
     private static CommandActorBinding FromSystem(TrustedActorContext actor)
     {
-        if (actor.Kind != ActorKind.System || actor.AccountId.HasValue || actor.CharacterId.HasValue)
+        if (actor.Kind != ActorKind.System || actor.AccountId.HasValue || actor.CharacterId.HasValue || actor.SystemActorKey is null)
         {
-            throw new InvalidOperationException("System command actors cannot carry account or character identity.");
+            throw new InvalidOperationException("System command actors require a trusted SystemActorKey and cannot carry account or character identity.");
         }
 
-        return new CommandActorBinding(actor.Lane, null, null);
+        return new CommandActorBinding(actor.Lane, null, null, actor.SystemActorKey);
     }
 }
 
@@ -266,89 +270,6 @@ public sealed record CommandReceiptAcquireRequest
     public DateTimeOffset LeaseExpiresAtUtc => ReceivedAtUtc + ExecutionLease.Duration;
 }
 
-public enum CommandTerminalStatus
-{
-    Succeeded = 0,
-    Rejected = 1,
-    Conflict = 2,
-    Cancelled = 3,
-    DomainFailed = 4,
-    TechnicalFailure = 5
-}
-
-public sealed record CommandReasonCode
-{
-    public CommandReasonCode(string value)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(value);
-        Value = value;
-    }
-
-    public string Value { get; }
-
-    public override string ToString() => Value;
-}
-
-/// <summary>
-/// Durable terminal command result after the authoritative transaction has committed (or has
-/// definitively failed without a gameplay commit). This is intentionally distinct from CoreDecision:
-/// a Core success is not a command success until persistence commits.
-/// </summary>
-public sealed record CommandTerminalOutcome
-{
-    private CommandTerminalOutcome(
-        CommandTerminalStatus status,
-        CommandReasonCode? reason,
-        DateTimeOffset completedAtUtc)
-    {
-        if (!Enum.IsDefined(typeof(CommandTerminalStatus), status))
-        {
-            throw new ArgumentOutOfRangeException(nameof(status));
-        }
-
-        if (completedAtUtc.Offset != TimeSpan.Zero)
-        {
-            throw new ArgumentException("Command completion time must be UTC.", nameof(completedAtUtc));
-        }
-
-        if (status == CommandTerminalStatus.Succeeded && reason is not null)
-        {
-            throw new ArgumentException("Succeeded command outcomes cannot carry a failure reason.", nameof(reason));
-        }
-
-        if (status != CommandTerminalStatus.Succeeded && reason is null)
-        {
-            throw new ArgumentNullException(nameof(reason), "Non-success command outcomes require an explicit reason code.");
-        }
-
-        Status = status;
-        Reason = reason;
-        CompletedAtUtc = completedAtUtc;
-    }
-
-    public CommandTerminalStatus Status { get; }
-
-    public CommandReasonCode? Reason { get; }
-
-    public DateTimeOffset CompletedAtUtc { get; }
-
-    public static CommandTerminalOutcome Succeeded(DateTimeOffset completedAtUtc) =>
-        new(CommandTerminalStatus.Succeeded, null, completedAtUtc);
-
-    public static CommandTerminalOutcome Failed(
-        CommandTerminalStatus status,
-        CommandReasonCode reason,
-        DateTimeOffset completedAtUtc)
-    {
-        if (status == CommandTerminalStatus.Succeeded)
-        {
-            throw new ArgumentException("Use Succeeded for successful command outcomes.", nameof(status));
-        }
-
-        return new CommandTerminalOutcome(status, reason ?? throw new ArgumentNullException(nameof(reason)), completedAtUtc);
-    }
-}
-
 public enum CommandReceiptDisposition
 {
     Acquired = 0,
@@ -357,9 +278,6 @@ public enum CommandReceiptDisposition
     IntegrityViolation = 3
 }
 
-/// <summary>
-/// Atomic result of attempting to claim one CommandId for execution.
-/// </summary>
 public sealed record CommandReceiptClaim
 {
     private CommandReceiptClaim(
@@ -368,11 +286,6 @@ public sealed record CommandReceiptClaim
         CommandExecutionToken? executionToken,
         CommandTerminalOutcome? terminalOutcome)
     {
-        if (originalCorrelationId.Value == Guid.Empty)
-        {
-            throw new ArgumentException("Original CorrelationId cannot be empty.", nameof(originalCorrelationId));
-        }
-
         Disposition = disposition;
         OriginalCorrelationId = originalCorrelationId;
         ExecutionToken = executionToken;
@@ -387,15 +300,10 @@ public sealed record CommandReceiptClaim
 
     public CommandTerminalOutcome? TerminalOutcome { get; }
 
-    public static CommandReceiptClaim Acquired(CorrelationId correlationId, CommandExecutionToken executionToken)
-    {
-        if (executionToken.IsEmpty)
-        {
-            throw new ArgumentException("Acquired command claims require a non-empty execution token.", nameof(executionToken));
-        }
-
-        return new CommandReceiptClaim(CommandReceiptDisposition.Acquired, correlationId, executionToken, null);
-    }
+    public static CommandReceiptClaim Acquired(
+        CorrelationId originalCorrelationId,
+        CommandExecutionToken executionToken) =>
+        new(CommandReceiptDisposition.Acquired, originalCorrelationId, executionToken, null);
 
     public static CommandReceiptClaim DuplicateInProgress(CorrelationId originalCorrelationId) =>
         new(CommandReceiptDisposition.DuplicateInProgress, originalCorrelationId, null, null);
@@ -413,11 +321,6 @@ public sealed record CommandReceiptClaim
         new(CommandReceiptDisposition.IntegrityViolation, originalCorrelationId, null, null);
 }
 
-/// <summary>
-/// Durable receipt boundary. TryAcquireAsync must atomically create or compare the CommandId receipt.
-/// New receipts persist the exact canonical typed-command JSON and an execution lease so abandoned
-/// work can be recovered. Terminal completion remains exclusive to the atomic command transaction.
-/// </summary>
 public interface ICommandReceiptRepository
 {
     ValueTask<CommandReceiptClaim> TryAcquireAsync(
