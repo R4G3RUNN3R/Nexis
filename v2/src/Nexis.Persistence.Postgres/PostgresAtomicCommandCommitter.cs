@@ -241,14 +241,18 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         const string outboxSql = """
             INSERT INTO nexis_v2.outbox (
                 event_id, command_id, correlation_id, occurred_at_utc,
-                contract_name, contract_schema_version, payload)
+                contract_name, contract_schema_version, payload, available_at_utc)
             VALUES (
                 @event_id, @command_id, @correlation_id, @occurred_at_utc,
-                @contract_name, @contract_schema_version, @payload);
+                @contract_name, @contract_schema_version, @payload, @available_at_utc);
             """;
 
         await using var outboxCommand = new NpgsqlCommand(outboxSql, connection, transaction);
         AddEventParameters(outboxCommand, plan, envelope, serializedEvent.Json, includeCausation: false);
+        outboxCommand.Parameters.AddWithValue(
+            "available_at_utc",
+            NpgsqlDbType.TimestampTz,
+            plan.TerminalOutcome.CompletedAtUtc.UtcDateTime);
         await outboxCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
