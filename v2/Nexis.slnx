@@ -5,9 +5,10 @@
     <Project Path="src/Nexis.Core/Nexis.Core.csproj" />
     <Project Path="src/Nexis.Identity.Contracts/Nexis.Identity.Contracts.csproj" />
     <Project Path="src/Nexis.Modules.Identity/Nexis.Modules.Identity.csproj" />
+    <Project Path="src/Nexis.Audit.Contracts/Nexis.Audit.Contracts.csproj" />
+    <Project Path="src/Nexis.Modules.Audit/Nexis.Modules.Audit.csproj" />
     <Project Path="src/Nexis.Execution.Contracts/Nexis.Execution.Contracts.csproj" />
     <Project Path="src/Nexis.Execution/Nexis.Execution.csproj" />
-    <Project Path="src/Nexis.Modules.Audit/Nexis.Modules.Audit.csproj" />
     <Project Path="src/Nexis.Host.Api/Nexis.Host.Api.csproj" />
   </Folder>
   <Folder Name="/tests/">
