@@ -10,24 +10,12 @@ public sealed record EquipmentPlacementDefinition
         IEnumerable<EquipmentSlotKey> occupiedSlots)
     {
         PlacementKey = placementKey ?? throw new ArgumentNullException(nameof(placementKey));
-        ArgumentNullException.ThrowIfNull(occupiedSlots);
-        var frozen = occupiedSlots.ToArray();
-        if (frozen.Length == 0 || frozen.Any(static slot => slot is null))
-        {
-            throw new ArgumentException("Equipment placements require at least one non-null occupied slot.", nameof(occupiedSlots));
-        }
-
-        if (frozen.Distinct().Count() != frozen.Length)
-        {
-            throw new ArgumentException("Equipment placements cannot list the same occupied slot twice.", nameof(occupiedSlots));
-        }
-
-        OccupiedSlots = Array.AsReadOnly(frozen);
+        OccupiedSlots = new EquipmentSlotSet(occupiedSlots);
     }
 
     public EquipmentPlacementKey PlacementKey { get; }
 
-    public IReadOnlyList<EquipmentSlotKey> OccupiedSlots { get; }
+    public EquipmentSlotSet OccupiedSlots { get; }
 }
 
 /// <summary>
