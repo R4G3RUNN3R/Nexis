@@ -24,6 +24,9 @@ jobs:
     name: Restore, build and test Nexis V2
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: v2
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
@@ -31,24 +34,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install pinned .NET SDK
+      - name: Ensure .NET 10 SDK baseline
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.100'
 
-      - name: Show .NET environment
-        run: dotnet --info
+      - name: Show resolved .NET environment
+        run: |
+          dotnet --version
+          dotnet --info
 
       - name: Restore
-        run: dotnet restore v2/Nexis.slnx
+        run: dotnet restore Nexis.slnx
 
       - name: Build with warnings as errors
-        run: dotnet build v2/Nexis.slnx --configuration Release --no-restore
+        run: dotnet build Nexis.slnx --configuration Release --no-restore
 
       - name: Run architecture and Core conformance tests
         run: >-
           dotnet test
-          v2/tests/Nexis.Architecture.Tests/Nexis.Architecture.Tests.csproj
+          tests/Nexis.Architecture.Tests/Nexis.Architecture.Tests.csproj
           --configuration Release
           --no-build
           --no-restore
