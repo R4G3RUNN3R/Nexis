@@ -32,14 +32,13 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
     public CoreDecision Evaluate(CoreRuleExecutionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var request = context.Request;
 
-        if (request.Intent is not EquipItemIntent intent)
+        if (context.Intent is not EquipItemIntent intent)
         {
             throw new InvalidOperationException("Equip Item evaluator received a different intent type for its registered contract.");
         }
 
-        var actor = request.Context.Actor;
+        var actor = context.Actor;
         if (actor.Lane != CommandExecutionLane.Player || !actor.CharacterId.HasValue)
         {
             return CoreDecision.Rejected(PlayerActorRequired);
@@ -51,7 +50,7 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
         }
 
         var inventory = RequireSingleSnapshot<InventorySnapshot>(
-            request,
+            context.Snapshots,
             intent.CharacterId,
             static snapshot => snapshot.CharacterId,
             InventorySnapshotInvalid,
@@ -62,7 +61,7 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
         }
 
         var equipment = RequireSingleSnapshot<EquipmentSnapshot>(
-            request,
+            context.Snapshots,
             intent.CharacterId,
             static snapshot => snapshot.CharacterId,
             EquipmentSnapshotInvalid,
@@ -73,7 +72,7 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
         }
 
         var combat = RequireSingleSnapshot<CombatParticipationSnapshot>(
-            request,
+            context.Snapshots,
             intent.CharacterId,
             static snapshot => snapshot.CharacterId,
             CombatSnapshotInvalid,
@@ -99,7 +98,7 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
             return CoreDecision.Rejected(ItemNotEquippable);
         }
 
-        var definitions = request.Content
+        var definitions = context.Content
             .OfType<EquippableItemDefinition>()
             .Where(definition =>
                 definition.Contract == possessedItem.DefinitionKey.Contract &&
@@ -154,14 +153,14 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
     }
 
     private static TSnapshot? RequireSingleSnapshot<TSnapshot>(
-        CoreEvaluationRequest request,
+        IReadOnlyList<IAuthoritativeSnapshot> snapshots,
         Nexis.Identity.Contracts.CharacterId characterId,
         Func<TSnapshot, Nexis.Identity.Contracts.CharacterId> characterSelector,
         CoreReasonCode failureReason,
         out CoreDecision? failure)
         where TSnapshot : class, IAuthoritativeSnapshot
     {
-        var matching = request.Snapshots
+        var matching = snapshots
             .OfType<TSnapshot>()
             .Where(snapshot => characterSelector(snapshot) == characterId)
             .ToArray();
