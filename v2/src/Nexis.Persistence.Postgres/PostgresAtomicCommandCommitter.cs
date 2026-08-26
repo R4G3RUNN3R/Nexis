@@ -142,7 +142,7 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT lane, actor_account_id, actor_character_id,
+            SELECT lane, actor_account_id, actor_character_id, actor_system_key,
                    intent_name, intent_schema_version, payload_fingerprint,
                    original_correlation_id, terminal_status, terminal_reason, completed_at_utc,
                    execution_token
@@ -161,7 +161,7 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         }
 
         var stored = PostgresCommandReceiptRepository.ReadReceipt(reader);
-        var executionToken = reader.GetGuid(10);
+        var executionToken = reader.GetGuid(11);
 
         if (!PostgresCommandReceiptRepository.Matches(plan.Trace.Identity, stored) ||
             stored.OriginalCorrelationId != plan.Trace.CorrelationId.Value ||
