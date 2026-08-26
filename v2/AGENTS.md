@@ -13,7 +13,10 @@ Before non-trivial work anywhere under `v2/`, read and obey:
 5. `docs/IDENTITY-AUTHORIZATION.md` - Account/Character/public identity and authorization boundary.
 6. `docs/CANON-AND-LORE.md` - authoritative world/city/academy/lore identity and legacy-canon precedence for gameplay/world/content work.
 7. `docs/CORE-RELEASE-GATE.md` and `docs/COMPONENT-RELEASE-GATE.md` when upgrade/replacement/release work is involved.
-8. `docs/AGENT-HANDOFF.md` for current foundation order and stop conditions.
+8. `docs/AGENT-HANDOFF.md` for ordered foundation gates and stop conditions.
+9. `docs/IMPLEMENTATION-STATUS.md` for the current branch progress checkpoint so completed foundation slices are not reimplemented.
+
+`docs/IMPLEMENTATION-STATUS.md` records current progress only. It never overrides the manual, architecture documents, canon, release gates or handoff stop conditions.
 
 `docs/ENGINEERING-MANUAL.md` is the canonical instruction manual for Codex, Claude and every other engineering agent. Do not invent a Codex-specific Nexis architecture or quality bar.
 
