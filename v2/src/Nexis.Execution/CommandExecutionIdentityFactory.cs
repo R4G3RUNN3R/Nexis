@@ -11,6 +11,14 @@ public static class CommandExecutionIdentityFactory
 {
     public static CommandExecutionIdentity Create(
         CoreEvaluationRequest request,
+        CanonicalCommandPayload payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        return Create(request, payload.Fingerprint);
+    }
+
+    public static CommandExecutionIdentity Create(
+        CoreEvaluationRequest request,
         CommandPayloadFingerprint payloadFingerprint)
     {
         ArgumentNullException.ThrowIfNull(request);

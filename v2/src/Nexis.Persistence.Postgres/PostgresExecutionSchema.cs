@@ -8,7 +8,8 @@ public static class PostgresExecutionSchema
     private static readonly string[] OrderedResources =
     {
         "Nexis.Persistence.Postgres.Migrations.0001_execution_foundation.sql",
-        "Nexis.Persistence.Postgres.Migrations.0002_outbox_delivery.sql"
+        "Nexis.Persistence.Postgres.Migrations.0002_outbox_delivery.sql",
+        "Nexis.Persistence.Postgres.Migrations.0003_command_recovery.sql"
     };
 
     public static async ValueTask EnsureCreatedAsync(

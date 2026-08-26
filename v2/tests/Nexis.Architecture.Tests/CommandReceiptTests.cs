@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nexis.Core.Contracts;
 using Nexis.Execution;
@@ -20,17 +19,19 @@ public sealed class CommandReceiptTests
         var coordinator = new CommandReceiptCoordinator(repository);
         var commandId = CommandId.New();
         var actor = CreatePlayerActor();
-        var payload = Fingerprint("same-payload");
+        var payload = Payload("same-payload");
         var firstCorrelation = CorrelationId.New();
 
         var first = await coordinator.AcquireAsync(
             CreateRequest(commandId, actor, firstCorrelation),
             payload,
+            Lease("worker-a"),
             Utc(10, 0));
 
         var duplicate = await coordinator.AcquireAsync(
             CreateRequest(commandId, actor, CorrelationId.New()),
             payload,
+            Lease("worker-b"),
             Utc(10, 1));
 
         Assert.AreEqual(CommandReceiptDisposition.Acquired, first.Disposition);
@@ -50,12 +51,14 @@ public sealed class CommandReceiptTests
 
         await coordinator.AcquireAsync(
             CreateRequest(commandId, actor, CorrelationId.New()),
-            Fingerprint("payload-a"),
+            Payload("payload-a"),
+            Lease("worker-a"),
             Utc(10, 0));
 
         var second = await coordinator.AcquireAsync(
             CreateRequest(commandId, actor, CorrelationId.New()),
-            Fingerprint("payload-b"),
+            Payload("payload-b"),
+            Lease("worker-b"),
             Utc(10, 1));
 
         Assert.AreEqual(CommandReceiptDisposition.IntegrityViolation, second.Disposition);
@@ -67,16 +70,18 @@ public sealed class CommandReceiptTests
         var repository = new InMemoryReceiptRepository();
         var coordinator = new CommandReceiptCoordinator(repository);
         var commandId = CommandId.New();
-        var payload = Fingerprint("same-payload");
+        var payload = Payload("same-payload");
 
         await coordinator.AcquireAsync(
             CreateRequest(commandId, CreatePlayerActor(), CorrelationId.New()),
             payload,
+            Lease("worker-a"),
             Utc(10, 0));
 
         var second = await coordinator.AcquireAsync(
             CreateRequest(commandId, CreatePlayerActor(), CorrelationId.New()),
             payload,
+            Lease("worker-b"),
             Utc(10, 1));
 
         Assert.AreEqual(CommandReceiptDisposition.IntegrityViolation, second.Disposition);
@@ -90,7 +95,7 @@ public sealed class CommandReceiptTests
         var commandId = CommandId.New();
         var accountId = AccountId.New();
         var characterId = CharacterId.New();
-        var payload = Fingerprint("same-payload");
+        var payload = Payload("same-payload");
 
         var actorAtReceive = TrustedActorContext.CreatePlayer(
             accountId,
@@ -109,11 +114,13 @@ public sealed class CommandReceiptTests
         await coordinator.AcquireAsync(
             CreateRequest(commandId, actorAtReceive, CorrelationId.New()),
             payload,
+            Lease("worker-a"),
             Utc(10, 0));
 
         var retry = await coordinator.AcquireAsync(
             CreateRequest(commandId, actorAtRetry, CorrelationId.New()),
             payload,
+            Lease("worker-b"),
             Utc(10, 1));
 
         Assert.AreEqual(CommandReceiptDisposition.DuplicateInProgress, retry.Disposition);
@@ -126,12 +133,13 @@ public sealed class CommandReceiptTests
         var coordinator = new CommandReceiptCoordinator(repository);
         var commandId = CommandId.New();
         var actor = CreatePlayerActor();
-        var payload = Fingerprint("same-payload");
+        var payload = Payload("same-payload");
         var originalCorrelation = CorrelationId.New();
 
         var first = await coordinator.AcquireAsync(
             CreateRequest(commandId, actor, originalCorrelation),
             payload,
+            Lease("worker-a"),
             Utc(10, 0));
 
         Assert.AreEqual(CommandReceiptDisposition.Acquired, first.Disposition);
@@ -142,6 +150,7 @@ public sealed class CommandReceiptTests
         var duplicate = await coordinator.AcquireAsync(
             CreateRequest(commandId, actor, CorrelationId.New()),
             payload,
+            Lease("worker-b"),
             Utc(10, 3));
 
         Assert.AreEqual(CommandReceiptDisposition.DuplicateCompleted, duplicate.Disposition);
@@ -157,16 +166,18 @@ public sealed class CommandReceiptTests
         var coordinator = new CommandReceiptCoordinator(repository);
         var commandId = CommandId.New();
         var actor = CreatePlayerActor();
-        var payload = Fingerprint("same-payload");
+        var payload = Payload("same-payload");
 
         await coordinator.AcquireAsync(
             CreateRequest(commandId, actor, CorrelationId.New(), "tests.command.a"),
             payload,
+            Lease("worker-a"),
             Utc(10, 0));
 
         var second = await coordinator.AcquireAsync(
             CreateRequest(commandId, actor, CorrelationId.New(), "tests.command.b"),
             payload,
+            Lease("worker-b"),
             Utc(10, 1));
 
         Assert.AreEqual(CommandReceiptDisposition.IntegrityViolation, second.Disposition);
@@ -180,21 +191,43 @@ public sealed class CommandReceiptTests
 
         Assert.ThrowsExactly<ArgumentException>(() => coordinator.AcquireAsync(
             request,
-            Fingerprint("payload"),
+            Payload("payload"),
+            Lease("worker-a"),
             new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.FromHours(1))));
     }
 
     [TestMethod]
-    public void PayloadFingerprint_IsDeterministicAndNormalizesHexCase()
+    public void CanonicalPayload_IsValidJsonAndOwnsItsDeterministicFingerprint()
     {
-        var payloadBytes = Encoding.UTF8.GetBytes("canonical-payload");
-        var first = CommandPayloadFingerprint.Compute(payloadBytes);
-        var second = CommandPayloadFingerprint.Compute(payloadBytes);
-        var parsed = CommandPayloadFingerprint.Parse(first.Value.ToUpperInvariant());
+        const string json = "{\"action\":\"test\",\"amount\":3}";
+        var first = CanonicalCommandPayload.FromTrustedJson(json);
+        var second = CanonicalCommandPayload.FromTrustedJson(json);
+        var parsed = CommandPayloadFingerprint.Parse(first.Fingerprint.Value.ToUpperInvariant());
 
+        Assert.AreEqual(json, first.Json);
         Assert.AreEqual(first, second);
-        Assert.AreEqual(first, parsed);
-        Assert.AreEqual(64, first.Value.Length);
+        Assert.AreEqual(first.Fingerprint, parsed);
+        Assert.AreEqual(64, first.Fingerprint.Value.Length);
+    }
+
+    [TestMethod]
+    public void CanonicalPayload_RejectsInvalidJson()
+    {
+        Assert.ThrowsExactly<FormatException>(() => CanonicalCommandPayload.FromTrustedJson("not-json"));
+    }
+
+    [TestMethod]
+    public void AcquireRequest_RejectsPayloadThatDoesNotMatchIdentityFingerprint()
+    {
+        var request = CreateRequest(CommandId.New(), CreatePlayerActor(), CorrelationId.New());
+        var identity = CommandExecutionIdentityFactory.Create(request, Payload("payload-a"));
+
+        Assert.ThrowsExactly<ArgumentException>(() => new CommandReceiptAcquireRequest(
+            identity,
+            Payload("payload-b"),
+            request.Context.CorrelationId,
+            Utc(10, 0),
+            Lease("worker-a")));
     }
 
     private static CoreEvaluationRequest CreateRequest(
@@ -218,8 +251,11 @@ public sealed class CommandReceiptTests
     private static TrustedActorContext CreatePlayerActor() =>
         TrustedActorContext.CreatePlayer(AccountId.New(), CharacterId.New(), 1);
 
-    private static CommandPayloadFingerprint Fingerprint(string payload) =>
-        CommandPayloadFingerprint.Compute(Encoding.UTF8.GetBytes(payload));
+    private static CanonicalCommandPayload Payload(string value) =>
+        CanonicalCommandPayload.FromTrustedJson($"{{\"value\":\"{value}\"}}");
+
+    private static CommandExecutionLeaseRequest Lease(string workerId) =>
+        new(workerId, TimeSpan.FromMinutes(1));
 
     private static DateTimeOffset Utc(int hour, int minute) =>
         new(2026, 8, 26, hour, minute, 0, TimeSpan.Zero);
@@ -250,28 +286,24 @@ public sealed class CommandReceiptTests
         private readonly Dictionary<CommandId, Entry> _entries = new();
 
         public ValueTask<CommandReceiptClaim> TryAcquireAsync(
-            CommandExecutionIdentity identity,
-            CorrelationId correlationId,
-            DateTimeOffset receivedAtUtc,
+            CommandReceiptAcquireRequest request,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(request);
             cancellationToken.ThrowIfCancellationRequested();
-
-            if (receivedAtUtc.Offset != TimeSpan.Zero)
-            {
-                throw new ArgumentException("Receive time must be UTC.", nameof(receivedAtUtc));
-            }
 
             lock (_gate)
             {
-                if (!_entries.TryGetValue(identity.CommandId, out var entry))
+                if (!_entries.TryGetValue(request.Identity.CommandId, out var entry))
                 {
                     var token = CommandExecutionToken.New();
-                    _entries.Add(identity.CommandId, new Entry(identity, correlationId, token));
-                    return ValueTask.FromResult(CommandReceiptClaim.Acquired(correlationId, token));
+                    _entries.Add(
+                        request.Identity.CommandId,
+                        new Entry(request.Identity, request.Payload, request.CorrelationId, token));
+                    return ValueTask.FromResult(CommandReceiptClaim.Acquired(request.CorrelationId, token));
                 }
 
-                if (entry.Identity != identity)
+                if (entry.Identity != request.Identity)
                 {
                     return ValueTask.FromResult(CommandReceiptClaim.IntegrityViolation(entry.CorrelationId));
                 }
@@ -300,15 +332,19 @@ public sealed class CommandReceiptTests
         {
             public Entry(
                 CommandExecutionIdentity identity,
+                CanonicalCommandPayload payload,
                 CorrelationId correlationId,
                 CommandExecutionToken executionToken)
             {
                 Identity = identity;
+                Payload = payload;
                 CorrelationId = correlationId;
                 ExecutionToken = executionToken;
             }
 
             public CommandExecutionIdentity Identity { get; }
+
+            public CanonicalCommandPayload Payload { get; }
 
             public CorrelationId CorrelationId { get; }
 

@@ -16,48 +16,42 @@ public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
     }
 
     public async ValueTask<CommandReceiptClaim> TryAcquireAsync(
-        CommandExecutionIdentity identity,
-        CorrelationId correlationId,
-        DateTimeOffset receivedAtUtc,
+        CommandReceiptAcquireRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(identity);
-
-        if (correlationId.Value == Guid.Empty)
-        {
-            throw new ArgumentException("CorrelationId cannot be empty.", nameof(correlationId));
-        }
-
-        if (receivedAtUtc.Offset != TimeSpan.Zero)
-        {
-            throw new ArgumentException("Command receive time must be UTC.", nameof(receivedAtUtc));
-        }
-
+        ArgumentNullException.ThrowIfNull(request);
+        var identity = request.Identity;
         var executionToken = CommandExecutionToken.New();
+
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         const string insertSql = """
             INSERT INTO nexis_v2.command_receipts (
                 command_id, lane, actor_account_id, actor_character_id,
                 intent_name, intent_schema_version, payload_fingerprint,
-                original_correlation_id, execution_token, received_at_utc)
+                original_correlation_id, execution_token, received_at_utc,
+                canonical_payload, execution_owner, execution_lease_expires_at_utc)
             VALUES (
                 @command_id, @lane, @actor_account_id, @actor_character_id,
                 @intent_name, @intent_schema_version, @payload_fingerprint,
-                @correlation_id, @execution_token, @received_at_utc)
+                @correlation_id, @execution_token, @received_at_utc,
+                @canonical_payload, @execution_owner, @execution_lease_expires_at_utc)
             ON CONFLICT (command_id) DO NOTHING;
             """;
 
         await using (var insert = new NpgsqlCommand(insertSql, connection))
         {
             AddIdentityParameters(insert, identity);
-            insert.Parameters.AddWithValue("correlation_id", NpgsqlDbType.Uuid, correlationId.Value);
+            insert.Parameters.AddWithValue("correlation_id", NpgsqlDbType.Uuid, request.CorrelationId.Value);
             insert.Parameters.AddWithValue("execution_token", NpgsqlDbType.Uuid, executionToken.Value);
-            insert.Parameters.AddWithValue("received_at_utc", NpgsqlDbType.TimestampTz, receivedAtUtc.UtcDateTime);
+            insert.Parameters.AddWithValue("received_at_utc", NpgsqlDbType.TimestampTz, request.ReceivedAtUtc.UtcDateTime);
+            insert.Parameters.AddWithValue("canonical_payload", NpgsqlDbType.Jsonb, request.Payload.Json);
+            insert.Parameters.AddWithValue("execution_owner", NpgsqlDbType.Text, request.ExecutionLease.WorkerId);
+            insert.Parameters.AddWithValue("execution_lease_expires_at_utc", NpgsqlDbType.TimestampTz, request.LeaseExpiresAtUtc.UtcDateTime);
 
             if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
             {
-                return CommandReceiptClaim.Acquired(correlationId, executionToken);
+                return CommandReceiptClaim.Acquired(request.CorrelationId, executionToken);
             }
         }
 

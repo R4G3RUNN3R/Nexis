@@ -18,24 +18,23 @@ public sealed class CommandReceiptCoordinator
 
     public ValueTask<CommandReceiptClaim> AcquireAsync(
         CoreEvaluationRequest request,
-        CommandPayloadFingerprint payloadFingerprint,
+        CanonicalCommandPayload payload,
+        CommandExecutionLeaseRequest executionLease,
         DateTimeOffset receivedAtUtc,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(payloadFingerprint);
+        ArgumentNullException.ThrowIfNull(payload);
+        ArgumentNullException.ThrowIfNull(executionLease);
 
-        if (receivedAtUtc.Offset != TimeSpan.Zero)
-        {
-            throw new ArgumentException("Authoritative command receive time must be UTC.", nameof(receivedAtUtc));
-        }
-
-        var identity = CommandExecutionIdentityFactory.Create(request, payloadFingerprint);
-
-        return _receiptRepository.TryAcquireAsync(
+        var identity = CommandExecutionIdentityFactory.Create(request, payload);
+        var acquisition = new CommandReceiptAcquireRequest(
             identity,
+            payload,
             request.Context.CorrelationId,
             receivedAtUtc,
-            cancellationToken);
+            executionLease);
+
+        return _receiptRepository.TryAcquireAsync(acquisition, cancellationToken);
     }
 }

@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nexis.Core.Contracts;
 using Nexis.Eventing.Contracts;
@@ -258,18 +257,21 @@ public sealed class PostgresOutboxIntegrationTests
         for (var index = 0; index < count; index++)
         {
             var request = CreateRequest();
-            var fingerprint = CommandPayloadFingerprint.Compute(Encoding.UTF8.GetBytes($"event-{index}-{request.Context.CommandId}"));
+            var payload = CanonicalCommandPayload.FromTrustedJson(
+                $"{{\"eventIndex\":{index},\"commandId\":\"{request.Context.CommandId.Value:D}\"}}");
             var repository = new PostgresCommandReceiptRepository(DataSource);
-            var claim = await repository.TryAcquireAsync(
-                CommandExecutionIdentityFactory.Create(request, fingerprint),
+            var claim = await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+                CommandExecutionIdentityFactory.Create(request, payload),
+                payload,
                 request.Context.CorrelationId,
-                Utc(10, 0));
+                Utc(10, 0),
+                new CommandExecutionLeaseRequest("outbox-seed", TimeSpan.FromMinutes(1))));
             Assert.AreEqual(CommandReceiptDisposition.Acquired, claim.Disposition);
 
             var descriptor = new SyntheticEvent(index);
             var plan = new CommandCommitPlanBuilder().Build(
                 request,
-                fingerprint,
+                payload.Fingerprint,
                 claim,
                 CoreDecision.Succeeded(events: new[] { descriptor }),
                 new CoreImplementationDescriptor("Test.Core", "outbox", CoreContractVersion.V1),

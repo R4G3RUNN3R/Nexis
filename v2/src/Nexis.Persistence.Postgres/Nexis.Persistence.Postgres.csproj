@@ -13,5 +13,6 @@
   <ItemGroup>
     <EmbeddedResource Include="Migrations\0001_execution_foundation.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0001_execution_foundation.sql" />
     <EmbeddedResource Include="Migrations\0002_outbox_delivery.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0002_outbox_delivery.sql" />
+    <EmbeddedResource Include="Migrations\0003_command_recovery.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0003_command_recovery.sql" />
   </ItemGroup>
 </Project>

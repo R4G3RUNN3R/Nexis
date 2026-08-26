@@ -189,7 +189,9 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
                 core_contract_version = @core_contract_version,
                 rule_version = @rule_version,
                 content_version = @content_version,
-                evaluated_at_utc = @evaluated_at_utc
+                evaluated_at_utc = @evaluated_at_utc,
+                execution_owner = NULL,
+                execution_lease_expires_at_utc = NULL
             WHERE command_id = @command_id
               AND execution_token = @execution_token
               AND terminal_status IS NULL;

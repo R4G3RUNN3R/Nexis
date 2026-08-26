@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nexis.Audit.Contracts;
 using Nexis.Core.Contracts;
@@ -69,6 +68,7 @@ public sealed class PostgresExecutionIntegrationTests
     {
         const string sql = """
             TRUNCATE TABLE
+                nexis_v2.event_consumer_checkpoints,
                 nexis_v2.outbox,
                 nexis_v2.authoritative_events,
                 nexis_v2.admin_audit,
@@ -90,13 +90,17 @@ public sealed class PostgresExecutionIntegrationTests
     {
         var repository = new PostgresCommandReceiptRepository(DataSource);
         var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
-        var identity = CommandExecutionIdentityFactory.Create(request, Fingerprint("same"));
+        var payload = Payload("same");
+        var identity = CommandExecutionIdentityFactory.Create(request, payload);
 
         var tasks = Enumerable.Range(0, 10)
-            .Select(_ => repository.TryAcquireAsync(
-                    identity,
-                    CorrelationId.New(),
-                    Utc(10, 0))
+            .Select(index => repository.TryAcquireAsync(
+                    new CommandReceiptAcquireRequest(
+                        identity,
+                        payload,
+                        CorrelationId.New(),
+                        Utc(10, 0),
+                        Lease($"worker-{index}")))
                 .AsTask())
             .ToArray();
 
@@ -115,27 +119,55 @@ public sealed class PostgresExecutionIntegrationTests
     {
         var repository = new PostgresCommandReceiptRepository(DataSource);
         var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
+        var payloadA = Payload("payload-a");
+        var payloadB = Payload("payload-b");
 
-        await repository.TryAcquireAsync(
-            CommandExecutionIdentityFactory.Create(request, Fingerprint("payload-a")),
+        await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+            CommandExecutionIdentityFactory.Create(request, payloadA),
+            payloadA,
             request.Context.CorrelationId,
-            Utc(10, 0));
+            Utc(10, 0),
+            Lease("worker-a")));
 
-        var result = await repository.TryAcquireAsync(
-            CommandExecutionIdentityFactory.Create(request, Fingerprint("payload-b")),
+        var result = await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+            CommandExecutionIdentityFactory.Create(request, payloadB),
+            payloadB,
             CorrelationId.New(),
-            Utc(10, 1));
+            Utc(10, 1),
+            Lease("worker-b")));
 
         Assert.AreEqual(CommandReceiptDisposition.IntegrityViolation, result.Disposition);
+    }
+
+    [TestMethod]
+    public async Task NewReceipt_PersistsCanonicalPayloadAndExecutionLease()
+    {
+        var repository = new PostgresCommandReceiptRepository(DataSource);
+        var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
+        var payload = Payload("recoverable");
+
+        var claim = await AcquireAsync(repository, request, payload);
+
+        Assert.AreEqual(CommandReceiptDisposition.Acquired, claim.Disposition);
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT canonical_payload::text, execution_owner, execution_lease_expires_at_utc FROM nexis_v2.command_receipts WHERE command_id = @command_id;",
+            connection);
+        command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, request.Context.CommandId.Value);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.IsTrue(await reader.ReadAsync());
+        Assert.AreEqual(payload.Json, reader.GetString(0));
+        Assert.AreEqual("integration-worker", reader.GetString(1));
+        Assert.IsFalse(reader.IsDBNull(2));
     }
 
     [TestMethod]
     public async Task MultiOwnerConflict_RollsBackEarlierOwnerAndLeavesReceiptIncomplete()
     {
         var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
-        var fingerprint = Fingerprint("rollback");
+        var payload = Payload("rollback");
         var repository = new PostgresCommandReceiptRepository(DataSource);
-        var claim = await AcquireAsync(repository, request, fingerprint);
+        var claim = await AcquireAsync(repository, request, payload);
         var decision = CoreDecision.Succeeded(
             transitions: new IOwnerTransition[]
             {
@@ -145,7 +177,7 @@ public sealed class PostgresExecutionIntegrationTests
             events: new[] { new SyntheticEvent() });
         var plan = new CommandCommitPlanBuilder().Build(
             request,
-            fingerprint,
+            payload.Fingerprint,
             claim,
             decision,
             CoreDescriptor(),
@@ -166,9 +198,9 @@ public sealed class PostgresExecutionIntegrationTests
     public async Task MultiOwnerSuccess_CommitsOwnersReceiptHistoryAndOutboxTogether()
     {
         var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
-        var fingerprint = Fingerprint("success");
+        var payload = Payload("success");
         var repository = new PostgresCommandReceiptRepository(DataSource);
-        var claim = await AcquireAsync(repository, request, fingerprint);
+        var claim = await AcquireAsync(repository, request, payload);
         var decision = CoreDecision.Succeeded(
             transitions: new IOwnerTransition[]
             {
@@ -178,7 +210,7 @@ public sealed class PostgresExecutionIntegrationTests
             events: new[] { new SyntheticEvent() });
         var plan = new CommandCommitPlanBuilder().Build(
             request,
-            fingerprint,
+            payload.Fingerprint,
             claim,
             decision,
             CoreDescriptor(),
@@ -192,11 +224,14 @@ public sealed class PostgresExecutionIntegrationTests
         Assert.AreEqual((int)CommandTerminalStatus.Succeeded, await ReadTerminalStatusAsync(request.Context.CommandId));
         Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.authoritative_events;"));
         Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.outbox;"));
+        Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.command_receipts WHERE execution_owner IS NOT NULL OR execution_lease_expires_at_utc IS NOT NULL;"));
 
-        var duplicate = await repository.TryAcquireAsync(
-            CommandExecutionIdentityFactory.Create(request, fingerprint),
+        var duplicate = await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+            CommandExecutionIdentityFactory.Create(request, payload),
+            payload,
             CorrelationId.New(),
-            Utc(10, 6));
+            Utc(10, 6),
+            Lease("duplicate-worker")));
         Assert.AreEqual(CommandReceiptDisposition.DuplicateCompleted, duplicate.Disposition);
         Assert.AreEqual(CommandTerminalStatus.Succeeded, duplicate.TerminalOutcome?.Status);
     }
@@ -206,9 +241,9 @@ public sealed class PostgresExecutionIntegrationTests
     {
         var accountId = AccountId.New();
         var request = CreateAdminRequest(accountId, CommandId.New(), CorrelationId.New());
-        var fingerprint = Fingerprint("admin");
+        var payload = Payload("admin");
         var repository = new PostgresCommandReceiptRepository(DataSource);
-        var claim = await AcquireAsync(repository, request, fingerprint);
+        var claim = await AcquireAsync(repository, request, payload);
         var audit = new AuditEntry(
             AuditId.New(),
             accountId,
@@ -224,7 +259,7 @@ public sealed class PostgresExecutionIntegrationTests
             null);
         var plan = new CommandCommitPlanBuilder().Build(
             request,
-            fingerprint,
+            payload.Fingerprint,
             claim,
             CoreDecision.Rejected(new CoreReasonCode("tests.rejected")),
             CoreDescriptor(),
@@ -284,12 +319,14 @@ public sealed class PostgresExecutionIntegrationTests
     private static async ValueTask<CommandReceiptClaim> AcquireAsync(
         PostgresCommandReceiptRepository repository,
         CoreEvaluationRequest request,
-        CommandPayloadFingerprint fingerprint)
+        CanonicalCommandPayload payload)
     {
-        var claim = await repository.TryAcquireAsync(
-            CommandExecutionIdentityFactory.Create(request, fingerprint),
+        var claim = await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+            CommandExecutionIdentityFactory.Create(request, payload),
+            payload,
             request.Context.CorrelationId,
-            Utc(10, 0));
+            Utc(10, 0),
+            Lease("integration-worker")));
         Assert.AreEqual(CommandReceiptDisposition.Acquired, claim.Disposition);
         return claim;
     }
@@ -326,8 +363,11 @@ public sealed class PostgresExecutionIntegrationTests
             new SyntheticIntent(),
             Array.Empty<IAuthoritativeSnapshot>());
 
-    private static CommandPayloadFingerprint Fingerprint(string value) =>
-        CommandPayloadFingerprint.Compute(Encoding.UTF8.GetBytes(value));
+    private static CanonicalCommandPayload Payload(string value) =>
+        CanonicalCommandPayload.FromTrustedJson($"{{\"value\":\"{value}\"}}");
+
+    private static CommandExecutionLeaseRequest Lease(string workerId) =>
+        new(workerId, TimeSpan.FromMinutes(1));
 
     private static CoreImplementationDescriptor CoreDescriptor() =>
         new("Test.Core", "postgres-proof", CoreContractVersion.V1);

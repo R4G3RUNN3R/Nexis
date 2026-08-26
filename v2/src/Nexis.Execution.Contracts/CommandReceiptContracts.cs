@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Nexis.Core.Contracts;
 using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
@@ -40,6 +42,42 @@ public sealed record CommandPayloadFingerprint
     }
 
     public override string ToString() => Value;
+}
+
+/// <summary>
+/// Exact canonical JSON representation of one validated typed command intent. This is durable
+/// recovery input, not generic gameplay state. Trusted ingress code owns canonical serialization;
+/// a client-supplied JSON string or hash is never authoritative.
+/// </summary>
+public sealed record CanonicalCommandPayload
+{
+    private CanonicalCommandPayload(string json, CommandPayloadFingerprint fingerprint)
+    {
+        Json = json;
+        Fingerprint = fingerprint;
+    }
+
+    public string Json { get; }
+
+    public CommandPayloadFingerprint Fingerprint { get; }
+
+    public static CanonicalCommandPayload FromTrustedJson(string canonicalJson)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(canonicalJson);
+
+        try
+        {
+            using var _ = JsonDocument.Parse(canonicalJson);
+        }
+        catch (JsonException exception)
+        {
+            throw new FormatException("Canonical command payload must be valid JSON.", exception);
+        }
+
+        return new CanonicalCommandPayload(
+            canonicalJson,
+            CommandPayloadFingerprint.Compute(Encoding.UTF8.GetBytes(canonicalJson)));
+    }
 }
 
 /// <summary>
@@ -154,6 +192,78 @@ public readonly record struct CommandExecutionToken
     public bool IsEmpty => Value == Guid.Empty;
 
     public static CommandExecutionToken New() => new(Guid.NewGuid());
+}
+
+/// <summary>
+/// Non-authoritative worker ownership for one execution attempt. The execution token remains the
+/// fencing identity; worker labels exist only for lease ownership/operations.
+/// </summary>
+public sealed record CommandExecutionLeaseRequest
+{
+    public CommandExecutionLeaseRequest(string workerId, TimeSpan duration)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
+        if (duration <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(duration), "Command execution lease duration must be positive.");
+        }
+
+        WorkerId = workerId.Trim();
+        Duration = duration;
+    }
+
+    public string WorkerId { get; }
+
+    public TimeSpan Duration { get; }
+}
+
+/// <summary>
+/// Complete first-acquisition request. The canonical payload fingerprint must match the identity,
+/// preventing storage/recovery material from drifting away from the CommandId idempotency identity.
+/// </summary>
+public sealed record CommandReceiptAcquireRequest
+{
+    public CommandReceiptAcquireRequest(
+        CommandExecutionIdentity identity,
+        CanonicalCommandPayload payload,
+        CorrelationId correlationId,
+        DateTimeOffset receivedAtUtc,
+        CommandExecutionLeaseRequest executionLease)
+    {
+        Identity = identity ?? throw new ArgumentNullException(nameof(identity));
+        Payload = payload ?? throw new ArgumentNullException(nameof(payload));
+        ExecutionLease = executionLease ?? throw new ArgumentNullException(nameof(executionLease));
+
+        if (Identity.PayloadFingerprint != Payload.Fingerprint)
+        {
+            throw new ArgumentException("Command identity fingerprint must match the canonical recovery payload.", nameof(payload));
+        }
+
+        if (correlationId.Value == Guid.Empty)
+        {
+            throw new ArgumentException("CorrelationId cannot be empty.", nameof(correlationId));
+        }
+
+        if (receivedAtUtc.Offset != TimeSpan.Zero)
+        {
+            throw new ArgumentException("Command receive time must be UTC.", nameof(receivedAtUtc));
+        }
+
+        CorrelationId = correlationId;
+        ReceivedAtUtc = receivedAtUtc;
+    }
+
+    public CommandExecutionIdentity Identity { get; }
+
+    public CanonicalCommandPayload Payload { get; }
+
+    public CorrelationId CorrelationId { get; }
+
+    public DateTimeOffset ReceivedAtUtc { get; }
+
+    public CommandExecutionLeaseRequest ExecutionLease { get; }
+
+    public DateTimeOffset LeaseExpiresAtUtc => ReceivedAtUtc + ExecutionLease.Duration;
 }
 
 public enum CommandTerminalStatus
@@ -305,14 +415,12 @@ public sealed record CommandReceiptClaim
 
 /// <summary>
 /// Durable receipt boundary. TryAcquireAsync must atomically create or compare the CommandId receipt.
-/// Terminal completion is deliberately not exposed here; it belongs in the later atomic command
-/// transaction contract so owner state, outcome, events and outbox cannot commit independently.
+/// New receipts persist the exact canonical typed-command JSON and an execution lease so abandoned
+/// work can be recovered. Terminal completion remains exclusive to the atomic command transaction.
 /// </summary>
 public interface ICommandReceiptRepository
 {
     ValueTask<CommandReceiptClaim> TryAcquireAsync(
-        CommandExecutionIdentity identity,
-        CorrelationId correlationId,
-        DateTimeOffset receivedAtUtc,
+        CommandReceiptAcquireRequest request,
         CancellationToken cancellationToken = default);
 }
