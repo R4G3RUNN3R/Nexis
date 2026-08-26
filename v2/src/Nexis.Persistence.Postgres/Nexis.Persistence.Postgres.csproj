@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexis.Kernel\Nexis.Kernel.csproj" />
+    <ProjectReference Include="..\Nexis.Core.Contracts\Nexis.Core.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Audit.Contracts\Nexis.Audit.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Execution.Contracts\Nexis.Execution.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\0001_execution_foundation.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0001_execution_foundation.sql" />
+  </ItemGroup>
+</Project>
