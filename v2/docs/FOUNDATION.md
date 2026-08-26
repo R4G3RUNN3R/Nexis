@@ -1,6 +1,6 @@
 # Nexis 2.0 Foundation Contract
 
-_Status: initial implementation skeleton, corrected 2026-08-25 to enforce Core replaceability and rules-engine ownership._
+_Status: initial implementation skeleton, corrected 2026-08-26 to reflect the first Core contract implementation slice._
 
 ## Dependency direction
 
@@ -35,7 +35,7 @@ Rules:
 - replacing `Nexis.Core` with a newer implementation or even a different runtime must not require surrounding systems to be rewritten when the stable contracts remain compatible;
 - domain/system projects must not reference the web host, EF Core, PostgreSQL drivers, Redis clients, Caddy concerns, SMTP, payment SDKs, filesystem adapters or frontend code unless they are explicitly infrastructure adapters.
 
-The implementation skeleton does not yet contain the final `Nexis.Core.Contracts` split. That split is a foundation requirement before broad gameplay systems are allowed to integrate against Core.
+The implementation skeleton now contains the initial `Nexis.Core.Contracts` split. `Nexis.Core` references that stable contract assembly rather than serving as the dependency base for surrounding systems. The first contract slice establishes versioned engine identity, typed intent/snapshot/owner-transition/event/result seams, authoritative evaluation context, controlled deterministic RNG input and a replaceable `ICoreRulesEngine` boundary. These contracts remain intentionally narrow and must be extended through owner-specific contract assemblies rather than by introducing a universal player-state payload.
 
 ## Kernel
 
@@ -107,6 +107,8 @@ Before broad gameplay systems are implemented, architecture tests must enforce a
 - Core conformance/golden tests prove compatible rule semantics before replacement;
 - infrastructure dependencies do not leak into domain/public contracts;
 - authorization, audit visibility and Hennet public/private projection boundaries remain enforced.
+
+The architecture-test project now contains the first automated Core dependency/replaceability checks. Restore/build/test execution is still required before the branch can be treated as verified.
 
 ## Migration boundary
 
