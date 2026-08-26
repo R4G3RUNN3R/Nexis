@@ -63,7 +63,7 @@ public sealed class DeterministicIntegerMathTests
     [TestMethod]
     public void MultiplyDivide_ThrowsWhenFinalResultCannotFitLong()
     {
-        Assert.ThrowsException<OverflowException>(() => Calculate(
+        Assert.ThrowsExactly<OverflowException>(() => Calculate(
             long.MaxValue,
             2,
             1,
@@ -73,7 +73,7 @@ public sealed class DeterministicIntegerMathTests
     [TestMethod]
     public void MultiplyDivide_ThrowsForZeroDenominator()
     {
-        Assert.ThrowsException<DivideByZeroException>(() => Calculate(
+        Assert.ThrowsExactly<DivideByZeroException>(() => Calculate(
             1,
             1,
             0,
@@ -83,7 +83,7 @@ public sealed class DeterministicIntegerMathTests
     [TestMethod]
     public void MultiplyDivide_RejectsUnknownRoundingMode()
     {
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => Calculate(
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Calculate(
             2,
             1,
             1,
