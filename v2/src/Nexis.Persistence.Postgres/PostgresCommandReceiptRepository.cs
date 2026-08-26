@@ -45,7 +45,7 @@ public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
             insert.Parameters.AddWithValue("correlation_id", NpgsqlDbType.Uuid, request.CorrelationId.Value);
             insert.Parameters.AddWithValue("execution_token", NpgsqlDbType.Uuid, executionToken.Value);
             insert.Parameters.AddWithValue("received_at_utc", NpgsqlDbType.TimestampTz, request.ReceivedAtUtc.UtcDateTime);
-            insert.Parameters.AddWithValue("canonical_payload", NpgsqlDbType.Jsonb, request.Payload.Json);
+            insert.Parameters.AddWithValue("canonical_payload", NpgsqlDbType.Text, request.Payload.Json);
             insert.Parameters.AddWithValue("execution_owner", NpgsqlDbType.Text, request.ExecutionLease.WorkerId);
             insert.Parameters.AddWithValue("execution_lease_expires_at_utc", NpgsqlDbType.TimestampTz, request.LeaseExpiresAtUtc.UtcDateTime);
 
