@@ -15,7 +15,7 @@ public sealed class CoreContractBehaviorTests
     {
         var localOffset = new DateTimeOffset(2026, 8, 26, 8, 0, 0, TimeSpan.FromHours(1));
 
-        Assert.ThrowsException<ArgumentException>(() => new CoreEvaluationContext(
+        Assert.ThrowsExactly<ArgumentException>(() => new CoreEvaluationContext(
             CommandId.New(),
             CorrelationId.New(),
             localOffset,
@@ -27,7 +27,7 @@ public sealed class CoreContractBehaviorTests
     [TestMethod]
     public void EvaluationRequest_RejectsInvalidDefaultContractVersion()
     {
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => new CoreEvaluationRequest(
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new CoreEvaluationRequest(
             default,
             CreateContext(),
             new SyntheticIntent(),
