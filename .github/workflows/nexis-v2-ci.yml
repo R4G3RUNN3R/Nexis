@@ -53,8 +53,9 @@ jobs:
       - name: Run architecture and Core conformance tests
         run: >-
           dotnet test
-          tests/Nexis.Architecture.Tests/Nexis.Architecture.Tests.csproj
+          --project tests/Nexis.Architecture.Tests/Nexis.Architecture.Tests.csproj
           --configuration Release
           --no-build
           --no-restore
-          --logger "console;verbosity=normal"
+          --minimum-expected-tests 1
+          --output Detailed
