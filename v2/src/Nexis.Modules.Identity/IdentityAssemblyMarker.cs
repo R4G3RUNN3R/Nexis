@@ -1,3 +1,5 @@
+using Nexis.Identity.Contracts;
+
 namespace Nexis.Modules.Identity;
 
 /// <summary>
@@ -6,4 +8,9 @@ namespace Nexis.Modules.Identity;
 /// </summary>
 public static class IdentityAssemblyMarker
 {
+    /// <summary>
+    /// Provides a compile-time/binary dependency anchor for architecture verification without
+    /// exposing implementation state or persistence details.
+    /// </summary>
+    public static Type ContractsAnchor => typeof(AccountId);
 }
