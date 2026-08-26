@@ -8,141 +8,111 @@ _Status: rolling implementation checkpoint, updated 2026-08-26. This file record
 
 Draft PR #4 remains the integration surface and must remain draft until the complete foundation stop conditions in `AGENT-HANDOFF.md` are satisfied.
 
-Existing/current Nexis outside `v2/` remains reference/migration source only. No work recorded here authorizes live deployment or v1 mutation.
+Existing/current Nexis outside `v2/` remains reference/migration source only. Nothing recorded here authorizes live deployment, live database mutation, or v1 changes.
 
-## Completed and CI-verified foundation slices
+## Current verified implementation
 
-The following are implemented on the branch and have passed the V2 restore/build/test workflow after their latest code changes:
+The V2 branch now contains and has executable coverage for:
 
-- separate `Nexis.Core.Contracts` stable engine boundary;
-- replaceable `ICoreRulesEngine` reference implementation seam;
-- CommandId/CorrelationId authoritative execution primitives;
-- replay-safe deterministic RNG factory/stream contracts;
-- explicit typed owner snapshots, Content Registry inputs, owner-addressed transitions, event descriptors and result payloads;
-- Core contract/rule/content version primitives;
-- golden-scenario Core conformance and baseline/candidate comparison harness;
-- deterministic exact integer/rational arithmetic with explicit rounding and checked overflow;
-- explicit internal Core rule dispatch with no reflection/service-locator dependency;
-- concrete-Core dependency guard allowing Kernel + stable `*.Contracts` packages while rejecting implementation assemblies;
-- separate `Nexis.Identity.Contracts` assembly;
-- permanent AccountId/CharacterId type separation;
-- server-created trusted actor context for Player/Admin/System/Realtime mutation lanes;
-- separation of platform capability facts from commercial entitlement facts;
-- Admin/staff actor context without hidden Character impersonation;
-- command receipt/idempotency contracts binding CommandId to stable trusted actor + intent contract + server-derived SHA-256 payload fingerprint;
-- explicit receipt outcomes for first acquisition, duplicate-in-progress, duplicate-completed and CommandId integrity violation;
-- original CorrelationId retention across transport retries;
-- atomic command commit plan carrying proposed terminal outcome, typed owner transitions, authoritative events and replay-critical Core/rule/content provenance;
-- strict rule that Core `Succeeded` is not a durable command success until the atomic commit succeeds;
-- canonical deterministic multi-resource lock ordering independent of call direction;
-- bounded whole-command retry executor driven only by an infrastructure-specific transient failure classifier, with cancellation never auto-retried;
-- separate `Nexis.Audit.Contracts` assembly using typed Account/Correlation/Event identities;
-- append-only privileged-read audit boundary;
-- state-changing Admin command audit entries included in the same atomic command commit plan, including rejected Admin attempts;
-- isolated raw-Npgsql PostgreSQL execution adapter using the dedicated `nexis_v2` schema for command receipts, authoritative history, durable outbox and Admin audit only;
-- PostgreSQL receipt acquisition with a unique CommandId constraint and trusted actor-shape database constraints;
-- PostgreSQL atomic command commit with receipt row revalidation, owner transition appliers, terminal outcome, history/outbox and Admin audit in one transaction;
-- PostgreSQL transient retry classification limited to SQLSTATE `40001` serialization failure and `40P01` deadlock detection, while network/commit-ack ambiguity is deliberately not auto-retried;
-- disposable PostgreSQL integration-test proof that a second-owner optimistic conflict rolls back an earlier owner's staged update and leaves terminal/history/outbox effects absent;
-- V2-only GitHub Actions verification using .NET 10, Release build, warnings-as-errors, Microsoft.Testing.Platform tests and a disposable PostgreSQL 18.6 service.
+- separate stable Core, Identity, Execution, Audit, Eventing, Content, Items, Inventory, Equipment and Combat contract assemblies;
+- replaceable `ICoreRulesEngine` with explicit internal evaluator dispatch and no feature implementation, persistence, network or UI dependencies;
+- trusted Player/Admin/System/Realtime actor context with Account/Character separation, capability-based platform authority and commercial entitlements kept separate;
+- deterministic Core evaluation inputs: authoritative UTC time, rule/content versions and replay-safe RNG factories;
+- exact integer/rational arithmetic with explicit rounding and checked overflow;
+- golden/conformance comparison for baseline and replacement Core implementations;
+- CommandId idempotency receipts, canonical payload fingerprints, original-correlation retention and duplicate/integrity-violation handling;
+- canonical command codecs and durable crash-recovery payload rehydration without runtime type metadata;
+- atomic command commit plans covering owner transitions, terminal command outcome, authoritative history, outbox and state-changing Admin audit;
+- canonical multi-resource lock ordering and bounded whole-command retries only for explicitly classified transient failures;
+- PostgreSQL command receipt persistence, optimistic owner transition coordination, authoritative history, durable outbox and Admin audit in the dedicated `nexis_v2` schema;
+- command execution leases, expired-claim recovery, lease renewal/fencing and ambiguous-commit reconciliation by CommandId;
+- leased at-least-once PostgreSQL outbox delivery using EventId as the stable delivery identity;
+- multi-worker outbox claiming, lease expiry/recovery, publication acknowledgement and failure-delay redelivery;
+- idempotent PostgreSQL projection-consumer checkpoints whose side effect and checkpoint commit atomically;
+- exact-version Content Registry resolution with no silent latest-version fallback;
+- first real gameplay owner contracts for Inventory possession, Equipment state/placement and Combat participation prerequisites;
+- first real Core gameplay rule: `EquipItem`, registered in the reference Core by default;
+- real PostgreSQL Equipment owner persistence, including optimistic revision enforcement and multi-slot bindings;
+- canonical value-equal `EquipmentSlotSet`, preventing replay/conformance divergence caused by collection reference identity.
+
+## First real gameplay vertical proof
+
+`EquipItem` is the first owner-specific end-to-end V2 gameplay proof.
+
+The flow now proves:
+
+1. Application supplies trusted player actor identity plus Inventory, Equipment and Combat snapshots and exact versioned item content;
+2. Core validates actor/character identity, possession, combat state, content definition, placement legality and occupied slots;
+3. Core emits only an Equipment-owner transition plus semantic `ItemEquipped` event;
+4. Inventory remains the possession authority and is read-only for this operation;
+5. PostgreSQL applies the Equipment transition using the expected Equipment revision;
+6. receipt completion, Equipment state, authoritative history and outbox commit atomically;
+7. stale Equipment revision rolls the owner mutation and command side effects back;
+8. multi-slot placements persist as one binding occupying all required slots;
+9. repeated evaluation of the same trusted inputs produces value-equal transitions/events.
+
+This is intentionally narrow. It proves the architecture with a real owner without authorizing broad Equipment/Inventory/Combat implementation fan-out.
 
 ## Current verification evidence
 
-The PostgreSQL execution-adapter commit `3b4301769d62272d83cba99edeff8100c30b81bc` passed the complete V2 workflow against PostgreSQL 18.6:
+The code checkpoint `e1eaf9fe2e2afe9629cc2633ddb7dcf2e7ad767c` passed the complete V2 workflow against disposable PostgreSQL 18.6 after the first real gameplay vertical fixes:
 
 - solution restore: passed;
 - Release build: **0 warnings, 0 errors**;
-- architecture/Core/execution/security suite: **72 passed, 0 failed, 0 skipped**;
-- PostgreSQL integration suite: **7 passed, 0 failed, 0 skipped**.
+- architecture/Core/execution/security suite: **101 passed, 0 failed, 0 skipped**;
+- PostgreSQL integration suite: **28 passed, 0 failed, 0 skipped**.
 
-The real-database integration suite proves:
+That run covers, among other things:
 
-- ten concurrent attempts for the same CommandId produce exactly one acquired execution receipt;
-- changed payload under an existing CommandId is an integrity violation;
-- two synthetic authoritative owners commit together on success;
-- a second-owner revision conflict rolls the first owner's staged update back;
-- the failed multi-owner attempt leaves the command receipt incomplete and emits no authoritative history/outbox rows;
-- successful commit persists both owner updates, terminal command status, authoritative history and durable outbox together;
-- a completed duplicate returns the stored terminal outcome rather than executing again;
-- state-changing Admin audit persists in the same transaction;
-- privileged read-only audit can append independently without a gameplay command receipt;
-- only PostgreSQL serialization/deadlock SQLSTATEs are classified as safe automatic whole-command retries.
+- deterministic `EquipItem` reevaluation;
+- actor mismatch, active-combat, missing-possession, unsupported-placement, occupied-slot and content-definition rejection paths;
+- real Equipment persistence and authoritative history/outbox emission;
+- stale Equipment revision rollback;
+- multi-slot Equipment persistence;
+- concurrent CommandId acquisition and payload-integrity rejection;
+- multi-owner all-or-nothing rollback/success infrastructure;
+- Admin audit atomicity;
+- command crash recovery, lease fencing and ambiguous reconciliation;
+- independent outbox workers not claiming the same rows;
+- expired outbox lease recovery with stable EventId and incremented attempt count;
+- publish acknowledgement and redelivery after publish/failure ambiguity;
+- idempotent projection checkpointing and rollback on projection failure.
 
-The synthetic owner tables used by this suite are transaction-proof infrastructure only. They do not satisfy the still-required real owner-specific gameplay vertical proof.
+The outbox tests also exposed a wall-clock leak: initial `available_at_utc` relied on PostgreSQL `now()`. Normal command commits now write the authoritative command completion time explicitly, keeping delivery eligibility testable and consistent with the execution-time model.
 
-## Other verified invariants already covered by automation
+The reference Core implementation version is now `0.5.0-foundation`; the stable Core contract remains V1.
 
-Current tests also prove, among other things:
+## Foundation work still incomplete
 
-- Kernel has no dependency on other Nexis assemblies;
-- Core contracts do not depend on concrete Core or feature implementations;
-- concrete Core does not depend on feature implementation assemblies;
-- a fake/replacement Core can satisfy the same stable engine contract;
-- deterministic replay can detect semantic divergence;
-- repeated Core evaluation receives a fresh stream from the same deterministic RNG inputs;
-- rejected/conflicted/technical outcomes cannot silently carry mutation plans through the convenience constructors;
-- Core requests freeze supplied snapshot/content collections;
-- deterministic ratio arithmetic has explicit positive/negative rounding and overflow behavior;
-- duplicate internal rule registration is rejected;
-- unregistered intents are mutation-free TechnicalFailure results;
-- trusted actor context reaches the selected evaluator unchanged;
-- AccountId and CharacterId remain distinct contract types;
-- Identity implementation depends on stable Identity contracts, never the reverse;
-- staff Admin context has no Character impersonation identity;
-- platform AccountRole is not carried as Core actor authority;
-- capability/entitlement/security-version changes do not turn the same retry into a different command identity;
-- opposite-direction multi-resource operations produce the same canonical lock order;
-- retryable failures rerun the whole supplied command attempt and stop at the configured bound;
-- permanent failures and caller cancellation are not automatically retried;
-- atomic command plans retain original receipt correlation for history/events;
-- DomainFailed decisions can preserve legitimate committed in-world consequences;
-- Admin command plans require an audit entry for the trusted acting Account and original command correlation;
-- Audit contracts are separated from the replaceable Audit implementation.
+The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
 
-## Partially complete foundation areas
+1. executable scheduler/System-lane and CIEL bypass protections so neither can mutate owner state outside normal command/Core/persistence paths;
+2. the remaining Identity capability/policy implementation and security tests without ordinal-role authorization;
+3. Player Log/history projection and visibility contracts, including the player-facing boundary versus internal/admin-only events;
+4. production replay-corpus extraction/retention so real historical commands and known exploit/bug cases become permanent Core regression scenarios;
+5. migration/reconciliation tooling before any v1-to-v2 state movement;
+6. additional real owner-specific multi-owner gameplay proof where a legitimate rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
+7. observability/operational readiness around recovery workers, outbox workers, poison events, retry exhaustion and invariant failures;
+8. final threat-model/security review and the wider foundation stop-condition audit before broad gameplay implementation.
 
-These areas now have real persistence seams but still require additional lifecycle work before they satisfy the full stop conditions:
-
-- event/history: authoritative event rows are persisted transactionally, but Player Log projection/visibility contracts and production replay-corpus extraction remain incomplete;
-- outbox: committed authoritative events create durable outbox rows transactionally, but leased multi-worker delivery, publication acknowledgement and idempotent consumer checkpointing are not implemented yet;
-- audit: PostgreSQL append-only read audit and atomic state-changing Admin audit are implemented; broader retention/query/admin-review services remain future work;
-- concurrency: optimistic revision rollback is proven against PostgreSQL and safe retry SQLSTATE classification exists; real owner-specific lock/revision policy still depends on the first gameplay owner proof;
-- command lifecycle: durable receipt + terminal outcome + real atomic persistence exist; stale execution-claim recovery, lease/takeover policy and ambiguous COMMIT acknowledgement reconciliation remain incomplete;
-- owner persistence: PostgreSQL can coordinate explicit owner transition appliers, but no real gameplay owner-specific PostgreSQL adapter exists yet.
-
-## Not yet complete
-
-Do not interpret the green CI slices above as permission for broad gameplay fan-out. The following foundation work remains before the full `AGENT-HANDOFF.md` stop conditions are cleared:
-
-1. define the first narrow owner-specific contract packages needed for an end-to-end proof;
-2. define the Content Registry contracts required by that proof without a generic content blob;
-3. add the first real domain golden rule pack behind internal Core dispatch;
-4. implement at-least-once outbox delivery with safe multi-worker claiming and idempotent consumer handling/checkpointing;
-5. define stale execution-claim/crash recovery and ambiguous commit reconciliation by CommandId;
-6. prove one deliberately multi-owner **real owner-specific** vertical scenario including rollback on one-owner failure;
-7. add scheduler/CIEL bypass protections at the executable architecture boundary;
-8. complete the remaining Identity capability/policy implementation and security tests without role-ordinal authorization;
-9. complete Player Log/history projection boundaries;
-10. establish the migration/reconciliation harness before any v1-to-v2 state movement.
+Exact owner/domain contracts should continue to be introduced only when the corresponding gameplay design is sufficiently settled. Do not create generic state bags merely to make the architecture look more complete.
 
 ## Next safe implementation boundary
 
-The next safe infrastructure-only slice is **durable outbox delivery and idempotent post-commit consumer handling**. It can build on the now-proven PostgreSQL outbox without inventing any unsettled gameplay state.
+The next safe foundation slice is **scheduler/CIEL bypass prevention at the executable architecture boundary**.
 
-The design must preserve these rules:
+The required behavior is:
 
-- delivery is at-least-once, not falsely advertised as exactly-once across arbitrary external systems;
-- EventId is the stable delivery/idempotency identity;
-- multiple workers must not concurrently own the same outbox claim;
-- a worker crash must make an abandoned claim eligible again after an explicit lease expires;
-- successful publication must be acknowledged durably;
-- a crash after external publication but before acknowledgement may cause redelivery, so consumers must be idempotent by EventId;
-- internal PostgreSQL projection consumers should persist their side effect and event checkpoint atomically where possible;
-- outbox workers never mutate authoritative gameplay owner state directly;
-- Core remains unaware of delivery infrastructure.
+- schedulers and CIEL may propose/submit typed commands only through the approved System or applicable trusted execution lane;
+- neither receives a direct owner repository mutation path;
+- neither calls owner transition appliers or PostgreSQL owner tables directly;
+- state-changing work still passes through CommandId/idempotency, trusted actor context, current snapshots/content, Core evaluation and atomic commit;
+- CIEL remains advisory/interpretive and never becomes an authoritative gameplay owner;
+- automated/System work is auditable and replayable with the same rule/content/time provenance expectations as player commands;
+- architecture tests should fail if scheduler/CIEL implementation assemblies acquire forbidden direct persistence/owner dependencies.
 
-After that slice, continue with command crash-recovery/ambiguous-commit reconciliation or return to product/system design to select the first real owner-specific vertical proof.
+After that, continue the remaining Identity policy boundary and Player Log/history projection work before broad system fan-out.
 
 ## Verification discipline
 
-Every new code slice must pass the existing V2 CI workflow before another dependent slice is considered stable. A green build is necessary but does not satisfy the Universal Component Release Gate for production promotion.
+Every dependent code slice must pass the V2 restore/build/test workflow before being treated as stable. A green CI run is necessary evidence, not production-release approval. The Universal Component Release Gate and 30-day soak requirements still apply to material production promotion.
