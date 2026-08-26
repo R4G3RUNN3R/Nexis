@@ -9,10 +9,13 @@
     <ProjectReference Include="..\Nexis.Audit.Contracts\Nexis.Audit.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Execution.Contracts\Nexis.Execution.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Eventing.Contracts\Nexis.Eventing.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Equipment.Contracts\Nexis.Equipment.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Migrations\0001_execution_foundation.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0001_execution_foundation.sql" />
     <EmbeddedResource Include="Migrations\0002_outbox_delivery.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0002_outbox_delivery.sql" />
     <EmbeddedResource Include="Migrations\0003_command_recovery.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0003_command_recovery.sql" />
+    <EmbeddedResource Include="Migrations\0004_equipment_owner.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0004_equipment_owner.sql" />
   </ItemGroup>
 </Project>
