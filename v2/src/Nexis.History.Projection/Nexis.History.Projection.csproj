@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Nexis.Audit.Contracts\Nexis.Audit.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Core.Contracts\Nexis.Core.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Equipment.Contracts\Nexis.Equipment.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Eventing.Contracts\Nexis.Eventing.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.History.Contracts\Nexis.History.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Kernel\Nexis.Kernel.csproj" />
+  </ItemGroup>
+</Project>

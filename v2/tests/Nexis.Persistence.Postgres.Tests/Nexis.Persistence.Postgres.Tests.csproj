@@ -1,0 +1,26 @@
+<Project Sdk="MSTest.Sdk/4.3.3">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nexis.Kernel\Nexis.Kernel.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Core.Contracts\Nexis.Core.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Core\Nexis.Core.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Content.Contracts\Nexis.Content.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Content.Registry\Nexis.Content.Registry.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Inventory.Contracts\Nexis.Inventory.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Equipment.Contracts\Nexis.Equipment.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Combat.Contracts\Nexis.Combat.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Modules.Equipment\Nexis.Modules.Equipment.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Audit.Contracts\Nexis.Audit.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Execution.Contracts\Nexis.Execution.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Execution\Nexis.Execution.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Eventing.Contracts\Nexis.Eventing.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Persistence.Postgres\Nexis.Persistence.Postgres.csproj" />
+  </ItemGroup>
+</Project>

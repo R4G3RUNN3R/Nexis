@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="..\Nexis.Kernel\Nexis.Kernel.csproj" />
+    <ProjectReference Include="..\Nexis.Core.Contracts\Nexis.Core.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Core\Nexis.Core.csproj" />
+    <ProjectReference Include="..\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Modules.Identity\Nexis.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Nexis.Modules.Audit\Nexis.Modules.Audit.csproj" />
+  </ItemGroup>
+</Project>

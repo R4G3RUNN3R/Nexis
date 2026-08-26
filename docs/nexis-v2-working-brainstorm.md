@@ -4,7 +4,7 @@
 >
 > This document records product and architecture decisions while Nexis v2 is being reconsidered system by system. Agreed areas should later graduate into focused design specifications under `docs/superpowers/specs/`, followed by implementation plans. No gameplay or architecture should be implemented directly from this draft without the relevant design being reviewed and approved.
 
-_Last updated: 2026-08-21_
+_Last updated: 2026-08-26_
 
 ## 1. Rebuild Principles
 
@@ -76,7 +76,7 @@ The exact list of formal schools is still open.
 
 Some magical disciplines should **not** appear in Silverbough's public catalogue.
 
-History, archaeology, exploration, adventure, ruins, bosses, hidden libraries, sealed vaults and world events can lead to extremely rare physical Grimoires/Tomes. Necromancy is the primary example discussed so far.
+History, archaeology, exploration, Adventures, Excursions, ruins, bosses, hidden libraries, sealed vaults and world events can lead to extremely rare physical Grimoires/Tomes. Necromancy is the primary example discussed so far.
 
 ### 5.1 Tome flow
 
@@ -156,7 +156,7 @@ A spirit is not an equippable percentage buff. It is a rare being that must choo
 
 ### 8.1 Discovery and favour
 
-- Players must go adventuring/exploring to encounter spirits in the world.
+- Players must discover spirits through the world, especially exploration/Excursions and other appropriate world content. Instant Adventures may also surface leads or encounters where a specific Adventure is designed to do so, but Adventures are not the long-form exploration system.
 - Spirit encounters should be **very rare** and can be strongly influenced by region, environment, active world events, hidden sites and the spirit's element.
 - Finding a spirit does **not** immediately bind or grant it.
 - An encounter becomes a favour/bond challenge.
@@ -356,7 +356,51 @@ Open questions include:
 - Should the Chronicle be a universal player-history system rather than anything donor-gated?
 - How should Feats of Strength appear relative to normal achievements?
 
-## 13. Existing Systems Requiring Dedicated Review
+## 13. Adventures, Excursions and Scenarios
+
+These are **three distinct player-facing gameplay modes**. An earlier discussion accidentally described the intended Excursion system as Adventures; that interpretation is superseded.
+
+### 13.1 Adventures — instant actions
+
+Adventures preserve the original Nexis idea: they are **instant-resolution actions**, closest in interaction pattern to Crimes in Torn.
+
+- The player selects an available Adventure/action.
+- The server/Core immediately evaluates the attempt from authoritative character state, location, knowledge, skills, equipment, reputation, resources and any specific prerequisites required by that Adventure.
+- The result is returned immediately: success/failure and any appropriate consequences, rewards, discoveries, injuries, progression or follow-up opportunities defined by that Adventure.
+- Adventures are the game's quick, repeatable field-action loop. They are **not** a multi-hour away-from-character timer and do not use the standing-orders/supplies model by default.
+- Exact resource cost, attempt cadence, failure model, difficulty tiers and reward structure remain open for later balancing.
+
+### 13.2 Excursions — timed expeditions
+
+Excursions are the long-form exploration concept discussed in the recent design session.
+
+- They take real time and can continue while the player is away/offline.
+- The player prepares before departure: destination, supplies, equipment and other relevant preparation.
+- The player can set standing orders or priorities for situations that may occur while the Excursion is underway.
+- The server resolves encounters/events from authoritative state as time progresses or at defined checkpoints.
+- Possible outcomes include discoveries, combat, resource expenditure, injuries, route changes, hidden sites, rare encounters, materials, lore and other expedition consequences.
+- The player receives the authoritative result/history when checking or when the Excursion completes.
+- This is the natural home for deeper exploration, dangerous routes, hidden sites and rare world discoveries.
+
+The exact duration bands, encounter cadence, supplies model, abort/return rules and death/recovery interaction remain to be designed.
+
+### 13.3 DMOS One-Shots / Scenarios — curated interactive stories
+
+The existing DMOS One-Shot idea remains a third mode: authored or curated scenarios in which the player is present and makes explicit choices as scenes unfold.
+
+- Immediate scene-by-scene interaction rather than an instant single roll or unattended timed expedition.
+- Can reuse lower-level Core rules such as combat, skill checks, inventory use and rewards.
+- Should preserve meaningful authored choices and Chronicle outcomes.
+
+### 13.4 Shared internals without collapsing the modes
+
+These modes may share reusable lower-level components — combat resolution, checks, rewards, encounters, item use, history events, world content and Core evaluation contracts — but they should **not** be collapsed into one undifferentiated player-facing Adventure engine. Their interaction rhythms are intentionally different:
+
+- **Adventure:** choose → resolve now.
+- **Excursion:** prepare → leave → time passes → resolve/return.
+- **Scenario:** enter → choose repeatedly → conclude.
+
+## 14. Existing Systems Requiring Dedicated Review
 
 The following existing systems are considered valuable candidates for **preserve, redesign, merge, split or retire** decisions. None should be carried forward automatically merely because code exists:
 
@@ -367,9 +411,9 @@ The following existing systems are considered valuable candidates for **preserve
 - Magic, mana, Grimoires, spells and research.
 - Combat, Arena, duels and PvP.
 - Bounties, notoriety and capture.
-- Adventures.
-- Excursions/grid exploration.
-- DMOS one-shots.
+- Adventures: instant-resolution field actions.
+- Excursions/grid exploration: timed expedition/exploration system.
+- DMOS One-Shots/Scenarios: interactive curated narrative content.
 - Guild/Consortium group operations.
 - Cities, regional identities and standing.
 - World Map, hidden sites, macro-regions and the Hellenic Sphere.
@@ -391,7 +435,7 @@ The following existing systems are considered valuable candidates for **preserve
 - Database migration and persistent storage.
 - Routing, page taxonomy and the complete visual/navigation redesign.
 
-## 14. Repository Audit Notes So Far
+## 15. Repository Audit Notes So Far
 
 A complete repository **path inventory** has been taken. The semantic audit is being performed subsystem by subsystem rather than pretending that listing every file is the same as understanding every line.
 
@@ -404,7 +448,7 @@ Initial structural findings:
 - Existing operational incident documentation, canaries and data-safety lessons are valuable and must survive the rebuild.
 - Existing exploration, rare manual, recipe-fragment, hidden-site and world-event systems already provide useful foundations for the newly emphasized discovery/research direction.
 
-## 15. Open Product Questions
+## 16. Open Product Questions
 
 These are intentionally unresolved and should be answered one at a time during the continuing brainstorm:
 
@@ -422,7 +466,6 @@ These are intentionally unresolved and should be answered one at a time during t
 - What happens when a forbidden school is illegal in a given city?
 - What should Civic Jobs become in a more education-driven game?
 - Do Guilds and Consortiums remain separate, and what should each uniquely do?
-- Should Adventures, Excursions and DMOS One-Shots remain separate systems or become different content types built on one underlying adventure engine?
 - How expansive should the world be at v2 launch, and which existing regions are canonical launch content?
 - How deep should housing/player infrastructure go?
 - What belongs in crafting versus formal research versus magical enhancement?
@@ -431,7 +474,7 @@ These are intentionally unresolved and should be answered one at a time during t
 - How should the new game shell/navigation expose deep systems without recreating the old wall-of-pages problem?
 - Which current visual identity elements remain canonical, and which should be recreated from scratch?
 
-## 16. Current Rebuild Priority
+## 17. Current Rebuild Priority
 
 The earlier idea of making Adventures the first central vertical slice has been superseded by the education-first product direction.
 
@@ -441,7 +484,7 @@ Provisional order, pending further design:
 2. Education engine and knowledge model.
 3. Practical mastery framework.
 4. Silverbough arcane vertical slice: mana, school access, spell learning/research and school mastery.
-5. Combat/adventure integration using those foundations.
+5. Combat integration plus the first instant Adventure and timed Excursion integrations using those foundations.
 6. Bounties/capture and other connected gameplay loops.
 7. Continue migrating/redesigning the remaining systems in focused subprojects.
 
