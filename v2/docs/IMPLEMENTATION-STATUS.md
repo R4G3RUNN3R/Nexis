@@ -39,11 +39,40 @@ The following are implemented on the branch and have passed the V2 restore/build
 - separate `Nexis.Audit.Contracts` assembly using typed Account/Correlation/Event identities;
 - append-only privileged-read audit boundary;
 - state-changing Admin command audit entries included in the same atomic command commit plan, including rejected Admin attempts;
-- V2-only GitHub Actions verification using .NET 10, Release build, warnings-as-errors and Microsoft.Testing.Platform tests.
+- isolated raw-Npgsql PostgreSQL execution adapter using the dedicated `nexis_v2` schema for command receipts, authoritative history, durable outbox and Admin audit only;
+- PostgreSQL receipt acquisition with a unique CommandId constraint and trusted actor-shape database constraints;
+- PostgreSQL atomic command commit with receipt row revalidation, owner transition appliers, terminal outcome, history/outbox and Admin audit in one transaction;
+- PostgreSQL transient retry classification limited to SQLSTATE `40001` serialization failure and `40P01` deadlock detection, while network/commit-ack ambiguity is deliberately not auto-retried;
+- disposable PostgreSQL integration-test proof that a second-owner optimistic conflict rolls back an earlier owner's staged update and leaves terminal/history/outbox effects absent;
+- V2-only GitHub Actions verification using .NET 10, Release build, warnings-as-errors, Microsoft.Testing.Platform tests and a disposable PostgreSQL 18.6 service.
 
-## Verified invariants already covered by automation
+## Current verification evidence
 
-Current tests prove, among other things:
+The PostgreSQL execution-adapter commit `3b4301769d62272d83cba99edeff8100c30b81bc` passed the complete V2 workflow against PostgreSQL 18.6:
+
+- solution restore: passed;
+- Release build: **0 warnings, 0 errors**;
+- architecture/Core/execution/security suite: **72 passed, 0 failed, 0 skipped**;
+- PostgreSQL integration suite: **7 passed, 0 failed, 0 skipped**.
+
+The real-database integration suite proves:
+
+- ten concurrent attempts for the same CommandId produce exactly one acquired execution receipt;
+- changed payload under an existing CommandId is an integrity violation;
+- two synthetic authoritative owners commit together on success;
+- a second-owner revision conflict rolls the first owner's staged update back;
+- the failed multi-owner attempt leaves the command receipt incomplete and emits no authoritative history/outbox rows;
+- successful commit persists both owner updates, terminal command status, authoritative history and durable outbox together;
+- a completed duplicate returns the stored terminal outcome rather than executing again;
+- state-changing Admin audit persists in the same transaction;
+- privileged read-only audit can append independently without a gameplay command receipt;
+- only PostgreSQL serialization/deadlock SQLSTATEs are classified as safe automatic whole-command retries.
+
+The synthetic owner tables used by this suite are transaction-proof infrastructure only. They do not satisfy the still-required real owner-specific gameplay vertical proof.
+
+## Other verified invariants already covered by automation
+
+Current tests also prove, among other things:
 
 - Kernel has no dependency on other Nexis assemblies;
 - Core contracts do not depend on concrete Core or feature implementations;
@@ -61,10 +90,7 @@ Current tests prove, among other things:
 - Identity implementation depends on stable Identity contracts, never the reverse;
 - staff Admin context has no Character impersonation identity;
 - platform AccountRole is not carried as Core actor authority;
-- the same CommandId + same stable actor/type/payload cannot acquire a second execution claim;
-- changed actor, intent contract or payload under the same CommandId is an integrity violation;
 - capability/entitlement/security-version changes do not turn the same retry into a different command identity;
-- completed duplicate commands return the stored terminal outcome instead of executing again;
 - opposite-direction multi-resource operations produce the same canonical lock order;
 - retryable failures rerun the whole supplied command attempt and stop at the configured bound;
 - permanent failures and caller cancellation are not automatically retried;
@@ -75,13 +101,14 @@ Current tests prove, among other things:
 
 ## Partially complete foundation areas
 
-These areas have stable seams but still require persistence/owner integration before they satisfy the full stop conditions:
+These areas now have real persistence seams but still require additional lifecycle work before they satisfy the full stop conditions:
 
-- event/history: authoritative event envelopes and replay trace exist; production append-only ledger storage and Player Log projection/visibility contracts remain incomplete;
-- outbox: atomic commit contract requires durable outbox records for committed authoritative events, but no production outbox store/dispatcher/idempotent consumer adapter exists yet;
-- audit: stable contracts and atomic Admin-command inclusion exist; production append-only audit persistence remains incomplete;
-- concurrency: canonical lock order and bounded retry policy exist; PostgreSQL-specific transaction/lock/retry adapter does not yet exist;
-- command lifecycle: receipt + terminal outcome + atomic commit contracts exist; crash recovery/stale execution-claim lease/takeover semantics remain to be implemented with persistence.
+- event/history: authoritative event rows are persisted transactionally, but Player Log projection/visibility contracts and production replay-corpus extraction remain incomplete;
+- outbox: committed authoritative events create durable outbox rows transactionally, but leased multi-worker delivery, publication acknowledgement and idempotent consumer checkpointing are not implemented yet;
+- audit: PostgreSQL append-only read audit and atomic state-changing Admin audit are implemented; broader retention/query/admin-review services remain future work;
+- concurrency: optimistic revision rollback is proven against PostgreSQL and safe retry SQLSTATE classification exists; real owner-specific lock/revision policy still depends on the first gameplay owner proof;
+- command lifecycle: durable receipt + terminal outcome + real atomic persistence exist; stale execution-claim recovery, lease/takeover policy and ambiguous COMMIT acknowledgement reconciliation remain incomplete;
+- owner persistence: PostgreSQL can coordinate explicit owner transition appliers, but no real gameplay owner-specific PostgreSQL adapter exists yet.
 
 ## Not yet complete
 
@@ -90,31 +117,31 @@ Do not interpret the green CI slices above as permission for broad gameplay fan-
 1. define the first narrow owner-specific contract packages needed for an end-to-end proof;
 2. define the Content Registry contracts required by that proof without a generic content blob;
 3. add the first real domain golden rule pack behind internal Core dispatch;
-4. implement production persistence adapters for command receipts, owner revisions/transactions, history/audit/outbox and retry classification without leaking Npgsql/EF types into public contracts;
-5. prove one deliberately multi-owner atomic vertical scenario including rollback on one-owner failure;
-6. add scheduler/CIEL bypass protections at the executable architecture boundary;
-7. complete the remaining Identity capability/policy implementation and security tests without role-ordinal authorization;
-8. complete Player Log/history projection boundaries and idempotent post-commit consumers;
-9. establish the migration/reconciliation harness before any v1-to-v2 state movement.
+4. implement at-least-once outbox delivery with safe multi-worker claiming and idempotent consumer handling/checkpointing;
+5. define stale execution-claim/crash recovery and ambiguous commit reconciliation by CommandId;
+6. prove one deliberately multi-owner **real owner-specific** vertical scenario including rollback on one-owner failure;
+7. add scheduler/CIEL bypass protections at the executable architecture boundary;
+8. complete the remaining Identity capability/policy implementation and security tests without role-ordinal authorization;
+9. complete Player Log/history projection boundaries;
+10. establish the migration/reconciliation harness before any v1-to-v2 state movement.
 
 ## Next safe implementation boundary
 
-The non-gameplay Core/execution spine is now far enough along that the next meaningful proof needs **real owner-specific contracts or a transaction-capable persistence adapter used only against isolated V2/test state**.
+The next safe infrastructure-only slice is **durable outbox delivery and idempotent post-commit consumer handling**. It can build on the now-proven PostgreSQL outbox without inventing any unsettled gameplay state.
 
-Do not create a generic PlayerState, generic property bag, generic owner-table writer or fake gameplay rule merely to keep implementation moving.
+The design must preserve these rules:
 
-The selected vertical proof must:
+- delivery is at-least-once, not falsely advertised as exactly-once across arbitrary external systems;
+- EventId is the stable delivery/idempotency identity;
+- multiple workers must not concurrently own the same outbox claim;
+- a worker crash must make an abandoned claim eligible again after an explicit lease expires;
+- successful publication must be acknowledged durably;
+- a crash after external publication but before acknowledgement may cause redelivery, so consumers must be idempotent by EventId;
+- internal PostgreSQL projection consumers should persist their side effect and event checkpoint atomically where possible;
+- outbox workers never mutate authoritative gameplay owner state directly;
+- Core remains unaware of delivery infrastructure.
 
-- use real authoritative-owner boundaries already approved by `STATE-OWNERSHIP.md`;
-- avoid inventing unsettled game balance or content merely to exercise infrastructure;
-- use typed snapshots and typed transitions;
-- execute through `ICoreRulesEngine` and internal rule dispatch;
-- produce a golden conformance scenario;
-- prove owner state + terminal command result + events/history + Admin audit when applicable + outbox commit atomically;
-- prove rollback when any participating owner transition cannot commit;
-- prove a retry reloads/revalidates/re-evaluates rather than reusing stale snapshots.
-
-If no real gameplay operation is sufficiently specified to do that without inventing rules, continue product/system design before creating implementation gravity around guesses.
+After that slice, continue with command crash-recovery/ambiguous-commit reconciliation or return to product/system design to select the first real owner-specific vertical proof.
 
 ## Verification discipline
 
