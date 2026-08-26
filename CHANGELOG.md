@@ -2,6 +2,20 @@
 
 ## 2026-08-26
 
+### Nexis 2.0 Core CI verification and internal rule dispatch
+- added a V2-only GitHub Actions verification workflow that restores, builds and tests the isolated `v2/` solution without touching the current/live application
+- corrected CI so commands run from `v2/`, ensuring `v2/global.json` is discovered; the configured `latestFeature` roll-forward currently resolves .NET SDK 10.0.400 while preserving the approved .NET 10 line
+- enabled the .NET 10 Microsoft.Testing.Platform runner in `global.json` and changed CI to the MTP `dotnet test --project` form with a minimum-test-count guard
+- CI caught obsolete MSTest 4 `Assert.ThrowsException` calls before merge; tests were corrected to `Assert.ThrowsExactly`
+- observed green baseline at commit `d5b83b1799691e9aa38266eb52279d74b0fea0bc`: restore succeeded, Release build completed with 0 warnings/0 errors, and all 25 architecture/Core conformance tests passed with 0 failures/skips
+- added explicit internal Core rule dispatch keyed by typed intent contract name + schema version; duplicate registrations are rejected and unregistered intents remain mutation-free TechnicalFailure outcomes
+- kept `CoreRuleExecutionContext` and `ICoreRuleEvaluator` internal to the concrete Core, with friend access only for architecture tests, so surrounding systems still depend exclusively on `ICoreRulesEngine`/`Nexis.Core.Contracts`
+- each dispatched evaluation receives exactly one fresh deterministic RNG stream; evaluator exceptions/null results are treated as implementation defects rather than converted into fake in-world outcomes
+- concrete `Nexis.Core` now directly references only the two approved foundation assemblies it requires: `Nexis.Core.Contracts` and `Nexis.Kernel`; it still has no feature-module, persistence, network or UI dependencies
+- dispatch commit under CI verification: `f316738197e54588310087c8b390d9facdff7c5c`; this section supersedes the older provisional verification-status notes below
+- player impact: none; these changes are isolated Nexis 2.0 Core architecture/verification infrastructure
+- risk level: low to moderate; broad gameplay implementation remains blocked by the larger foundation stop conditions and PR #4 remains draft
+
 ### Nexis 2.0 deterministic Core arithmetic
 - added `Nexis.Core.Numerics.DeterministicIntegerMath` as the reference Core's exact integer/rational calculation primitive for authoritative ratios, percentages and multipliers without default floating-point semantics
 - added explicit rounding modes for toward-zero, away-from-zero, floor, ceiling, nearest-even and nearest-away-from-zero behavior so each versioned gameplay formula must choose its rounding semantics deliberately
@@ -9,7 +23,7 @@
 - invalid rounding modes and zero denominators now fail explicitly; overflow remains a technical/configuration error rather than being converted into an in-world result
 - added tests for positive/negative midpoint behavior, negative-denominator normalization, wide intermediates, checked overflow, invalid rounding configuration and exact ratio calculations
 - added `v2/docs/CORE-NUMERIC-DETERMINISM.md` defining the cross-runtime numeric contract, floating-point restrictions, overflow policy and formula-version implications without choosing any gameplay balance values
-- verification status: static review completed, but the environment still lacks the pinned .NET 10 SDK and the branch has no GitHub Actions run, so restore/build/test verification is still required
+- verification status at the time of this entry was provisional; the newer Core CI verification entry above supersedes it
 - player impact: none; this establishes deterministic Core arithmetic infrastructure only and does not implement or change any live gameplay formula
 - risk level: low to moderate; this deliberately fixes numeric semantics before domain rules depend on them
 
@@ -20,9 +34,9 @@
 - added a reusable golden-scenario conformance harness that can run one implementation against expected semantics or compare baseline and candidate Core implementations using fresh equivalent requests
 - added tests proving compatible replacement equivalence, deliberate divergence detection, repeatable RNG-backed results on re-evaluation, immutable snapshot/content request capture and invalid default contract-version rejection
 - added `v2/docs/CORE-CONFORMANCE-HARNESS.md` documenting scenario construction, semantic comparison, replay-safe RNG requirements, Content Registry inputs and the ordered next Core slices
-- verification status: static review completed for this slice, but the current execution environment still has no .NET SDK and no GitHub Actions run exists, so restore/build/test evidence remains mandatory before the branch is green
+- verification status at the time of this entry was provisional; the newer Core CI verification entry above supersedes it
 - player impact: none; this is isolated Nexis 2.0 architecture/test infrastructure and does not alter the current/live game
-- risk level: low to moderate; the changes deliberately tighten a pre-release contract before gameplay systems depend on it, but compilation/test verification is still pending
+- risk level: low to moderate; the changes deliberately tighten a pre-release contract before gameplay systems depend on it
 
 ### Nexis 2.0 replaceable Core implementation foundation
 - introduced a separate `Nexis.Core.Contracts` assembly so surrounding systems can target a stable engine-facing boundary without compiling against the concrete `Nexis.Core` implementation
@@ -30,12 +44,12 @@
 - added versioned typed Core contracts for intents, authoritative owner snapshots, owner-addressed transitions, semantic event descriptors and typed result payloads without introducing a universal mutable PlayerState/RuntimeState contract
 - added authoritative Core evaluation context carrying CommandId, CorrelationId, UTC evaluation time, gameplay rule version, content version and a controlled deterministic RNG source
 - added the initial `ICoreRulesEngine` replacement seam and a reference `CoreRulesEngine` shell which rejects unsupported contract/intent work as TechnicalFailure without producing state transitions
-- changed concrete `Nexis.Core` so its only Nexis project dependency is `Nexis.Core.Contracts`; the contract assembly depends only on the deliberately small `Nexis.Kernel`
+- concrete `Nexis.Core` initially depended only on `Nexis.Core.Contracts`; later dispatch work deliberately adds the universal `Nexis.Kernel` substrate while preserving the prohibition on feature-module/persistence dependencies
 - converted `Nexis.Architecture.Tests` from a placeholder project to `MSTest.Sdk/4.3.3` and added initial dependency-direction, infrastructure-leak, fake/replacement-Core and Core-decision behaviour tests
 - updated `v2/Nexis.slnx` and `v2/docs/FOUNDATION.md` to reflect the new contract boundary and explicitly preserve the no-global-player-state rule
-- verification status: code has been statically reviewed, but the current execution environment has no .NET SDK and cannot clone GitHub over outbound DNS; no GitHub workflow run exists for the pushed commit, so restore/build/test evidence remains required before the branch is considered green
+- verification status at the time of this entry was provisional; the newer Core CI verification entry above supersedes it
 - player impact: none; this is isolated Nexis 2.0 foundation code and does not alter the current/live game
-- risk level: low to moderate; architecture is isolated and intentionally minimal, but compilation/test verification is still pending
+- risk level: low to moderate; architecture is isolated and intentionally minimal
 
 ### Nexis 2.0 gameplay-mode clarification
 - corrected the v2 design record so **Adventures** preserve their original instant-resolution role, closest in interaction pattern to Torn Crimes: choose an action and receive an immediate server-authoritative result
@@ -66,7 +80,7 @@
 - reconciled `v2/docs/COMMAND-EXECUTION.md`, `v2/docs/CORE-ARCHITECTURE.md` and `v2/docs/AGENT-HANDOFF.md` with the approved Core and State Ownership model: Application gathers current owner snapshots and coordinates transactions, Core alone owns gameplay rule/calculation evaluation, Content Registry owns versioned static definitions, and authoritative systems persist only typed transitions addressed to the state they own
 - added `v2/docs/ENGINEERING-MANUAL.md` as the canonical instruction manual shared by Claude Code, Codex, ChatGPT/OpenAI agents, Gemini, future model families and human engineers; it fixes one common architecture/quality/security/testing/Definition-of-Done standard, explicitly prevents rogue rewrites or agent-specific architecture, and requires every spawned sub-agent to inherit the same constraints
 - added `v2/docs/WORK-ORDER-TEMPLATE.md` so substantial tasks can be given to all agents with the same objective, scope, state owners, Core responsibilities, contract permissions, persistence/concurrency expectations, security cases, acceptance criteria, tests and deployment authority
-- added `v2/AGENTS.md` as the short Codex/general-agent entrypoint and `v2/CLAUDE.md` as the Claude Code adapter importing the same canonical manual/design documents; model-specific entry files are intentionally not alternative rulebooks
+- added `v2/AGENTS.md` as the short Codex/general-agent entrypoint and `v2/CLAUDE.md` as the Claude Code adapter importing the same canonical docs; model-specific entry files are intentionally not alternative rulebooks
 - added repository-root `AGENTS.md` and `CLAUDE.md` guards so agents launched from the repository root are directed into the same v2 manual before making v2 changes and are explicitly prevented from treating the current application outside `v2/` as free foundation-work scope
 - added `v2/docs/CANON-AND-LORE.md` to preserve current approved Nexis world identity independently of legacy implementation data: Silverbough is the magic/Mana/item-infusion academy; Ironhall is the dwarven/gnomish crafting, engineering and building centre; Akai Tetsu Dojo is the Edo-Japan-inspired combat/tactics academy; the Sacred Grove is the island directly south of Nexis City teaching Druidic/Shamanic healing and gifted resurrection magic; and Blackharbor/Highcourt are one shared city/academy whose first three lessons branch into mutually exclusive Light bounty-hunter/capture and Shadow headhunter/assassin kill-or-capture specializations with costly, cooldown-gated, escalating path switching while retaining previously completed training
 - clarified canon provenance from the recovered early Nexis snapshot and human design history: Akai Tetsu predates Ironhall; Ironhall was explicitly conceived later as a new additional dwarven/tinkering/crafting city; the 17 May city-normalization work incorrectly replaced Akai Tetsu with Ironhall rather than expanding the world; new world elements are therefore additive by default and implementation limits such as fixed compass slots/enums may never silently delete, merge or alias existing canon
