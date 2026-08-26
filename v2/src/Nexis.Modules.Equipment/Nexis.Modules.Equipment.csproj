@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Nexis.Equipment.Contracts\Nexis.Equipment.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Execution.Contracts\Nexis.Execution.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
+  </ItemGroup>
+</Project>
