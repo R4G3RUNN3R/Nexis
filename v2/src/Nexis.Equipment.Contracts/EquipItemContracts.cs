@@ -59,17 +59,10 @@ public sealed record EquipItemTransition : IOwnerTransition
         }
 
         PlacementKey = placementKey ?? throw new ArgumentNullException(nameof(placementKey));
-        ArgumentNullException.ThrowIfNull(occupiedSlots);
-        var frozen = occupiedSlots.ToArray();
-        if (frozen.Length == 0 || frozen.Any(static slot => slot is null) || frozen.Distinct().Count() != frozen.Length)
-        {
-            throw new ArgumentException("Equip Item transitions require unique occupied slots.", nameof(occupiedSlots));
-        }
-
         ExpectedRevision = expectedRevision;
         CharacterId = characterId;
         ItemInstanceId = itemInstanceId;
-        OccupiedSlots = Array.AsReadOnly(frozen);
+        OccupiedSlots = new EquipmentSlotSet(occupiedSlots);
     }
 
     public ContractDescriptor Contract => TransitionContract;
@@ -84,7 +77,7 @@ public sealed record EquipItemTransition : IOwnerTransition
 
     public EquipmentPlacementKey PlacementKey { get; }
 
-    public IReadOnlyList<EquipmentSlotKey> OccupiedSlots { get; }
+    public EquipmentSlotSet OccupiedSlots { get; }
 }
 
 public sealed record ItemEquippedEvent : ICoreEventDescriptor
@@ -103,16 +96,9 @@ public sealed record ItemEquippedEvent : ICoreEventDescriptor
         }
 
         PlacementKey = placementKey ?? throw new ArgumentNullException(nameof(placementKey));
-        ArgumentNullException.ThrowIfNull(occupiedSlots);
-        var frozen = occupiedSlots.ToArray();
-        if (frozen.Length == 0 || frozen.Any(static slot => slot is null) || frozen.Distinct().Count() != frozen.Length)
-        {
-            throw new ArgumentException("Item Equipped events require unique occupied slots.", nameof(occupiedSlots));
-        }
-
         CharacterId = characterId;
         ItemInstanceId = itemInstanceId;
-        OccupiedSlots = Array.AsReadOnly(frozen);
+        OccupiedSlots = new EquipmentSlotSet(occupiedSlots);
     }
 
     public ContractDescriptor Contract => EventContract;
@@ -123,5 +109,5 @@ public sealed record ItemEquippedEvent : ICoreEventDescriptor
 
     public EquipmentPlacementKey PlacementKey { get; }
 
-    public IReadOnlyList<EquipmentSlotKey> OccupiedSlots { get; }
+    public EquipmentSlotSet OccupiedSlots { get; }
 }
