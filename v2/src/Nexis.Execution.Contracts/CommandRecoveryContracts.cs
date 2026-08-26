@@ -24,6 +24,35 @@ public sealed record RecoveredCommandExecution
         CommandExecutionToken executionToken,
         string workerId,
         DateTimeOffset leaseExpiresAtUtc)
+        : this(
+            commandId,
+            lane,
+            accountId,
+            characterId,
+            lane == CommandExecutionLane.System ? SystemActorKey.Platform : null,
+            intentContract,
+            payload,
+            originalCorrelationId,
+            receivedAtUtc,
+            executionToken,
+            workerId,
+            leaseExpiresAtUtc)
+    {
+    }
+
+    public RecoveredCommandExecution(
+        CommandId commandId,
+        CommandExecutionLane lane,
+        AccountId? accountId,
+        CharacterId? characterId,
+        SystemActorKey? systemActorKey,
+        ContractDescriptor intentContract,
+        CanonicalCommandPayload payload,
+        CorrelationId originalCorrelationId,
+        DateTimeOffset receivedAtUtc,
+        CommandExecutionToken executionToken,
+        string workerId,
+        DateTimeOffset leaseExpiresAtUtc)
     {
         if (commandId.IsEmpty)
         {
@@ -35,7 +64,7 @@ public sealed record RecoveredCommandExecution
             throw new ArgumentOutOfRangeException(nameof(lane));
         }
 
-        ValidateActorShape(lane, accountId, characterId);
+        ValidateActorShape(lane, accountId, characterId, systemActorKey);
         IntentContract = intentContract ?? throw new ArgumentNullException(nameof(intentContract));
         Payload = payload ?? throw new ArgumentNullException(nameof(payload));
 
@@ -64,6 +93,7 @@ public sealed record RecoveredCommandExecution
         Lane = lane;
         AccountId = accountId;
         CharacterId = characterId;
+        SystemActorKey = systemActorKey;
         OriginalCorrelationId = originalCorrelationId;
         ReceivedAtUtc = receivedAtUtc;
         ExecutionToken = executionToken;
@@ -78,6 +108,8 @@ public sealed record RecoveredCommandExecution
     public AccountId? AccountId { get; }
 
     public CharacterId? CharacterId { get; }
+
+    public SystemActorKey? SystemActorKey { get; }
 
     public ContractDescriptor IntentContract { get; }
 
@@ -96,7 +128,8 @@ public sealed record RecoveredCommandExecution
     private static void ValidateActorShape(
         CommandExecutionLane lane,
         AccountId? accountId,
-        CharacterId? characterId)
+        CharacterId? characterId,
+        SystemActorKey? systemActorKey)
     {
         if (accountId is { IsEmpty: true })
         {
@@ -110,9 +143,9 @@ public sealed record RecoveredCommandExecution
 
         var valid = lane switch
         {
-            CommandExecutionLane.Player or CommandExecutionLane.Realtime => accountId.HasValue && characterId.HasValue,
-            CommandExecutionLane.Admin => accountId.HasValue && !characterId.HasValue,
-            CommandExecutionLane.System => !accountId.HasValue && !characterId.HasValue,
+            CommandExecutionLane.Player or CommandExecutionLane.Realtime => accountId.HasValue && characterId.HasValue && systemActorKey is null,
+            CommandExecutionLane.Admin => accountId.HasValue && !characterId.HasValue && systemActorKey is null,
+            CommandExecutionLane.System => !accountId.HasValue && !characterId.HasValue && systemActorKey is not null,
             _ => false
         };
 
@@ -180,10 +213,6 @@ public sealed record CommandRecoveryResult
         new(CommandRecoveryDisposition.NotRecoverable, originalCorrelationId, null, null);
 }
 
-/// <summary>
-/// Durable crash-recovery boundary. Reconciliation locks the command receipt before deciding
-/// whether an ambiguous earlier commit completed. New execution tokens fence every prior worker.
-/// </summary>
 public interface ICommandExecutionRecoveryRepository
 {
     ValueTask<CommandRecoveryResult> ReconcileAsync(
