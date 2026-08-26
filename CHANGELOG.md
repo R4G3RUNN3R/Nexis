@@ -2,6 +2,19 @@
 
 ## 2026-08-26
 
+### Nexis 2.0 automated authority and scheduler/CIEL bypass boundary
+- introduced stable `SystemActorKey` identity for trusted automated authorities so scheduler, CIEL and future system services no longer collapse into one anonymous `SYSTEM` actor while still remaining completely separate from Account/Character identity
+- bound the System principal into CommandId idempotency identity, durable PostgreSQL command receipts, atomic receipt verification and crash recovery so an automated command retains the same source authority across retries, restarts and recovery workers
+- added additive migration `0005_system_actor_identity.sql`, backfilling pre-release System receipts to `nexis.system` and tightening the persisted actor-shape constraint so Player/Realtime, Admin and System identities cannot be mixed
+- added the intentionally narrow `Nexis.Automation.Contracts` boundary with `AutomatedCommandRequest` and `IAutomatedCommandGateway`; automated components may submit only System identity, CommandId, CorrelationId and a typed Core intent, never owner transitions, persistence handles or precomputed gameplay outcomes
+- added executable architecture guards for future `Nexis.Ciel*` and `Nexis.Scheduling*` projects; those projects fail the architecture suite if they directly reference concrete Core, concrete Execution, Execution internals, PostgreSQL or owner implementation modules instead of using the approved automated-command boundary
+- preserved the approved rule that schedulers own due-work mechanics rather than gameplay outcomes and that CIEL remains advisory/interpretive rather than an authoritative state owner
+- CI caught and rejected one nullable-flow defect in the new project-reference scan; the test was corrected without suppressing nullable analysis
+- checkpoint `4de3b830c19c5659c042aa342d86e3361a0c05a7` passed the complete V2 workflow: Release build **0 warnings / 0 errors**, architecture/Core/execution/security suite **105 passed / 0 failed / 0 skipped**, PostgreSQL integration suite **28 passed / 0 failed / 0 skipped**
+- no scheduler business logic, CIEL runtime, V1/live mutation, production database change, deployment or PR merge was introduced; PR #4 remains draft
+- player impact: none yet; this hardens automated authority and future mutation ingress before those runtime components exist
+- risk level: low to moderate; the cross-cutting System identity migration and automation boundary are green, while remaining Identity policy and history/projection stop conditions still block broad gameplay fan-out
+
 ### Nexis 2.0 first real gameplay vertical, recovery and durable delivery foundation
 - completed the missing default Core composition for the first real rule by registering `EquipItemRuleEvaluator` in `Nexis.Core.Reference`; unsupported intents still fail closed, while the reference engine now actually executes the approved Equipment vertical
 - added stable Items, Inventory, Equipment and Combat contract boundaries plus exact-version Content Registry contracts/implementation without introducing generic mutable state or content blobs
