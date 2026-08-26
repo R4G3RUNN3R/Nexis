@@ -96,7 +96,7 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
 
         const string selectSql = """
-            SELECT command_id, lane, actor_account_id, actor_character_id,
+            SELECT command_id, lane, actor_account_id, actor_character_id, actor_system_key,
                    intent_name, intent_schema_version, payload_fingerprint,
                    original_correlation_id, received_at_utc, execution_token,
                    canonical_payload, execution_owner, execution_lease_expires_at_utc,
@@ -179,7 +179,7 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
         CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT command_id, lane, actor_account_id, actor_character_id,
+            SELECT command_id, lane, actor_account_id, actor_character_id, actor_system_key,
                    intent_name, intent_schema_version, payload_fingerprint,
                    original_correlation_id, received_at_utc, execution_token,
                    canonical_payload, execution_owner, execution_lease_expires_at_utc,
@@ -203,18 +203,19 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
             reader.GetInt32(1),
             reader.IsDBNull(2) ? null : reader.GetGuid(2),
             reader.IsDBNull(3) ? null : reader.GetGuid(3),
-            reader.GetString(4),
-            reader.GetInt32(5),
-            reader.GetString(6).TrimEnd(),
-            reader.GetGuid(7),
-            ToDateTimeOffset(reader.GetDateTime(8)),
-            reader.GetGuid(9),
-            reader.IsDBNull(10) ? null : reader.GetString(10),
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            reader.GetString(5),
+            reader.GetInt32(6),
+            reader.GetString(7).TrimEnd(),
+            reader.GetGuid(8),
+            ToDateTimeOffset(reader.GetDateTime(9)),
+            reader.GetGuid(10),
             reader.IsDBNull(11) ? null : reader.GetString(11),
-            reader.IsDBNull(12) ? null : ToDateTimeOffset(reader.GetDateTime(12)),
-            reader.IsDBNull(13) ? null : reader.GetInt32(13),
-            reader.IsDBNull(14) ? null : reader.GetString(14),
-            reader.IsDBNull(15) ? null : ToDateTimeOffset(reader.GetDateTime(15)));
+            reader.IsDBNull(12) ? null : reader.GetString(12),
+            reader.IsDBNull(13) ? null : ToDateTimeOffset(reader.GetDateTime(13)),
+            reader.IsDBNull(14) ? null : reader.GetInt32(14),
+            reader.IsDBNull(15) ? null : reader.GetString(15),
+            reader.IsDBNull(16) ? null : ToDateTimeOffset(reader.GetDateTime(16)));
 
     private static RecoveredCommandExecution BuildRecovered(
         StoredRecoveryRow row,
@@ -237,12 +238,14 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
         var lane = (CommandExecutionLane)row.Lane;
         var accountId = row.ActorAccountId.HasValue ? new AccountId(row.ActorAccountId.Value) : (AccountId?)null;
         var characterId = row.ActorCharacterId.HasValue ? new CharacterId(row.ActorCharacterId.Value) : (CharacterId?)null;
+        var systemActorKey = row.ActorSystemKey is null ? null : new SystemActorKey(row.ActorSystemKey);
 
         return new RecoveredCommandExecution(
             new CommandId(row.CommandId),
             lane,
             accountId,
             characterId,
+            systemActorKey,
             new ContractDescriptor(row.IntentName, row.IntentSchemaVersion),
             payload,
             new CorrelationId(row.OriginalCorrelationId),
@@ -258,6 +261,7 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
             row.Lane,
             row.ActorAccountId,
             row.ActorCharacterId,
+            row.ActorSystemKey,
             row.IntentName,
             row.IntentSchemaVersion,
             row.PayloadFingerprint,
@@ -337,6 +341,7 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
         int Lane,
         Guid? ActorAccountId,
         Guid? ActorCharacterId,
+        string? ActorSystemKey,
         string IntentName,
         int IntentSchemaVersion,
         string PayloadFingerprint,
