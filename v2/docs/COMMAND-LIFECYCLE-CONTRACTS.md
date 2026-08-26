@@ -1,23 +1,33 @@
 # Nexis 2.0 Command Receipt and Idempotency Contracts
 
-_Status: foundation implementation slice, 2026-08-26. This document narrows `COMMAND-EXECUTION.md`; it does not supersede it._
+_Status: foundation implementation slice, updated 2026-08-26. This document narrows `COMMAND-EXECUTION.md`; it does not supersede it._
 
 ## Purpose
 
-This slice introduces the stable command-receipt boundary required before authoritative gameplay mutations can be made safely retryable. It deliberately stops before terminal command completion, owner persistence, event append and outbox commit because those must later share one atomic transaction boundary.
+This document defines the durable mutation-command identity, receipt, recovery payload and execution-fencing contracts used before any authoritative gameplay mutation is allowed to commit.
+
+The lifecycle now spans:
+
+1. trusted typed command ingress;
+2. canonical payload serialization + fingerprinting;
+3. first receipt acquisition;
+4. Core evaluation / whole-command execution;
+5. atomic owner/history/audit/outbox commit;
+6. duplicate replay of the stored terminal result;
+7. fenced crash recovery where an incomplete execution is abandoned or a prior COMMIT result is ambiguous.
 
 ## Stable idempotency identity
 
-One received mutation command is identified by:
+One mutation command is durably identified by:
 
 - `CommandId`;
 - stable server-derived actor binding;
 - typed intent contract name + schema version;
-- SHA-256 fingerprint of the canonical command payload.
+- SHA-256 fingerprint of the exact canonical command payload.
 
-A repeat with the same identity is the same command. A repeat reusing the CommandId with a different actor, intent contract or payload fingerprint is an integrity violation, not a new action.
+A repeat with the same identity is the same command. Reusing the CommandId with a different actor, intent contract/schema or payload fingerprint is an integrity violation, not a new action.
 
-The first accepted receipt retains its original `CorrelationId`. Transport retries may arrive carrying a different correlation, but the stored command remains linked to the original causal operation.
+The first accepted receipt retains its original `CorrelationId`. Later transport retries may arrive with a different correlation, but authoritative history/replay remains tied to the original causal operation.
 
 ## Actor binding
 
@@ -27,49 +37,127 @@ The first accepted receipt retains its original `CorrelationId`. Transport retri
 - Admin: AccountId + Admin lane, never Character impersonation;
 - System: System lane with no AccountId/CharacterId.
 
-Current capabilities, entitlements and security/session version are intentionally not part of the idempotency identity. They must be revalidated from current trusted server state on each execution/recovery attempt. A permission change does not turn a retry into a different command, and an old capability snapshot cannot be smuggled into authority through CommandId reuse.
+Current capabilities, entitlements and security/session version are intentionally **not** part of idempotency identity. Those values are current execution facts and must be resolved/revalidated again whenever the command is freshly executed or recovered.
 
-## Payload fingerprint
+A durable receipt therefore proves who originally submitted the command. It never proves that the actor is still authorized now.
 
-`CommandPayloadFingerprint` is SHA-256 over a canonical trusted-server representation of the typed payload. This slice provides the digest primitive but does **not** define one universal serializer for all Nexis domain contracts.
+## Canonical command payload
 
-The fingerprint supplied to the coordinator must be created by trusted ingress/application code after schema validation. A client-provided hash is never accepted as authority.
+`CanonicalCommandPayload` stores the exact trusted-server canonical JSON representation of one validated typed command intent plus its SHA-256 fingerprint.
 
-## Receipt acquisition outcomes
+Important boundaries:
 
-`ICommandReceiptRepository.TryAcquireAsync` atomically returns exactly one of:
+- canonical JSON is command recovery/replay material, not generic gameplay state;
+- a client-supplied JSON string or hash is never authoritative;
+- the exact canonical string is stored as PostgreSQL `text`, **not** `jsonb`, because jsonb normalization could alter whitespace/key representation and break the exact-byte fingerprint invariant;
+- secrets, credentials, raw tokens and other unnecessary sensitive material must never be placed in recoverable command payloads;
+- retention/redaction/encryption policy for sensitive command classes must be defined before production rollout.
+
+## Explicit typed codec registry
+
+There is no universal reflection serializer for authoritative commands.
+
+Each recoverable typed intent contract registers an explicit `ICanonicalCommandCodec` keyed by stable contract name + schema version. `CanonicalCommandCodecRegistry`:
+
+- rejects duplicate registrations;
+- serializes through only the codec registered for the intent's exact contract;
+- deserializes only a registered name/schema pair;
+- rejects a codec that returns an intent advertising a different contract;
+- never persists or activates CLR type names;
+- never uses assembly scanning or arbitrary JSON-to-object activation as authority.
+
+Old schemas therefore require their old codec/upcaster path to remain intentionally supported or to be deliberately retired through migration policy. A new schema is never silently treated as compatible with an old one.
+
+## Receipt acquisition and execution lease
+
+A first receipt acquisition supplies:
+
+- stable execution identity;
+- canonical payload;
+- original CorrelationId;
+- authoritative received-at UTC time;
+- execution worker identifier;
+- positive execution lease duration.
+
+PostgreSQL stores:
+
+- exact payload + fingerprint;
+- execution owner;
+- lease expiry;
+- an opaque `CommandExecutionToken` fencing token.
+
+`ICommandReceiptRepository.TryAcquireAsync` atomically returns:
 
 - `Acquired`: first valid execution claim, with a non-empty execution token;
 - `DuplicateInProgress`: same command already has an active/incomplete receipt;
-- `DuplicateCompleted`: same command already has a durable terminal outcome and that original outcome is returned/reconstructed;
-- `IntegrityViolation`: the CommandId exists but actor/type/payload identity differs.
+- `DuplicateCompleted`: same command already has a durable terminal outcome and that original outcome is returned;
+- `IntegrityViolation`: CommandId exists but stable actor/type/payload identity differs.
 
-Production persistence must implement this comparison atomically, normally with a unique CommandId constraint plus transaction/locking semantics appropriate to PostgreSQL.
+## Completion stays atomic
 
-## Why completion is not exposed yet
+There is intentionally no public standalone `CompleteAsync` on the receipt repository.
 
-There is intentionally no public `ICommandReceiptRepository.CompleteAsync` method in this slice.
+Terminal outcome, owner transitions, authoritative history/events, state-changing Admin audit and durable outbox must commit through the atomic command transaction. This prevents a receipt from saying `Succeeded` before owner state committed, or owner state committing without a durable terminal receipt/history trail.
 
-A successful command may involve multiple authoritative owners. Terminal command outcome, owner state transitions, authoritative events/history and outbox entries must commit together where the gameplay promise requires atomicity. Allowing receipt completion as an independent persistence call would make it possible to record `Succeeded` before owner state committed, or mutate owner state without a durable terminal receipt.
+## Crash recovery and fencing
 
-The next persistence/transaction slice must therefore introduce completion only inside the authoritative atomic command transaction contract.
+Every in-progress recoverable command has an execution lease and fencing token.
 
-## Recovery note
+Two recovery paths exist:
 
-This slice distinguishes an acquired/in-progress receipt from a completed receipt. Production crash recovery, stale execution-token takeover/lease semantics and bounded retry classification remain persistence/execution work. They must preserve the same CommandId and identity; recovery may never manufacture a replacement command.
+### Ambiguous completion reconciliation
+
+If a worker loses connection around COMMIT, it must not guess whether the command committed. Recovery locks the receipt row with `SELECT ... FOR UPDATE` and lets PostgreSQL resolve the previous transaction first.
+
+Then:
+
+- terminal row -> return the stored terminal result and do **not** execute again;
+- incomplete row with matching observed token -> rotate to a new token/lease and allow a fresh whole-command attempt;
+- token mismatch -> another worker already owns recovery; return ownership lost;
+- legacy/incomplete row without canonical payload -> explicitly not recoverable.
+
+### Expired orphan recovery
+
+Expired incomplete recoverable receipts can be claimed in batches using `FOR UPDATE SKIP LOCKED` so multiple recovery workers do not take the same command.
+
+Every takeover rotates the execution token. The old worker may no longer commit or renew once that token changes.
+
+Lease expiry means **eligible for takeover**, not instantly invalid. If the original worker acquires the receipt row lock and completes before takeover rotates the token, that completion remains safe. If recovery wins first, the old worker is fenced.
+
+## Recovery does not restore authority
+
+`RecoveredCommandExecution` contains historical identity and exact payload facts only. It deliberately does not contain `TrustedActorContext`.
+
+Before rerunning Core, recovery/application code must:
+
+1. decode the exact stored typed intent through the explicit codec registry;
+2. resolve fresh current actor/session/capability/entitlement facts;
+3. load fresh authoritative owner snapshots;
+4. load the appropriate rule/content versions according to replay/recovery policy;
+5. revalidate all current prerequisites and authorization;
+6. rerun the complete Core evaluation/commit attempt under the new fencing token.
+
+A stale snapshot/transition plan is never resumed.
 
 ## Verification scope
 
-Current automated tests cover:
+Automated tests now cover:
 
-- same CommandId + same actor/type/payload cannot acquire two execution claims;
-- changed payload, actor or intent contract under the same CommandId becomes an integrity violation;
-- capability/entitlement/security-version changes do not alter stable actor idempotency identity;
-- completed duplicates reconstruct the stored terminal outcome in the test repository without a new execution token;
-- original correlation identity survives retries;
-- receive time must be authoritative UTC;
-- SHA-256 payload fingerprints are deterministic and normalized;
-- execution contracts do not depend on implementation assemblies;
-- the concrete execution coordinator depends only on approved stable contract assemblies.
+- exactly one first acquisition for the same CommandId under concurrency;
+- changed payload, actor or intent contract under the same CommandId -> integrity violation;
+- capability/entitlement/security-version changes do not change stable command identity;
+- completed duplicates return the original stored terminal outcome;
+- original correlation survives retries;
+- canonical payload JSON validity + deterministic SHA-256 fingerprinting;
+- exact canonical payload persistence as text;
+- active lease not recovered before expiry;
+- expired lease recovery preserves the exact payload and rotates the fence token;
+- concurrent recovery workers do not overlap claims;
+- ambiguous reconcile returns stored outcome after a committed command;
+- ambiguous reconcile rotates the token after a rolled-back/incomplete attempt;
+- stale workers cannot commit or renew after takeover;
+- wrong fencing token cannot steal a command;
+- corrupted canonical payload/fingerprint mismatch blocks recovery before re-execution;
+- codec registry rejects unknown schemas, duplicate registrations and wrong-contract deserialization.
 
-The in-memory receipt repository used by tests is test infrastructure only and is not a production persistence implementation.
+The remaining gameplay proof is not command-lifecycle infrastructure. It requires a real approved owner-specific command and real typed owner contracts/content definitions.
