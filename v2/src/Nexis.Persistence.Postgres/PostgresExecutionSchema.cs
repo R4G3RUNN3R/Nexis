@@ -9,7 +9,8 @@ public static class PostgresExecutionSchema
     {
         "Nexis.Persistence.Postgres.Migrations.0001_execution_foundation.sql",
         "Nexis.Persistence.Postgres.Migrations.0002_outbox_delivery.sql",
-        "Nexis.Persistence.Postgres.Migrations.0003_command_recovery.sql"
+        "Nexis.Persistence.Postgres.Migrations.0003_command_recovery.sql",
+        "Nexis.Persistence.Postgres.Migrations.0004_equipment_owner.sql"
     };
 
     public static async ValueTask EnsureCreatedAsync(
