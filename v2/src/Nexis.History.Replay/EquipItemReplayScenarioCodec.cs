@@ -11,6 +11,7 @@ using Nexis.Inventory.Contracts;
 using Nexis.Items.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
+using Nexis.Kernel.Randomness;
 
 namespace Nexis.History.Replay;
 
@@ -318,6 +319,7 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             throw new FormatException("Replay corpus artifact is not in the exact canonical JSON form.");
         }
 
+        ValidateDomainInvariants(document);
         return document;
     }
 
@@ -489,4 +491,173 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
         string OccurredAtUtc,
         ContractDocument Contract,
         EventDocument Event);
+    private static void ValidateDomainInvariants(EquipReplayDocument document)
+    {
+        try
+        {
+            var metadata = new ReplayCaptureMetadata(
+                document.ProvenanceKind,
+                ReplaySourceFingerprint.Parse(document.SourceFingerprint),
+                ParseUtc(document.CapturedAtUtc),
+                document.Tags,
+                new RestrictedReplayRandomReference(document.RestrictedRandomReference),
+                TimeSpan.FromTicks(document.EvaluationDurationTicks),
+                document.PersistenceOutcome);
+            if (!metadata.Tags.SequenceEqual(document.Tags))
+            {
+                throw new InvalidOperationException("Replay scenario tags must be in canonical domain order without duplicates.");
+            }
+
+            if (document.Actor.Lane is not (CommandExecutionLane.Player or CommandExecutionLane.Realtime))
+            {
+                throw new InvalidOperationException("Equip Item replay artifacts require a player or realtime actor lane.");
+            }
+
+            var actor = TrustedActorContext.CreatePlayer(
+                new AccountId(document.Actor.AccountId),
+                new CharacterId(document.Actor.CharacterId),
+                securityVersion: 0,
+                realtime: document.Actor.Lane == CommandExecutionLane.Realtime);
+            var characterId = new CharacterId(document.Intent.CharacterId);
+            if (actor.CharacterId != characterId)
+            {
+                throw new InvalidOperationException("Equip Item replay actor and intent identities are inconsistent.");
+            }
+
+            var coreContractVersion = new CoreContractVersion(document.Execution.CoreContractVersion);
+            _ = new CoreImplementationDescriptor(
+                document.Execution.CoreImplementationName,
+                document.Execution.CoreImplementationVersion,
+                coreContractVersion);
+            _ = CommandPayloadFingerprint.Parse(document.Execution.PayloadFingerprint);
+            var context = new CoreEvaluationContext(
+                new CommandId(document.Execution.CommandId),
+                new CorrelationId(document.Execution.CorrelationId),
+                actor,
+                ParseUtc(document.Execution.EvaluatedAtUtc),
+                new RuleVersion(document.Execution.RuleVersion),
+                new ContentVersion(document.Execution.ContentVersion),
+                DomainValidationRandomFactory.Instance);
+            var intent = new EquipItemIntent(
+                characterId,
+                new ItemInstanceId(document.Intent.ItemInstanceId),
+                new EquipmentPlacementKey(document.Intent.Placement));
+            var inventory = new InventorySnapshot(
+                characterId,
+                document.Inventory.Revision,
+                document.Inventory.Items.Select(static item => new InventoryItemReference(
+                    new ItemInstanceId(item.ItemInstanceId),
+                    new ContentDefinitionKey(
+                        new ContractDescriptor(item.DefinitionContract.Name, item.DefinitionContract.SchemaVersion),
+                        new ContentDefinitionId(item.DefinitionId)))));
+            var equipment = new EquipmentSnapshot(
+                characterId,
+                document.Equipment.Revision,
+                document.Equipment.Bindings.Select(static binding => new EquippedItemBinding(
+                    new ItemInstanceId(binding.ItemInstanceId),
+                    new EquipmentPlacementKey(binding.Placement),
+                    binding.OccupiedSlots.Select(static slot => new EquipmentSlotKey(slot)))));
+            var combat = new CombatParticipationSnapshot(
+                characterId,
+                document.Combat.Revision,
+                document.Combat.IsInActiveCombat);
+            var content = new EquippableItemDefinition(
+                new ContentDefinitionId(document.Content.DefinitionId),
+                document.Content.Placements.Select(static placement => new EquipmentPlacementDefinition(
+                    new EquipmentPlacementKey(placement.Placement),
+                    placement.OccupiedSlots.Select(static slot => new EquipmentSlotKey(slot)))));
+            _ = new CoreEvaluationRequest(
+                coreContractVersion,
+                context,
+                intent,
+                new IAuthoritativeSnapshot[] { inventory, equipment, combat },
+                new[] { content });
+
+            var decision = ValidateDecision(document.Decision);
+            var completedAtUtc = ParseUtc(document.Execution.CompletedAtUtc);
+            var terminalOutcome = document.Execution.TerminalStatus == CommandTerminalStatus.Succeeded
+                ? CommandTerminalOutcome.Succeeded(completedAtUtc)
+                : CommandTerminalOutcome.Failed(
+                    document.Execution.TerminalStatus,
+                    new CommandReasonCode(document.Execution.TerminalReason!),
+                    completedAtUtc);
+            if ((CoreOutcomeStatus)terminalOutcome.Status != decision.Status ||
+                terminalOutcome.Reason?.Value != decision.Reason?.Value)
+            {
+                throw new InvalidOperationException("Replay decision and terminal outcome are inconsistent.");
+            }
+
+            foreach (var committedEvent in document.CommittedEvents)
+            {
+                var contract = new ContractDescriptor(
+                    committedEvent.Contract.Name,
+                    committedEvent.Contract.SchemaVersion);
+                if (contract != ItemEquippedEvent.EventContract)
+                {
+                    throw new InvalidOperationException("Equip Item replay committed event uses an unexpected contract.");
+                }
+
+                _ = new AuthoritativeEventEnvelope(
+                    new EventMetadata(
+                        new EventId(committedEvent.EventId),
+                        ParseUtc(committedEvent.OccurredAtUtc),
+                        new CorrelationId(committedEvent.CorrelationId),
+                        committedEvent.CausationId.HasValue ? new EventId(committedEvent.CausationId.Value) : null,
+                        contract.SchemaVersion),
+                    CreateEvent(committedEvent.Event));
+            }
+        }
+        catch (Exception exception) when (exception is ArgumentException or FormatException or InvalidOperationException or NullReferenceException)
+        {
+            throw new FormatException("Replay corpus artifact violates the reviewed Equip Item domain invariants.", exception);
+        }
+    }
+
+    private static CoreDecision ValidateDecision(DecisionDocument document)
+    {
+        if (!Enum.IsDefined(document.Status))
+        {
+            throw new ArgumentOutOfRangeException(nameof(document), "Replay decision status is undefined.");
+        }
+
+        var transitions = document.Transitions.Select(static transition => new EquipItemTransition(
+            transition.ExpectedRevision
+                ?? throw new InvalidOperationException("Equip Item replay transitions require an expected revision."),
+            new CharacterId(transition.CharacterId),
+            new ItemInstanceId(transition.ItemInstanceId),
+            new EquipmentPlacementKey(transition.Placement),
+            transition.OccupiedSlots.Select(static slot => new EquipmentSlotKey(slot))));
+        var events = document.Events.Select(CreateEvent);
+        return document.Status switch
+        {
+            CoreOutcomeStatus.Succeeded when document.Reason is null =>
+                CoreDecision.Succeeded(transitions: transitions, events: events),
+            CoreOutcomeStatus.DomainFailed when document.Reason is not null =>
+                CoreDecision.DomainFailed(new CoreReasonCode(document.Reason), transitions: transitions, events: events),
+            CoreOutcomeStatus.Rejected when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
+                CoreDecision.Rejected(new CoreReasonCode(document.Reason)),
+            CoreOutcomeStatus.Conflict when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
+                CoreDecision.Conflict(new CoreReasonCode(document.Reason)),
+            CoreOutcomeStatus.Cancelled when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
+                CoreDecision.Cancelled(new CoreReasonCode(document.Reason)),
+            CoreOutcomeStatus.TechnicalFailure when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
+                CoreDecision.TechnicalFailure(new CoreReasonCode(document.Reason)),
+            _ => throw new InvalidOperationException("Replay decision status, reason, and mutation shape are inconsistent.")
+        };
+    }
+
+    private static ItemEquippedEvent CreateEvent(EventDocument document) =>
+        new(
+            new CharacterId(document.CharacterId),
+            new ItemInstanceId(document.ItemInstanceId),
+            new EquipmentPlacementKey(document.Placement),
+            document.OccupiedSlots.Select(static slot => new EquipmentSlotKey(slot)));
+
+    private sealed class DomainValidationRandomFactory : IDeterministicRandomFactory
+    {
+        public static DomainValidationRandomFactory Instance { get; } = new();
+
+        public IDeterministicRandomSource Create() => throw new NotSupportedException();
+    }
+
 }

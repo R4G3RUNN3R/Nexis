@@ -127,6 +127,34 @@ public sealed class ReplayCorpusTests
     }
 
     [TestMethod]
+    public void ArtifactParser_RejectsCanonicalDomainInvalidArtifacts()
+    {
+        var fixture = CreateFixture(ReplayScenarioTag.Exploit);
+        var artifact = CreateExtractor().Extract(fixture.Capture);
+        var invalidArtifacts = new[]
+        {
+            artifact.CanonicalJson.Replace("\"tags\":[\"exploit\"]", "\"tags\":[]", StringComparison.Ordinal),
+            artifact.CanonicalJson.Replace("\"evaluationDurationTicks\":70000", "\"evaluationDurationTicks\":-1", StringComparison.Ordinal),
+            artifact.CanonicalJson.Replace(
+                $"\"sourceFingerprint\":\"{fixture.Capture.Metadata.SourceFingerprint.Value}\"",
+                "\"sourceFingerprint\":\"invalid\"",
+                StringComparison.Ordinal),
+            artifact.CanonicalJson.Replace(
+                "\"provenanceKind\":\"productionHistory\"",
+                "\"provenanceKind\":99",
+                StringComparison.Ordinal),
+            artifact.CanonicalJson.Replace(
+                "\"definitionContract\":{\"name\":\"nexis.items.equippable-definition\"",
+                "\"definitionContract\":{\"name\":\"\"",
+                StringComparison.Ordinal)
+        };
+
+        foreach (var invalidArtifact in invalidArtifacts)
+        {
+            Assert.ThrowsExactly<FormatException>(() => ReplayCorpusArtifact.Parse(invalidArtifact));
+        }
+    }
+    [TestMethod]
     public void Extract_RejectsCodecThatAttemptsCompletenessPayloadBypass()
     {
         var fixture = CreateFixture(ReplayScenarioTag.Exploit);
@@ -136,6 +164,32 @@ public sealed class ReplayCorpusTests
                 Encoding.UTF8.GetBytes("test-only-pseudonymization-key-material")));
 
         Assert.ThrowsExactly<FormatException>(() => extractor.Extract(fixture.Capture));
+    }
+
+    [TestMethod]
+    public void Extract_RejectsRequestAndTraceCorrelationMismatch()
+    {
+        var fixture = CreateFixture(ReplayScenarioTag.KnownBug);
+        var mismatchedRequest = new CoreEvaluationRequest(
+            fixture.Request.ContractVersion,
+            new CoreEvaluationContext(
+                fixture.Request.Context.CommandId,
+                CorrelationId.New(),
+                fixture.Request.Context.Actor,
+                fixture.Request.Context.EvaluationTimeUtc,
+                fixture.Request.Context.RuleVersion,
+                fixture.Request.Context.ContentVersion,
+                fixture.Request.Context.RandomFactory),
+            fixture.Request.Intent,
+            fixture.Request.Snapshots,
+            fixture.Request.Content);
+        var capture = new ReplayCapture(
+            mismatchedRequest,
+            fixture.Decision,
+            fixture.Plan,
+            fixture.Capture.Metadata);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => CreateExtractor().Extract(capture));
     }
 
 

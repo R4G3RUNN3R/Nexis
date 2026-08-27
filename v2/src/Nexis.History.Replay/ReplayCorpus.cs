@@ -380,6 +380,7 @@ public sealed class ReplayCorpusExtractor
         var request = capture.Request;
         var trace = capture.Plan.Trace;
         if (trace.Identity.CommandId != request.Context.CommandId ||
+            trace.CorrelationId != request.Context.CorrelationId ||
             trace.Identity.IntentContract != request.Intent.Contract ||
             trace.Identity.Actor != CommandActorBinding.From(request.Context.Actor) ||
             trace.CoreContractVersion != request.ContractVersion ||
