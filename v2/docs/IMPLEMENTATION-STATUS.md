@@ -146,7 +146,7 @@ On `new-voidsmith`, checkpoint `ec9239a` additionally passed restore and a Debug
 
 The Player Log finishing review independently reran the required workflow from `v2/` with .NET SDK 10.0.111: restore passed; Debug build passed with **0 warnings, 0 errors**; the full solution reported **154 total, 126 passed, 28 skipped, 0 failed**. All 28 skips are PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is absent; this review created or used no database. The Player Log/History in-memory and architecture tests are included in the 126 passing tests.
 
-The replay corpus slice independently reran the required workflow from `v2/` with .NET SDK 10.0.111: restore passed; Release build passed with **0 warnings, 0 errors**; the focused architecture/Core/security/replay suite passed **134/134**; the full solution reported **162 total, 134 passed, 28 skipped, 0 failed**. All 28 skips are PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is absent. No credentials were invented and no database or production source was accessed.
+The replay corpus repair independently reran the required workflow from repository root with .NET SDK 10.0.111: Release build passed with **0 warnings, 0 errors**; the complete Architecture/Core/security/replay executable passed **140/140**; and the separate PostgreSQL integration executable reported **28 total, 0 passed, 28 skipped, 0 failed**. Across both executables, **168 tests were discovered: 140 passed and 28 skipped**. All skips are because `NEXIS_TEST_POSTGRES_CONNECTION` is absent. No credentials were invented and no database or production source was accessed.
 
 
 The reference Core implementation version remains `0.5.0-foundation`; the stable Core contract remains V1.

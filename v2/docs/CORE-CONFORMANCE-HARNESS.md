@@ -91,4 +91,4 @@ Do not use the conformance harness as permission to begin broad gameplay impleme
 
 ## Verification status
 
-The replay-corpus slice passed restore, a Release build with zero warnings/errors, the 134-test architecture/Core/security/replay suite and the full solution run on .NET SDK 10.0.111. The full run reported 162 total, 134 passed, 28 PostgreSQL integration tests skipped for the absent `NEXIS_TEST_POSTGRES_CONNECTION`, and zero failures.
+The replay-corpus repair passed a Release build with zero warnings/errors and the complete 140-test Architecture/Core/security/replay executable on .NET SDK 10.0.111. The separate PostgreSQL integration executable reported 28 total, 28 skipped for the absent `NEXIS_TEST_POSTGRES_CONNECTION`, and zero failures. Across both executables, 168 tests were discovered: 140 passed and 28 skipped.

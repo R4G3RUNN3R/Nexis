@@ -144,6 +144,7 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             decision,
             committedEvents);
 
+        ValidateReviewedTokens(document);
         return JsonSerializer.Serialize(document, JsonOptions);
     }
 
@@ -339,14 +340,15 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
         }
     }
 
-    private static void ValidateSafeToken(string value, string field)
+    private static void ValidateSafeToken(string value, string field, int maximumLength = 200)
     {
-        if (value.Length > 200 ||
+        if (string.IsNullOrEmpty(value) ||
+            value.Length > maximumLength ||
             value.Any(static character =>
                 !(char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' or ':' or '/')))
         {
             throw new InvalidOperationException(
-                $"Replay {field} contains characters outside the reviewed normalized identifier vocabulary.");
+                $"Replay {field} is outside the reviewed normalized identifier vocabulary or length.");
         }
     }
 
@@ -495,6 +497,8 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
     {
         try
         {
+            ValidateReviewedTokens(document);
+            ValidateCanonicalValues(document);
             var metadata = new ReplayCaptureMetadata(
                 document.ProvenanceKind,
                 ReplaySourceFingerprint.Parse(document.SourceFingerprint),
@@ -574,6 +578,7 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
                 new[] { content });
 
             var decision = ValidateDecision(document.Decision);
+            ValidateRetainedRelations(document);
             var completedAtUtc = ParseUtc(document.Execution.CompletedAtUtc);
             var terminalOutcome = document.Execution.TerminalStatus == CommandTerminalStatus.Succeeded
                 ? CommandTerminalOutcome.Succeeded(completedAtUtc)
@@ -612,6 +617,268 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             throw new FormatException("Replay corpus artifact violates the reviewed Equip Item domain invariants.", exception);
         }
     }
+
+    private static void ValidateReviewedTokens(EquipReplayDocument document)
+    {
+        ValidateSafeToken(document.IntentContract.Name, "intent contract");
+        ValidateSafeToken(document.Execution.CoreImplementationName, "Core implementation name");
+        ValidateSafeToken(document.Execution.CoreImplementationVersion, "Core implementation version");
+        ValidateSafeToken(document.Execution.RuleVersion, "rule version");
+        ValidateSafeToken(document.Execution.ContentVersion, "content version");
+        if (document.Execution.TerminalReason is not null)
+        {
+            ValidateSafeToken(document.Execution.TerminalReason, "terminal reason");
+        }
+
+        ValidateSafeToken(document.Intent.Placement, "intent placement", 64);
+        var expectedDefinitionContract = new ContractDocument(
+            EquippableItemDefinition.ContractDescriptor.Name,
+            EquippableItemDefinition.ContractDescriptor.SchemaVersion);
+        foreach (var item in document.Inventory.Items)
+        {
+            ValidateSafeToken(item.DefinitionContract.Name, "definition contract");
+            ValidateSafeToken(item.DefinitionId, "content definition");
+            if (item.DefinitionContract != expectedDefinitionContract)
+            {
+                throw new InvalidOperationException("Equip Item replay inventory uses an unexpected definition contract.");
+            }
+        }
+
+        foreach (var binding in document.Equipment.Bindings)
+        {
+            ValidateSafeToken(binding.Placement, "equipment placement", 64);
+            foreach (var slot in binding.OccupiedSlots)
+            {
+                ValidateSafeToken(slot, "equipment slot", 64);
+            }
+        }
+
+        ValidateSafeToken(document.Content.DefinitionId, "content definition");
+        foreach (var placement in document.Content.Placements)
+        {
+            ValidateSafeToken(placement.Placement, "content placement", 64);
+            foreach (var slot in placement.OccupiedSlots)
+            {
+                ValidateSafeToken(slot, "equipment slot", 64);
+            }
+        }
+
+        if (document.Decision.Reason is not null)
+        {
+            ValidateSafeToken(document.Decision.Reason, "decision reason");
+        }
+
+        foreach (var transition in document.Decision.Transitions)
+        {
+            ValidateSafeToken(transition.Placement, "transition placement", 64);
+            foreach (var slot in transition.OccupiedSlots)
+            {
+                ValidateSafeToken(slot, "equipment slot", 64);
+            }
+        }
+
+        foreach (var domainEvent in document.Decision.Events)
+        {
+            ValidateEventTokens(domainEvent);
+        }
+
+        var expectedEventContract = new ContractDocument(
+            ItemEquippedEvent.EventContract.Name,
+            ItemEquippedEvent.EventContract.SchemaVersion);
+        foreach (var committedEvent in document.CommittedEvents)
+        {
+            ValidateSafeToken(committedEvent.Contract.Name, "committed event contract");
+            if (committedEvent.Contract != expectedEventContract)
+            {
+                throw new InvalidOperationException("Equip Item replay committed event uses an unexpected contract.");
+            }
+
+            ValidateEventTokens(committedEvent.Event);
+        }
+    }
+
+    private static void ValidateEventTokens(EventDocument domainEvent)
+    {
+        ValidateSafeToken(domainEvent.Placement, "event placement", 64);
+        foreach (var slot in domainEvent.OccupiedSlots)
+        {
+            ValidateSafeToken(slot, "equipment slot", 64);
+        }
+    }
+
+    private static void ValidateCanonicalValues(EquipReplayDocument document)
+    {
+        RequireCanonical(
+            document.SourceFingerprint,
+            ReplaySourceFingerprint.Parse(document.SourceFingerprint).Value,
+            "source fingerprint");
+        RequireCanonical(document.CapturedAtUtc, FormatUtc(ParseUtc(document.CapturedAtUtc)), "capture timestamp");
+        RequireCanonical(
+            document.Execution.EvaluatedAtUtc,
+            FormatUtc(ParseUtc(document.Execution.EvaluatedAtUtc)),
+            "evaluation timestamp");
+        RequireCanonical(
+            document.Execution.CompletedAtUtc,
+            FormatUtc(ParseUtc(document.Execution.CompletedAtUtc)),
+            "completion timestamp");
+        foreach (var committedEvent in document.CommittedEvents)
+        {
+            RequireCanonical(
+                committedEvent.OccurredAtUtc,
+                FormatUtc(ParseUtc(committedEvent.OccurredAtUtc)),
+                "event timestamp");
+        }
+
+        ValidatePlacement(document.Intent.Placement);
+        foreach (var item in document.Inventory.Items)
+        {
+            ValidateDefinitionId(item.DefinitionId);
+        }
+
+        foreach (var binding in document.Equipment.Bindings)
+        {
+            ValidatePlacement(binding.Placement);
+            foreach (var slot in binding.OccupiedSlots)
+            {
+                ValidateSlot(slot);
+            }
+        }
+
+        ValidateDefinitionId(document.Content.DefinitionId);
+        foreach (var placement in document.Content.Placements)
+        {
+            ValidatePlacement(placement.Placement);
+            foreach (var slot in placement.OccupiedSlots)
+            {
+                ValidateSlot(slot);
+            }
+        }
+
+        foreach (var transition in document.Decision.Transitions)
+        {
+            ValidatePlacement(transition.Placement);
+            foreach (var slot in transition.OccupiedSlots)
+            {
+                ValidateSlot(slot);
+            }
+        }
+
+        foreach (var domainEvent in document.Decision.Events.Concat(
+            document.CommittedEvents.Select(static committedEvent => committedEvent.Event)))
+        {
+            ValidatePlacement(domainEvent.Placement);
+            foreach (var slot in domainEvent.OccupiedSlots)
+            {
+                ValidateSlot(slot);
+            }
+        }
+    }
+
+    private static void ValidateDefinitionId(string value) =>
+        RequireCanonical(value, new ContentDefinitionId(value).Value, "content definition identifier");
+
+    private static void ValidatePlacement(string value) =>
+        RequireCanonical(value, new EquipmentPlacementKey(value).Value, "equipment placement");
+
+    private static void ValidateSlot(string value) =>
+        RequireCanonical(value, new EquipmentSlotKey(value).Value, "equipment slot");
+
+    private static void RequireCanonical(string retained, string normalized, string field)
+    {
+        if (!StringComparer.Ordinal.Equals(retained, normalized))
+        {
+            throw new FormatException($"Replay {field} is not in canonical value form.");
+        }
+    }
+
+    private static void ValidateRetainedRelations(EquipReplayDocument document)
+    {
+        if (document.CommittedEvents.Any(committedEvent =>
+                committedEvent.CorrelationId != document.Execution.CorrelationId ||
+                !StringComparer.Ordinal.Equals(committedEvent.OccurredAtUtc, document.Execution.EvaluatedAtUtc) ||
+                committedEvent.CausationId.HasValue) ||
+            document.CommittedEvents.Select(static committedEvent => committedEvent.EventId).Distinct().Count() !=
+                document.CommittedEvents.Length)
+        {
+            throw new InvalidOperationException("Replay committed-event metadata contradicts the authoritative execution identity.");
+        }
+
+        var decisionEvents = document.Decision.Events
+            .Select(EventFingerprint)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var committedEvents = document.CommittedEvents
+            .Select(static committedEvent => EventFingerprint(committedEvent.Event))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (!decisionEvents.SequenceEqual(committedEvents, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException("Replay decision events and committed event evidence are inconsistent.");
+        }
+
+        if (document.Decision.Transitions.Any(transition =>
+                transition.CharacterId != document.Intent.CharacterId ||
+                transition.ItemInstanceId != document.Intent.ItemInstanceId ||
+                !StringComparer.Ordinal.Equals(transition.Placement, document.Intent.Placement)) ||
+            document.Decision.Events.Any(domainEvent =>
+                domainEvent.CharacterId != document.Intent.CharacterId ||
+                domainEvent.ItemInstanceId != document.Intent.ItemInstanceId ||
+                !StringComparer.Ordinal.Equals(domainEvent.Placement, document.Intent.Placement)))
+        {
+            throw new InvalidOperationException("Equip Item replay output identities contradict the retained intent and actor.");
+        }
+
+        if (document.Decision.Status != CoreOutcomeStatus.Succeeded)
+        {
+            return;
+        }
+
+        if (document.Decision.Transitions.Length != 1 ||
+            document.Decision.Events.Length != 1 ||
+            document.CommittedEvents.Length != 1)
+        {
+            throw new InvalidOperationException("Successful Equip Item replay decisions require one transition and one committed semantic event.");
+        }
+
+        var transition = document.Decision.Transitions[0];
+        var domainEvent = document.Decision.Events[0];
+        if (transition.CharacterId != document.Intent.CharacterId ||
+            transition.ItemInstanceId != document.Intent.ItemInstanceId ||
+            !StringComparer.Ordinal.Equals(transition.Placement, document.Intent.Placement) ||
+            transition.ExpectedRevision != document.Equipment.Revision ||
+            !EventMatchesTransition(domainEvent, transition))
+        {
+            throw new InvalidOperationException("Successful Equip Item replay output contradicts its intent or owner revision.");
+        }
+
+        var possessedItem = document.Inventory.Items.SingleOrDefault(item =>
+            item.ItemInstanceId == document.Intent.ItemInstanceId);
+        var placement = document.Content.Placements.SingleOrDefault(candidate =>
+            StringComparer.Ordinal.Equals(candidate.Placement, document.Intent.Placement));
+        if (document.Combat.IsInActiveCombat ||
+            possessedItem is null ||
+            possessedItem.DefinitionContract != new ContractDocument(
+                EquippableItemDefinition.ContractDescriptor.Name,
+                EquippableItemDefinition.ContractDescriptor.SchemaVersion) ||
+            !StringComparer.Ordinal.Equals(possessedItem.DefinitionId, document.Content.DefinitionId) ||
+            placement is null ||
+            !transition.OccupiedSlots.SequenceEqual(placement.OccupiedSlots, StringComparer.Ordinal) ||
+            document.Equipment.Bindings.Any(binding =>
+                binding.ItemInstanceId == document.Intent.ItemInstanceId ||
+                binding.OccupiedSlots.Intersect(placement.OccupiedSlots, StringComparer.Ordinal).Any()))
+        {
+            throw new InvalidOperationException("Retained owner snapshots and content cannot support the successful Equip Item decision.");
+        }
+    }
+
+    private static bool EventMatchesTransition(EventDocument domainEvent, TransitionDocument transition) =>
+        domainEvent.CharacterId == transition.CharacterId &&
+        domainEvent.ItemInstanceId == transition.ItemInstanceId &&
+        StringComparer.Ordinal.Equals(domainEvent.Placement, transition.Placement) &&
+        domainEvent.OccupiedSlots.SequenceEqual(transition.OccupiedSlots, StringComparer.Ordinal);
+
+    private static string EventFingerprint(EventDocument domainEvent) =>
+        JsonSerializer.Serialize(domainEvent, JsonOptions);
 
     private static CoreDecision ValidateDecision(DecisionDocument document)
     {

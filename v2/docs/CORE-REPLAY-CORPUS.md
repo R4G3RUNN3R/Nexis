@@ -72,6 +72,6 @@ No production source was accessed and no real production artifact was harvested 
 
 ## Current coverage and extension rule
 
-Executable coverage proves normalization, version/provenance/tag retention, keyed pseudonymization, secret/RNG exclusion, strict-schema rejection, deterministic replay, input-order canonicalization, immutable retention, tamper detection and architecture isolation.
+Executable coverage proves normalization, version/provenance/tag retention, keyed pseudonymization, secret/RNG exclusion, strict-schema rejection, cross-field ingest consistency, canonical value spellings, bounded reviewed token vocabularies, deterministic replay, input-order and byte canonicalization, immutable retention, tamper detection and architecture isolation.
 
 Only `EquipItem` schema V1 is registered. A later command schema must add a focused typed codec and adversarial privacy/determinism tests. It must not weaken the fail-closed registry, introduce a generic payload serializer or expose restricted data to make corpus ingestion convenient.

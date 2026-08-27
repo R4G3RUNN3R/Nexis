@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nexis.Combat.Contracts;
 using Nexis.Content.Contracts;
@@ -154,6 +156,130 @@ public sealed class ReplayCorpusTests
             Assert.ThrowsExactly<FormatException>(() => ReplayCorpusArtifact.Parse(invalidArtifact));
         }
     }
+
+    [TestMethod]
+    public async Task ArtifactIngest_RejectsCrossFieldInconsistenciesAndStoreFailsClosed()
+    {
+        var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Exploit).Capture);
+        var invalidArtifacts = new[]
+        {
+            MutateArtifact(artifact, root =>
+                root["committedEvents"]!.AsArray()[0]!["correlationId"] = Guid.NewGuid()),
+            MutateArtifact(artifact, root =>
+                root["decision"]!["events"]!.AsArray()[0]!["placement"] = "off-hand"),
+            MutateArtifact(artifact, root =>
+                root["decision"]!["transitions"]!.AsArray()[0]!["characterId"] = Guid.NewGuid()),
+            MutateArtifact(artifact, root =>
+            {
+                root["decision"]!["transitions"] = new JsonArray();
+                root["decision"]!["events"] = new JsonArray();
+            }),
+            MutateArtifact(artifact, root => root["inventory"]!["items"] = new JsonArray())
+        };
+
+        foreach (var invalidArtifact in invalidArtifacts)
+        {
+            Assert.ThrowsExactly<FormatException>(() => ReplayCorpusArtifact.Parse(invalidArtifact));
+        }
+
+        var retainedInvalid = invalidArtifacts[0];
+        var scenarioId = ReplayScenarioId.Parse(
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(retainedInvalid))).ToLowerInvariant());
+        var directory = Path.Combine(Path.GetTempPath(), $"nexis-replay-invalid-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new FileReplayCorpusStore(directory);
+            await File.WriteAllTextAsync(store.GetArtifactPath(scenarioId), retainedInvalid);
+
+            await Assert.ThrowsExactlyAsync<InvalidDataException>(async () => await store.ReadAsync(scenarioId));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void ArtifactParser_RejectsNonCanonicalValueSpellings()
+    {
+        var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Exploit).Capture);
+        var invalidArtifacts = new[]
+        {
+            MutateArtifact(artifact, root =>
+                root["sourceFingerprint"] = root["sourceFingerprint"]!.GetValue<string>().ToUpperInvariant()),
+            MutateArtifact(artifact, root => MutatePlacement(root, "MAIN-HAND")),
+            MutateArtifact(artifact, root => MutateSlots(root, " MAIN-HAND ")),
+            MutateArtifact(artifact, root =>
+            {
+                root["inventory"]!["items"]!.AsArray()[0]!["definitionId"] = " iron-sword ";
+                root["content"]!["definitionId"] = " iron-sword ";
+            }),
+            MutateArtifact(artifact, root =>
+            {
+                root["capturedAtUtc"] = "2026-08-27T09:00:00.0000000Z";
+                root["execution"]!["evaluatedAtUtc"] = "2026-08-26T10:00:00.0000000Z";
+                root["execution"]!["completedAtUtc"] = "2026-08-26T10:00:01.0000000Z";
+                root["committedEvents"]!.AsArray()[0]!["occurredAtUtc"] = "2026-08-26T10:00:00.0000000Z";
+            })
+        };
+
+        foreach (var invalidArtifact in invalidArtifacts)
+        {
+            Assert.ThrowsExactly<FormatException>(() => ReplayCorpusArtifact.Parse(invalidArtifact));
+        }
+    }
+
+    [TestMethod]
+    public void ArtifactParser_RejectsUnreviewedRetainedTokensAndContractNames()
+    {
+        var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Exploit).Capture);
+        var oversized = new string('a', 201);
+        var invalidArtifacts = new[]
+        {
+            MutateArtifact(artifact, root => root["execution"]!["ruleVersion"] = "private operator notes"),
+            MutateArtifact(artifact, root => root["execution"]!["contentVersion"] = oversized),
+            MutateArtifact(artifact, root => root["execution"]!["coreImplementationName"] = "unreviewed core name"),
+            MutateArtifact(artifact, root => root["execution"]!["coreImplementationVersion"] = oversized),
+            MutateArtifact(artifact, root => MutateFailureReason(root, "private terminal notes")),
+            MutateArtifact(artifact, root => MutateFailureReason(root, oversized)),
+            MutateArtifact(artifact, root =>
+            {
+                root["inventory"]!["items"]!.AsArray()[0]!["definitionId"] = "iron sword";
+                root["content"]!["definitionId"] = "iron sword";
+            }),
+            MutateArtifact(artifact, root => MutatePlacement(root, "main hand")),
+            MutateArtifact(artifact, root => MutateSlots(root, "main hand")),
+            MutateArtifact(artifact, root =>
+                root["inventory"]!["items"]!.AsArray()[0]!["definitionContract"]!["name"] =
+                    "nexis.items.unreviewed-definition")
+        };
+
+        foreach (var invalidArtifact in invalidArtifacts)
+        {
+            Assert.ThrowsExactly<FormatException>(() => ReplayCorpusArtifact.Parse(invalidArtifact));
+        }
+    }
+
+    [TestMethod]
+    public void EncodeParseDecodeAndJsonReencode_IsByteStable()
+    {
+        var fixture = CreateFixture(ReplayScenarioTag.Ordinary);
+        var artifact = CreateExtractor().Extract(fixture.Capture);
+        var parsed = ReplayCorpusArtifact.Parse(artifact.CanonicalJson);
+        var codec = new EquipItemReplayScenarioCodec();
+
+        var scenario = codec.Decode(parsed.CanonicalJson, new FixedRandomResolver(fixture.RandomReference));
+        var reencoded = JsonNode.Parse(parsed.CanonicalJson)!.ToJsonString();
+        var reparsed = ReplayCorpusArtifact.Parse(reencoded);
+
+        Assert.AreEqual(artifact.CanonicalJson, reencoded);
+        Assert.AreEqual(artifact.ScenarioId, reparsed.ScenarioId);
+        Assert.AreEqual(
+            scenario.ExpectedDecisionFingerprint,
+            codec.DecisionFingerprint(new CoreRulesEngine().Evaluate(scenario.Request)));
+    }
+
     [TestMethod]
     public void Extract_RejectsCodecThatAttemptsCompletenessPayloadBypass()
     {
@@ -276,6 +402,48 @@ public sealed class ReplayCorpusTests
         new(
             new[] { new EquipItemReplayScenarioCodec() },
             ReplayPseudonymizationKey.FromBytes(Encoding.UTF8.GetBytes("test-only-pseudonymization-key-material")));
+
+    private static void MutateFailureReason(JsonObject root, string value)
+    {
+        root["execution"]!["terminalStatus"] = "rejected";
+        root["execution"]!["terminalReason"] = value;
+        root["decision"]!["status"] = "rejected";
+        root["decision"]!["reason"] = value;
+        root["decision"]!["transitions"] = new JsonArray();
+        root["decision"]!["events"] = new JsonArray();
+        root["committedEvents"] = new JsonArray();
+    }
+
+    private static void MutatePlacement(JsonObject root, string value)
+    {
+        root["intent"]!["placement"] = value;
+        root["content"]!["placements"]!.AsArray()[0]!["placement"] = value;
+        root["decision"]!["transitions"]!.AsArray()[0]!["placement"] = value;
+        root["decision"]!["events"]!.AsArray()[0]!["placement"] = value;
+        root["committedEvents"]!.AsArray()[0]!["event"]!["placement"] = value;
+    }
+
+    private static void MutateSlots(JsonObject root, string value)
+    {
+        root["content"]!["placements"]!.AsArray()[0]!["occupiedSlots"] =
+            new JsonArray(JsonValue.Create(value));
+        root["decision"]!["transitions"]!.AsArray()[0]!["occupiedSlots"] =
+            new JsonArray(JsonValue.Create(value));
+        root["decision"]!["events"]!.AsArray()[0]!["occupiedSlots"] =
+            new JsonArray(JsonValue.Create(value));
+        root["committedEvents"]!.AsArray()[0]!["event"]!["occupiedSlots"] =
+            new JsonArray(JsonValue.Create(value));
+    }
+
+    private static string MutateArtifact(
+        ReplayCorpusArtifact artifact,
+        Action<JsonObject> mutation)
+    {
+        var root = JsonNode.Parse(artifact.CanonicalJson)?.AsObject()
+            ?? throw new InvalidOperationException("Replay fixture must contain a JSON object.");
+        mutation(root);
+        return root.ToJsonString();
+    }
 
     private static Fixture CreateFixture(params ReplayScenarioTag[] tags)
     {

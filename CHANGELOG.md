@@ -2,6 +2,14 @@
 
 ## 2026-08-27
 
+### Nexis 2.0 replay corpus independent-review repair
+- hardened untrusted Equip Item replay ingestion so execution/committed-event identities, decision versus committed evidence, output intent identities, and successful owner/content prerequisites are re-established before artifacts are retained or replayed
+- reject normalization-changing source fingerprints, UTC timestamp spellings, definition IDs, placements and slots so semantically identical values cannot acquire different content-addressed scenario IDs
+- apply the reviewed identifier vocabulary and length limits to retained Core/rule/content versions, reasons, definition IDs, placements, slots and contract names; Equip Item artifacts now allow only the registered equippable-definition and item-equipped contracts
+- added adversarial parse and fail-closed file-store regressions plus encode -> parse -> decode/re-encode byte-stability coverage under strict TDD RED -> GREEN
+- verification: Release build passed with 0 warnings/0 errors; replay tests passed 14/14; complete Architecture executable passed 140/140; PostgreSQL integration executable reported 28/28 skipped because `NEXIS_TEST_POSTGRES_CONNECTION` is absent
+- no production access, deployment, push, merge, v1, migration, Education or Web changes were performed
+
 ### Nexis 2.0 production-derived replay corpus boundary
 - added `Nexis.History.Replay` as an internal, replaceable replay extraction/execution/retention assembly that consumes existing typed Core request/decision and authoritative command trace/event contracts without introducing a second gameplay execution model
 - added versioned canonical JSON artifacts with SHA-256 content-addressed scenario identity, production/human/automated/synthetic provenance, ordinary/known-bug/exploit/concurrency/high-value tags, persistence outcome and evaluation timing
