@@ -20,6 +20,7 @@
     <Project Path="src/Nexis.Eventing.Contracts/Nexis.Eventing.Contracts.csproj" />
     <Project Path="src/Nexis.History.Contracts/Nexis.History.Contracts.csproj" />
     <Project Path="src/Nexis.History.Projection/Nexis.History.Projection.csproj" />
+    <Project Path="src/Nexis.History.Replay/Nexis.History.Replay.csproj" />
     <Project Path="src/Nexis.Persistence.Postgres/Nexis.Persistence.Postgres.csproj" />
     <Project Path="src/Nexis.Host.Api/Nexis.Host.Api.csproj" />
   </Folder>

@@ -23,5 +23,6 @@
     <ProjectReference Include="..\..\src\Nexis.Eventing.Contracts\Nexis.Eventing.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.History.Contracts\Nexis.History.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.History.Projection\Nexis.History.Projection.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.History.Replay\Nexis.History.Replay.csproj" />
   </ItemGroup>
 </Project>

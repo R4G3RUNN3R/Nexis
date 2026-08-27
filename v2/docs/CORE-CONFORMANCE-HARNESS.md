@@ -58,7 +58,7 @@ The initial harness supports two useful foundation checks:
 
 This is intentionally small. As real gameplay contracts arrive, the harness should grow scenario packs for rule domains rather than growing one universal test object.
 
-Future production-derived replay should extend the same model with persisted scenario manifests, checksums, provenance, transition/event details, timing telemetry and intentional rule-version divergence classification defined by `CORE-ARCHITECTURE.md` and `CORE-RELEASE-GATE.md`.
+The production-derived replay boundary now extends this model with versioned content-addressed artifacts, provenance/tags, normalized typed inputs and decisions, transition/event metadata, timing, privacy filtering and restricted RNG references. `CORE-REPLAY-CORPUS.md` records the implemented V1 boundary. Intentional rule-version divergence classification and broader domain corpus packs remain future release-harness work defined by `CORE-ARCHITECTURE.md` and `CORE-RELEASE-GATE.md`.
 
 ## Foundation coverage
 
@@ -85,10 +85,10 @@ After this harness is build-verified, continue in this order unless a newer appr
 4. selected Core rule dispatch/evaluator structure behind `ICoreRulesEngine`;
 5. first real golden rule pack using typed domain contracts;
 6. command/application integration and one atomic multi-owner vertical proof;
-7. production replay manifest/storage tooling after event/history persistence exists.
+7. production replay manifest/storage tooling after event/history persistence exists. **Implemented for the Equip Item V1 foundation boundary; later rule schemas require explicit privacy-reviewed codecs.**
 
 Do not use the conformance harness as permission to begin broad gameplay implementation before the stop conditions in `AGENT-HANDOFF.md` are satisfied.
 
 ## Verification status
 
-The files in this slice require `dotnet restore`, build with warnings as errors, and test execution on a .NET 10 environment before the branch can be described as green. Static review is useful but is not substitute evidence.
+The replay-corpus slice passed restore, a Release build with zero warnings/errors, the 134-test architecture/Core/security/replay suite and the full solution run on .NET SDK 10.0.111. The full run reported 162 total, 134 passed, 28 PostgreSQL integration tests skipped for the absent `NEXIS_TEST_POSTGRES_CONNECTION`, and zero failures.

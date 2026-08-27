@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-08-27
+
+### Nexis 2.0 production-derived replay corpus boundary
+- added `Nexis.History.Replay` as an internal, replaceable replay extraction/execution/retention assembly that consumes existing typed Core request/decision and authoritative command trace/event contracts without introducing a second gameplay execution model
+- added versioned canonical JSON artifacts with SHA-256 content-addressed scenario identity, production/human/automated/synthetic provenance, ordinary/known-bug/exploit/concurrency/high-value tags, persistence outcome and evaluation timing
+- retained existing CommandId, original CorrelationId, EventId/causation, canonical payload fingerprint, Core implementation/contract, rule/content versions and authoritative UTC times
+- added the first explicit privacy-reviewed codec for Equip Item V1; private AccountId/CharacterId/ItemInstanceId values are keyed-pseudonymized while raw command JSON, capabilities, entitlements, security version, credentials, arbitrary metadata and unrestricted RNG material are structurally excluded
+- represented deterministic RNG only through an opaque restricted reference resolved at replay time; replay invokes compatible `ICoreRulesEngine` implementations without owner persistence or authoritative event emission
+- added immutable filesystem retention with duplicate recognition plus content/filename/collision/tamper detection; strict typed deserialization rejects unknown fields at every envelope level
+- kept replay corpus independent of Player Log, Admin Audit, PostgreSQL, HTTP/frontend types, concrete Core and production infrastructure
+- strict TDD RED evidence: the initial focused run failed because the replay project/types did not exist; a later self-review RED run failed both missing payload-fingerprint retention and acceptance of an injected credential field before the parser was hardened
+- verification from `v2/`: .NET SDK 10.0.111; restore passed; Release build passed with 0 warnings/0 errors; focused architecture/Core/security/replay suite passed 134/134; full solution passed 162 total, 134 succeeded, 28 skipped, 0 failed
+- all 28 skips are the existing PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is absent; no credentials were invented and no database, production source, live state, deployment, push or merge was used
+- added `v2/docs/CORE-REPLAY-CORPUS.md` and reconciled conformance/status truth; only Equip Item V1 is registered, and authorized offline production export/selection can now populate permanent corpus packs
+- player impact: none; this is isolated V2 Core/Foundation regression evidence infrastructure
+- remaining foundation work includes migration/reconciliation tooling, a real multi-owner gameplay write proof, operational observability, Staff/Admin policy integration and final threat-model/stop-condition review
+
+
 ## 2026-08-26
 
 ### Nexis 2.0 Player Log / history projection boundary

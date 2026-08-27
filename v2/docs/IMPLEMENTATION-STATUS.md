@@ -1,6 +1,6 @@
 # Nexis 2.0 Foundation Implementation Status
 
-_Status: rolling implementation checkpoint, updated 2026-08-26. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
+_Status: rolling implementation checkpoint, updated 2026-08-27. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
 
 ## Current branch
 
@@ -21,6 +21,7 @@ The V2 branch now contains and has executable coverage for:
 - deterministic Core evaluation inputs: authoritative UTC time, rule/content versions and replay-safe RNG factories;
 - exact integer/rational arithmetic with explicit rounding and checked overflow;
 - golden/conformance comparison for baseline and replacement Core implementations;
+- versioned, provenance-tagged and content-addressed replay-corpus extraction/retention for the typed Equip Item V1 vertical, with keyed identity pseudonymization, restricted RNG references and deterministic Core re-execution;
 - CommandId idempotency receipts, canonical payload fingerprints, original-correlation retention and duplicate/integrity-violation handling;
 - canonical command codecs and durable crash-recovery payload rehydration without runtime type metadata;
 - atomic command commit plans covering owner transitions, terminal command outcome, authoritative history, outbox and state-changing Admin audit;
@@ -90,6 +91,26 @@ The current slice proves:
 
 The slice adds no Player Log persistence, query API, runtime consumer registration or authoritative mutation path. `PLAYER-LOG-BOUNDARY.md` is the focused contract record.
 
+## Core replay corpus proof
+
+The internal replay corpus is now separate from Player Log and has an executable first typed scenario boundary.
+
+The current slice proves:
+
+1. historical `CoreEvaluationRequest`, `CoreDecision` and `CommandCommitPlan` facts are cross-validated before extraction;
+2. the existing CommandId, original CorrelationId, EventId/causation, canonical payload fingerprint, authoritative UTC time and Core/rule/content versions are retained;
+3. AccountId, CharacterId and ItemInstanceId are keyed-pseudonymized while rule-required equality relationships survive;
+4. raw command JSON, actor capabilities/entitlements/security version, raw RNG material, credentials and arbitrary extra fields cannot enter the artifact;
+5. restricted deterministic RNG is represented only by an opaque resolver reference and is supplied to Core at replay time;
+6. ordinary, known-bug, exploit, concurrency and high-value cases use typed canonical tags and provenance;
+7. semantically unordered typed inputs normalize to one SHA-256 content-addressed scenario;
+8. a compatible `ICoreRulesEngine` can replay the artifact without owner persistence or authoritative effects;
+9. immutable file retention deduplicates identical cases and detects tampering/collision;
+10. unknown intent schemas fail closed until an explicit privacy-reviewed codec is added.
+
+Only Equip Item schema V1 is registered. No production source was accessed and no real production record was harvested in this repository slice. Authorized offline production export/selection may now populate permanent corpus packs without granting live-database access. `CORE-REPLAY-CORPUS.md` is the focused boundary record.
+
+
 ## Current verification evidence
 
 Checkpoint `4de3b830c19c5659c042aa342d86e3361a0c05a7` passed the complete V2 workflow against disposable PostgreSQL 18.6 after the automated-authority/bypass changes:
@@ -125,6 +146,9 @@ On `new-voidsmith`, checkpoint `ec9239a` additionally passed restore and a Debug
 
 The Player Log finishing review independently reran the required workflow from `v2/` with .NET SDK 10.0.111: restore passed; Debug build passed with **0 warnings, 0 errors**; the full solution reported **154 total, 126 passed, 28 skipped, 0 failed**. All 28 skips are PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is absent; this review created or used no database. The Player Log/History in-memory and architecture tests are included in the 126 passing tests.
 
+The replay corpus slice independently reran the required workflow from `v2/` with .NET SDK 10.0.111: restore passed; Release build passed with **0 warnings, 0 errors**; the focused architecture/Core/security/replay suite passed **134/134**; the full solution reported **162 total, 134 passed, 28 skipped, 0 failed**. All 28 skips are PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is absent. No credentials were invented and no database or production source was accessed.
+
+
 The reference Core implementation version remains `0.5.0-foundation`; the stable Core contract remains V1.
 
 ## Foundation work still incomplete
@@ -132,17 +156,16 @@ The reference Core implementation version remains `0.5.0-foundation`; the stable
 The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
 
 1. integration of the verified Identity capability policy into concrete Staff/Admin command entrypoints as those commands are introduced;
-2. production replay-corpus extraction/retention so real historical commands and known exploit/bug cases become permanent Core regression scenarios;
-3. migration/reconciliation tooling before any v1-to-v2 state movement;
-4. additional real owner-specific multi-owner gameplay proof where a legitimate rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
-5. observability/operational readiness around recovery workers, outbox workers, poison events, retry exhaustion and invariant failures;
-6. final threat-model/security review and the wider foundation stop-condition audit before broad gameplay implementation.
+2. migration/reconciliation tooling before any v1-to-v2 state movement;
+3. additional real owner-specific multi-owner gameplay proof where a legitimate rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
+4. observability/operational readiness around recovery workers, outbox workers, poison events, retry exhaustion and invariant failures;
+5. final threat-model/security review and the wider foundation stop-condition audit before broad gameplay implementation.
 
 Exact owner/domain contracts should continue to be introduced only when the corresponding gameplay design is sufficiently settled. Do not create generic state bags merely to make the architecture look more complete.
 
 ## Next safe implementation boundary
 
-The Player Log/history projection visibility boundary is now implemented and adversarially covered. The next safe foundation slice is **production replay-corpus extraction and retention**, using existing typed command/event/trace contracts so real historical commands and known exploit/bug cases can become permanent Core regression scenarios. This boundary must preserve privacy and restricted RNG/security data, and it does not authorize new gameplay rules or world/lore design. Concrete Staff/Admin command entrypoints must still consume the verified Identity policy when introduced.
+The typed replay-corpus extraction/retention boundary is now implemented and adversarially covered. The next safe foundation slice is **migration/reconciliation tooling before any v1-to-v2 state movement**, using read-only v1 exports, versioned manifests/checksums and explicit owner-specific transforms. It does not authorize live source access or mutation, gameplay fan-out, generic migration buckets or canon changes. Concrete Staff/Admin command entrypoints must still consume the verified Identity policy when introduced.
 
 ## Verification discipline
 
