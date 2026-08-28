@@ -1,4 +1,13 @@
 # Changelog
+## 2026-08-28
+
+### Nexis 2.0 privileged command-entry authorization boundary
+- added a stable Identity authorization-policy interface and reusable Execution entry authorizer for future real Admin commands without introducing fake admin gameplay
+- bind successful privileged entry to the trusted acting staff AccountId separately from the target AccountId so downstream atomic Admin Audit cannot substitute the target as actor
+- reject role-ordinal inference, commercial entitlement or actor-carried capability claims, Character identity, stale security state, target-security substitution, implicit grants and explicit-deny bypass at the command-entry boundary
+- strict TDD RED evidence: the focused boundary test project failed because the privileged entry authorizer/contracts did not exist; GREEN passed 7/7 after the minimum implementation
+- verification: Release build passed with 0 warnings/0 errors; complete Architecture/Core/execution/security/replay executable passed 153/153
+- C3 remains design-blocked: Equip Item legitimately writes Equipment only, and no second real owner mutation is specified without inventing an unapproved cost, reward, reservation or duplicate ownership fact
 
 ## 2026-08-27
 

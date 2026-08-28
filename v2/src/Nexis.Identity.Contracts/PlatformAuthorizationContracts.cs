@@ -10,6 +10,14 @@ public enum PlatformAuthorizationOutcome
     CapabilityMissing = 5
 }
 
+public interface IPlatformAuthorizationPolicy
+{
+    PlatformAuthorizationDecision Authorize(
+        TrustedActorContext actor,
+        IdentitySecuritySnapshot currentSecurity,
+        PlatformCapabilityKey requiredCapability);
+}
+
 public sealed record PlatformAuthorizationDecision(
     PlatformAuthorizationOutcome Outcome,
     PlatformCapabilityKey RequiredCapability)

@@ -38,7 +38,8 @@ The V2 branch now contains and has executable coverage for:
 - canonical value-equal `EquipmentSlotSet`, preventing replay/conformance divergence caused by collection reference identity;
 - narrow `IAutomatedCommandGateway`/`AutomatedCommandRequest` contracts allowing automated components to submit only a System principal, CommandId, CorrelationId and typed Core intent;
 - executable architecture guards preventing future `Nexis.Ciel*` and `Nexis.Scheduling*` projects from directly referencing concrete Core, concrete Execution, Execution internals, PostgreSQL or owner implementation modules;
-- executable Identity capability policy derived from current server security facts with exact capability checks, explicit-deny precedence, account binding and security-version freshness; role ordinals and commercial entitlements cannot grant platform authority.
+- executable Identity capability policy derived from current server security facts with exact capability checks, explicit-deny precedence, account binding and security-version freshness; role ordinals and commercial entitlements cannot grant platform authority;
+- reusable privileged command-entry authorization contracts/implementation that consume current Identity policy facts and preserve the trusted acting staff AccountId separately from the target identity for downstream atomic Admin Audit.
 
 ## First real gameplay vertical proof
 
@@ -148,6 +149,10 @@ The Player Log finishing review independently reran the required workflow from `
 
 The replay corpus repair independently reran the required workflow from repository root with .NET SDK 10.0.111: Release build passed with **0 warnings, 0 errors**; the complete Architecture/Core/security/replay executable passed **140/140**; and the separate PostgreSQL integration executable reported **28 total, 0 passed, 28 skipped, 0 failed**. Across both executables, **168 tests were discovered: 140 passed and 28 skipped**. All skips are because `NEXIS_TEST_POSTGRES_CONNECTION` is absent. No credentials were invented and no database or production source was accessed.
 
+Checkpoint `14d7a46edeb6258ec865e8609f56e07a646b6a59` completed the remaining replay evidence hardening and passed a Release build with **0 warnings, 0 errors**, the complete Architecture/Core/execution/security/replay executable with **146/146**, and the disposable PostgreSQL 18.6 integration executable with **28/28** and no skips.
+
+The subsequent privileged-entry RED/GREEN slice passed a Release build with **0 warnings, 0 errors** and the complete Architecture/Core/execution/security/replay executable with **153/153**. The reusable boundary denies ordinal-role, entitlement, Character, stale-security, target-substitution, implicit-grant and explicit-deny bypasses while retaining the real acting staff AccountId only after authorization.
+
 
 The reference Core implementation version remains `0.5.0-foundation`; the stable Core contract remains V1.
 
@@ -155,17 +160,18 @@ The reference Core implementation version remains `0.5.0-foundation`; the stable
 
 The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
 
-1. integration of the verified Identity capability policy into concrete Staff/Admin command entrypoints as those commands are introduced;
-2. migration/reconciliation tooling before any v1-to-v2 state movement;
-3. additional real owner-specific multi-owner gameplay proof where a legitimate rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
-4. observability/operational readiness around recovery workers, outbox workers, poison events, retry exhaustion and invariant failures;
-5. final threat-model/security review and the wider foundation stop-condition audit before broad gameplay implementation.
+1. migration/reconciliation tooling before any v1-to-v2 state movement, still gated by unresolved human decisions;
+2. additional real owner-specific multi-owner gameplay proof where a legitimate approved rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
+3. observability/operational readiness around recovery workers, outbox workers, poison events, retry exhaustion and invariant failures;
+4. final threat-model/security review and the wider foundation stop-condition audit before broad gameplay implementation.
+
+The real multi-owner proof cannot currently proceed without inventing mechanics. `EquipItem` legitimately writes only Equipment while Inventory, Combat and Content are read-only prerequisites. No implemented Economy, Marketplace, Education, Resources or other gameplay transition contract supplies a second legitimate owner write, and creating a no-op Inventory transition or unapproved cost/reward/reservation would violate the ownership and research-before-canon rules.
 
 Exact owner/domain contracts should continue to be introduced only when the corresponding gameplay design is sufficiently settled. Do not create generic state bags merely to make the architecture look more complete.
 
 ## Next safe implementation boundary
 
-The typed replay-corpus extraction/retention boundary is now implemented and adversarially covered. The next safe foundation slice is **migration/reconciliation tooling before any v1-to-v2 state movement**, using read-only v1 exports, versioned manifests/checksums and explicit owner-specific transforms. It does not authorize live source access or mutation, gameplay fan-out, generic migration buckets or canon changes. Concrete Staff/Admin command entrypoints must still consume the verified Identity policy when introduced.
+The typed replay-corpus extraction/retention and reusable privileged command-entry authorization boundaries are implemented and adversarially covered. The next safe foundation slice is platform-neutral operational observability for command recovery, fencing, outbox poison/failure, retry exhaustion, invariant/projection/replay failures and unexpected concurrency. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
 
 ## Verification discipline
 
