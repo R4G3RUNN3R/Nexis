@@ -37,6 +37,11 @@ public sealed class FileReplayCorpusStore
         {
             throw new InvalidDataException("Replay artifact failed content-address integrity verification.");
         }
+        if (System.Text.Encoding.UTF8.GetByteCount(artifact.CanonicalJson) >
+            ReplayCorpusArtifact.MaximumCanonicalJsonUtf8Bytes)
+        {
+            throw new InvalidDataException("Replay artifact exceeds the reviewed retention size limit.");
+        }
 
         var path = GetArtifactPath(artifact.ScenarioId);
         var temporaryPath = Path.Combine(
@@ -87,6 +92,12 @@ public sealed class FileReplayCorpusStore
     {
         ArgumentNullException.ThrowIfNull(scenarioId);
         var path = GetArtifactPath(scenarioId);
+        var file = new FileInfo(path);
+        if (file.Length > ReplayCorpusArtifact.MaximumCanonicalJsonUtf8Bytes)
+        {
+            throw new InvalidDataException("Retained replay artifact exceeds the reviewed ingestion size limit.");
+        }
+
         var canonicalJson = await File.ReadAllTextAsync(path, cancellationToken);
         ReplayCorpusArtifact artifact;
         try

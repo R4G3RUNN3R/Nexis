@@ -499,6 +499,15 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
         {
             ValidateReviewedTokens(document);
             ValidateCanonicalValues(document);
+            var chronologyCapturedAtUtc = ParseUtc(document.CapturedAtUtc);
+            var chronologyEvaluatedAtUtc = ParseUtc(document.Execution.EvaluatedAtUtc);
+            var chronologyCompletedAtUtc = ParseUtc(document.Execution.CompletedAtUtc);
+            if (chronologyCompletedAtUtc < chronologyEvaluatedAtUtc || chronologyCapturedAtUtc < chronologyCompletedAtUtc)
+            {
+                throw new InvalidOperationException(
+                    "Replay timestamps must preserve evaluation, completion, then capture chronology.");
+            }
+
             var metadata = new ReplayCaptureMetadata(
                 document.ProvenanceKind,
                 ReplaySourceFingerprint.Parse(document.SourceFingerprint),
@@ -580,6 +589,11 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             var decision = ValidateDecision(document.Decision);
             ValidateRetainedRelations(document);
             var completedAtUtc = ParseUtc(document.Execution.CompletedAtUtc);
+            if (document.Execution.TerminalStatus == CommandTerminalStatus.Succeeded &&
+                document.Execution.TerminalReason is not null)
+            {
+                throw new InvalidOperationException("Successful replay execution cannot retain a terminal failure reason.");
+            }
             var terminalOutcome = document.Execution.TerminalStatus == CommandTerminalStatus.Succeeded
                 ? CommandTerminalOutcome.Succeeded(completedAtUtc)
                 : CommandTerminalOutcome.Failed(
@@ -885,6 +899,9 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
 
     private static void ValidateRetainedRelations(EquipReplayDocument document)
     {
+        // Equip Item V1 events are emitted directly by a command and have no event parent. A future
+        // codec for a causally chained rule must validate the retained parent identity and ordering
+        // instead of copying this null-causation invariant.
         if (document.CommittedEvents.Any(committedEvent =>
                 committedEvent.CorrelationId != document.Execution.CorrelationId ||
                 !StringComparer.Ordinal.Equals(committedEvent.OccurredAtUtc, document.Execution.EvaluatedAtUtc) ||

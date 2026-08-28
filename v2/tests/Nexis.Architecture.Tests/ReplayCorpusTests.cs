@@ -103,13 +103,33 @@ public sealed class ReplayCorpusTests
 
         var first = extractor.Extract(fixture.Capture);
         var second = extractor.Extract(reordered.Capture);
-        var result = new ReplayCorpusRunner(new[] { new EquipItemReplayScenarioCodec() })
+        var result = new ReplayCorpusRunner(
+                new[] { new EquipItemReplayScenarioCodec() }, new ExactReplayVersionCompatibilityPolicy())
             .Run(first, new CoreRulesEngine(), new FixedRandomResolver(fixture.RandomReference));
 
         Assert.AreEqual(first.ScenarioId, second.ScenarioId);
         Assert.AreEqual(first.CanonicalJson, second.CanonicalJson);
         Assert.IsTrue(result.IsEquivalent, result.Difference);
         Assert.AreEqual(CoreOutcomeStatus.Succeeded, result.ActualStatus);
+    }
+
+    [TestMethod]
+    public void Run_RejectsReplayWhenExactRuleAndContentCompatibilityCannotBeProven()
+    {
+        var fixture = CreateFixture(ReplayScenarioTag.Ordinary);
+        var artifact = CreateExtractor().Extract(fixture.Capture);
+        var unsupported = ReplayCorpusArtifact.Parse(MutateArtifact(artifact, root =>
+        {
+            root["execution"]!["ruleVersion"] = "equip-rules-v999";
+            root["execution"]!["contentVersion"] = "equip-content-v999";
+        }));
+        var runner = new ReplayCorpusRunner(
+            new[] { new EquipItemReplayScenarioCodec() }, new ExactReplayVersionCompatibilityPolicy());
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => runner.Run(
+            unsupported,
+            new CoreRulesEngine(),
+            new FixedRandomResolver(fixture.RandomReference)));
     }
 
     [TestMethod]
@@ -202,6 +222,24 @@ public sealed class ReplayCorpusTests
     }
 
     [TestMethod]
+    public void ArtifactParser_RejectsImpossibleChronology()
+    {
+        var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Exploit).Capture);
+        var invalidArtifacts = new[]
+        {
+            MutateArtifact(artifact, root =>
+                root["execution"]!["completedAtUtc"] = "2026-08-26T09:59:59.0000000\u002B00:00"),
+            MutateArtifact(artifact, root =>
+                root["capturedAtUtc"] = "2026-08-26T09:59:59.0000000\u002B00:00")
+        };
+
+        foreach (var invalidArtifact in invalidArtifacts)
+        {
+            Assert.ThrowsExactly<FormatException>(() => ReplayCorpusArtifact.Parse(invalidArtifact));
+        }
+    }
+
+    [TestMethod]
     public void ArtifactParser_RejectsNonCanonicalValueSpellings()
     {
         var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Exploit).Capture);
@@ -269,6 +307,8 @@ public sealed class ReplayCorpusTests
         var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Exploit).Capture);
         var invalidArtifacts = new[]
         {
+            MutateArtifact(artifact, root =>
+                root["execution"]!["terminalReason"] = "equipment.contradictory.success"),
             MutateArtifact(artifact, root =>
             {
                 root["execution"]!["terminalStatus"] = "domainFailed";
@@ -353,6 +393,7 @@ public sealed class ReplayCorpusTests
         var fixture = CreateFixture(ReplayScenarioTag.Exploit);
         var extractor = new ReplayCorpusExtractor(
             new IReplayScenarioCodec[] { new CompletenessReplayCodec() },
+            new ICanonicalCommandCodec[] { new EquipItemCanonicalCommandCodec() },
             ReplayPseudonymizationKey.FromBytes(
                 Encoding.UTF8.GetBytes("test-only-pseudonymization-key-material")));
 
@@ -384,6 +425,43 @@ public sealed class ReplayCorpusTests
 
         Assert.ThrowsExactly<InvalidOperationException>(() => CreateExtractor().Extract(capture));
     }
+
+    [TestMethod]
+    public void Extract_RejectsTracePayloadFingerprintThatDoesNotMatchTypedIntent()
+    {
+        var fixture = CreateFixture(ReplayScenarioTag.Exploit);
+        var trace = fixture.Plan.Trace;
+        var mismatchedIdentity = new CommandExecutionIdentity(
+            trace.Identity.CommandId,
+            trace.Identity.Actor,
+            trace.Identity.IntentContract,
+            CommandPayloadFingerprint.Compute(Encoding.UTF8.GetBytes("{}")));
+        var mismatchedTrace = new CommandExecutionTrace(
+            mismatchedIdentity,
+            trace.CorrelationId,
+            trace.CoreImplementation,
+            trace.CoreContractVersion,
+            trace.RuleVersion,
+            trace.ContentVersion,
+            trace.EvaluatedAtUtc);
+        var mismatchedPlan = new CommandCommitPlan(
+            mismatchedTrace,
+            fixture.Plan.ExecutionToken,
+            fixture.Plan.TerminalOutcome,
+            fixture.Plan.Transitions,
+            fixture.Plan.Events,
+            fixture.Plan.AuditEntries);
+        var capture = new ReplayCapture(
+            fixture.Request,
+            fixture.Decision,
+            mismatchedPlan,
+            fixture.Capture.Metadata);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => CreateExtractor().Extract(capture));
+    }
+
+
+
 
 
     [TestMethod]
@@ -440,6 +518,29 @@ public sealed class ReplayCorpusTests
     }
 
     [TestMethod]
+    public async Task FileRetention_RejectsOversizedAndMalformedArtifactsBeforeUse()
+    {
+        var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Exploit).Capture);
+        var directory = Path.Combine(Path.GetTempPath(), $"nexis-replay-bounds-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new FileReplayCorpusStore(directory);
+            var oversized = new string('x', ReplayCorpusArtifact.MaximumCanonicalJsonUtf8Bytes + 1);
+            await File.WriteAllTextAsync(store.GetArtifactPath(artifact.ScenarioId), oversized);
+            await Assert.ThrowsExactlyAsync<InvalidDataException>(async () => await store.ReadAsync(artifact.ScenarioId));
+
+            var malformed = MutateArtifact(artifact, root => root["corpusVersion"] = 0);
+            await File.WriteAllTextAsync(store.GetArtifactPath(artifact.ScenarioId), malformed);
+            await Assert.ThrowsExactlyAsync<InvalidDataException>(async () => await store.ReadAsync(artifact.ScenarioId));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void ReplayAssembly_HasNoConcreteCorePersistenceTransportOrPlayerLogDependency()
     {
         var references = typeof(ReplayCorpusExtractor).Assembly
@@ -468,6 +569,7 @@ public sealed class ReplayCorpusTests
     private static ReplayCorpusExtractor CreateExtractor() =>
         new(
             new[] { new EquipItemReplayScenarioCodec() },
+            new ICanonicalCommandCodec[] { new EquipItemCanonicalCommandCodec() },
             ReplayPseudonymizationKey.FromBytes(Encoding.UTF8.GetBytes("test-only-pseudonymization-key-material")));
 
     private static void MutateFailureReason(JsonObject root, string value)
@@ -678,6 +780,20 @@ public sealed class ReplayCorpusTests
 
         public string DecisionFingerprint(CoreDecision decision) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class ExactReplayVersionCompatibilityPolicy : IReplayVersionCompatibilityPolicy
+    {
+        public bool Supports(
+            CoreImplementationDescriptor candidate,
+            ContractDescriptor intentContract,
+            CoreContractVersion coreContractVersion,
+            RuleVersion ruleVersion,
+            ContentVersion contentVersion) =>
+            coreContractVersion == CoreContractVersion.V1 &&
+            intentContract == EquipItemIntent.IntentContract &&
+            ruleVersion == new RuleVersion("equip-rules-v1") &&
+            contentVersion == new ContentVersion("equip-content-v1");
     }
 
     private sealed class SecretBearingRandomFactory : IDeterministicRandomFactory

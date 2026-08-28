@@ -39,6 +39,8 @@ The envelope retains:
 - ordinary, known-bug, exploit, concurrency and high-value tags;
 - an opaque reference for restricted deterministic RNG resolution.
 
+The retained command-payload fingerprint is opaque corroborating metadata. Because the privacy boundary deliberately excludes raw command JSON, the artifact cannot independently recompute or authenticate that fingerprint against the original payload.
+
 The replay runner reconstructs the same typed `CoreEvaluationRequest`, resolves RNG through `IRestrictedReplayRandomResolver`, invokes any compatible `ICoreRulesEngine`, and compares the candidate decision with the retained semantic fingerprint. It never commits owner state or emits authoritative effects.
 
 ## Privacy and security
@@ -60,6 +62,8 @@ Strict JSON deserialization rejects unknown fields at every typed envelope level
 
 ## Retention
 
+
+`ProvenanceKind` and `SourceFingerprint` are operator-supplied provenance metadata, not cryptographic attestation of origin. The codec validates their reviewed shape and internal consistency only. Any offline production export/selection writer must therefore be access-controlled outside this component; a future forensic-evidence use case requires an explicit trusted attestation boundary.
 `FileReplayCorpusStore` is an immutable, content-addressed retention adapter suitable for checked-in or separately archived internal corpus packs:
 
 - creates one `<sha256>.replay.v1.json` artifact;
@@ -75,3 +79,5 @@ No production source was accessed and no real production artifact was harvested 
 Executable coverage proves normalization, version/provenance/tag retention, keyed pseudonymization, secret/RNG exclusion, strict-schema rejection, cross-field ingest consistency, canonical value spellings, bounded reviewed token vocabularies, deterministic replay, input-order and byte canonicalization, immutable retention, tamper detection and architecture isolation.
 
 Only `EquipItem` schema V1 is registered. A later command schema must add a focused typed codec and adversarial privacy/determinism tests. It must not weaken the fail-closed registry, introduce a generic payload serializer or expose restricted data to make corpus ingestion convenient.
+
+Equip Item events are direct command outcomes and therefore retain no event causation parent. A future codec for a legitimately chained event must validate the explicit parent identity and ordering; it must not copy Equip Item's blanket null-causation rule.

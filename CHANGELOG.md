@@ -3,6 +3,8 @@
 ## 2026-08-27
 
 ### Nexis 2.0 replay corpus independent-review repair
+- reject successful replay execution evidence that also carries a contradictory terminal failure reason, with a RED-then-GREEN regression
+- document that retained provenance and command-payload fingerprints are corroborating metadata rather than origin attestation, and scope Equip Item's null-causation invariant to its direct-command event shape
 - hardened untrusted Equip Item replay ingestion so execution/committed-event identities, decision versus committed evidence, output intent identities, and successful owner/content prerequisites are re-established before artifacts are retained or replayed
 - reject normalization-changing source fingerprints, UTC timestamp spellings, definition IDs, placements and slots so semantically identical values cannot acquire different content-addressed scenario IDs
 - apply the reviewed identifier vocabulary and length limits to retained Core/rule/content versions, reasons, definition IDs, placements, slots and contract names; Equip Item artifacts now allow only the registered equippable-definition and item-equipped contracts

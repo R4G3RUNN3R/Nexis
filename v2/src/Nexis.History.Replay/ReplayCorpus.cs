@@ -238,6 +238,9 @@ public sealed record ReplayScenarioId
 
 public sealed class ReplayCorpusArtifact
 {
+    public const int MaximumCanonicalJsonUtf8Bytes = 1_048_576;
+    private const int MaximumJsonDepth = 32;
+
     private ReplayCorpusArtifact(
         ReplayCorpusVersion corpusVersion,
         ReplayScenarioId scenarioId,
@@ -275,9 +278,16 @@ public sealed class ReplayCorpusArtifact
     public static ReplayCorpusArtifact Parse(string canonicalJson)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(canonicalJson);
+        if (Encoding.UTF8.GetByteCount(canonicalJson) > MaximumCanonicalJsonUtf8Bytes)
+        {
+            throw new FormatException("Replay corpus artifacts cannot exceed the reviewed UTF-8 size limit.");
+        }
+
         try
         {
-            using var document = JsonDocument.Parse(canonicalJson);
+            using var document = JsonDocument.Parse(
+                canonicalJson,
+                new JsonDocumentOptions { MaxDepth = MaximumJsonDepth });
             var root = document.RootElement;
             var version = new ReplayCorpusVersion(root.GetProperty("corpusVersion").GetInt32());
             var contractElement = root.GetProperty("intentContract");
@@ -294,7 +304,7 @@ public sealed class ReplayCorpusArtifact
 
             return Create(version, contract, canonicalJson);
         }
-        catch (Exception exception) when (exception is JsonException or KeyNotFoundException or InvalidOperationException)
+        catch (Exception exception) when (exception is JsonException or KeyNotFoundException or InvalidOperationException or ArgumentException)
         {
             throw new FormatException("Replay corpus artifact is not a valid versioned envelope.", exception);
         }
@@ -329,13 +339,16 @@ public sealed record ReplayExecutableScenario(
 public sealed class ReplayCorpusExtractor
 {
     private readonly IReadOnlyDictionary<ContractDescriptor, IReplayScenarioCodec> _codecs;
+    private readonly IReadOnlyDictionary<ContractDescriptor, ICanonicalCommandCodec> _commandCodecs;
     private readonly ReplayPseudonymizationKey _pseudonymizationKey;
 
     public ReplayCorpusExtractor(
         IEnumerable<IReplayScenarioCodec> codecs,
+        IEnumerable<ICanonicalCommandCodec> commandCodecs,
         ReplayPseudonymizationKey pseudonymizationKey)
     {
         ArgumentNullException.ThrowIfNull(codecs);
+        ArgumentNullException.ThrowIfNull(commandCodecs);
         var registered = new Dictionary<ContractDescriptor, IReplayScenarioCodec>();
         foreach (var codec in codecs)
         {
@@ -352,8 +365,25 @@ public sealed class ReplayCorpusExtractor
             }
         }
 
+        var registeredCommandCodecs = new Dictionary<ContractDescriptor, ICanonicalCommandCodec>();
+        foreach (var commandCodec in commandCodecs)
+        {
+            if (commandCodec is null)
+            {
+                throw new ArgumentException("Canonical command codec collections cannot contain null entries.", nameof(commandCodecs));
+            }
+
+            if (!registeredCommandCodecs.TryAdd(commandCodec.IntentContract, commandCodec))
+            {
+                throw new ArgumentException(
+                    $"A canonical command codec is already registered for '{commandCodec.IntentContract.Name}' schema {commandCodec.IntentContract.SchemaVersion}.",
+                    nameof(commandCodecs));
+            }
+        }
+
         _codecs = registered;
         _pseudonymizationKey = pseudonymizationKey ?? throw new ArgumentNullException(nameof(pseudonymizationKey));
+        _commandCodecs = registeredCommandCodecs;
     }
 
     public ReplayCorpusArtifact Extract(ReplayCapture capture)
@@ -365,8 +395,19 @@ public sealed class ReplayCorpusExtractor
             : throw new KeyNotFoundException(
                 $"No privacy-reviewed replay codec is registered for '{contract.Name}' schema {contract.SchemaVersion}.");
         ValidateTrace(capture);
+        var commandCodec = _commandCodecs.TryGetValue(contract, out var registeredCommandCodec)
+            ? registeredCommandCodec
+            : throw new KeyNotFoundException(
+                $"No canonical command codec is registered for '{contract.Name}' schema {contract.SchemaVersion}.");
         var canonicalJson = codec.Encode(capture, _pseudonymizationKey);
         var artifact = ReplayCorpusArtifact.Parse(canonicalJson);
+        var canonicalPayload = commandCodec.Serialize(capture.Request.Intent)
+            ?? throw new InvalidOperationException("Canonical command codec returned a null payload during replay extraction.");
+        if (canonicalPayload.Fingerprint != capture.Plan.Trace.Identity.PayloadFingerprint)
+        {
+            throw new InvalidOperationException("Replay capture typed intent contradicts the authoritative command payload fingerprint.");
+        }
+
         if (artifact.CorpusVersion != ReplayCorpusVersion.V1 || artifact.IntentContract != contract)
         {
             throw new InvalidOperationException("Replay codec emitted an artifact for the wrong corpus or intent contract version.");
@@ -402,14 +443,28 @@ public sealed class ReplayCorpusExtractor
     }
 }
 
+public interface IReplayVersionCompatibilityPolicy
+{
+    bool Supports(
+        CoreImplementationDescriptor candidate,
+        ContractDescriptor intentContract,
+        CoreContractVersion coreContractVersion,
+        RuleVersion ruleVersion,
+        ContentVersion contentVersion);
+}
+
 public sealed class ReplayCorpusRunner
 {
     private readonly IReadOnlyDictionary<ContractDescriptor, IReplayScenarioCodec> _codecs;
+    private readonly IReplayVersionCompatibilityPolicy _compatibilityPolicy;
 
-    public ReplayCorpusRunner(IEnumerable<IReplayScenarioCodec> codecs)
+    public ReplayCorpusRunner(
+        IEnumerable<IReplayScenarioCodec> codecs,
+        IReplayVersionCompatibilityPolicy compatibilityPolicy)
     {
         ArgumentNullException.ThrowIfNull(codecs);
         _codecs = codecs.ToDictionary(static codec => codec.IntentContract);
+        _compatibilityPolicy = compatibilityPolicy ?? throw new ArgumentNullException(nameof(compatibilityPolicy));
     }
 
     public ReplayComparison Run(
@@ -435,6 +490,17 @@ public sealed class ReplayCorpusRunner
             throw new InvalidOperationException("Selected Core does not support the replay scenario contract version.");
         }
 
+
+        if (!_compatibilityPolicy.Supports(
+                core.Descriptor,
+                scenario.Request.Intent.Contract,
+                scenario.Request.ContractVersion,
+                scenario.Request.Context.RuleVersion,
+                scenario.Request.Context.ContentVersion))
+        {
+            throw new InvalidOperationException(
+                "Selected Core has no explicit exact rule/content compatibility approval for the replay scenario.");
+        }
         var actual = core.Evaluate(scenario.Request);
         var actualFingerprint = codec.DecisionFingerprint(actual);
         var equivalent = StringComparer.Ordinal.Equals(actualFingerprint, scenario.ExpectedDecisionFingerprint);
