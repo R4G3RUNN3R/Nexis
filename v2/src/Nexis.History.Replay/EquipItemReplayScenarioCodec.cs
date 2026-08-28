@@ -708,6 +708,7 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
 
     private static void ValidateCanonicalValues(EquipReplayDocument document)
     {
+        ValidateCanonicalCollectionOrder(document);
         RequireCanonical(
             document.SourceFingerprint,
             ReplaySourceFingerprint.Parse(document.SourceFingerprint).Value,
@@ -774,6 +775,97 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
         }
     }
 
+    private static void ValidateCanonicalCollectionOrder(EquipReplayDocument document)
+    {
+        RequireCanonicalOrder(document.Tags, static tag => tag, Comparer<ReplayScenarioTag>.Default, "scenario tags");
+        RequireCanonicalOrder(
+            document.Inventory.Items,
+            static item => item.ItemInstanceId,
+            Comparer<Guid>.Default,
+            "inventory items");
+        RequireCanonicalOrder(
+            document.Equipment.Bindings,
+            static binding => binding.ItemInstanceId,
+            Comparer<Guid>.Default,
+            "equipment bindings");
+        foreach (var binding in document.Equipment.Bindings)
+        {
+            RequireCanonicalOrder(
+                binding.OccupiedSlots,
+                static slot => slot,
+                StringComparer.Ordinal,
+                "equipment binding slots");
+        }
+
+        RequireCanonicalOrder(
+            document.Content.Placements,
+            static placement => placement.Placement,
+            StringComparer.Ordinal,
+            "content placements");
+        foreach (var placement in document.Content.Placements)
+        {
+            RequireCanonicalOrder(
+                placement.OccupiedSlots,
+                static slot => slot,
+                StringComparer.Ordinal,
+                "content placement slots");
+        }
+
+        RequireCanonicalOrder(
+            document.Decision.Transitions,
+            static transition => transition.ItemInstanceId,
+            Comparer<Guid>.Default,
+            "decision transitions");
+        foreach (var transition in document.Decision.Transitions)
+        {
+            RequireCanonicalOrder(
+                transition.OccupiedSlots,
+                static slot => slot,
+                StringComparer.Ordinal,
+                "decision transition slots");
+        }
+
+        RequireCanonicalOrder(
+            document.Decision.Events,
+            static domainEvent => domainEvent.ItemInstanceId,
+            Comparer<Guid>.Default,
+            "decision events");
+        foreach (var domainEvent in document.Decision.Events)
+        {
+            RequireCanonicalOrder(
+                domainEvent.OccupiedSlots,
+                static slot => slot,
+                StringComparer.Ordinal,
+                "decision event slots");
+        }
+
+        RequireCanonicalOrder(
+            document.CommittedEvents,
+            static committedEvent => committedEvent.EventId,
+            Comparer<Guid>.Default,
+            "committed events");
+        foreach (var committedEvent in document.CommittedEvents)
+        {
+            RequireCanonicalOrder(
+                committedEvent.Event.OccupiedSlots,
+                static slot => slot,
+                StringComparer.Ordinal,
+                "committed event slots");
+        }
+    }
+
+    private static void RequireCanonicalOrder<T, TKey>(
+        IReadOnlyList<T> retained,
+        Func<T, TKey> keySelector,
+        IComparer<TKey> comparer,
+        string field)
+    {
+        if (!retained.SequenceEqual(retained.OrderBy(keySelector, comparer)))
+        {
+            throw new FormatException($"Replay {field} are not in canonical order.");
+        }
+    }
+
     private static void ValidateDefinitionId(string value) =>
         RequireCanonical(value, new ContentDefinitionId(value).Value, "content definition identifier");
 
@@ -828,8 +920,15 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             throw new InvalidOperationException("Equip Item replay output identities contradict the retained intent and actor.");
         }
 
-        if (document.Decision.Status != CoreOutcomeStatus.Succeeded)
+        if (document.Decision.Status is CoreOutcomeStatus.Rejected or CoreOutcomeStatus.TechnicalFailure)
         {
+            if (document.Decision.Transitions.Length != 0 ||
+                document.Decision.Events.Length != 0 ||
+                document.CommittedEvents.Length != 0)
+            {
+                throw new InvalidOperationException("Non-successful Equip Item replay decisions cannot retain transitions or events.");
+            }
+
             return;
         }
 
@@ -887,6 +986,14 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             throw new ArgumentOutOfRangeException(nameof(document), "Replay decision status is undefined.");
         }
 
+        if (document.Status is not (
+            CoreOutcomeStatus.Succeeded or
+            CoreOutcomeStatus.Rejected or
+            CoreOutcomeStatus.TechnicalFailure))
+        {
+            throw new InvalidOperationException("Equip Item V1 replay decision uses a status that its reviewed rule cannot emit.");
+        }
+
         var transitions = document.Transitions.Select(static transition => new EquipItemTransition(
             transition.ExpectedRevision
                 ?? throw new InvalidOperationException("Equip Item replay transitions require an expected revision."),
@@ -899,14 +1006,8 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
         {
             CoreOutcomeStatus.Succeeded when document.Reason is null =>
                 CoreDecision.Succeeded(transitions: transitions, events: events),
-            CoreOutcomeStatus.DomainFailed when document.Reason is not null =>
-                CoreDecision.DomainFailed(new CoreReasonCode(document.Reason), transitions: transitions, events: events),
             CoreOutcomeStatus.Rejected when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
                 CoreDecision.Rejected(new CoreReasonCode(document.Reason)),
-            CoreOutcomeStatus.Conflict when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
-                CoreDecision.Conflict(new CoreReasonCode(document.Reason)),
-            CoreOutcomeStatus.Cancelled when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
-                CoreDecision.Cancelled(new CoreReasonCode(document.Reason)),
             CoreOutcomeStatus.TechnicalFailure when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
                 CoreDecision.TechnicalFailure(new CoreReasonCode(document.Reason)),
             _ => throw new InvalidOperationException("Replay decision status, reason, and mutation shape are inconsistent.")

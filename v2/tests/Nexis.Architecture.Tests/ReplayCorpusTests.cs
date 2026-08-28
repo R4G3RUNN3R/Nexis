@@ -31,6 +31,7 @@ public sealed class ReplayCorpusTests
     private static readonly DateTimeOffset CapturedAt = new(2026, 8, 27, 9, 0, 0, TimeSpan.Zero);
     private static readonly EquipmentPlacementKey MainHandPlacement = new("main-hand");
     private static readonly EquipmentSlotKey MainHand = new("main-hand");
+    private static readonly EquipmentSlotKey OffHand = new("off-hand");
 
     [TestMethod]
     public void Extract_NormalizesVersionsProvenanceTagsAndAuthoritativeIdentities()
@@ -231,6 +232,72 @@ public sealed class ReplayCorpusTests
     }
 
     [TestMethod]
+    public void ArtifactParser_RejectsNonCanonicalUnorderedCollectionOrdering()
+    {
+        var fixture = CreateCollectionFixture();
+        var artifact = CreateExtractor().Extract(fixture.Capture);
+        var invalidArtifacts = new[]
+        {
+            MutateArtifact(artifact, ReverseRetainedOccupiedSlots),
+            MutateArtifact(artifact, root => Reverse(root["tags"]!.AsArray())),
+            MutateArtifact(artifact, root => Reverse(root["inventory"]!["items"]!.AsArray())),
+            MutateArtifact(artifact, root => Reverse(root["equipment"]!["bindings"]!.AsArray())),
+            MutateArtifact(artifact, root => Reverse(root["content"]!["placements"]!.AsArray()))
+        };
+
+        foreach (var invalidArtifact in invalidArtifacts)
+        {
+            Assert.ThrowsExactly<FormatException>(() => ReplayCorpusArtifact.Parse(invalidArtifact));
+        }
+
+        var parsed = ReplayCorpusArtifact.Parse(artifact.CanonicalJson);
+        var codec = new EquipItemReplayScenarioCodec();
+        var scenario = codec.Decode(
+            parsed.CanonicalJson,
+            new FixedRandomResolver(fixture.RandomReference));
+
+        Assert.AreEqual(artifact.CanonicalJson, parsed.CanonicalJson);
+        Assert.AreEqual(artifact.ScenarioId, parsed.ScenarioId);
+        Assert.AreEqual(
+            scenario.ExpectedDecisionFingerprint,
+            codec.DecisionFingerprint(new CoreRulesEngine().Evaluate(scenario.Request)));
+    }
+
+    [TestMethod]
+    public void ArtifactParser_RejectsUnsupportedEquipItemStatusesAndForgedFailureEvidence()
+    {
+        var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Exploit).Capture);
+        var invalidArtifacts = new[]
+        {
+            MutateArtifact(artifact, root =>
+            {
+                root["execution"]!["terminalStatus"] = "domainFailed";
+                root["execution"]!["terminalReason"] = "equipment.forged.failure";
+                root["decision"]!["status"] = "domainFailed";
+                root["decision"]!["reason"] = "equipment.forged.failure";
+                root["combat"]!["isInActiveCombat"] = true;
+                root["equipment"]!["revision"] = 99;
+                root["inventory"]!["items"] = new JsonArray();
+            }),
+            MutateArtifact(artifact, root => MutateFailureStatus(root, "conflict")),
+            MutateArtifact(artifact, root => MutateFailureStatus(root, "cancelled"))
+        };
+
+        foreach (var invalidArtifact in invalidArtifacts)
+        {
+            Assert.ThrowsExactly<FormatException>(() => ReplayCorpusArtifact.Parse(invalidArtifact));
+        }
+
+        foreach (var supportedStatus in new[] { "rejected", "technicalFailure" })
+        {
+            var supportedArtifact = MutateArtifact(
+                artifact,
+                root => MutateFailureStatus(root, supportedStatus));
+            Assert.AreEqual(supportedArtifact, ReplayCorpusArtifact.Parse(supportedArtifact).CanonicalJson);
+        }
+    }
+
+    [TestMethod]
     public void ArtifactParser_RejectsUnreviewedRetainedTokensAndContractNames()
     {
         var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Exploit).Capture);
@@ -351,7 +418,7 @@ public sealed class ReplayCorpusTests
     [TestMethod]
     public async Task FileRetention_IsImmutableContentAddressedAndDetectsTampering()
     {
-        var artifact = CreateExtractor().Extract(CreateFixture(ReplayScenarioTag.Concurrency).Capture);
+        var artifact = CreateExtractor().Extract(CreateCollectionFixture().Capture);
         var directory = Path.Combine(Path.GetTempPath(), $"nexis-replay-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         try
@@ -414,6 +481,17 @@ public sealed class ReplayCorpusTests
         root["committedEvents"] = new JsonArray();
     }
 
+    private static void MutateFailureStatus(JsonObject root, string status)
+    {
+        root["execution"]!["terminalStatus"] = status;
+        root["execution"]!["terminalReason"] = "equipment.reviewed.failure";
+        root["decision"]!["status"] = status;
+        root["decision"]!["reason"] = "equipment.reviewed.failure";
+        root["decision"]!["transitions"] = new JsonArray();
+        root["decision"]!["events"] = new JsonArray();
+        root["committedEvents"] = new JsonArray();
+    }
+
     private static void MutatePlacement(JsonObject root, string value)
     {
         root["intent"]!["placement"] = value;
@@ -435,6 +513,26 @@ public sealed class ReplayCorpusTests
             new JsonArray(JsonValue.Create(value));
     }
 
+    private static void ReverseRetainedOccupiedSlots(JsonObject root)
+    {
+        var placement = root["content"]!["placements"]!.AsArray()
+            .Single(candidate => candidate!["placement"]!.GetValue<string>() == MainHandPlacement.Value)!;
+        Reverse(placement["occupiedSlots"]!.AsArray());
+        Reverse(root["decision"]!["transitions"]!.AsArray()[0]!["occupiedSlots"]!.AsArray());
+        Reverse(root["decision"]!["events"]!.AsArray()[0]!["occupiedSlots"]!.AsArray());
+        Reverse(root["committedEvents"]!.AsArray()[0]!["event"]!["occupiedSlots"]!.AsArray());
+    }
+
+    private static void Reverse(JsonArray array)
+    {
+        var reversed = array.Select(static value => value!.DeepClone()).Reverse().ToArray();
+        array.Clear();
+        foreach (var value in reversed)
+        {
+            array.Add(value);
+        }
+    }
+
     private static string MutateArtifact(
         ReplayCorpusArtifact artifact,
         Action<JsonObject> mutation)
@@ -445,17 +543,57 @@ public sealed class ReplayCorpusTests
         return root.ToJsonString();
     }
 
-    private static Fixture CreateFixture(params ReplayScenarioTag[] tags)
+    private static Fixture CreateFixture(params ReplayScenarioTag[] tags) =>
+        CreateFixture(includeCanonicalCollections: false, tags);
+
+    private static Fixture CreateCollectionFixture() =>
+        CreateFixture(
+            includeCanonicalCollections: true,
+            ReplayScenarioTag.HighValue,
+            ReplayScenarioTag.Exploit);
+
+    private static Fixture CreateFixture(
+        bool includeCanonicalCollections,
+        params ReplayScenarioTag[] tags)
     {
         var commandId = new CommandId(Guid.Parse("10000000-0000-0000-0000-000000000001"));
         var correlationId = new CorrelationId(Guid.Parse("20000000-0000-0000-0000-000000000002"));
         var accountId = AccountId.New();
         var characterId = CharacterId.New();
         var itemId = ItemInstanceId.New();
+        var helmetId = ItemInstanceId.New();
+        var bootsId = ItemInstanceId.New();
         var definition = new EquippableItemDefinition(
             new ContentDefinitionId("iron-sword"),
-            new[] { new EquipmentPlacementDefinition(MainHandPlacement, new[] { MainHand }) });
+            includeCanonicalCollections
+                ? new[]
+                {
+                    new EquipmentPlacementDefinition(MainHandPlacement, new[] { OffHand, MainHand }),
+                    new EquipmentPlacementDefinition(new EquipmentPlacementKey("versatile"), new[] { MainHand })
+                }
+                : new[] { new EquipmentPlacementDefinition(MainHandPlacement, new[] { MainHand }) });
         var definitionKey = new ContentDefinitionKey(definition.Contract, definition.DefinitionId);
+        var inventoryItems = includeCanonicalCollections
+            ? new[]
+            {
+                new InventoryItemReference(bootsId, definitionKey),
+                new InventoryItemReference(itemId, definitionKey),
+                new InventoryItemReference(helmetId, definitionKey)
+            }
+            : new[] { new InventoryItemReference(itemId, definitionKey) };
+        var equipmentBindings = includeCanonicalCollections
+            ? new[]
+            {
+                new EquippedItemBinding(
+                    helmetId,
+                    new EquipmentPlacementKey("head"),
+                    new[] { new EquipmentSlotKey("neck"), new EquipmentSlotKey("head") }),
+                new EquippedItemBinding(
+                    bootsId,
+                    new EquipmentPlacementKey("feet"),
+                    new[] { new EquipmentSlotKey("feet") })
+            }
+            : Array.Empty<EquippedItemBinding>();
         var actor = TrustedActorContext.CreatePlayer(
             accountId,
             characterId,
@@ -475,8 +613,8 @@ public sealed class ReplayCorpusTests
             new EquipItemIntent(characterId, itemId, MainHandPlacement),
             new IAuthoritativeSnapshot[]
             {
-                new InventorySnapshot(characterId, 5, new[] { new InventoryItemReference(itemId, definitionKey) }),
-                new EquipmentSnapshot(characterId, 9, Array.Empty<EquippedItemBinding>()),
+                new InventorySnapshot(characterId, 5, inventoryItems),
+                new EquipmentSnapshot(characterId, 9, equipmentBindings),
                 new CombatParticipationSnapshot(characterId, 3, false)
             },
             new[] { definition });
