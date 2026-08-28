@@ -1,6 +1,15 @@
 # Changelog
 ## 2026-08-28
 
+### Nexis 2.0 operational observability foundation
+- added stable `Nexis.Operations.Contracts` and a platform-neutral `Nexis.Operations` health reporter without introducing a monitoring product or authoritative gameplay state
+- represent command recovery, fencing, outbox delivery/poison, retry exhaustion, invariant, projection, replay rejection/corruption and unexpected concurrency conditions through bounded typed signals
+- expose thread-safe bounded health summaries with exact counts, highest severity and monotonic latest occurrence; exclude raw exceptions, arbitrary payloads, credentials and personal data from the contract
+- strict TDD RED evidence: the focused suite failed because the Operations projects/types did not exist; GREEN passed 5/5 after the minimum contracts and reporter implementation
+- verification: solution restore passed; Release build passed with 0 warnings/0 errors; complete Architecture/Core/execution/security/replay/operations executable passed 158/158
+- added `v2/docs/OPERATIONAL-OBSERVABILITY.md`; validated C7 fixes remain responsible for wiring producers while implementing quarantine, dead-letter, retry and failure-classification behavior
+
+
 ### Nexis 2.0 privileged command-entry authorization boundary
 - added a stable Identity authorization-policy interface and reusable Execution entry authorizer for future real Admin commands without introducing fake admin gameplay
 - bind successful privileged entry to the trusted acting staff AccountId separately from the target AccountId so downstream atomic Admin Audit cannot substitute the target as actor

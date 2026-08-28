@@ -7,6 +7,8 @@
     <ProjectReference Include="..\..\src\Nexis.Core.Contracts\Nexis.Core.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Core\Nexis.Core.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Content.Contracts\Nexis.Content.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Operations.Contracts\Nexis.Operations.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Operations\Nexis.Operations.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Content.Registry\Nexis.Content.Registry.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Inventory.Contracts\Nexis.Inventory.Contracts.csproj" />

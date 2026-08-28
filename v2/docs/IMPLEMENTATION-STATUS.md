@@ -22,6 +22,7 @@ The V2 branch now contains and has executable coverage for:
 - exact integer/rational arithmetic with explicit rounding and checked overflow;
 - golden/conformance comparison for baseline and replacement Core implementations;
 - versioned, provenance-tagged and content-addressed replay-corpus extraction/retention for the typed Equip Item V1 vertical, with keyed identity pseudonymization, restricted RNG references and deterministic Core re-execution;
+- stable operational-observability contracts plus a bounded thread-safe process-local health reporter covering recovery, fencing, outbox, retry, invariant, projection, replay and unexpected concurrency conditions without owning gameplay state;
 - CommandId idempotency receipts, canonical payload fingerprints, original-correlation retention and duplicate/integrity-violation handling;
 - canonical command codecs and durable crash-recovery payload rehydration without runtime type metadata;
 - atomic command commit plans covering owner transitions, terminal command outcome, authoritative history, outbox and state-changing Admin audit;
@@ -153,6 +154,8 @@ Checkpoint `14d7a46edeb6258ec865e8609f56e07a646b6a59` completed the remaining re
 
 The subsequent privileged-entry RED/GREEN slice passed a Release build with **0 warnings, 0 errors** and the complete Architecture/Core/execution/security/replay executable with **153/153**. The reusable boundary denies ordinal-role, entitlement, Character, stale-security, target-substitution, implicit-grant and explicit-deny bypasses while retaining the real acting staff AccountId only after authorization.
 
+The operational-observability RED/GREEN slice added `Nexis.Operations.Contracts` and `Nexis.Operations`; solution restore passed, the Release build passed with **0 warnings, 0 errors**, and the complete Architecture/Core/execution/security/replay/operations executable passed **158/158**. The current slice provides structured sinks and health summaries; validated C7 fixes must wire producers as their quarantine, dead-letter and classification behavior is implemented.
+
 
 The reference Core implementation version remains `0.5.0-foundation`; the stable Core contract remains V1.
 
@@ -162,8 +165,7 @@ The branch is materially further along, but PR #4 must remain draft. Remaining s
 
 1. migration/reconciliation tooling before any v1-to-v2 state movement, still gated by unresolved human decisions;
 2. additional real owner-specific multi-owner gameplay proof where a legitimate approved rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
-3. observability/operational readiness around recovery workers, outbox workers, poison events, retry exhaustion and invariant failures;
-4. final threat-model/security review and the wider foundation stop-condition audit before broad gameplay implementation.
+3. reproduction and resolution of valid threat-model findings, producer wiring for the operational surface, and the wider foundation stop-condition audit before broad gameplay implementation.
 
 The real multi-owner proof cannot currently proceed without inventing mechanics. `EquipItem` legitimately writes only Equipment while Inventory, Combat and Content are read-only prerequisites. No implemented Economy, Marketplace, Education, Resources or other gameplay transition contract supplies a second legitimate owner write, and creating a no-op Inventory transition or unapproved cost/reward/reservation would violate the ownership and research-before-canon rules.
 
@@ -171,7 +173,7 @@ Exact owner/domain contracts should continue to be introduced only when the corr
 
 ## Next safe implementation boundary
 
-The typed replay-corpus extraction/retention and reusable privileged command-entry authorization boundaries are implemented and adversarially covered. The next safe foundation slice is platform-neutral operational observability for command recovery, fencing, outbox poison/failure, retry exhaustion, invariant/projection/replay failures and unexpected concurrency. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
+The replay, privileged-entry and operational-observability foundation boundaries are implemented and adversarially covered. The next safe slice is evidence-first reproduction and resolution of Claude threat-model findings against the exact current branch, beginning with recovery corruption and poison outbox behavior. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
 
 ## Verification discipline
 
