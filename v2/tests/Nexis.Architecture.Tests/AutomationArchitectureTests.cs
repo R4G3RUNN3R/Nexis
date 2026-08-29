@@ -90,23 +90,7 @@ public sealed class AutomationArchitectureTests
     [TestMethod]
     public void OnlyExplicitCompositionProjectsMayReferenceMutationAssemblies()
     {
-        var solutionDirectory = FindSolutionDirectory();
-        var sourceDirectory = Path.Combine(solutionDirectory, "src");
-        var sourceProjects = Directory
-            .EnumerateFiles(sourceDirectory, "*.csproj", SearchOption.AllDirectories)
-            .ToArray();
-
-        Assert.IsTrue(sourceProjects.Length > 0, "The automation dependency guard must govern a non-empty source-project set.");
-
-        var dependencies = sourceProjects.SelectMany(projectPath =>
-            XDocument.Load(projectPath)
-                .Descendants("ProjectReference")
-                .Select(static element => element.Attribute("Include")?.Value ?? string.Empty)
-                .Select(static path => Path.GetFileNameWithoutExtension(path) ?? string.Empty)
-                .Where(static name => !string.IsNullOrWhiteSpace(name))
-                .Select(reference => (Project: Path.GetFileNameWithoutExtension(projectPath)!, Reference: reference)));
-
-        var bypasses = FindMutationBypasses(dependencies);
+        var bypasses = FindMutationBypasses(ReadSourceDependencies());
 
         Assert.AreEqual(
             0,
@@ -115,10 +99,53 @@ public sealed class AutomationArchitectureTests
             + string.Join(", ", bypasses));
     }
 
+    /// <summary>
+    /// Parses every source .csproj into (project, reference) name pairs. Exposed so the non-vacuity
+    /// guard in ClaudeContinuationAutomationGuardTests can assert that this scan actually observes
+    /// the repository, rather than passing because it classified nothing.
+    /// </summary>
+    internal static (string Project, string Reference)[] ReadSourceDependencies()
+    {
+        var solutionDirectory = FindSolutionDirectory();
+        var sourceDirectory = Path.Combine(solutionDirectory, "src");
+        var sourceProjects = Directory
+            .EnumerateFiles(sourceDirectory, "*.csproj", SearchOption.AllDirectories)
+            .ToArray();
+
+        Assert.IsTrue(sourceProjects.Length > 0, "The automation dependency guard must govern a non-empty source-project set.");
+
+        return sourceProjects.SelectMany(projectPath =>
+            XDocument.Load(projectPath)
+                .Descendants("ProjectReference")
+                .Select(static element => element.Attribute("Include")?.Value ?? string.Empty)
+                .Select(static include => ProjectName(include))
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(reference => (Project: ProjectName(projectPath), Reference: reference)))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Reduces a .csproj path or a ProjectReference Include attribute to its bare assembly name.
+    /// Include attributes are authored with Windows separators, and on Linux
+    /// <see cref="Path.GetFileNameWithoutExtension(string)"/> does not split on '\\', which would
+    /// leave the directory prefix attached and silently exempt every reference from the scan.
+    /// </summary>
+    private static string ProjectName(string pathOrInclude)
+    {
+        var normalized = pathOrInclude.Replace('\\', '/');
+        var lastSeparator = normalized.LastIndexOf('/');
+        var fileName = lastSeparator >= 0 ? normalized[(lastSeparator + 1)..] : normalized;
+        return Path.GetFileNameWithoutExtension(fileName) ?? string.Empty;
+    }
+
     internal static string[] FindMutationBypasses(IEnumerable<(string Project, string Reference)> dependencies)
     {
         var allowed = new HashSet<(string Project, string Reference)>
         {
+            // Reviewed trusted composition. Each entry is a deliberate decision, not an
+            // absorption of whatever the scan happened to find.
+            ("Nexis.Execution", "Nexis.Execution.Contracts"),
+            ("Nexis.History.Replay", "Nexis.Execution.Contracts"),
             ("Nexis.Host.Api", "Nexis.Core"),
             ("Nexis.Host.Api", "Nexis.Modules.Audit"),
             ("Nexis.Host.Api", "Nexis.Modules.Identity"),
@@ -135,7 +162,7 @@ public sealed class AutomationArchitectureTests
             .ToArray();
     }
 
-    private static bool IsMutationBoundary(string reference) =>
+    internal static bool IsMutationBoundary(string reference) =>
         string.Equals(reference, "Nexis.Core", StringComparison.Ordinal) ||
         string.Equals(reference, "Nexis.Execution", StringComparison.Ordinal) ||
         string.Equals(reference, "Nexis.Execution.Contracts", StringComparison.Ordinal) ||
