@@ -1,6 +1,12 @@
 # Changelog
 ## 2026-08-29
 
+### Nexis 2.0 terminal-effect and recovery-authority contracts
+- reject owner transitions and authoritative events at the commit-plan boundary for Rejected, Conflict, Cancelled and TechnicalFailure outcomes while preserving both effects for DomainFailed
+- remove the public RecoveredCommandExecution overload that inferred Platform for a System-lane command; every recovery construction now supplies the historically persisted SystemActorKey explicitly
+- retain reflection guards against reintroducing any recovery constructor that accepts a lane without the corresponding SystemActorKey
+- public contract change: the 11-argument actor-substituting RecoveredCommandExecution constructor was deleted
+
 ### Nexis 2.0 receipt-aware bounded command retry
 - compose receipt acquisition and retry at one Application boundary: acquire CommandId exactly once, then rebuild/revalidate/re-evaluate/commit each retry with the same fenced token instead of re-acquiring as DuplicateInProgress
 - renew the held lease between retryable attempts and abandon immediately when renewal is refused; PostgreSQL emits a bounded payload-free lease-fencing signal with CommandId and original CorrelationId

@@ -82,6 +82,20 @@ public sealed class ClaudeOvernightAdversarialTests
             + "committed fact, so it must emit no durable event and no outbox record.");
     }
 
+    [TestMethod]
+    public void CommitPlan_MustRejectTransitionsAndEventsForCancelledOutcome()
+    {
+        var correlationId = CorrelationId.New();
+
+        Assert.ThrowsExactly<ArgumentException>(
+            () => CreatePlan(
+                CommandTerminalStatus.Cancelled,
+                transitions: new IOwnerTransition[] { new NamedTransition("Resources", "tests.cancelled") },
+                events: new[] { CreateEventEnvelope(correlationId, "tests.cancelled-event") },
+                correlationId: correlationId),
+            "A Cancelled commit plan accepted authoritative effects even though cancellation commits no in-world outcome.");
+    }
+
     /// <summary>
     /// Protective. DomainFailed is the one non-success status that may legitimately carry transitions
     /// and events, because an in-world failure can be a committed game rule. Whatever guard closes the
@@ -134,37 +148,22 @@ public sealed class ClaudeOvernightAdversarialTests
     [TestMethod]
     public void RecoveredCommand_MustNotSubstituteAGenericSystemActorIdentity()
     {
-        var substituted = false;
+        var actorSubstitutingConstructor = typeof(RecoveredCommandExecution)
+            .GetConstructors(BindingFlags.Public | BindingFlags.Instance)
+            .SingleOrDefault(static constructor =>
+            {
+                var parameters = constructor.GetParameters();
+                return parameters.Any(static parameter => parameter.ParameterType == typeof(CommandExecutionLane))
+                    && parameters.All(static parameter => parameter.ParameterType != typeof(SystemActorKey));
+            });
 
-        try
-        {
-            var recovered = new RecoveredCommandExecution(
-                CommandId.New(),
-                CommandExecutionLane.System,
-                null,
-                null,
-                new ContractDescriptor("tests.recovery", 1),
-                CanonicalCommandPayload.FromTrustedJson("{}"),
-                CorrelationId.New(),
-                Utc(10, 0),
-                CommandExecutionToken.New(),
-                "tests-worker",
-                Utc(10, 5));
-
-            substituted = recovered.SystemActorKey is not null;
-        }
-        catch (ArgumentException)
-        {
-            substituted = false;
-        }
-
-        Assert.IsFalse(
-            substituted,
-            "A public recovery contract fabricated SystemActorKey.Platform for a System-lane command "
+        Assert.IsNull(
+            actorSubstitutingConstructor,
+            "A public recovery contract can fabricate SystemActorKey.Platform for a System-lane command "
             + "that did not supply one. AutomationArchitectureTests already treats scheduler != CIEL != "
             + "platform as a security distinction; collapsing it during recovery is an attribution "
-            + "hazard in exactly the area the directive names. Delete the overload rather than making "
-            + "it throw, so no call site can survive to fail inside a recovery path.");
+            + "hazard in exactly the area the directive names. The overload must be absent so no call "
+            + "site can survive to fail inside a recovery path.");
     }
 
     [TestMethod]

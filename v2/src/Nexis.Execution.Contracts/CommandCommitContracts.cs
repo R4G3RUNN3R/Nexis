@@ -133,6 +133,17 @@ public sealed class CommandCommitPlan
         Events = Freeze(events, nameof(events));
         AuditEntries = Freeze(auditEntries, nameof(auditEntries));
 
+        if (TerminalOutcome.Status is
+                CommandTerminalStatus.Rejected or
+                CommandTerminalStatus.Conflict or
+                CommandTerminalStatus.Cancelled or
+                CommandTerminalStatus.TechnicalFailure &&
+            (Transitions.Count != 0 || Events.Count != 0))
+        {
+            throw new ArgumentException(
+                $"{TerminalOutcome.Status} command outcomes cannot carry owner transitions or authoritative events.");
+        }
+
         foreach (var transition in Transitions)
         {
             if (transition.TargetOwner is null)

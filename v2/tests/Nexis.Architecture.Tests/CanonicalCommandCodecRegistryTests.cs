@@ -79,6 +79,7 @@ public sealed class CanonicalCommandCodecRegistryTests
             CommandExecutionLane.Player,
             accountId,
             characterId,
+            null,
             SyntheticIntent.ContractDescriptor,
             payload,
             CorrelationId.New(),

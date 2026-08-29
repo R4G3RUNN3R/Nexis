@@ -263,7 +263,7 @@ Core/execution distinguishes at least:
 - **DomainFailed** - technically successful gameplay resolution produced an in-world failure;
 - **TechnicalFailure** - infrastructure prevented completion and no success is claimed.
 
-A DomainFailed action may legitimately consume resources if that is the committed game rule. A TechnicalFailure must not masquerade as an in-world failure or consume resources unless an explicit durable gameplay outcome was actually committed.
+Succeeded and DomainFailed outcomes may carry owner transitions and authoritative events; a DomainFailed action may legitimately consume resources when that is the committed game rule. Rejected, Conflict, Cancelled and TechnicalFailure outcomes carry neither transitions nor authoritative events. A TechnicalFailure must never masquerade as an in-world failure.
 
 ## Example concurrency matrix
 

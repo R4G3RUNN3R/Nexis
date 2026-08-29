@@ -12,33 +12,6 @@ namespace Nexis.Execution.Contracts;
 /// </summary>
 public sealed record RecoveredCommandExecution
 {
-    public RecoveredCommandExecution(
-        CommandId commandId,
-        CommandExecutionLane lane,
-        AccountId? accountId,
-        CharacterId? characterId,
-        ContractDescriptor intentContract,
-        CanonicalCommandPayload payload,
-        CorrelationId originalCorrelationId,
-        DateTimeOffset receivedAtUtc,
-        CommandExecutionToken executionToken,
-        string workerId,
-        DateTimeOffset leaseExpiresAtUtc)
-        : this(
-            commandId,
-            lane,
-            accountId,
-            characterId,
-            lane == CommandExecutionLane.System ? SystemActorKey.Platform : null,
-            intentContract,
-            payload,
-            originalCorrelationId,
-            receivedAtUtc,
-            executionToken,
-            workerId,
-            leaseExpiresAtUtc)
-    {
-    }
 
     public RecoveredCommandExecution(
         CommandId commandId,
