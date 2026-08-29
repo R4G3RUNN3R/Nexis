@@ -63,5 +63,5 @@ public sealed record CommandRecoveryQuarantineEntry(
     ContractDescriptor IntentContract,
     DateTimeOffset ReceivedAtUtc,
     CommandExecutionToken ExecutionToken,
-    DateTimeOffset RecoveryAbandonedAtUtc,
+    DateTimeOffset? RecoveryAbandonedAtUtc,
     string RecoveryAbandonReason);

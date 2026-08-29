@@ -185,6 +185,91 @@ public sealed class PostgresOperationalQuarantineIntegrationTests
     }
 
     [TestMethod]
+    public async Task ReceiptWithoutCanonicalPayload_IsEnumerableAndUsesTheSameFencedTerminalResolution()
+    {
+        var seeded = await SeedReceiptWithoutCanonicalPayloadAsync();
+        var operatorId = AccountId.New();
+        var context = OperatorContext(operatorId, "OPS-NO-PAYLOAD-1");
+        var service = new PostgresOperationalQuarantineService(DataSource);
+
+        var entry = (await service.ListRecoveryQuarantinesAsync(context, maximumItems: 20))
+            .Single(item => item.CommandId == seeded.Request.Context.CommandId);
+
+        Assert.IsNull(entry.RecoveryAbandonedAtUtc);
+        Assert.AreEqual("canonical_payload_unavailable", entry.RecoveryAbandonReason);
+        Assert.IsTrue(await service.ResolveRecoveryQuarantineAsTechnicalFailureAsync(
+            context,
+            entry.CommandId,
+            entry.ExecutionToken,
+            entry.RecoveryAbandonedAtUtc));
+
+        var repeated = await new PostgresCommandReceiptRepository(DataSource).TryAcquireAsync(
+            AcquireRequest(seeded.Request, seeded.Payload, "no-payload-repeat", TimeSpan.FromMinutes(1)));
+
+        Assert.AreEqual(CommandReceiptDisposition.DuplicateCompleted, repeated.Disposition);
+        Assert.AreEqual(CommandTerminalStatus.TechnicalFailure, repeated.TerminalOutcome?.Status);
+        Assert.AreEqual(1, await CountAuditAsync(
+            "operations.command-recovery.quarantine.resolve",
+            operatorId,
+            "OPS-NO-PAYLOAD-1",
+            "technical_failure_recorded"));
+    }
+
+    [TestMethod]
+    public async Task ReceiptWithoutCanonicalPayload_CannotBeResolvedThroughAStaleExecutionFence()
+    {
+        var seeded = await SeedReceiptWithoutCanonicalPayloadAsync();
+        var operatorId = AccountId.New();
+        var context = OperatorContext(operatorId, "OPS-NO-PAYLOAD-STALE");
+        var service = new PostgresOperationalQuarantineService(DataSource);
+        var entry = (await service.ListRecoveryQuarantinesAsync(context, maximumItems: 20))
+            .Single(item => item.CommandId == seeded.Request.Context.CommandId);
+
+        await using (var connection = await DataSource.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(
+            "UPDATE nexis_v2.command_receipts SET execution_token = @replacement WHERE command_id = @command_id;",
+            connection))
+        {
+            command.Parameters.AddWithValue("replacement", NpgsqlDbType.Uuid, Guid.NewGuid());
+            command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, entry.CommandId.Value);
+            Assert.AreEqual(1, await command.ExecuteNonQueryAsync());
+        }
+
+        Assert.IsFalse(await service.ResolveRecoveryQuarantineAsTechnicalFailureAsync(
+            context,
+            entry.CommandId,
+            entry.ExecutionToken,
+            entry.RecoveryAbandonedAtUtc));
+        Assert.AreEqual(1, await CountAuditAsync(
+            "operations.command-recovery.quarantine.resolve",
+            operatorId,
+            "OPS-NO-PAYLOAD-STALE",
+            "fence_lost_or_not_found"));
+
+        await using var verifyConnection = await DataSource.OpenConnectionAsync();
+        await using var verifyCommand = new NpgsqlCommand(
+            "SELECT terminal_status IS NULL FROM nexis_v2.command_receipts WHERE command_id = @command_id;",
+            verifyConnection);
+        verifyCommand.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, entry.CommandId.Value);
+        Assert.AreEqual(true, await verifyCommand.ExecuteScalarAsync());
+    }
+
+    [TestMethod]
+    public void OperationalQuarantineMigrationPinsTechnicalFailureOrdinalToTheExecutionContract()
+    {
+        const string migrationName = "Nexis.Persistence.Postgres.Migrations.0006_operational_quarantine.sql";
+        using var stream = typeof(PostgresExecutionSchema).Assembly.GetManifestResourceStream(migrationName);
+        Assert.IsNotNull(stream, $"Embedded migration '{migrationName}' is missing.");
+        using var reader = new StreamReader(stream);
+        var migration = reader.ReadToEnd();
+
+        StringAssert.Contains(
+            migration,
+            $"terminal_status = {(int)CommandTerminalStatus.TechnicalFailure}",
+            "The recovery-abandon schema must fail loudly if the persisted TechnicalFailure ordinal drifts.");
+    }
+
+    [TestMethod]
     public async Task DeniedOperatorDecision_CannotListQuarantineState()
     {
         await SeedDeadLetteredEventAsync();
@@ -266,6 +351,28 @@ public sealed class PostgresOperationalQuarantineIntegrationTests
             Utc(10, 0, 2),
             maximumItems: 1);
         Assert.AreEqual(0, recovered.Count);
+        return new RecoverySeed(request, payload);
+    }
+
+    private static async Task<RecoverySeed> SeedReceiptWithoutCanonicalPayloadAsync()
+    {
+        var request = CreateRequest();
+        var payload = CanonicalCommandPayload.FromTrustedJson("{\"kind\":\"legacy-no-payload\"}");
+        var claim = await new PostgresCommandReceiptRepository(DataSource).TryAcquireAsync(
+            AcquireRequest(request, payload, "legacy-seed", TimeSpan.FromMinutes(1)));
+        Assert.AreEqual(CommandReceiptDisposition.Acquired, claim.Disposition);
+
+        const string sql = """
+            UPDATE nexis_v2.command_receipts
+            SET canonical_payload = NULL,
+                execution_owner = NULL,
+                execution_lease_expires_at_utc = NULL
+            WHERE command_id = @command_id;
+            """;
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, request.Context.CommandId.Value);
+        Assert.AreEqual(1, await command.ExecuteNonQueryAsync());
         return new RecoverySeed(request, payload);
     }
 

@@ -154,11 +154,12 @@ public sealed class PostgresOperationalQuarantineService
         const string sql = """
             SELECT command_id, original_correlation_id,
                    intent_name, intent_schema_version, received_at_utc,
-                   execution_token, recovery_abandoned_at_utc, recovery_abandon_reason
+                   execution_token, recovery_abandoned_at_utc,
+                   COALESCE(recovery_abandon_reason, 'canonical_payload_unavailable')
             FROM nexis_v2.command_receipts
             WHERE terminal_status IS NULL
-              AND recovery_abandoned_at_utc IS NOT NULL
-            ORDER BY recovery_abandoned_at_utc, command_id
+              AND (recovery_abandoned_at_utc IS NOT NULL OR canonical_payload IS NULL)
+            ORDER BY COALESCE(recovery_abandoned_at_utc, received_at_utc), command_id
             LIMIT @maximum_items;
             """;
 
@@ -178,7 +179,7 @@ public sealed class PostgresOperationalQuarantineService
                     new Core.Contracts.ContractDescriptor(reader.GetString(2), reader.GetInt32(3)),
                     ToDateTimeOffset(reader.GetDateTime(4)),
                     new CommandExecutionToken(reader.GetGuid(5)),
-                    ToDateTimeOffset(reader.GetDateTime(6)),
+                    reader.IsDBNull(6) ? null : ToDateTimeOffset(reader.GetDateTime(6)),
                     reader.GetString(7)));
             }
         }
@@ -200,7 +201,7 @@ public sealed class PostgresOperationalQuarantineService
         OperationalQuarantineActionContext context,
         CommandId commandId,
         CommandExecutionToken observedExecutionToken,
-        DateTimeOffset observedRecoveryAbandonedAtUtc,
+        DateTimeOffset? observedRecoveryAbandonedAtUtc,
         CancellationToken cancellationToken = default)
     {
         var actingAccountId = RequireAuthorized(context);
@@ -214,7 +215,10 @@ public sealed class PostgresOperationalQuarantineService
             throw new ArgumentException("Observed recovery fence cannot be empty.", nameof(observedExecutionToken));
         }
 
-        ValidateUtc(observedRecoveryAbandonedAtUtc, nameof(observedRecoveryAbandonedAtUtc));
+        if (observedRecoveryAbandonedAtUtc.HasValue)
+        {
+            ValidateUtc(observedRecoveryAbandonedAtUtc.Value, nameof(observedRecoveryAbandonedAtUtc));
+        }
 
         const string sql = """
             UPDATE nexis_v2.command_receipts
@@ -231,8 +235,9 @@ public sealed class PostgresOperationalQuarantineService
                 execution_lease_expires_at_utc = NULL
             WHERE command_id = @command_id
               AND execution_token = @observed_execution_token
-              AND recovery_abandoned_at_utc = @observed_recovery_abandoned_at_utc
-              AND terminal_status IS NULL;
+              AND recovery_abandoned_at_utc IS NOT DISTINCT FROM @observed_recovery_abandoned_at_utc
+              AND terminal_status IS NULL
+              AND (recovery_abandoned_at_utc IS NOT NULL OR canonical_payload IS NULL);
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -246,7 +251,9 @@ public sealed class PostgresOperationalQuarantineService
         command.Parameters.AddWithValue(
             "observed_recovery_abandoned_at_utc",
             NpgsqlDbType.TimestampTz,
-            observedRecoveryAbandonedAtUtc.UtcDateTime);
+            observedRecoveryAbandonedAtUtc.HasValue
+                ? observedRecoveryAbandonedAtUtc.Value.UtcDateTime
+                : DBNull.Value);
         var applied = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
 
         await AppendAuditAsync(
