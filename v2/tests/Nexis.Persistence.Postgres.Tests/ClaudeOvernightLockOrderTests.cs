@@ -174,7 +174,8 @@ public sealed class ClaudeOvernightLockOrderTests
 
         var committer = new PostgresAtomicCommandCommitter(
             DataSource,
-            new IPostgresOwnerTransitionApplier[] { new KeyedApplier(acquisitionOrder) });
+            new IPostgresOwnerTransitionApplier[] { new KeyedApplier() },
+            resourceLockAcquirer: new RecordingResourceLockAcquirer(acquisitionOrder));
 
         var result = await committer.CommitAsync(plan);
         Assert.AreEqual(CommandCommitDisposition.Committed, result.Disposition);
@@ -226,12 +227,6 @@ public sealed class ClaudeOvernightLockOrderTests
 
     private sealed class KeyedApplier : IPostgresOwnerTransitionApplier
     {
-        private readonly List<AuthoritativeResourceKey> _acquisitionOrder;
-
-        public KeyedApplier(List<AuthoritativeResourceKey> acquisitionOrder)
-        {
-            _acquisitionOrder = acquisitionOrder;
-        }
 
         public OwnerKey Owner => ClaudeOvernightLockOrderTests.Owner;
 
@@ -253,12 +248,10 @@ public sealed class ClaudeOvernightLockOrderTests
         {
             var keys = ResolveLockKeys(transition);
 
-            // Mirrors a real applier: it locks each resolved resource, in its own canonical order,
-            // as it executes its statements.
+            // Mirrors a real applier with more than one SQL statement. The committer must already
+            // hold every declared advisory lock before this code starts.
             foreach (var key in keys)
             {
-                _acquisitionOrder.Add(key);
-
                 await using var command = new NpgsqlCommand(
                     """
                     UPDATE nexis_v2_claude_test.lock_owner
@@ -275,6 +268,31 @@ public sealed class ClaudeOvernightLockOrderTests
             }
 
             return PostgresOwnerTransitionResult.Applied();
+        }
+    }
+
+    private sealed class RecordingResourceLockAcquirer : IPostgresResourceLockAcquirer
+    {
+        private readonly List<AuthoritativeResourceKey> _acquisitionOrder;
+        private readonly PostgresAdvisoryResourceLockAcquirer _inner = new();
+
+        public RecordingResourceLockAcquirer(List<AuthoritativeResourceKey> acquisitionOrder)
+        {
+            _acquisitionOrder = acquisitionOrder;
+        }
+
+        public async ValueTask AcquireAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            AuthoritativeResourceKey resource,
+            CancellationToken cancellationToken = default)
+        {
+            await _inner.AcquireAsync(
+                connection,
+                transaction,
+                resource,
+                cancellationToken);
+            _acquisitionOrder.Add(resource);
         }
     }
 

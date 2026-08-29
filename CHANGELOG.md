@@ -1,6 +1,12 @@
 # Changelog
 ## 2026-08-29
 
+### Nexis 2.0 global canonical PostgreSQL resource locking
+- acquire every adapter-resolved authoritative resource in one global canonical transaction advisory-lock sweep before any owner transition applier executes; interleaved same-owner key sets can no longer regress to transition-local `a,c,b` acquisition
+- preserve adapter-side key resolution and Core replacement boundaries; lock identities remain private PostgreSQL infrastructure and use stable SHA-256-derived 64-bit advisory keys
+- add a real Equipment H1-C conformance guard that compares declared aggregate/binding/slot keys with the actual SQL write order captured by PostgreSQL triggers
+- RED/GREEN evidence: Claude's disposable-PostgreSQL interleaving probe failed at 42/43 with `a,c,b`, then the complete suite passed 44/44 after the global sweep and Equipment guard; Release build passed with 0 warnings/0 errors
+
 ### Nexis 2.0 recovery, quarantine and outbox failure hardening
 - separated total outbox delivery attempts from event-specific poison attempts; unclassified and systemic transport failures now back off without consuming the poison ceiling, while explicit event-specific permanent failures alone can dead-letter an event
 - added capability-gated, payload-free operational quarantine listings plus fenced, atomically audited dead-letter requeue and command-recovery resolution paths; recovery quarantine now rotates the execution fence and can terminate as TechnicalFailure without becoming a permanent `DuplicateInProgress` trapdoor

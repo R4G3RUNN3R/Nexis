@@ -22,6 +22,12 @@ It is **only** a concurrency identity. It is not a generic state path and cannot
 
 The same logical resource set therefore produces the same lock order in opposite-direction operations. Persistence adapters that use explicit locks must acquire them in this order.
 
+For PostgreSQL atomic commands, each authoritative-owner adapter resolves every resource its typed transition can lock or conditionally update. The committer validates owner attribution, combines and deduplicates all resolved keys across the complete plan, then acquires transaction-scoped advisory locks in one global canonical sweep before invoking any owner applier. Ordering whole transitions is not a substitute: interleaved key sets such as `{a,c}` and `{b}` must still acquire `a,b,c`.
+
+The advisory-lock identity is a stable SHA-256-derived 64-bit namespace over length-delimited owner/type/id components. Hash values select PostgreSQL lock identities; acquisition sequence remains the canonical resource-key sequence. Lock vocabulary stays in the PostgreSQL adapter and does not leak into Core contracts.
+
+Every owner adapter requires a PostgreSQL conformance guard proving that `ResolveLockKeys` matches the order-sensitive SQL work performed by `ApplyAsync`. The real Equipment guard records its actual aggregate, binding and slot writes through database triggers and compares that sequence with the declared resource keys, preventing resource-name sorting from becoming an accidental invariant.
+
 Resource key strings are stable contract values and must not be localized, culture-sorted or constructed from mutable display names.
 
 ## Bounded whole-command retry

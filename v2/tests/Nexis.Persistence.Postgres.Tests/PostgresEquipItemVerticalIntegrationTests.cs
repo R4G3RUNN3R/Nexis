@@ -55,6 +55,9 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
     public async Task TestInitialize()
     {
         const string sql = """
+            DROP TRIGGER IF EXISTS record_equipment_state_write ON nexis_v2.equipment_state;
+            DROP TRIGGER IF EXISTS record_equipment_binding_write ON nexis_v2.equipment_bindings;
+            DROP TRIGGER IF EXISTS record_equipment_slot_write ON nexis_v2.equipment_binding_slots;
             TRUNCATE TABLE
                 nexis_v2.equipment_binding_slots,
                 nexis_v2.equipment_bindings,
@@ -233,6 +236,129 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
         Assert.AreEqual(2, await ScalarIntAsync(
             "SELECT count(*) FROM nexis_v2.equipment_binding_slots;"));
     }
+    [TestMethod]
+    public async Task EquipmentDeclaredLockKeys_MatchActualSqlWriteAcquisitionOrder()
+    {
+        const string guardSql = """
+            CREATE SCHEMA IF NOT EXISTS nexis_v2_test;
+            CREATE TABLE IF NOT EXISTS nexis_v2_test.equipment_write_order (
+                sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                owner_key text NOT NULL,
+                resource_type text NOT NULL,
+                resource_id text NOT NULL
+            );
+            TRUNCATE TABLE nexis_v2_test.equipment_write_order RESTART IDENTITY;
+
+            CREATE OR REPLACE FUNCTION nexis_v2_test.record_equipment_write()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                IF TG_TABLE_NAME = 'equipment_state' THEN
+                    INSERT INTO nexis_v2_test.equipment_write_order(owner_key, resource_type, resource_id)
+                    VALUES ('Equipment', 'equipment.aggregate', NEW.character_id::text);
+                ELSIF TG_TABLE_NAME = 'equipment_bindings' THEN
+                    INSERT INTO nexis_v2_test.equipment_write_order(owner_key, resource_type, resource_id)
+                    VALUES ('Equipment', 'equipment.binding', NEW.character_id::text || '/' || NEW.item_instance_id::text);
+                ELSIF TG_TABLE_NAME = 'equipment_binding_slots' THEN
+                    INSERT INTO nexis_v2_test.equipment_write_order(owner_key, resource_type, resource_id)
+                    VALUES ('Equipment', 'equipment.slot', NEW.character_id::text || '/' || NEW.slot_key);
+                ELSE
+                    RAISE EXCEPTION 'Unexpected Equipment table %', TG_TABLE_NAME;
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+
+            DROP TRIGGER IF EXISTS record_equipment_state_write ON nexis_v2.equipment_state;
+            DROP TRIGGER IF EXISTS record_equipment_binding_write ON nexis_v2.equipment_bindings;
+            DROP TRIGGER IF EXISTS record_equipment_slot_write ON nexis_v2.equipment_binding_slots;
+            CREATE TRIGGER record_equipment_state_write
+                AFTER UPDATE ON nexis_v2.equipment_state
+                FOR EACH ROW EXECUTE FUNCTION nexis_v2_test.record_equipment_write();
+            CREATE TRIGGER record_equipment_binding_write
+                AFTER INSERT ON nexis_v2.equipment_bindings
+                FOR EACH ROW EXECUTE FUNCTION nexis_v2_test.record_equipment_write();
+            CREATE TRIGGER record_equipment_slot_write
+                AFTER INSERT ON nexis_v2.equipment_binding_slots
+                FOR EACH ROW EXECUTE FUNCTION nexis_v2_test.record_equipment_write();
+            """;
+
+        await using (var connection = await DataSource.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(guardSql, connection))
+        {
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+        await SeedEquipmentStateAsync(characterId, revision: 1);
+        var definition = new EquippableItemDefinition(
+            new ContentDefinitionId("lock-order-greatsword"),
+            new[]
+            {
+                new EquipmentPlacementDefinition(
+                    new EquipmentPlacementKey("two-hand"),
+                    new[] { MainHand, OffHand })
+            });
+        var request = await BuildRequestAsync(
+            characterId,
+            itemId,
+            definition,
+            new EquipmentPlacementKey("two-hand"));
+        var engine = new CoreRulesEngine();
+        var decision = engine.Evaluate(request);
+        var transition = (EquipItemTransition)decision.Transitions.Single();
+        var applier = new PostgresEquipmentTransitionApplier();
+        var declared = applier.ResolveLockKeys(transition)
+            .Select(static key => key.ToString())
+            .ToArray();
+
+        var payload = new EquipItemCanonicalCommandCodec().Serialize(request.Intent);
+        var claim = await new PostgresCommandReceiptRepository(DataSource).TryAcquireAsync(
+            new CommandReceiptAcquireRequest(
+                CommandExecutionIdentityFactory.Create(request, payload),
+                payload,
+                request.Context.CorrelationId,
+                Utc(10, 0),
+                new CommandExecutionLeaseRequest("equipment-lock-order", TimeSpan.FromMinutes(1))));
+        var plan = new CommandCommitPlanBuilder().Build(
+            request,
+            payload.Fingerprint,
+            claim,
+            decision,
+            engine.Descriptor,
+            Utc(10, 0, 1));
+
+        var result = await new PostgresAtomicCommandCommitter(
+            DataSource,
+            new IPostgresOwnerTransitionApplier[] { applier })
+            .CommitAsync(plan);
+        Assert.AreEqual(CommandCommitDisposition.Committed, result.Disposition);
+
+        var observed = new List<string>();
+        await using (var connection = await DataSource.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(
+            """
+            SELECT owner_key || '/' || resource_type || '/' || resource_id
+            FROM nexis_v2_test.equipment_write_order
+            ORDER BY sequence;
+            """,
+            connection))
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                observed.Add(reader.GetString(0));
+            }
+        }
+
+        CollectionAssert.AreEqual(
+            declared,
+            observed,
+            "Equipment ResolveLockKeys must describe the real SQL write acquisition sequence exactly.");
+    }
+
 
     private static async Task<CoreEvaluationRequest> BuildRequestAsync(
         CharacterId characterId,

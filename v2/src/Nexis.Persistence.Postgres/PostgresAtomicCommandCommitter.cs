@@ -20,14 +20,17 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
     private readonly NpgsqlDataSource _dataSource;
     private readonly IReadOnlyDictionary<OwnerKey, IPostgresOwnerTransitionApplier> _appliers;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly IPostgresResourceLockAcquirer _resourceLockAcquirer;
 
     public PostgresAtomicCommandCommitter(
         NpgsqlDataSource dataSource,
         IEnumerable<IPostgresOwnerTransitionApplier>? ownerTransitionAppliers = null,
-        JsonSerializerOptions? jsonOptions = null)
+        JsonSerializerOptions? jsonOptions = null,
+        IPostgresResourceLockAcquirer? resourceLockAcquirer = null)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _jsonOptions = jsonOptions is null ? new JsonSerializerOptions() : new JsonSerializerOptions(jsonOptions);
+        _resourceLockAcquirer = resourceLockAcquirer ?? new PostgresAdvisoryResourceLockAcquirer();
 
         var appliers = new Dictionary<OwnerKey, IPostgresOwnerTransitionApplier>();
         foreach (var applier in ownerTransitionAppliers ?? Array.Empty<IPostgresOwnerTransitionApplier>())
@@ -79,14 +82,23 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
                 return CommandCommitResult.TechnicalFailure(OwnerApplierMissing);
             }
 
-            var orderedTransitions = ResolveOrderedTransitions(plan.Transitions);
-            if (orderedTransitions is null)
+            var resolvedPlan = ResolveCommitResources(plan.Transitions);
+            if (resolvedPlan is null)
             {
                 await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                 return CommandCommitResult.TechnicalFailure(OwnerLockKeysUnresolved);
             }
 
-            foreach (var item in orderedTransitions)
+            foreach (var resource in resolvedPlan.Resources)
+            {
+                await _resourceLockAcquirer.AcquireAsync(
+                    connection,
+                    transaction,
+                    resource,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var item in resolvedPlan.Transitions)
             {
                 var applyResult = await item.Applier.ApplyAsync(
                     connection,
@@ -144,7 +156,7 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         }
     }
 
-    private IReadOnlyList<ResolvedTransition>? ResolveOrderedTransitions(
+    private ResolvedCommitPlan? ResolveCommitResources(
         IReadOnlyList<IOwnerTransition> transitions)
     {
         var resolved = new List<ResolvedTransition>(transitions.Count);
@@ -188,13 +200,15 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
             .Select(static (key, index) => new { key, index })
             .ToDictionary(static item => item.key, static item => item.index);
 
-        return resolved
+        var orderedTransitions = resolved
             .OrderBy(item => item.Keys.Min(key => positions[key]))
             .ThenBy(static item => item.Transition.Contract.Name, StringComparer.Ordinal)
             .ThenBy(static item => item.Transition.Contract.SchemaVersion)
             .ThenBy(static item => item.KeySignature, StringComparer.Ordinal)
             .ThenBy(static item => item.Transition.ExpectedRevision)
             .ToArray();
+
+        return new ResolvedCommitPlan(globalOrder, orderedTransitions);
     }
 
     private static async ValueTask<CommandReasonCode?> VerifyReceiptAsync(
@@ -366,4 +380,8 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         IPostgresOwnerTransitionApplier Applier,
         IReadOnlyList<AuthoritativeResourceKey> Keys,
         string KeySignature);
+
+    private sealed record ResolvedCommitPlan(
+        IReadOnlyList<AuthoritativeResourceKey> Resources,
+        IReadOnlyList<ResolvedTransition> Transitions);
 }
