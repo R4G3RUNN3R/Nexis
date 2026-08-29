@@ -1,6 +1,20 @@
 # Changelog
 ## 2026-08-29
 
+### Nexis 2.0 automated-ingress identity and command-integrity observability
+- added a non-empty, case-normalized closed `SystemActorKey` registry contract for the first real automated-command gateway while preserving construction of retired historical keys for recovery and replay
+- removed the zero-argument `TrustedActorContext.CreateSystem()` authority factory; every System actor construction now supplies an explicit key, guarded across public constructors and static factories in both Identity.Contracts and Execution.Contracts
+- replaced the vacuous CIEL/Scheduling prefix scan with a non-empty whole-source dependency scan and exact trusted-composition allowlist; a negative control proves an arbitrarily named future worker cannot reference mutation boundaries
+- fixed a residual vacuity in that same scan found under review: ProjectReference `Include` attributes use Windows separators, and on Linux `Path.GetFileNameWithoutExtension` does not split on `\`, so every reference parsed with its directory prefix attached, matched no mutation boundary, and left all allowlist entries as unreachable dead configuration; the scan is now bounded from below by tests asserting it parses bare assembly names, classifies a non-empty set, and observes exactly the reviewed eight references
+- reviewed and explicitly allowlisted two mutation-boundary references that the repaired scan made visible for the first time, `Nexis.Execution` and `Nexis.History.Replay` onto `Nexis.Execution.Contracts`; both are contracts-only and hold no mutation capability
+- recorded a RED architecture test for stale privileged-decision protection: `PrivilegedCommandEntryDecision` carries no evaluation time and no security version, so a future BFF could not refuse a decision evaluated before a capability or password change
+- made every non-terminal non-recoverable receipt operator-enumerable, including `canonical_payload IS NULL`, and routed it through the same explicit execution-token/state-fenced terminal TechnicalFailure resolution without automatic resurrection
+- pinned migration `0006`'s persisted `terminal_status = 5` assumption to `CommandTerminalStatus.TechnicalFailure` with an executable embedded-migration invariant so enum drift fails the suite
+- intentionally changed `IAutomatedCommandGateway.SubmitAsync` from `ValueTask` to `ValueTask<AutomatedCommandSubmissionResult>` before any implementation or caller exists, making unregistered-authority rejection an explicit public contract result
+- documented the five exact disposable-PostgreSQL behavioural acceptance tests the first real gateway must pass; runtime M6 enforcement remains a readiness condition because no real gateway exists, and no fake gameplay gateway was introduced
+- added durable append-only PostgreSQL operational signals for CommandId actor, intent-contract and canonical-payload integrity violations; signals link original and attempt correlations and carry only a SHA-256 actor discriminator rather than raw identity or payload
+- verification at this checkpoint: Release build of `Nexis.slnx` 0 warnings/0 errors; architecture suite 187 total, 183 passed, 4 failed, 0 skipped; disposable PostgreSQL integration suite 55 total, 55 passed, 0 failed, 0 skipped; the four architecture failures are the three open L3 History/Player Log findings and the deliberate O-4 RED above
+
 ### Nexis 2.0 terminal-effect and recovery-authority contracts
 - reject owner transitions and authoritative events at the commit-plan boundary for Rejected, Conflict, Cancelled and TechnicalFailure outcomes while preserving both effects for DomainFailed
 - remove the public RecoveredCommandExecution overload that inferred Platform for a System-lane command; every recovery construction now supplies the historically persisted SystemActorKey explicitly
