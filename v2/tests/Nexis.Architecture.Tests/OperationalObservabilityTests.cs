@@ -96,6 +96,29 @@ public sealed class OperationalObservabilityTests
     }
 
     [TestMethod]
+    public void IntegritySignalsCanLinkBothAttemptsWithoutCarryingRawActorIdentity()
+    {
+        var properties = typeof(OperationalSignal).GetProperties();
+
+        Assert.IsNotNull(
+            properties.SingleOrDefault(static property =>
+                property.Name == "OriginalCorrelationId" &&
+                property.PropertyType == typeof(CorrelationId?)),
+            "A CommandId integrity signal must identify both the original and colliding attempts.");
+        Assert.IsNotNull(
+            properties.SingleOrDefault(static property =>
+                property.Name == "ActorDiscriminator" &&
+                string.Equals(property.PropertyType.Name, "OperationalActorDiscriminator", StringComparison.Ordinal)),
+            "A CommandId integrity signal must carry a bounded pseudonymous discriminator for the attempting actor binding.");
+        Assert.IsFalse(
+            properties.Any(static property =>
+                property.Name.Contains("AccountId", StringComparison.Ordinal) ||
+                property.Name.Contains("CharacterId", StringComparison.Ordinal) ||
+                property.Name.Contains("SystemActorKey", StringComparison.Ordinal)),
+            "Operational signals must not expose raw Account, Character, or System actor identity.");
+    }
+
+    [TestMethod]
     public void OperationalAssembliesDependOnlyOnStableNonAuthoritativeBoundaries()
     {
         CollectionAssert.AreEquivalent(

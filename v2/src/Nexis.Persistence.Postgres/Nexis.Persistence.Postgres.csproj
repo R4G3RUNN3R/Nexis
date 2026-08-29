@@ -21,5 +21,6 @@
     <EmbeddedResource Include="Migrations\0004_equipment_owner.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0004_equipment_owner.sql" />
     <EmbeddedResource Include="Migrations\0005_system_actor_identity.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0005_system_actor_identity.sql" />
     <EmbeddedResource Include="Migrations\0006_operational_quarantine.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0006_operational_quarantine.sql" />
+    <EmbeddedResource Include="Migrations\0007_operational_signals.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0007_operational_signals.sql" />
   </ItemGroup>
 </Project>

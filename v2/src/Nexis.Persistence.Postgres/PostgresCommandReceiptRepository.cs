@@ -1,5 +1,8 @@
 using System.Data;
+using System.Security.Cryptography;
+using System.Text;
 using Nexis.Execution.Contracts;
+using Nexis.Operations.Contracts;
 using Nexis.Identity.Contracts;
 using Nexis.Kernel.Events;
 using Npgsql;
@@ -10,10 +13,16 @@ namespace Nexis.Persistence.Postgres;
 public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
 {
     private readonly NpgsqlDataSource _dataSource;
+    private readonly PostgresOperationalSignalSink _durableOperationalSignalSink;
+    private readonly IOperationalSignalSink? _operationalSignalObserver;
 
-    public PostgresCommandReceiptRepository(NpgsqlDataSource dataSource)
+    public PostgresCommandReceiptRepository(
+        NpgsqlDataSource dataSource,
+        IOperationalSignalSink? operationalSignalObserver = null)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _durableOperationalSignalSink = new PostgresOperationalSignalSink(_dataSource);
+        _operationalSignalObserver = operationalSignalObserver;
     }
 
     public async ValueTask<CommandReceiptClaim> TryAcquireAsync(
@@ -76,6 +85,9 @@ public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
         var stored = ReadReceipt(result);
         if (!Matches(identity, stored))
         {
+            var signal = CreateIntegritySignal(request, stored);
+            await _durableOperationalSignalSink.ReportAsync(signal, cancellationToken).ConfigureAwait(false);
+            await ReportObserverBestEffortAsync(signal).ConfigureAwait(false);
             return CommandReceiptClaim.IntegrityViolation(new CorrelationId(stored.OriginalCorrelationId));
         }
 
@@ -160,6 +172,65 @@ public sealed class PostgresCommandReceiptRepository : ICommandReceiptRepository
         command.Parameters.AddWithValue("intent_name", NpgsqlDbType.Text, identity.IntentContract.Name);
         command.Parameters.AddWithValue("intent_schema_version", NpgsqlDbType.Integer, identity.IntentContract.SchemaVersion);
         command.Parameters.AddWithValue("payload_fingerprint", NpgsqlDbType.Char, identity.PayloadFingerprint.Value);
+    }
+
+    private static OperationalSignal CreateIntegritySignal(
+        CommandReceiptAcquireRequest request,
+        PostgresCommandReceiptRow stored)
+    {
+        var identity = request.Identity;
+        var reason = !ActorMatches(identity.Actor, stored)
+            ? "integrity.actor_mismatch"
+            : !IntentMatches(identity, stored)
+                ? "integrity.intent_contract_mismatch"
+                : "integrity.payload_fingerprint_mismatch";
+
+        return new OperationalSignal(
+            OperationalConditionKind.CommandIdentityIntegrityViolation,
+            OperationalSeverity.Critical,
+            new OperationalComponentKey("postgres.command-receipts"),
+            new OperationalReasonCode(reason),
+            request.ReceivedAtUtc,
+            identity.CommandId,
+            request.CorrelationId,
+            originalCorrelationId: new CorrelationId(stored.OriginalCorrelationId),
+            actorDiscriminator: CreateActorDiscriminator(identity));
+    }
+
+    private static bool ActorMatches(CommandActorBinding actor, PostgresCommandReceiptRow stored) =>
+        stored.Lane == (int)actor.Lane &&
+        stored.ActorAccountId == actor.AccountId?.Value &&
+        stored.ActorCharacterId == actor.CharacterId?.Value &&
+        string.Equals(stored.ActorSystemKey, actor.SystemActorKey?.Value, StringComparison.Ordinal);
+
+    private static bool IntentMatches(CommandExecutionIdentity identity, PostgresCommandReceiptRow stored) =>
+        string.Equals(stored.IntentName, identity.IntentContract.Name, StringComparison.Ordinal) &&
+        stored.IntentSchemaVersion == identity.IntentContract.SchemaVersion;
+
+    private static OperationalActorDiscriminator CreateActorDiscriminator(CommandExecutionIdentity identity)
+    {
+        var canonical = FormattableString.Invariant(
+            $"{identity.CommandId.Value:N}|{(int)identity.Actor.Lane}|{identity.Actor.AccountId?.Value:N}|{identity.Actor.CharacterId?.Value:N}|{identity.Actor.SystemActorKey?.Value}");
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
+        return new OperationalActorDiscriminator(Convert.ToHexString(digest).ToLowerInvariant());
+    }
+
+    private async ValueTask ReportObserverBestEffortAsync(OperationalSignal signal)
+    {
+        if (_operationalSignalObserver is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _operationalSignalObserver.ReportAsync(signal, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // The durable signal and integrity disposition are authoritative for this boundary.
+            // A process-local monitoring failure cannot turn the collision into an acquired claim.
+        }
     }
 
     private static DateTimeOffset ToDateTimeOffset(DateTime value) =>

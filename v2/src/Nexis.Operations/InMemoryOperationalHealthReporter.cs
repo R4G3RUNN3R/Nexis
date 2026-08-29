@@ -107,6 +107,8 @@ public sealed class InMemoryOperationalHealthReporter : IOperationalSignalSink, 
                 _latest.CommandId,
                 _latest.CorrelationId,
                 _latest.EventId,
-                _latest.AttemptCount);
+                _latest.AttemptCount,
+                _latest.OriginalCorrelationId,
+                _latest.ActorDiscriminator);
     }
 }

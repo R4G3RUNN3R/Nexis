@@ -141,6 +141,115 @@ public sealed class PostgresExecutionIntegrationTests
     }
 
     [TestMethod]
+    public async Task DiscardingPayloadIntegrityClaimStillAppendsOneDurableSignal()
+    {
+        var repository = new PostgresCommandReceiptRepository(DataSource);
+        var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
+        var originalPayload = Payload("integrity-original");
+        var collidingPayload = Payload("integrity-collision");
+
+        await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+            CommandExecutionIdentityFactory.Create(request, originalPayload),
+            originalPayload,
+            request.Context.CorrelationId,
+            Utc(10, 0),
+            Lease("worker-original")));
+
+        _ = await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+            CommandExecutionIdentityFactory.Create(request, collidingPayload),
+            collidingPayload,
+            CorrelationId.New(),
+            Utc(10, 1),
+            Lease("worker-collision")));
+
+        var signal = await ReadSingleIntegritySignalAsync(request.Context.CommandId);
+        Assert.AreEqual((int)OperationalSeverity.Critical, signal.Severity);
+        Assert.AreEqual("integrity.payload_fingerprint_mismatch", signal.Reason);
+        Assert.AreEqual(request.Context.CorrelationId.Value, signal.OriginalCorrelationId);
+        Assert.AreEqual(64, signal.ActorDiscriminator.Length);
+        var safeValues = string.Join('|', signal.Component, signal.Reason, signal.ActorDiscriminator);
+        Assert.IsFalse(safeValues.Contains("integrity-collision", StringComparison.Ordinal));
+        Assert.IsFalse(safeValues.Contains("credential-sentinel", StringComparison.Ordinal));
+        Assert.AreEqual(1, await CountDurableIntegritySignalsAsync(request.Context.CommandId));
+    }
+
+    [TestMethod]
+    public async Task ActorMismatchEmitsOneCriticalSignalWithBothCorrelations()
+    {
+        var commandId = CommandId.New();
+        var originalCorrelationId = CorrelationId.New();
+        var collidingCorrelationId = CorrelationId.New();
+        var original = CreatePlayerRequest(commandId, originalCorrelationId);
+        var colliding = CreatePlayerRequest(commandId, collidingCorrelationId);
+        var payload = Payload("actor-mismatch");
+        var repository = new PostgresCommandReceiptRepository(DataSource);
+
+        await AcquireAsync(repository, original, payload);
+        var result = await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+            CommandExecutionIdentityFactory.Create(colliding, payload),
+            payload,
+            collidingCorrelationId,
+            Utc(10, 1),
+            Lease("worker-collision")));
+
+        var signal = await ReadSingleIntegritySignalAsync(commandId);
+        Assert.AreEqual(CommandReceiptDisposition.IntegrityViolation, result.Disposition);
+        Assert.AreEqual((int)OperationalSeverity.Critical, signal.Severity);
+        Assert.AreEqual("postgres.command-receipts", signal.Component);
+        Assert.AreEqual("integrity.actor_mismatch", signal.Reason);
+        Assert.AreEqual(collidingCorrelationId.Value, signal.CorrelationId);
+        Assert.AreEqual(originalCorrelationId.Value, signal.OriginalCorrelationId);
+        Assert.AreEqual(64, signal.ActorDiscriminator.Length);
+    }
+
+    [TestMethod]
+    public async Task IntentContractMismatchEmitsItsOwnDurableReasonClass()
+    {
+        var commandId = CommandId.New();
+        var originalCorrelationId = CorrelationId.New();
+        var collidingCorrelationId = CorrelationId.New();
+        var actor = TrustedActorContext.CreatePlayer(AccountId.New(), CharacterId.New(), 1);
+        var original = CreateRequest(commandId, originalCorrelationId, actor);
+        var colliding = CreateRequest(commandId, collidingCorrelationId, actor, new AlternateIntent());
+        var payload = Payload("intent-mismatch");
+        var repository = new PostgresCommandReceiptRepository(DataSource);
+
+        await AcquireAsync(repository, original, payload);
+        var result = await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+            CommandExecutionIdentityFactory.Create(colliding, payload),
+            payload,
+            collidingCorrelationId,
+            Utc(10, 1),
+            Lease("worker-collision")));
+
+        var signal = await ReadSingleIntegritySignalAsync(commandId);
+        Assert.AreEqual(CommandReceiptDisposition.IntegrityViolation, result.Disposition);
+        Assert.AreEqual("integrity.intent_contract_mismatch", signal.Reason);
+        Assert.AreEqual(collidingCorrelationId.Value, signal.CorrelationId);
+        Assert.AreEqual(originalCorrelationId.Value, signal.OriginalCorrelationId);
+    }
+
+    [TestMethod]
+    public async Task FailingOperationalObserverCannotConvertIntegrityViolationIntoAcquisition()
+    {
+        var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
+        var originalPayload = Payload("observer-original");
+        var collidingPayload = Payload("observer-collision");
+        var repository = new PostgresCommandReceiptRepository(DataSource, new ThrowingOperationalSignalSink());
+
+        await AcquireAsync(repository, request, originalPayload);
+        var result = await repository.TryAcquireAsync(new CommandReceiptAcquireRequest(
+            CommandExecutionIdentityFactory.Create(request, collidingPayload),
+            collidingPayload,
+            CorrelationId.New(),
+            Utc(10, 1),
+            Lease("worker-collision")));
+
+        Assert.AreEqual(CommandReceiptDisposition.IntegrityViolation, result.Disposition);
+        Assert.AreEqual(1, await CountDurableIntegritySignalsAsync(request.Context.CommandId));
+    }
+
+    [TestMethod]
     public async Task NewReceipt_PersistsCanonicalPayloadAndExecutionLease()
     {
         var repository = new PostgresCommandReceiptRepository(DataSource);
@@ -632,7 +741,8 @@ public sealed class PostgresExecutionIntegrationTests
     private static CoreEvaluationRequest CreateRequest(
         CommandId commandId,
         CorrelationId correlationId,
-        TrustedActorContext actor) =>
+        TrustedActorContext actor,
+        ICoreIntent? intent = null) =>
         new(
             CoreContractVersion.V1,
             new CoreEvaluationContext(
@@ -643,7 +753,7 @@ public sealed class PostgresExecutionIntegrationTests
                 new RuleVersion("tests.rules.v1"),
                 new ContentVersion("tests.content.v1"),
                 new FixedRandomFactory()),
-            new SyntheticIntent(),
+            intent ?? new SyntheticIntent(),
             Array.Empty<IAuthoritativeSnapshot>());
 
     private static CanonicalCommandPayload Payload(string value) =>
@@ -686,6 +796,75 @@ public sealed class PostgresExecutionIntegrationTests
         return Convert.ToInt32(await command.ExecuteScalarAsync());
     }
 
+    private static async Task<int> CountDurableIntegritySignalsAsync(CommandId commandId)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await using (var exists = new NpgsqlCommand(
+            "SELECT to_regclass('nexis_v2.operational_signals') IS NOT NULL;",
+            connection))
+        {
+            if (!Convert.ToBoolean(await exists.ExecuteScalarAsync()))
+            {
+                return 0;
+            }
+        }
+
+        await using var count = new NpgsqlCommand(
+            """
+            SELECT count(*)
+            FROM nexis_v2.operational_signals
+            WHERE command_id = @command_id
+              AND condition_kind = @condition_kind;
+            """,
+            connection);
+        count.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, commandId.Value);
+        count.Parameters.AddWithValue(
+            "condition_kind",
+            NpgsqlDbType.Integer,
+            (int)OperationalConditionKind.CommandIdentityIntegrityViolation);
+        return Convert.ToInt32(await count.ExecuteScalarAsync());
+    }
+
+    private static async Task<DurableIntegritySignalRow> ReadSingleIntegritySignalAsync(CommandId commandId)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT severity, component, reason, correlation_id, original_correlation_id,
+                   actor_discriminator
+            FROM nexis_v2.operational_signals
+            WHERE command_id = @command_id
+              AND condition_kind = @condition_kind
+            ORDER BY occurred_at_utc, signal_id;
+            """,
+            connection);
+        command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, commandId.Value);
+        command.Parameters.AddWithValue(
+            "condition_kind",
+            NpgsqlDbType.Integer,
+            (int)OperationalConditionKind.CommandIdentityIntegrityViolation);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.IsTrue(await reader.ReadAsync(), "The integrity attempt produced no durable operational signal.");
+        var row = new DurableIntegritySignalRow(
+            reader.GetInt32(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetGuid(3),
+            reader.GetGuid(4),
+            reader.GetString(5).TrimEnd());
+        Assert.IsFalse(await reader.ReadAsync(), "One integrity attempt produced more than one durable signal.");
+        return row;
+    }
+
+    private sealed record DurableIntegritySignalRow(
+        int Severity,
+        string Component,
+        string Reason,
+        Guid CorrelationId,
+        Guid OriginalCorrelationId,
+        string ActorDiscriminator);
+
     private static async Task<int> ScalarIntAsync(string sql)
     {
         await using var connection = await DataSource.OpenConnectionAsync();
@@ -696,6 +875,11 @@ public sealed class PostgresExecutionIntegrationTests
     private sealed record SyntheticIntent : ICoreIntent
     {
         public ContractDescriptor Contract { get; } = new("tests.postgres.command", 1);
+    }
+
+    private sealed record AlternateIntent : ICoreIntent
+    {
+        public ContractDescriptor Contract { get; } = new("tests.postgres.alternate-command", 1);
     }
 
     private sealed record SyntheticEvent : ICoreEventDescriptor
@@ -919,6 +1103,14 @@ public sealed class PostgresExecutionIntegrationTests
             Signals.Add(signal);
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class ThrowingOperationalSignalSink : IOperationalSignalSink
+    {
+        public ValueTask ReportAsync(
+            OperationalSignal signal,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromException(new InvalidOperationException("observer unavailable"));
     }
 
     private sealed class FixedRandomFactory : IDeterministicRandomFactory

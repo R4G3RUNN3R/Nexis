@@ -14,7 +14,9 @@ public enum OperationalConditionKind
     ProjectionFailure = 6,
     ReplayArtifactRejected = 7,
     ReplayCorruption = 8,
-    UnexpectedConcurrencyFailure = 9
+    UnexpectedConcurrencyFailure = 9,
+    CommandIdentityIntegrityViolation = 10,
+    AutomationIdentityRejected = 11
 }
 
 public enum OperationalSeverity
@@ -55,6 +57,29 @@ public sealed record OperationalReasonCode
     public override string ToString() => Value;
 }
 
+public sealed record OperationalActorDiscriminator
+{
+    private const int Sha256HexLength = 64;
+
+    public OperationalActorDiscriminator(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        if (value.Length != Sha256HexLength ||
+            value.Any(static character => !char.IsAsciiHexDigit(character) || char.IsAsciiLetterUpper(character)))
+        {
+            throw new ArgumentException(
+                "Operational actor discriminators must be 64 lowercase hexadecimal SHA-256 characters.",
+                nameof(value));
+        }
+
+        Value = value;
+    }
+
+    public string Value { get; }
+
+    public override string ToString() => Value;
+}
+
 public sealed record OperationalSignal
 {
     public OperationalSignal(
@@ -66,7 +91,9 @@ public sealed record OperationalSignal
         CommandId? commandId = null,
         CorrelationId? correlationId = null,
         EventId? eventId = null,
-        int? attemptCount = null)
+        int? attemptCount = null,
+        CorrelationId? originalCorrelationId = null,
+        OperationalActorDiscriminator? actorDiscriminator = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -93,6 +120,13 @@ public sealed record OperationalSignal
             throw new ArgumentException("Operational CorrelationId cannot be empty when supplied.", nameof(correlationId));
         }
 
+        if (originalCorrelationId is { Value: var originalCorrelationValue } && originalCorrelationValue == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Operational original CorrelationId cannot be empty when supplied.",
+                nameof(originalCorrelationId));
+        }
+
         if (eventId is { Value: var eventValue } && eventValue == Guid.Empty)
         {
             throw new ArgumentException("Operational EventId cannot be empty when supplied.", nameof(eventId));
@@ -112,6 +146,8 @@ public sealed record OperationalSignal
         CorrelationId = correlationId;
         EventId = eventId;
         AttemptCount = attemptCount;
+        OriginalCorrelationId = originalCorrelationId;
+        ActorDiscriminator = actorDiscriminator;
     }
 
     public OperationalConditionKind Kind { get; }
@@ -131,6 +167,10 @@ public sealed record OperationalSignal
     public EventId? EventId { get; }
 
     public int? AttemptCount { get; }
+
+    public CorrelationId? OriginalCorrelationId { get; }
+
+    public OperationalActorDiscriminator? ActorDiscriminator { get; }
 }
 
 public sealed record OperationalConditionSummary(
@@ -143,7 +183,9 @@ public sealed record OperationalConditionSummary(
     CommandId? LatestCommandId,
     CorrelationId? LatestCorrelationId,
     EventId? LatestEventId,
-    int? LatestAttemptCount);
+    int? LatestAttemptCount,
+    CorrelationId? LatestOriginalCorrelationId,
+    OperationalActorDiscriminator? LatestActorDiscriminator);
 
 public sealed class OperationalHealthSnapshot
 {
