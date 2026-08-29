@@ -90,7 +90,7 @@ public sealed class CoreRuleDispatchTests
             new CoreEvaluationContext(
                 new CommandId(Guid.Parse("33333333-3333-3333-3333-333333333333")),
                 new CorrelationId(Guid.Parse("44444444-4444-4444-4444-444444444444")),
-                actor ?? TrustedActorContext.CreateSystem(),
+                actor ?? TrustedActorContext.CreateSystem(new SystemActorKey("tests.core-dispatch")),
                 new DateTimeOffset(2026, 8, 26, 8, 45, 0, TimeSpan.Zero),
                 new RuleVersion("dispatch-rules-v1"),
                 new ContentVersion("dispatch-content-v1"),

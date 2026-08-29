@@ -167,30 +167,41 @@ public sealed class ClaudeOvernightAdversarialTests
     }
 
     [TestMethod]
-    public void NoExecutionContractConstructorMayDefaultASystemActorKeyForTheSystemLane()
+    public void NoIdentityOrExecutionContractFactoryMayDefaultASystemActorKeyForTheSystemLane()
     {
-        var offenders = typeof(RecoveredCommandExecution).Assembly
-            .GetExportedTypes()
-            .SelectMany(static type => type.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
-            .Where(static constructor =>
+        var contractAssemblies = new[]
+        {
+            typeof(RecoveredCommandExecution).Assembly,
+            typeof(TrustedActorContext).Assembly
+        };
+
+        var offenders = contractAssemblies
+            .SelectMany(static assembly => assembly.GetExportedTypes())
+            .SelectMany(static type =>
+                type.GetConstructors(BindingFlags.Public | BindingFlags.Instance).Cast<MethodBase>()
+                    .Concat(type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                        .Where(method => method.ReturnType == type)))
+            .Where(static factory =>
             {
-                var parameters = constructor.GetParameters();
+                var parameters = factory.GetParameters();
                 var acceptsLane = parameters.Any(static parameter =>
                     parameter.ParameterType == typeof(CommandExecutionLane));
                 var acceptsSystemActor = parameters.Any(static parameter =>
                     parameter.ParameterType == typeof(SystemActorKey));
-                return acceptsLane && !acceptsSystemActor;
+                var createsSystem = factory.Name.Contains("Create", StringComparison.OrdinalIgnoreCase)
+                    && factory.Name.Contains("System", StringComparison.OrdinalIgnoreCase);
+                return (acceptsLane || createsSystem) && !acceptsSystemActor;
             })
-            .Select(static constructor =>
-                $"{constructor.DeclaringType?.FullName}({constructor.GetParameters().Length} args)")
+            .Select(static factory =>
+                $"{factory.DeclaringType?.FullName}.{factory.Name}({factory.GetParameters().Length} args)")
             .OrderBy(static description => description, StringComparer.Ordinal)
             .ToArray();
 
         Assert.AreEqual(
             0,
             offenders.Length,
-            "A public Nexis.Execution.Contracts constructor accepts an execution lane without also "
-            + "requiring the automated authority that acted: "
+            "A public Nexis.Identity.Contracts or Nexis.Execution.Contracts constructor/static "
+            + "factory can create System-lane authority without requiring the actor key: "
             + string.Join(", ", offenders)
             + ". Any such convenience overload can only supply the missing identity by inventing one.");
     }

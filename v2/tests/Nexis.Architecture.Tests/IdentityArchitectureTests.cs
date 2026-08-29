@@ -74,7 +74,7 @@ public sealed class IdentityArchitectureTests
     [TestMethod]
     public void SystemActorHasNoAccountOrCharacterIdentity()
     {
-        var actor = TrustedActorContext.CreateSystem();
+        var actor = TrustedActorContext.CreateSystem(new SystemActorKey("tests.identity"));
 
         Assert.AreEqual(ActorKind.System, actor.Kind);
         Assert.AreEqual(CommandExecutionLane.System, actor.Lane);

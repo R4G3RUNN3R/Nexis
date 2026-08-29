@@ -194,9 +194,6 @@ public sealed class TrustedActorContext
             entitlements);
     }
 
-    public static TrustedActorContext CreateSystem() =>
-        CreateSystem(SystemActorKey.Platform);
-
     public static TrustedActorContext CreateSystem(SystemActorKey systemActorKey)
     {
         ArgumentNullException.ThrowIfNull(systemActorKey);
