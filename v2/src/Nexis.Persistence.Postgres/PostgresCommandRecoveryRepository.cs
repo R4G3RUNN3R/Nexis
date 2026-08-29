@@ -218,7 +218,13 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
         command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, commandId.Value);
         command.Parameters.AddWithValue("execution_token", NpgsqlDbType.Uuid, executionToken.Value);
         command.Parameters.AddWithValue("execution_owner", NpgsqlDbType.Text, currentLease.WorkerId);
-        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+        if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
+        {
+            return true;
+        }
+
+        await ReportLeaseRenewalRefusedAsync(commandId, nowUtc, CancellationToken.None).ConfigureAwait(false);
+        return false;
     }
 
     private static async ValueTask<StoredRecoveryRow?> ReadForUpdateAsync(
@@ -376,6 +382,47 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
         if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
         {
             throw new InvalidOperationException("Command recovery quarantine fence changed while its receipt row was locked.");
+        }
+    }
+
+    private async ValueTask ReportLeaseRenewalRefusedAsync(
+        CommandId commandId,
+        DateTimeOffset occurredAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (_operationalSignalSink is null)
+        {
+            return;
+        }
+
+        CorrelationId? correlationId = null;
+        try
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var command = new NpgsqlCommand(
+                "SELECT original_correlation_id FROM nexis_v2.command_receipts WHERE command_id = @command_id;",
+                connection);
+            command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, commandId.Value);
+            var storedCorrelation = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (storedCorrelation is Guid value)
+            {
+                correlationId = new CorrelationId(value);
+            }
+
+            await _operationalSignalSink.ReportAsync(
+                new OperationalSignal(
+                    OperationalConditionKind.LeaseFencingFailure,
+                    OperationalSeverity.Error,
+                    new OperationalComponentKey("postgres.command-recovery"),
+                    new OperationalReasonCode("retry_lease_renewal_refused"),
+                    occurredAtUtc,
+                    commandId,
+                    correlationId),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // The receipt fence is authoritative. Monitoring failures cannot restore retry ownership.
         }
     }
 

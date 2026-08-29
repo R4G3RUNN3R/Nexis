@@ -3,9 +3,10 @@ using Nexis.Execution.Contracts;
 namespace Nexis.Execution;
 
 /// <summary>
-/// Reruns the complete supplied authoritative command attempt only for failures explicitly
-/// classified as transient/retryable. The callback must represent the whole attempt: reload current
-/// state, revalidate authority/prerequisites, re-evaluate Core as required, then attempt commit.
+/// Reruns the post-receipt authoritative command attempt only for failures explicitly classified
+/// as transient/retryable. Receipt acquisition is outside this boundary. Each callback must reload
+/// current state, revalidate authority/prerequisites, re-evaluate Core and attempt commit while
+/// retaining the same acquired receipt token.
 /// </summary>
 public sealed class BoundedCommandRetryExecutor
 {
@@ -30,7 +31,22 @@ public sealed class BoundedCommandRetryExecutor
         Func<int, CancellationToken, ValueTask<T>> wholeCommandAttempt,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(wholeCommandAttempt);
+        return await ExecuteAsync(
+            wholeCommandAttempt,
+            static (_, _, _) => ValueTask.FromResult(true),
+            static (_, exception, _) => ValueTask.FromException<T>(exception),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async ValueTask<T> ExecuteAsync<T>(
+        Func<int, CancellationToken, ValueTask<T>> postReceiptAttempt,
+        Func<int, Exception, CancellationToken, ValueTask<bool>> renewLeaseBeforeRetry,
+        Func<int, Exception, CancellationToken, ValueTask<T>> retryExhausted,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(postReceiptAttempt);
+        ArgumentNullException.ThrowIfNull(renewLeaseBeforeRetry);
+        ArgumentNullException.ThrowIfNull(retryExhausted);
 
         for (var attemptNumber = 1; attemptNumber <= _maximumAttempts; attemptNumber++)
         {
@@ -38,21 +54,42 @@ public sealed class BoundedCommandRetryExecutor
 
             try
             {
-                return await wholeCommandAttempt(attemptNumber, cancellationToken).ConfigureAwait(false);
+                return await postReceiptAttempt(attemptNumber, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
-            catch (Exception exception) when (
-                attemptNumber < _maximumAttempts &&
-                _failureClassifier.IsRetryable(exception))
+            catch (Exception exception) when (_failureClassifier.IsRetryable(exception))
             {
-                // Retry by invoking the complete command attempt again. Never resume from a partial
-                // in-memory transition plan or reuse stale snapshots from the failed attempt.
+                if (attemptNumber == _maximumAttempts)
+                {
+                    return await retryExhausted(attemptNumber, exception, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (!await renewLeaseBeforeRetry(attemptNumber, exception, cancellationToken).ConfigureAwait(false))
+                {
+                    throw new CommandRetryLeaseLostException(attemptNumber, exception);
+                }
             }
         }
 
         throw new InvalidOperationException("Bounded retry executor reached an impossible terminal state.");
     }
+}
+
+public sealed class CommandRetryLeaseLostException : Exception
+{
+    public CommandRetryLeaseLostException(int completedAttempts, Exception transientFailure)
+        : base("The command receipt lease or execution fence moved before a retry could begin.", transientFailure)
+    {
+        if (completedAttempts <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(completedAttempts));
+        }
+
+        CompletedAttempts = completedAttempts;
+    }
+
+    public int CompletedAttempts { get; }
 }

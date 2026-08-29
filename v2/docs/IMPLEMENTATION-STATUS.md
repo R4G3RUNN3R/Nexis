@@ -26,7 +26,7 @@ The V2 branch now contains and has executable coverage for:
 - CommandId idempotency receipts, canonical payload fingerprints, original-correlation retention and duplicate/integrity-violation handling;
 - canonical command codecs and durable crash-recovery payload rehydration without runtime type metadata;
 - atomic command commit plans covering owner transitions, terminal command outcome, authoritative history, outbox and state-changing Admin audit;
-- canonical multi-resource lock ordering and bounded whole-command retries only for explicitly classified transient failures;
+- canonical global multi-resource lock acquisition plus receipt-aware bounded retries: receipt acquisition occurs once, each post-acquisition retry retains and renews the same fenced token, and exhaustion terminalizes as TechnicalFailure without owner resources/events;
 - PostgreSQL command receipt persistence, optimistic owner transition coordination, authoritative history, durable outbox and Admin audit in the dedicated `nexis_v2` schema;
 - command execution leases, expired-claim recovery, lease renewal/fencing and ambiguous-commit reconciliation by CommandId;
 - leased at-least-once PostgreSQL outbox delivery using EventId as the stable delivery identity;

@@ -221,7 +221,7 @@ Unique constraints, FKs, checks and atomic conditional updates are final structu
 
 Do not use blanket PostgreSQL `SERIALIZABLE` merely because it sounds safe.
 
-Use short transactions plus explicit owner concurrency rules. Infrastructure provides bounded whole-operation retry for retryable DB serialization/deadlock failures (for example SQLSTATE 40001/40P01). Each retry reloads current snapshots and re-runs rule evaluation as required.
+Use short transactions plus explicit owner concurrency rules. Infrastructure acquires the durable CommandId receipt once, then provides bounded retry only around the post-acquisition evaluation-and-commit region for retryable DB serialization/deadlock failures (for example SQLSTATE 40001/40P01). Every retry retains the same fenced execution token, renews its lease before continuing, reloads current snapshots and re-runs rule evaluation as required; retry exhaustion terminates as TechnicalFailure without owner transitions or authoritative events.
 
 Never automatically retry authorization failures, insufficient resources, invalid state, business-rule rejection or permanent constraint conflicts.
 

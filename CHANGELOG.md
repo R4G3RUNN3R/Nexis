@@ -1,6 +1,13 @@
 # Changelog
 ## 2026-08-29
 
+### Nexis 2.0 receipt-aware bounded command retry
+- compose receipt acquisition and retry at one Application boundary: acquire CommandId exactly once, then rebuild/revalidate/re-evaluate/commit each retry with the same fenced token instead of re-acquiring as DuplicateInProgress
+- renew the held lease between retryable attempts and abandon immediately when renewal is refused; PostgreSQL emits a bounded payload-free lease-fencing signal with CommandId and original CorrelationId
+- terminalize exhausted retryable failures as TechnicalFailure with zero owner transitions and zero authoritative events
+- real disposable-PostgreSQL evidence forces SQLSTATE 40001 inside attempt 1 and proves exactly one terminal outcome, owner mutation, history row and outbox row; also proves fence rotation blocks commit and exhaustion consumes no resources
+- verification: Release build 0 warnings/0 errors; focused H2 PostgreSQL 3/3 and complete PostgreSQL suite 47/47 before documentation reconciliation
+
 ### Nexis 2.0 global canonical PostgreSQL resource locking
 - acquire every adapter-resolved authoritative resource in one global canonical transaction advisory-lock sweep before any owner transition applier executes; interleaved same-owner key sets can no longer regress to transition-local `a,c,b` acquisition
 - preserve adapter-side key resolution and Core replacement boundaries; lock identities remain private PostgreSQL infrastructure and use stable SHA-256-derived 64-bit advisory keys

@@ -7,6 +7,7 @@ using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
 using Nexis.Kernel.Randomness;
+using Nexis.Operations.Contracts;
 using Nexis.Persistence.Postgres;
 using Npgsql;
 using NpgsqlTypes;
@@ -318,6 +319,173 @@ public sealed class PostgresExecutionIntegrationTests
     }
 
     [TestMethod]
+    public async Task RetryingWholeAttemptAfterTransientFailure_MustStillBeAbleToCommit()
+    {
+        await TransientFailureInsideCommit_ReachesCommittedTerminalOutcomeExactlyOnce();
+    }
+
+    [TestMethod]
+    public async Task TransientFailureInsideCommit_ReachesCommittedTerminalOutcomeExactlyOnce()
+    {
+        var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
+        var payload = Payload("retry-once");
+        var receipts = new CountingReceiptRepository(new PostgresCommandReceiptRepository(DataSource));
+        var recovery = new CountingRecoveryRepository(new PostgresCommandRecoveryRepository(DataSource));
+        var attempts = 0;
+        var committer = new PostgresAtomicCommandCommitter(
+            DataSource,
+            new[] { new SyntheticOwnerApplier(OwnerA, "nexis_v2_test.owner_a") },
+            resourceLockAcquirer: new RaisingResourceLockAcquirer(failures: 1));
+        var coordinator = new RetryingCommandExecutionCoordinator(
+            new CommandReceiptCoordinator(receipts),
+            new BoundedCommandRetryExecutor(new PostgresTransientCommandFailureClassifier(), maximumAttempts: 3),
+            recovery,
+            new CommandCommitCoordinator(committer));
+
+        var result = await coordinator.ExecuteAsync(
+            request,
+            payload,
+            Lease("integration-worker"),
+            Utc(10, 0),
+            (claim, _, _) =>
+            {
+                attempts++;
+                return ValueTask.FromResult(new CommandCommitPlanBuilder().Build(
+                    request,
+                    payload.Fingerprint,
+                    claim,
+                    CoreDecision.Succeeded(
+                        transitions: new[] { new SyntheticTransition(OwnerA, "resource", 10, 1) },
+                        events: new[] { new SyntheticEvent() }),
+                    CoreDescriptor(),
+                    Utc(10, 5)));
+            },
+            (claim, _, _) => ValueTask.FromResult(new CommandCommitPlanBuilder().Build(
+                request,
+                payload.Fingerprint,
+                claim,
+                CoreDecision.TechnicalFailure(new CoreReasonCode("execution.retry.exhausted")),
+                CoreDescriptor(),
+                Utc(10, 6))));
+
+        Assert.AreEqual(CommandReceiptDisposition.Acquired, result.ReceiptClaim.Disposition);
+        Assert.AreEqual(CommandCommitDisposition.Committed, result.CommitResult?.Disposition);
+        Assert.AreEqual(2, attempts);
+        Assert.AreEqual(1, receipts.AcquireCount);
+        Assert.AreEqual(1, recovery.RenewCount);
+        Assert.AreEqual(10, await ReadOwnerValueAsync("owner_a"));
+        Assert.AreEqual((int)CommandTerminalStatus.Succeeded, await ReadTerminalStatusAsync(request.Context.CommandId));
+        Assert.AreEqual(1, await ScalarIntForCommandAsync("nexis_v2.authoritative_events", request.Context.CommandId));
+        Assert.AreEqual(1, await ScalarIntForCommandAsync("nexis_v2.outbox", request.Context.CommandId));
+    }
+
+    [TestMethod]
+    public async Task RetryExhaustion_RecordsATerminalTechnicalFailureAndConsumesNoResources()
+    {
+        var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
+        var payload = Payload("retry-exhausted");
+        var receipts = new CountingReceiptRepository(new PostgresCommandReceiptRepository(DataSource));
+        var recovery = new CountingRecoveryRepository(new PostgresCommandRecoveryRepository(DataSource));
+        var committer = new PostgresAtomicCommandCommitter(
+            DataSource,
+            new[] { new SyntheticOwnerApplier(OwnerA, "nexis_v2_test.owner_a") },
+            resourceLockAcquirer: new RaisingResourceLockAcquirer(failures: int.MaxValue));
+        var coordinator = new RetryingCommandExecutionCoordinator(
+            new CommandReceiptCoordinator(receipts),
+            new BoundedCommandRetryExecutor(new PostgresTransientCommandFailureClassifier(), maximumAttempts: 2),
+            recovery,
+            new CommandCommitCoordinator(committer));
+
+        var result = await coordinator.ExecuteAsync(
+            request,
+            payload,
+            Lease("integration-worker"),
+            Utc(10, 0),
+            (claim, _, _) => ValueTask.FromResult(new CommandCommitPlanBuilder().Build(
+                request,
+                payload.Fingerprint,
+                claim,
+                CoreDecision.Succeeded(
+                    transitions: new[] { new SyntheticTransition(OwnerA, "resource", 10, 1) },
+                    events: new[] { new SyntheticEvent() }),
+                CoreDescriptor(),
+                Utc(10, 5))),
+            (claim, _, _) => ValueTask.FromResult(new CommandCommitPlanBuilder().Build(
+                request,
+                payload.Fingerprint,
+                claim,
+                CoreDecision.TechnicalFailure(new CoreReasonCode("execution.retry.exhausted")),
+                CoreDescriptor(),
+                Utc(10, 6))));
+
+        Assert.AreEqual(CommandCommitDisposition.Committed, result.CommitResult?.Disposition);
+        Assert.AreEqual(1, receipts.AcquireCount);
+        Assert.AreEqual(1, recovery.RenewCount);
+        Assert.AreEqual(0, await ReadOwnerValueAsync("owner_a"));
+        Assert.AreEqual((int)CommandTerminalStatus.TechnicalFailure, await ReadTerminalStatusAsync(request.Context.CommandId));
+        Assert.AreEqual(0, await ScalarIntForCommandAsync("nexis_v2.authoritative_events", request.Context.CommandId));
+        Assert.AreEqual(0, await ScalarIntForCommandAsync("nexis_v2.outbox", request.Context.CommandId));
+    }
+
+    [TestMethod]
+    public async Task RetryWhoseFenceWasRotatedMidFlight_MustNotCommit()
+    {
+        var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
+        var payload = Payload("retry-fenced");
+        var receipts = new CountingReceiptRepository(new PostgresCommandReceiptRepository(DataSource));
+        var signals = new CollectingOperationalSignalSink();
+        var postgresRecovery = new PostgresCommandRecoveryRepository(DataSource, signals);
+        var recovery = new RotateFenceBeforeRenewalRepository(postgresRecovery);
+        var committer = new PostgresAtomicCommandCommitter(
+            DataSource,
+            new[] { new SyntheticOwnerApplier(OwnerA, "nexis_v2_test.owner_a") },
+            resourceLockAcquirer: new RaisingResourceLockAcquirer(failures: 1));
+        var coordinator = new RetryingCommandExecutionCoordinator(
+            new CommandReceiptCoordinator(receipts),
+            new BoundedCommandRetryExecutor(new PostgresTransientCommandFailureClassifier(), maximumAttempts: 3),
+            recovery,
+            new CommandCommitCoordinator(committer));
+        var attempts = 0;
+
+        var result = await coordinator.ExecuteAsync(
+            request,
+            payload,
+            Lease("integration-worker"),
+            Utc(10, 0),
+            (claim, _, _) =>
+            {
+                attempts++;
+                return ValueTask.FromResult(new CommandCommitPlanBuilder().Build(
+                    request,
+                    payload.Fingerprint,
+                    claim,
+                    CoreDecision.Succeeded(
+                        transitions: new[] { new SyntheticTransition(OwnerA, "resource", 10, 1) },
+                        events: new[] { new SyntheticEvent() }),
+                    CoreDescriptor(),
+                    Utc(10, 5)));
+            },
+            (claim, _, _) => ValueTask.FromResult(new CommandCommitPlanBuilder().Build(
+                request,
+                payload.Fingerprint,
+                claim,
+                CoreDecision.TechnicalFailure(new CoreReasonCode("execution.retry.exhausted")),
+                CoreDescriptor(),
+                Utc(10, 6))));
+
+        Assert.AreEqual(CommandCommitDisposition.TechnicalFailure, result.CommitResult?.Disposition);
+        Assert.AreEqual("execution.receipt.ownership_lost", result.CommitResult?.Reason?.Value);
+        Assert.AreEqual(1, attempts);
+        Assert.AreEqual(1, receipts.AcquireCount);
+        Assert.AreEqual(0, await ReadOwnerValueAsync("owner_a"));
+        Assert.IsNull(await ReadTerminalStatusAsync(request.Context.CommandId));
+        Assert.IsTrue(signals.Signals.Any(signal =>
+            signal.Kind == OperationalConditionKind.LeaseFencingFailure &&
+            signal.CommandId == request.Context.CommandId &&
+            signal.CorrelationId == request.Context.CorrelationId));
+    }
+
+    [TestMethod]
     public async Task AdminCommand_PersistsAuditInSameTransaction()
     {
         var accountId = AccountId.New();
@@ -508,6 +676,16 @@ public sealed class PostgresExecutionIntegrationTests
         return value is null or DBNull ? null : Convert.ToInt32(value);
     }
 
+    private static async Task<int> ScalarIntForCommandAsync(string table, CommandId commandId)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(
+            $"SELECT count(*) FROM {table} WHERE command_id = @command_id;",
+            connection);
+        command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, commandId.Value);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
     private static async Task<int> ScalarIntAsync(string sql)
     {
         await using var connection = await DataSource.OpenConnectionAsync();
@@ -597,6 +775,149 @@ public sealed class PostgresExecutionIntegrationTests
             return rows == 1
                 ? PostgresOwnerTransitionResult.Applied()
                 : PostgresOwnerTransitionResult.ConcurrencyConflict(new CommandReasonCode("tests.revision_conflict"));
+        }
+    }
+
+    private sealed class CountingReceiptRepository : ICommandReceiptRepository
+    {
+        private readonly ICommandReceiptRepository _inner;
+
+        public CountingReceiptRepository(ICommandReceiptRepository inner) => _inner = inner;
+
+        public int AcquireCount { get; private set; }
+
+        public ValueTask<CommandReceiptClaim> TryAcquireAsync(
+            CommandReceiptAcquireRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            AcquireCount++;
+            return _inner.TryAcquireAsync(request, cancellationToken);
+        }
+    }
+
+    private sealed class CountingRecoveryRepository : ICommandExecutionRecoveryRepository
+    {
+        private readonly ICommandExecutionRecoveryRepository _inner;
+
+        public CountingRecoveryRepository(ICommandExecutionRecoveryRepository inner) => _inner = inner;
+
+        public int RenewCount { get; private set; }
+
+        public ValueTask<CommandRecoveryResult> ReconcileAsync(
+            CommandId commandId,
+            CommandExecutionToken observedExecutionToken,
+            CommandExecutionLeaseRequest replacementLease,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReconcileAsync(commandId, observedExecutionToken, replacementLease, nowUtc, cancellationToken);
+
+        public ValueTask<IReadOnlyList<RecoveredCommandExecution>> ClaimExpiredBatchAsync(
+            CommandExecutionLeaseRequest replacementLease,
+            DateTimeOffset nowUtc,
+            int maximumItems,
+            CancellationToken cancellationToken = default) =>
+            _inner.ClaimExpiredBatchAsync(replacementLease, nowUtc, maximumItems, cancellationToken);
+
+        public ValueTask<bool> RenewLeaseAsync(
+            CommandId commandId,
+            CommandExecutionToken executionToken,
+            CommandExecutionLeaseRequest currentLease,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken = default)
+        {
+            RenewCount++;
+            return _inner.RenewLeaseAsync(commandId, executionToken, currentLease, nowUtc, cancellationToken);
+        }
+    }
+
+    private sealed class RotateFenceBeforeRenewalRepository : ICommandExecutionRecoveryRepository
+    {
+        private readonly ICommandExecutionRecoveryRepository _inner;
+        private bool _rotated;
+
+        public RotateFenceBeforeRenewalRepository(ICommandExecutionRecoveryRepository inner) => _inner = inner;
+
+        public ValueTask<CommandRecoveryResult> ReconcileAsync(
+            CommandId commandId,
+            CommandExecutionToken observedExecutionToken,
+            CommandExecutionLeaseRequest replacementLease,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReconcileAsync(commandId, observedExecutionToken, replacementLease, nowUtc, cancellationToken);
+
+        public ValueTask<IReadOnlyList<RecoveredCommandExecution>> ClaimExpiredBatchAsync(
+            CommandExecutionLeaseRequest replacementLease,
+            DateTimeOffset nowUtc,
+            int maximumItems,
+            CancellationToken cancellationToken = default) =>
+            _inner.ClaimExpiredBatchAsync(replacementLease, nowUtc, maximumItems, cancellationToken);
+
+        public async ValueTask<bool> RenewLeaseAsync(
+            CommandId commandId,
+            CommandExecutionToken executionToken,
+            CommandExecutionLeaseRequest currentLease,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_rotated)
+            {
+                _rotated = true;
+                var rotated = await _inner.ReconcileAsync(
+                    commandId,
+                    executionToken,
+                    new CommandExecutionLeaseRequest("recovery-worker", TimeSpan.FromMinutes(1)),
+                    nowUtc,
+                    cancellationToken);
+                Assert.AreEqual(CommandRecoveryDisposition.Recovered, rotated.Disposition);
+            }
+
+            return await _inner.RenewLeaseAsync(
+                commandId,
+                executionToken,
+                currentLease,
+                nowUtc,
+                cancellationToken);
+        }
+    }
+
+    private sealed class RaisingResourceLockAcquirer : IPostgresResourceLockAcquirer
+    {
+        private readonly int _failures;
+        private readonly PostgresAdvisoryResourceLockAcquirer _inner = new();
+        private int _attempts;
+
+        public RaisingResourceLockAcquirer(int failures) => _failures = failures;
+
+        public async ValueTask AcquireAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            AuthoritativeResourceKey resource,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _attempts) <= _failures)
+            {
+                await using var command = new NpgsqlCommand(
+                    "DO $nexis$ BEGIN RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'forced serialization failure'; END $nexis$;",
+                    connection,
+                    transaction);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+                return;
+            }
+
+            await _inner.AcquireAsync(connection, transaction, resource, cancellationToken);
+        }
+    }
+
+    private sealed class CollectingOperationalSignalSink : IOperationalSignalSink
+    {
+        public List<OperationalSignal> Signals { get; } = new();
+
+        public ValueTask ReportAsync(
+            OperationalSignal signal,
+            CancellationToken cancellationToken = default)
+        {
+            Signals.Add(signal);
+            return ValueTask.CompletedTask;
         }
     }
 

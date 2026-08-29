@@ -34,13 +34,15 @@ Resource key strings are stable contract values and must not be localized, cultu
 
 `BoundedCommandRetryExecutor` retries only exceptions explicitly approved by an infrastructure-specific `ITransientCommandFailureClassifier` and only up to the configured maximum attempt count.
 
-Each retry invokes the **whole command attempt callback again**. That callback is required to reload current authoritative snapshots, revalidate current actor authority/prerequisites, re-evaluate Core where required and then attempt the atomic commit again.
+The retry boundary begins **after** `CommandReceiptCoordinator` has acquired the durable receipt exactly once. `RetryingCommandExecutionCoordinator` retains that claim's original CorrelationId and execution token across all attempts; it never calls `TryAcquireAsync` again for the owning attempt.
 
-It must never resume from a half-applied in-memory plan or reuse stale snapshots from the failed attempt.
+Each retry callback reloads current authoritative snapshots, revalidates current actor authority/prerequisites, re-resolves time/content/RNG inputs, re-evaluates Core where required, builds a fresh commit plan with the **same receipt token**, and attempts the atomic commit. It never resumes from a half-applied plan or reuses stale snapshots.
 
-The stable contract deliberately does not mention PostgreSQL/Npgsql error types. A later PostgreSQL adapter may classify known retryable database failures such as serialization/deadlock conditions, while business-rule rejection, authorization failure, insufficient resources, permanent constraint conflicts and ordinary domain failure remain non-retryable.
+Between attempts the coordinator renews the existing lease through `ICommandExecutionRecoveryRepository.RenewLeaseAsync`. Refusal means the execution fence or owner moved: the loop abandons immediately, performs no stale commit, and PostgreSQL reports a lease-fencing condition. A rolled-back `40001`/`40P01` commit leaves the receipt token unchanged, so a renewed retry can still commit exactly once.
 
-Caller cancellation is never converted into an automatic retry even if a faulty classifier claims otherwise.
+At retry exhaustion the coordinator builds and commits one terminal `TechnicalFailure` plan against the held token. That plan is required to contain no owner transitions or authoritative events. If terminalization itself cannot commit, normal receipt recovery remains authoritative.
+
+The stable classifier contract does not mention PostgreSQL/Npgsql error types. The PostgreSQL adapter classifies only serialization and deadlock failures (`40001`/`40P01`); business rejection, authorization failure, insufficient resources, permanent constraint conflicts and ordinary domain failure remain non-retryable. Caller cancellation is never converted into a retry.
 
 ## Deliberate non-goals
 
