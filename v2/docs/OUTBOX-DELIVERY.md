@@ -33,6 +33,14 @@ The dispatcher renews the current item's lease before transport publication. If 
 
 Transport failure releases the row with a configured `available_at_utc` delay. Failure delay and lease duration are infrastructure configuration, not gameplay rules.
 
+## Failure classification, quarantine and operator recovery
+
+Delivery attempts and poison attempts are distinct durable counters. Every claim increments the total delivery-attempt count for operational evidence. Only an explicit `CommittedEventTransportException` classified as `EventSpecificPermanent` increments the event-specific poison count. Unclassified failures and `SystemicTransient` failures are treated as shared transport unavailability: they back off and remain claimable, regardless of how many times the transport is unavailable. A broad outage can therefore never consume the poison budget of valid backlog.
+
+When one immutable event reaches the configured poison ceiling, PostgreSQL atomically clears its lease and records `dead_lettered_at_utc` plus the bounded reason `event_specific_retry_exhausted`. Dead-lettered events are excluded from ordinary claim, renew, acknowledge and release paths.
+
+Quarantine is a lifecycle state, not a permanent trapdoor. `PostgresOperationalQuarantineService` provides payload-free bounded listing and explicit requeue. Both require an authorized `operations.quarantine.manage` privileged-entry decision, acting staff AccountId, CorrelationId and case reference. Requeue compares the observed dead-letter timestamp and poison count, resets only quarantine and delivery availability, and appends the successful or stale-fence outcome to Admin Audit in the same transaction. Listing alone never requeues an event, and no background path automatically resurrects dead-lettered work.
+
 ## Internal PostgreSQL projections
 
 `PostgresProjectionConsumerExecutor` exists only for non-authoritative read models/projections.
@@ -70,7 +78,6 @@ This slice does not yet add:
 - a specific Kafka/RabbitMQ/cloud transport;
 - gameplay event handlers;
 - direct post-commit owner mutations;
-- a poison/dead-letter policy;
 - production operational dashboards/alerting;
 - automatic command creation from events.
 

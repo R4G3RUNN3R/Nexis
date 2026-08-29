@@ -6,6 +6,7 @@ using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
 using Nexis.Kernel.Randomness;
+using Nexis.Operations.Contracts;
 using Nexis.Persistence.Postgres;
 using Npgsql;
 using NpgsqlTypes;
@@ -251,6 +252,73 @@ public sealed class PostgresCommandRecoveryIntegrationTests
     }
 
     [TestMethod]
+    public async Task QuarantinedReceipt_RejectsALateCommitFromTheOriginalFenceHolder()
+    {
+        var request = CreateRequest();
+        var payload = Payload("{\"kind\":\"late-worker\"}");
+        var originalClaim = await AcquireAsync(request, payload, "worker-a", TimeSpan.FromSeconds(1));
+        var stalePlan = new CommandCommitPlanBuilder().Build(
+            request,
+            payload.Fingerprint,
+            originalClaim,
+            CoreDecision.Succeeded(events: new[] { new SyntheticEvent() }),
+            new CoreImplementationDescriptor("Test.Core", "recovery", CoreContractVersion.V1),
+            Utc(10, 0, 20));
+
+        await using (var connection = await DataSource.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(
+            "UPDATE nexis_v2.command_receipts SET canonical_payload = '{\"kind\":\"tampered\"}' WHERE command_id = @command_id;",
+            connection))
+        {
+            command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, request.Context.CommandId.Value);
+            Assert.AreEqual(1, await command.ExecuteNonQueryAsync());
+        }
+
+        var signals = new RecordingOperationalSignalSink();
+        var recovery = new PostgresCommandRecoveryRepository(DataSource, signals);
+        var recovered = await recovery.ClaimExpiredBatchAsync(
+            Lease("worker-b", TimeSpan.FromMinutes(1)),
+            Utc(10, 0, 2),
+            maximumItems: 1);
+
+        Assert.AreEqual(0, recovered.Count);
+
+        Guid durableFence;
+        await using (var connection = await DataSource.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(
+            "SELECT execution_token FROM nexis_v2.command_receipts WHERE command_id = @command_id;",
+            connection))
+        {
+            command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, request.Context.CommandId.Value);
+            durableFence = (Guid)(await command.ExecuteScalarAsync()
+                ?? throw new InvalidOperationException("Quarantined receipt disappeared."));
+        }
+
+        Assert.AreNotEqual(originalClaim.ExecutionToken!.Value.Value, durableFence);
+
+        var lateCommit = await new PostgresAtomicCommandCommitter(DataSource).CommitAsync(stalePlan);
+
+        Assert.AreEqual(CommandCommitDisposition.TechnicalFailure, lateCommit.Disposition);
+        Assert.AreEqual("execution.receipt.ownership_lost", lateCommit.Reason?.Value);
+
+        await using (var connection = await DataSource.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(
+            "SELECT terminal_status IS NULL, (SELECT count(*) FROM nexis_v2.authoritative_events WHERE command_id = @command_id) FROM nexis_v2.command_receipts WHERE command_id = @command_id;",
+            connection))
+        {
+            command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, request.Context.CommandId.Value);
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.IsTrue(await reader.ReadAsync());
+            Assert.IsTrue(reader.GetBoolean(0));
+            Assert.AreEqual(0L, reader.GetInt64(1));
+        }
+
+        Assert.IsTrue(signals.Signals.Any(signal =>
+            signal.Kind == OperationalConditionKind.LeaseFencingFailure
+            && signal.CommandId == request.Context.CommandId));
+    }
+
+    [TestMethod]
     public async Task CorruptedStoredPayload_IsRejectedBeforeRecoveredExecutionCanRun()
     {
         var request = CreateRequest();
@@ -266,13 +334,25 @@ public sealed class PostgresCommandRecoveryIntegrationTests
             await command.ExecuteNonQueryAsync();
         }
 
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
-        {
-            await new PostgresCommandRecoveryRepository(DataSource).ClaimExpiredBatchAsync(
-                Lease("worker-b", TimeSpan.FromMinutes(1)),
-                Utc(10, 0, 2),
-                maximumItems: 1);
-        });
+        var recovery = new PostgresCommandRecoveryRepository(DataSource, new ThrowingOperationalSignalSink());
+        var recovered = await recovery.ClaimExpiredBatchAsync(
+            Lease("worker-b", TimeSpan.FromMinutes(1)),
+            Utc(10, 0, 2),
+            maximumItems: 1);
+        var retried = await recovery.ClaimExpiredBatchAsync(
+            Lease("worker-c", TimeSpan.FromMinutes(1)),
+            Utc(10, 1),
+            maximumItems: 1);
+
+        Assert.AreEqual(0, recovered.Count);
+        Assert.AreEqual(0, retried.Count);
+
+        await using var verificationConnection = await DataSource.OpenConnectionAsync();
+        await using var verification = new NpgsqlCommand(
+            "SELECT recovery_abandoned_at_utc IS NOT NULL FROM nexis_v2.command_receipts WHERE command_id = @command_id;",
+            verificationConnection);
+        verification.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, request.Context.CommandId.Value);
+        Assert.IsTrue(Convert.ToBoolean(await verification.ExecuteScalarAsync()));
     }
 
     private static async ValueTask<CommandReceiptClaim> AcquireAsync(
@@ -333,6 +413,29 @@ public sealed class PostgresCommandRecoveryIntegrationTests
     private sealed record SyntheticIntent : ICoreIntent
     {
         public ContractDescriptor Contract { get; } = new("tests.recovery.command", 1);
+    }
+
+    private sealed record SyntheticEvent : ICoreEventDescriptor
+    {
+        public ContractDescriptor Contract { get; } = new("tests.recovery.event", 1);
+    }
+
+    private sealed class RecordingOperationalSignalSink : IOperationalSignalSink
+    {
+        public List<OperationalSignal> Signals { get; } = new();
+
+        public ValueTask ReportAsync(OperationalSignal signal, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Signals.Add(signal);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingOperationalSignalSink : IOperationalSignalSink
+    {
+        public ValueTask ReportAsync(OperationalSignal signal, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException(new InvalidOperationException("Synthetic diagnostics sink failure."));
     }
 
     private sealed class FixedRandomFactory : IDeterministicRandomFactory

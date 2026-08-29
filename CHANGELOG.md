@@ -1,4 +1,14 @@
 # Changelog
+## 2026-08-29
+
+### Nexis 2.0 recovery, quarantine and outbox failure hardening
+- separated total outbox delivery attempts from event-specific poison attempts; unclassified and systemic transport failures now back off without consuming the poison ceiling, while explicit event-specific permanent failures alone can dead-letter an event
+- added capability-gated, payload-free operational quarantine listings plus fenced, atomically audited dead-letter requeue and command-recovery resolution paths; recovery quarantine now rotates the execution fence and can terminate as TechnicalFailure without becoming a permanent `DuplicateInProgress` trapdoor
+- added adapter-side authoritative resource-key resolution and deterministic transition ordering without leaking PostgreSQL locking vocabulary into Core contracts; a later slice must complete the global acquisition sweep for interleaved same-owner resources
+- documented the public `CommittedEventTransportException` classification contract and the controlled recovery/quarantine lifecycle
+- verification on the exact reviewed dirty slice: .NET SDK 10.0.111; Release build 0 warnings/0 errors; disposable PostgreSQL 17 suite 41/41; Architecture/Core/security/replay suite 159/162 with only the three pre-existing deliberate L3 RED tests still failing
+- no production/V1 access, deployment, push, merge, DNS/Caddy change or gameplay/canon value change occurred
+
 ## 2026-08-28
 
 ### Nexis 2.0 operational observability foundation

@@ -1,6 +1,7 @@
 using System.Data;
 using System.Text.Json;
 using Nexis.Core.Contracts;
+using Nexis.Execution;
 using Nexis.Execution.Contracts;
 using Npgsql;
 using NpgsqlTypes;
@@ -13,6 +14,7 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
     private static readonly CommandReasonCode ReceiptOwnershipLost = new("execution.receipt.ownership_lost");
     private static readonly CommandReasonCode ReceiptAlreadyCompleted = new("execution.receipt.already_completed");
     private static readonly CommandReasonCode OwnerApplierMissing = new("execution.owner.applier_missing");
+    private static readonly CommandReasonCode OwnerLockKeysUnresolved = new("execution.owner.lock_keys_unresolved");
     private static readonly CommandReasonCode PersistenceFailure = new("execution.persistence.failed");
 
     private readonly NpgsqlDataSource _dataSource;
@@ -71,18 +73,25 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
                 return CommandCommitResult.TechnicalFailure(receiptVerification);
             }
 
-            foreach (var transition in plan.Transitions)
+            if (plan.Transitions.Any(transition => !_appliers.ContainsKey(transition.TargetOwner)))
             {
-                if (!_appliers.TryGetValue(transition.TargetOwner, out var applier))
-                {
-                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                    return CommandCommitResult.TechnicalFailure(OwnerApplierMissing);
-                }
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return CommandCommitResult.TechnicalFailure(OwnerApplierMissing);
+            }
 
-                var applyResult = await applier.ApplyAsync(
+            var orderedTransitions = ResolveOrderedTransitions(plan.Transitions);
+            if (orderedTransitions is null)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return CommandCommitResult.TechnicalFailure(OwnerLockKeysUnresolved);
+            }
+
+            foreach (var item in orderedTransitions)
+            {
+                var applyResult = await item.Applier.ApplyAsync(
                     connection,
                     transaction,
-                    transition,
+                    item.Transition,
                     cancellationToken).ConfigureAwait(false);
 
                 if (applyResult.Disposition == PostgresOwnerTransitionDisposition.ConcurrencyConflict)
@@ -135,6 +144,59 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         }
     }
 
+    private IReadOnlyList<ResolvedTransition>? ResolveOrderedTransitions(
+        IReadOnlyList<IOwnerTransition> transitions)
+    {
+        var resolved = new List<ResolvedTransition>(transitions.Count);
+        foreach (var transition in transitions)
+        {
+            if (!_appliers.TryGetValue(transition.TargetOwner, out var applier))
+            {
+                return null;
+            }
+
+            IReadOnlyList<AuthoritativeResourceKey> keys;
+            try
+            {
+                keys = applier.ResolveLockKeys(transition);
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+            {
+                return null;
+            }
+
+            if (keys is null || keys.Count == 0 || keys.Any(static key => key is null))
+            {
+                return null;
+            }
+
+            var canonicalKeys = CanonicalResourceLockOrder.Order(keys);
+            if (canonicalKeys.Count == 0 || canonicalKeys.Any(key => key.Owner != applier.Owner))
+            {
+                return null;
+            }
+
+            resolved.Add(new ResolvedTransition(
+                transition,
+                applier,
+                canonicalKeys,
+                string.Join("\u001f", canonicalKeys.Select(static key => key.ToString()))));
+        }
+
+        var globalOrder = CanonicalResourceLockOrder.Order(resolved.SelectMany(static item => item.Keys));
+        var positions = globalOrder
+            .Select(static (key, index) => new { key, index })
+            .ToDictionary(static item => item.key, static item => item.index);
+
+        return resolved
+            .OrderBy(item => item.Keys.Min(key => positions[key]))
+            .ThenBy(static item => item.Transition.Contract.Name, StringComparer.Ordinal)
+            .ThenBy(static item => item.Transition.Contract.SchemaVersion)
+            .ThenBy(static item => item.KeySignature, StringComparer.Ordinal)
+            .ThenBy(static item => item.Transition.ExpectedRevision)
+            .ToArray();
+    }
+
     private static async ValueTask<CommandReasonCode?> VerifyReceiptAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -145,7 +207,7 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
             SELECT lane, actor_account_id, actor_character_id, actor_system_key,
                    intent_name, intent_schema_version, payload_fingerprint,
                    original_correlation_id, terminal_status, terminal_reason, completed_at_utc,
-                   execution_token
+                   execution_token, recovery_abandoned_at_utc
             FROM nexis_v2.command_receipts
             WHERE command_id = @command_id
             FOR UPDATE;
@@ -162,10 +224,12 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
 
         var stored = PostgresCommandReceiptRepository.ReadReceipt(reader);
         var executionToken = reader.GetGuid(11);
+        var recoveryAbandoned = !reader.IsDBNull(12);
 
         if (!PostgresCommandReceiptRepository.Matches(plan.Trace.Identity, stored) ||
             stored.OriginalCorrelationId != plan.Trace.CorrelationId.Value ||
-            executionToken != plan.ExecutionToken.Value)
+            executionToken != plan.ExecutionToken.Value ||
+            recoveryAbandoned)
         {
             return ReceiptOwnershipLost;
         }
@@ -194,7 +258,8 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
                 execution_lease_expires_at_utc = NULL
             WHERE command_id = @command_id
               AND execution_token = @execution_token
-              AND terminal_status IS NULL;
+              AND terminal_status IS NULL
+              AND recovery_abandoned_at_utc IS NULL;
             """;
 
         await using var command = new NpgsqlCommand(sql, connection, transaction);
@@ -295,4 +360,10 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
     }
 
     private sealed record SerializedEvent(AuthoritativeEventEnvelope Envelope, string Json);
+
+    private sealed record ResolvedTransition(
+        IOwnerTransition Transition,
+        IPostgresOwnerTransitionApplier Applier,
+        IReadOnlyList<AuthoritativeResourceKey> Keys,
+        string KeySignature);
 }

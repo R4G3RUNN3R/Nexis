@@ -98,6 +98,12 @@ Recovery rehydrates only through the registered codec. The registry rejects:
 
 This gives old command schemas an explicit compatibility obligation instead of hoping a future CLR type happens to deserialize yesterday's payload.
 
+## Unrecoverable-artifact quarantine and controlled resolution
+
+A malformed, unsupported or fingerprint-invalid stored recovery artifact cannot abort healthy siblings in the same recovery batch. The recovery transaction quarantines only that receipt, records a bounded reason and deliberately rotates `execution_token` in the same fenced update. The atomic committer independently rejects any receipt carrying recovery-abandon evidence, so a late original worker receives a clean ownership-lost result rather than relying on a database CHECK violation. Quarantined receipts are excluded from automatic claim, reconciliation fence rotation and lease renewal.
+
+Quarantine is reversible only through an explicit privileged operator transition. `PostgresOperationalQuarantineService` exposes a payload-free bounded listing and a controlled terminal resolution. Resolution requires an authorized `operations.quarantine.manage` decision, acting staff AccountId, CorrelationId, case reference, the observed quarantine fence and the observed abandonment timestamp. PostgreSQL compares all observed values, records terminal `TechnicalFailure`, clears the inactive lease, retains the original abandonment time/reason, and appends the successful or stale-fence outcome to Admin Audit in one transaction. A repeated CommandId then reconstructs the completed technical failure instead of remaining `DuplicateInProgress`. No recovery sweep automatically clears or resolves quarantine.
+
 ## Fresh authority after recovery
 
 A recovered receipt is historical evidence, not an authorization token.
@@ -135,6 +141,9 @@ The PostgreSQL integration suite proves:
 - a wrong token cannot steal a command;
 - lease renewal blocks premature takeover;
 - a stale worker cannot renew after recovery;
-- fingerprint mismatch caused by payload corruption stops recovery before execution.
+- fingerprint mismatch caused by payload corruption quarantines only that receipt while healthy siblings recover;
+- quarantine rotates the execution fence and a late original worker receives ownership-lost without committing effects;
+- authorized operators can enumerate unresolved quarantine and record terminal TechnicalFailure while retaining abandonment evidence;
+- repeated CommandId acquisition after controlled resolution returns the completed technical failure.
 
 These tests use disposable V2 PostgreSQL state only and do not touch the live/V1 database.

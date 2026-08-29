@@ -124,6 +124,7 @@ public sealed class PostgresOutboxStore
                 SELECT event_id
                 FROM nexis_v2.outbox
                 WHERE published_at_utc IS NULL
+                  AND dead_lettered_at_utc IS NULL
                   AND available_at_utc <= @now_utc
                   AND (lease_expires_at_utc IS NULL OR lease_expires_at_utc <= @now_utc)
                 ORDER BY created_at_utc, event_id
@@ -205,6 +206,7 @@ public sealed class PostgresOutboxStore
                 lease_expires_at_utc = NULL
             WHERE event_id = @event_id
               AND published_at_utc IS NULL
+              AND dead_lettered_at_utc IS NULL
               AND lease_token = @lease_token
               AND lease_owner = @worker_id;
             """;
@@ -234,6 +236,7 @@ public sealed class PostgresOutboxStore
                 lease_expires_at_utc = NULL
             WHERE event_id = @event_id
               AND published_at_utc IS NULL
+              AND dead_lettered_at_utc IS NULL
               AND lease_token = @lease_token
               AND lease_owner = @worker_id;
             """;
@@ -243,6 +246,71 @@ public sealed class PostgresOutboxStore
         AddLeaseIdentity(command, eventId, leaseToken, workerId);
         command.Parameters.AddWithValue("available_at_utc", NpgsqlDbType.TimestampTz, availableAtUtc.UtcDateTime);
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+    }
+
+    internal async ValueTask<PostgresOutboxPoisonFailureResult> RecordPoisonFailureAsync(
+        EventId eventId,
+        OutboxLeaseToken leaseToken,
+        string workerId,
+        DateTimeOffset occurredAtUtc,
+        DateTimeOffset availableAtUtc,
+        int maximumPoisonAttempts,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateEventAndLease(eventId, leaseToken, workerId);
+        ValidateUtc(occurredAtUtc, nameof(occurredAtUtc));
+        ValidateUtc(availableAtUtc, nameof(availableAtUtc));
+        if (maximumPoisonAttempts <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maximumPoisonAttempts),
+                "Outbox maximum poison attempts must be positive.");
+        }
+
+        const string sql = """
+            UPDATE nexis_v2.outbox
+            SET poison_attempt_count = poison_attempt_count + 1,
+                available_at_utc = CASE
+                    WHEN poison_attempt_count + 1 < @maximum_poison_attempts THEN @available_at_utc
+                    ELSE available_at_utc
+                END,
+                dead_lettered_at_utc = CASE
+                    WHEN poison_attempt_count + 1 >= @maximum_poison_attempts THEN @occurred_at_utc
+                    ELSE NULL
+                END,
+                dead_letter_reason = CASE
+                    WHEN poison_attempt_count + 1 >= @maximum_poison_attempts
+                        THEN 'event_specific_retry_exhausted'
+                    ELSE NULL
+                END,
+                lease_token = NULL,
+                lease_owner = NULL,
+                lease_expires_at_utc = NULL
+            WHERE event_id = @event_id
+              AND published_at_utc IS NULL
+              AND dead_lettered_at_utc IS NULL
+              AND lease_token = @lease_token
+              AND lease_owner = @worker_id
+            RETURNING poison_attempt_count, dead_lettered_at_utc IS NOT NULL;
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(sql, connection);
+        AddLeaseIdentity(command, eventId, leaseToken, workerId);
+        command.Parameters.AddWithValue("occurred_at_utc", NpgsqlDbType.TimestampTz, occurredAtUtc.UtcDateTime);
+        command.Parameters.AddWithValue("available_at_utc", NpgsqlDbType.TimestampTz, availableAtUtc.UtcDateTime);
+        command.Parameters.AddWithValue("maximum_poison_attempts", NpgsqlDbType.Integer, maximumPoisonAttempts);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return PostgresOutboxPoisonFailureResult.FenceLost;
+        }
+
+        return new PostgresOutboxPoisonFailureResult(
+            FenceOwned: true,
+            PoisonAttemptCount: reader.GetInt32(0),
+            DeadLettered: reader.GetBoolean(1));
     }
 
     private async ValueTask<bool> UpdateLeaseAsync(
@@ -261,6 +329,7 @@ public sealed class PostgresOutboxStore
             SET {assignmentSql}
             WHERE event_id = @event_id
               AND published_at_utc IS NULL
+              AND dead_lettered_at_utc IS NULL
               AND lease_token = @lease_token
               AND lease_owner = @worker_id;
             """;

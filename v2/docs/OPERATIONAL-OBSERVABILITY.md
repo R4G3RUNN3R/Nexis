@@ -51,7 +51,7 @@ The contract assembly depends only on `Nexis.Kernel` identities. The implementat
 
 A producer reports the typed condition after it has classified the failure; emitting a signal does not replace correct failure handling, quarantine, retry bounds, fencing, rollback or dead-letter state.
 
-The current slice establishes the shared contracts and health surface. Validated C7 fixes must wire the relevant recovery, outbox, retry, projection, replay and concurrency paths when those paths gain the required quarantine/dead-letter/classification behavior. Until a producer is wired, the absence of a signal is not evidence that the underlying condition cannot occur.
+The recovery and outbox quarantine slice wires the first producers. Recovery reports invalid stored artifacts and deliberate quarantine fence rotation only after the durable quarantine commits. Outbox delivery reports systemic unavailability separately from explicit event-specific rejection, poison exhaustion and fence loss; systemic failures never advance the poison ceiling. Signal-sink failure remains non-authoritative and cannot roll back quarantine, requeue, receipt resolution or delivery state. Retry, projection, replay and remaining concurrency producers are still pending; absence of their signals is not evidence that the underlying condition cannot occur.
 
 ## Verification
 

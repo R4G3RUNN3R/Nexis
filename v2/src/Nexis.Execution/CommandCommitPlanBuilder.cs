@@ -62,12 +62,18 @@ public sealed class CommandCommitPlanBuilder
                     descriptor.Contract.SchemaVersion),
                 descriptor))
             .ToArray();
+        var transitions = decision.Transitions
+            .OrderBy(static transition => transition.TargetOwner.Value, StringComparer.Ordinal)
+            .ThenBy(static transition => transition.Contract.Name, StringComparer.Ordinal)
+            .ThenBy(static transition => transition.Contract.SchemaVersion)
+            .ThenBy(static transition => transition.ExpectedRevision)
+            .ToArray();
 
         return new CommandCommitPlan(
             trace,
             receiptClaim.ExecutionToken.Value,
             terminalOutcome,
-            decision.Transitions,
+            transitions,
             eventEnvelopes,
             auditEntries);
     }

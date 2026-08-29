@@ -237,6 +237,87 @@ public sealed class PostgresExecutionIntegrationTests
     }
 
     [TestMethod]
+    public async Task OppositeEmissionDirections_ApplyTransitionsInOneCanonicalResourceOrder()
+    {
+        var forwardOrder = new List<string>();
+        var reverseOrder = new List<string>();
+
+        await CommitRecordedTransitionsAsync(
+            new[]
+            {
+                new SyntheticTransition(OwnerA, "resource", 1, 1),
+                new SyntheticTransition(OwnerB, "resource", 1, 1)
+            },
+            forwardOrder);
+        await ResetSyntheticOwnersAsync();
+        await CommitRecordedTransitionsAsync(
+            new[]
+            {
+                new SyntheticTransition(OwnerB, "resource", 1, 1),
+                new SyntheticTransition(OwnerA, "resource", 1, 1)
+            },
+            reverseOrder);
+
+        CollectionAssert.AreEqual(forwardOrder, reverseOrder);
+        CollectionAssert.AreEqual(
+            new[] { "SyntheticOwnerA/resource", "SyntheticOwnerB/resource" },
+            forwardOrder);
+    }
+
+    [TestMethod]
+    public async Task OwnerApplierWithoutResolvableLockKeys_IsRejectedNotSilentlyUnordered()
+    {
+        var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
+        var payload = Payload("missing-lock-keys");
+        var claim = await AcquireAsync(new PostgresCommandReceiptRepository(DataSource), request, payload);
+        var plan = new CommandCommitPlanBuilder().Build(
+            request,
+            payload.Fingerprint,
+            claim,
+            CoreDecision.Succeeded(transitions: new[]
+            {
+                new SyntheticTransition(OwnerA, "resource", 1, 1)
+            }),
+            CoreDescriptor(),
+            Utc(10, 5));
+        var committer = new PostgresAtomicCommandCommitter(
+            DataSource,
+            new[] { new SyntheticOwnerApplier(OwnerA, "nexis_v2_test.owner_a", resolvedKeys: Array.Empty<AuthoritativeResourceKey>()) });
+
+        var result = await committer.CommitAsync(plan);
+
+        Assert.AreEqual(CommandCommitDisposition.TechnicalFailure, result.Disposition);
+        Assert.AreEqual("execution.owner.lock_keys_unresolved", result.Reason?.Value);
+        Assert.AreEqual(0, await ReadOwnerValueAsync("owner_a"));
+        Assert.IsNull(await ReadTerminalStatusAsync(request.Context.CommandId));
+    }
+
+    [TestMethod]
+    public async Task SingleOwnerMultiResourceTransition_AppliesResourcesInCanonicalOrder()
+    {
+        await using (var connection = await DataSource.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand(
+            "INSERT INTO nexis_v2_test.owner_a(resource_id, value, revision) VALUES ('alpha', 0, 1), ('omega', 0, 1);",
+            connection))
+        {
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var appliedOrder = new List<string>();
+        await CommitRecordedTransitionsAsync(
+            new[]
+            {
+                new SyntheticTransition(OwnerA, "omega", 1, 1),
+                new SyntheticTransition(OwnerA, "alpha", 1, 1)
+            },
+            appliedOrder);
+
+        CollectionAssert.AreEqual(
+            new[] { "SyntheticOwnerA/alpha", "SyntheticOwnerA/omega" },
+            appliedOrder);
+    }
+
+    [TestMethod]
     public async Task AdminCommand_PersistsAuditInSameTransaction()
     {
         var accountId = AccountId.New();
@@ -315,6 +396,40 @@ public sealed class PostgresExecutionIntegrationTests
                 new SyntheticOwnerApplier(OwnerA, "nexis_v2_test.owner_a"),
                 new SyntheticOwnerApplier(OwnerB, "nexis_v2_test.owner_b")
             });
+
+    private static async Task CommitRecordedTransitionsAsync(
+        IReadOnlyList<SyntheticTransition> transitions,
+        List<string> appliedOrder)
+    {
+        var request = CreatePlayerRequest(CommandId.New(), CorrelationId.New());
+        var payload = Payload(Guid.NewGuid().ToString("N"));
+        var claim = await AcquireAsync(new PostgresCommandReceiptRepository(DataSource), request, payload);
+        var plan = new CommandCommitPlanBuilder().Build(
+            request,
+            payload.Fingerprint,
+            claim,
+            CoreDecision.Succeeded(transitions: transitions),
+            CoreDescriptor(),
+            Utc(10, 5));
+        var committer = new PostgresAtomicCommandCommitter(
+            DataSource,
+            new IPostgresOwnerTransitionApplier[]
+            {
+                new SyntheticOwnerApplier(OwnerA, "nexis_v2_test.owner_a", appliedOrder),
+                new SyntheticOwnerApplier(OwnerB, "nexis_v2_test.owner_b", appliedOrder)
+            });
+
+        Assert.AreEqual(CommandCommitDisposition.Committed, (await committer.CommitAsync(plan)).Disposition);
+    }
+
+    private static async Task ResetSyntheticOwnersAsync()
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(
+            "UPDATE nexis_v2_test.owner_a SET value = 0, revision = 1; UPDATE nexis_v2_test.owner_b SET value = 0, revision = 1;",
+            connection);
+        await command.ExecuteNonQueryAsync();
+    }
 
     private static async ValueTask<CommandReceiptClaim> AcquireAsync(
         PostgresCommandReceiptRepository repository,
@@ -422,14 +537,35 @@ public sealed class PostgresExecutionIntegrationTests
     private sealed class SyntheticOwnerApplier : IPostgresOwnerTransitionApplier
     {
         private readonly string _table;
+        private readonly List<string>? _appliedOrder;
+        private readonly IReadOnlyList<AuthoritativeResourceKey>? _resolvedKeys;
 
-        public SyntheticOwnerApplier(OwnerKey owner, string table)
+        public SyntheticOwnerApplier(
+            OwnerKey owner,
+            string table,
+            List<string>? appliedOrder = null,
+            IReadOnlyList<AuthoritativeResourceKey>? resolvedKeys = null)
         {
             Owner = owner;
             _table = table;
+            _appliedOrder = appliedOrder;
+            _resolvedKeys = resolvedKeys;
         }
 
         public OwnerKey Owner { get; }
+
+        public IReadOnlyList<AuthoritativeResourceKey> ResolveLockKeys(IOwnerTransition transition)
+        {
+            if (transition is not SyntheticTransition synthetic || synthetic.TargetOwner != Owner)
+            {
+                throw new InvalidOperationException("Synthetic PostgreSQL owner received an unsupported transition.");
+            }
+
+            return _resolvedKeys ?? new[]
+            {
+                new AuthoritativeResourceKey(Owner, "synthetic-state", synthetic.ResourceId)
+            };
+        }
 
         public async ValueTask<PostgresOwnerTransitionResult> ApplyAsync(
             NpgsqlConnection connection,
@@ -441,6 +577,8 @@ public sealed class PostgresExecutionIntegrationTests
             {
                 throw new InvalidOperationException("Synthetic PostgreSQL owner received an unsupported transition.");
             }
+
+            _appliedOrder?.Add($"{Owner.Value}/{synthetic.ResourceId}");
 
             var sql = $"""
                 UPDATE {_table}

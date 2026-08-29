@@ -7,6 +7,7 @@ using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
 using Nexis.Kernel.Randomness;
+using Nexis.Operations.Contracts;
 using Nexis.Persistence.Postgres;
 using Npgsql;
 using NpgsqlTypes;
@@ -88,7 +89,8 @@ public sealed class ClaudeFoundationThreatModelIntegrationTests
         // fingerprint stays unchanged. Ordered first so it is always selected in the sweep.
         await CorruptCanonicalPayloadAsync(poison, "{\"kind\":\"tampered\"}");
 
-        var recovery = new PostgresCommandRecoveryRepository(DataSource);
+        var signals = new RecordingOperationalSignalSink();
+        var recovery = new PostgresCommandRecoveryRepository(DataSource, signals);
 
         IReadOnlyList<RecoveredCommandExecution> claimed = Array.Empty<RecoveredCommandExecution>();
         Exception? thrown = null;
@@ -111,6 +113,9 @@ public sealed class ClaudeFoundationThreatModelIntegrationTests
             claimed.Any(item => item.CommandId == healthy),
             "The healthy expired command was not recovered because a corrupted receipt in the same "
             + "batch rolled the recovery transaction back.");
+        Assert.IsTrue(signals.Signals.Any(signal =>
+            signal.Kind == OperationalConditionKind.CommandRecoveryFailure
+            && signal.CommandId == poison));
     }
 
     /// <summary>
@@ -123,10 +128,11 @@ public sealed class ClaudeFoundationThreatModelIntegrationTests
     /// ordinary delivery and become an explicit, reportable dead-letter/poison condition.
     /// </summary>
     [TestMethod]
-    public async Task OutboxEventThatAlwaysFails_MustEventuallyBeQuarantinedInsteadOfRetriedForever()
+    public async Task EventSpecificRejection_DeadLettersAtThePoisonCeiling()
     {
         var seeded = await SeedCommittedEventAsync();
-        var transport = new AlwaysFailingTransport();
+        var transport = new EventSpecificRejectingTransport();
+        var signals = new RecordingOperationalSignalSink();
         var clock = new MutableTimeProvider(Utc(11, 0));
         var dispatcher = new PostgresOutboxDispatcher(
             new PostgresOutboxStore(DataSource),
@@ -135,7 +141,9 @@ public sealed class ClaudeFoundationThreatModelIntegrationTests
             batchSize: 10,
             leaseDuration: TimeSpan.FromSeconds(30),
             failureDelay: TimeSpan.Zero,
-            clock);
+            timeProvider: clock,
+            maximumAttempts: 3,
+            operationalSignalSink: signals);
 
         const int sweeps = 25;
         for (var sweep = 0; sweep < sweeps; sweep++)
@@ -152,6 +160,88 @@ public sealed class ClaudeFoundationThreatModelIntegrationTests
             $"A permanently failing outbox event was claimed {attempts} times across {sweeps} sweeps and "
             + "is still an ordinary claimable delivery. There is no dead-letter state, no attempt bound "
             + "and no retry-exhaustion signal.");
+        Assert.AreEqual(3, attempts);
+        Assert.IsTrue(await IsDeadLetteredAsync(seeded));
+        Assert.IsTrue(signals.Signals.Any(signal =>
+            signal.Kind == OperationalConditionKind.OutboxPoisoned
+            && signal.EventId == seeded
+            && signal.AttemptCount == 3));
+        Assert.IsTrue(signals.Signals.Any(signal =>
+            signal.Kind == OperationalConditionKind.RetryExhausted
+            && signal.EventId == seeded
+            && signal.AttemptCount == 3));
+    }
+
+    [TestMethod]
+    public async Task TransportUnavailableFailures_DoNotCountTowardThePoisonCeiling()
+    {
+        var seeded = await SeedCommittedEventAsync();
+        var transport = new SystemicallyUnavailableTransport();
+        var clock = new MutableTimeProvider(Utc(11, 0));
+        var dispatcher = new PostgresOutboxDispatcher(
+            new PostgresOutboxStore(DataSource),
+            transport,
+            "unavailable-dispatcher",
+            batchSize: 10,
+            leaseDuration: TimeSpan.FromSeconds(30),
+            failureDelay: TimeSpan.Zero,
+            timeProvider: clock,
+            maximumAttempts: 3);
+
+        const int sweeps = 8;
+        for (var sweep = 0; sweep < sweeps; sweep++)
+        {
+            await dispatcher.DispatchOnceAsync();
+            clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        Assert.AreEqual(sweeps, await ReadAttemptCountAsync(seeded));
+        Assert.IsFalse(await IsDeadLetteredAsync(seeded));
+        Assert.IsTrue(await IsClaimableAsync(seeded, Utc(12, 0)));
+    }
+
+    [TestMethod]
+    public async Task TransportOutage_DoesNotConsumeTheLaterEventSpecificPoisonBudget()
+    {
+        var seeded = await SeedCommittedEventAsync();
+        var clock = new MutableTimeProvider(Utc(11, 0));
+        var unavailableDispatcher = new PostgresOutboxDispatcher(
+            new PostgresOutboxStore(DataSource),
+            new SystemicallyUnavailableTransport(),
+            "unavailable-before-poison",
+            batchSize: 10,
+            leaseDuration: TimeSpan.FromSeconds(30),
+            failureDelay: TimeSpan.Zero,
+            timeProvider: clock,
+            maximumAttempts: 3);
+
+        for (var sweep = 0; sweep < 5; sweep++)
+        {
+            await unavailableDispatcher.DispatchOnceAsync();
+            clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        var poisonDispatcher = new PostgresOutboxDispatcher(
+            new PostgresOutboxStore(DataSource),
+            new EventSpecificRejectingTransport(),
+            "poison-after-unavailable",
+            batchSize: 10,
+            leaseDuration: TimeSpan.FromSeconds(30),
+            failureDelay: TimeSpan.Zero,
+            timeProvider: clock,
+            maximumAttempts: 3);
+
+        await poisonDispatcher.DispatchOnceAsync();
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await poisonDispatcher.DispatchOnceAsync();
+        clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.IsFalse(await IsDeadLetteredAsync(seeded));
+
+        await poisonDispatcher.DispatchOnceAsync();
+
+        Assert.IsTrue(await IsDeadLetteredAsync(seeded));
+        Assert.AreEqual(8, await ReadAttemptCountAsync(seeded));
     }
 
     private static async ValueTask<CommandId> AcquireExpiredAsync(string canonicalJson)
@@ -219,6 +309,15 @@ public sealed class ClaudeFoundationThreatModelIntegrationTests
         return (int)(await command.ExecuteScalarAsync() ?? 0);
     }
 
+    private static async Task<bool> IsDeadLetteredAsync(EventId eventId)
+    {
+        const string sql = "SELECT dead_lettered_at_utc IS NOT NULL FROM nexis_v2.outbox WHERE event_id = @event_id;";
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("event_id", NpgsqlDbType.Uuid, eventId.Value);
+        return Convert.ToBoolean(await command.ExecuteScalarAsync());
+    }
+
     private static async Task<bool> IsClaimableAsync(EventId eventId, DateTimeOffset nowUtc)
     {
         const string sql = """
@@ -226,6 +325,7 @@ public sealed class ClaudeFoundationThreatModelIntegrationTests
             FROM nexis_v2.outbox
             WHERE event_id = @event_id
               AND published_at_utc IS NULL
+              AND dead_lettered_at_utc IS NULL
               AND available_at_utc <= @now_utc
               AND (lease_expires_at_utc IS NULL OR lease_expires_at_utc <= @now_utc);
             """;
@@ -277,14 +377,37 @@ public sealed class ClaudeFoundationThreatModelIntegrationTests
         }
     }
 
-    private sealed class AlwaysFailingTransport : ICommittedEventTransport
+    private sealed class EventSpecificRejectingTransport : ICommittedEventTransport
     {
         public int Attempts { get; private set; }
 
         public ValueTask PublishAsync(CommittedEventMessage message, CancellationToken cancellationToken = default)
         {
             Attempts++;
-            throw new InvalidOperationException("Synthetic permanently poisoned transport failure.");
+            throw new CommittedEventTransportException(
+                CommittedEventTransportFailureKind.EventSpecificPermanent,
+                "Synthetic event-specific rejection.");
+        }
+    }
+
+    private sealed class SystemicallyUnavailableTransport : ICommittedEventTransport
+    {
+        public ValueTask PublishAsync(CommittedEventMessage message, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("Synthetic systemic transport outage.");
+        }
+    }
+
+    private sealed class RecordingOperationalSignalSink : IOperationalSignalSink
+    {
+        public List<OperationalSignal> Signals { get; } = new();
+
+        public ValueTask ReportAsync(OperationalSignal signal, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Signals.Add(signal);
+            return ValueTask.CompletedTask;
         }
     }
 

@@ -4,6 +4,7 @@ using Nexis.Execution.Contracts;
 using Nexis.Identity.Contracts;
 using Nexis.Kernel.Commands;
 using Nexis.Kernel.Events;
+using Nexis.Operations.Contracts;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -17,10 +18,19 @@ namespace Nexis.Persistence.Postgres;
 public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecoveryRepository
 {
     private readonly NpgsqlDataSource _dataSource;
+    private readonly IOperationalSignalSink? _operationalSignalSink;
 
     public PostgresCommandRecoveryRepository(NpgsqlDataSource dataSource)
+        : this(dataSource, null)
+    {
+    }
+
+    public PostgresCommandRecoveryRepository(
+        NpgsqlDataSource dataSource,
+        IOperationalSignalSink? operationalSignalSink)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _operationalSignalSink = operationalSignalSink;
     }
 
     public async ValueTask<CommandRecoveryResult> ReconcileAsync(
@@ -56,13 +66,29 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
             return CommandRecoveryResult.OwnershipLost(new CorrelationId(row.OriginalCorrelationId));
         }
 
-        if (row.CanonicalPayload is null)
+        if (row.CanonicalPayload is null || row.RecoveryAbandonedAtUtc.HasValue)
         {
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return CommandRecoveryResult.NotRecoverable(new CorrelationId(row.OriginalCorrelationId));
         }
 
         var newToken = CommandExecutionToken.New();
+        if (!TryBuildRecovered(row, newToken, replacementLease.WorkerId, newExpiry, out var recovered))
+        {
+            await AbandonRecoveryAsync(
+                connection,
+                transaction,
+                row.CommandId,
+                row.ExecutionToken,
+                CommandExecutionToken.New().Value,
+                nowUtc,
+                cancellationToken)
+                .ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await ReportRecoveryAbandonedAsync(row, nowUtc, CancellationToken.None).ConfigureAwait(false);
+            return CommandRecoveryResult.NotRecoverable(new CorrelationId(row.OriginalCorrelationId));
+        }
+
         await RotateFenceAsync(
             connection,
             transaction,
@@ -73,7 +99,6 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
             newExpiry,
             cancellationToken).ConfigureAwait(false);
 
-        var recovered = BuildRecovered(row, newToken, replacementLease.WorkerId, newExpiry);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return CommandRecoveryResult.Recovered(recovered);
     }
@@ -100,11 +125,13 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
                    intent_name, intent_schema_version, payload_fingerprint,
                    original_correlation_id, received_at_utc, execution_token,
                    canonical_payload, execution_owner, execution_lease_expires_at_utc,
-                   terminal_status, terminal_reason, completed_at_utc
+                   terminal_status, terminal_reason, completed_at_utc,
+                   recovery_abandoned_at_utc, recovery_abandon_reason
             FROM nexis_v2.command_receipts
             WHERE terminal_status IS NULL
               AND canonical_payload IS NOT NULL
               AND execution_lease_expires_at_utc <= @now_utc
+              AND recovery_abandoned_at_utc IS NULL
             ORDER BY execution_lease_expires_at_utc, received_at_utc, command_id
             FOR UPDATE SKIP LOCKED
             LIMIT @maximum_items;
@@ -126,6 +153,20 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
         foreach (var row in rows)
         {
             var newToken = CommandExecutionToken.New();
+            if (!TryBuildRecovered(row, newToken, replacementLease.WorkerId, newExpiry, out var recoveredExecution))
+            {
+                await AbandonRecoveryAsync(
+                connection,
+                transaction,
+                row.CommandId,
+                row.ExecutionToken,
+                CommandExecutionToken.New().Value,
+                nowUtc,
+                cancellationToken)
+                    .ConfigureAwait(false);
+                continue;
+            }
+
             await RotateFenceAsync(
                 connection,
                 transaction,
@@ -136,10 +177,17 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
                 newExpiry,
                 cancellationToken).ConfigureAwait(false);
 
-            recovered.Add(BuildRecovered(row, newToken, replacementLease.WorkerId, newExpiry));
+            recovered.Add(recoveredExecution);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var abandoned in rows.Where(static row => row.RecoveryAbandonedAtUtc is null)
+                     .Where(row => recovered.All(item => item.CommandId.Value != row.CommandId)))
+        {
+            await ReportRecoveryAbandonedAsync(abandoned, nowUtc, CancellationToken.None).ConfigureAwait(false);
+        }
+
         return recovered.AsReadOnly();
     }
 
@@ -160,7 +208,8 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
               AND execution_token = @execution_token
               AND execution_owner = @execution_owner
               AND terminal_status IS NULL
-              AND canonical_payload IS NOT NULL;
+              AND canonical_payload IS NOT NULL
+              AND recovery_abandoned_at_utc IS NULL;
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -183,7 +232,8 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
                    intent_name, intent_schema_version, payload_fingerprint,
                    original_correlation_id, received_at_utc, execution_token,
                    canonical_payload, execution_owner, execution_lease_expires_at_utc,
-                   terminal_status, terminal_reason, completed_at_utc
+                   terminal_status, terminal_reason, completed_at_utc,
+                   recovery_abandoned_at_utc, recovery_abandon_reason
             FROM nexis_v2.command_receipts
             WHERE command_id = @command_id
             FOR UPDATE;
@@ -215,7 +265,9 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
             reader.IsDBNull(13) ? null : ToDateTimeOffset(reader.GetDateTime(13)),
             reader.IsDBNull(14) ? null : reader.GetInt32(14),
             reader.IsDBNull(15) ? null : reader.GetString(15),
-            reader.IsDBNull(16) ? null : ToDateTimeOffset(reader.GetDateTime(16)));
+            reader.IsDBNull(16) ? null : ToDateTimeOffset(reader.GetDateTime(16)),
+            reader.IsDBNull(17) ? null : ToDateTimeOffset(reader.GetDateTime(17)),
+            reader.IsDBNull(18) ? null : reader.GetString(18));
 
     private static RecoveredCommandExecution BuildRecovered(
         StoredRecoveryRow row,
@@ -272,6 +324,101 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
         return PostgresCommandReceiptRepository.BuildTerminalOutcome(receipt);
     }
 
+    private static bool TryBuildRecovered(
+        StoredRecoveryRow row,
+        CommandExecutionToken newToken,
+        string workerId,
+        DateTimeOffset newExpiry,
+        out RecoveredCommandExecution recovered)
+    {
+        try
+        {
+            recovered = BuildRecovered(row, newToken, workerId, newExpiry);
+            return true;
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or InvalidOperationException
+            or FormatException
+            or System.Text.Json.JsonException
+            or OverflowException)
+        {
+            recovered = null!;
+            return false;
+        }
+    }
+
+    private static async ValueTask AbandonRecoveryAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid commandId,
+        Guid observedToken,
+        Guid quarantineToken,
+        DateTimeOffset abandonedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE nexis_v2.command_receipts
+            SET execution_token = @quarantine_execution_token,
+                recovery_abandoned_at_utc = @abandoned_at_utc,
+                recovery_abandon_reason = 'stored_recovery_artifact_invalid'
+            WHERE command_id = @command_id
+              AND execution_token = @observed_execution_token
+              AND terminal_status IS NULL
+              AND recovery_abandoned_at_utc IS NULL;
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("abandoned_at_utc", NpgsqlDbType.TimestampTz, abandonedAtUtc.UtcDateTime);
+        command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, commandId);
+        command.Parameters.AddWithValue("observed_execution_token", NpgsqlDbType.Uuid, observedToken);
+        command.Parameters.AddWithValue("quarantine_execution_token", NpgsqlDbType.Uuid, quarantineToken);
+
+        if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+        {
+            throw new InvalidOperationException("Command recovery quarantine fence changed while its receipt row was locked.");
+        }
+    }
+
+    private async ValueTask ReportRecoveryAbandonedAsync(
+        StoredRecoveryRow row,
+        DateTimeOffset occurredAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (_operationalSignalSink is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _operationalSignalSink.ReportAsync(
+                new OperationalSignal(
+                    OperationalConditionKind.CommandRecoveryFailure,
+                    OperationalSeverity.Error,
+                    new OperationalComponentKey("postgres.command-recovery"),
+                    new OperationalReasonCode("stored_recovery_artifact_invalid"),
+                    occurredAtUtc,
+                    new CommandId(row.CommandId),
+                    new CorrelationId(row.OriginalCorrelationId)),
+                cancellationToken).ConfigureAwait(false);
+            await _operationalSignalSink.ReportAsync(
+                new OperationalSignal(
+                    OperationalConditionKind.LeaseFencingFailure,
+                    OperationalSeverity.Error,
+                    new OperationalComponentKey("postgres.command-recovery"),
+                    new OperationalReasonCode("recovery_quarantine_fence_rotated"),
+                    occurredAtUtc,
+                    new CommandId(row.CommandId),
+                    new CorrelationId(row.OriginalCorrelationId)),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Recovery quarantine is durable before diagnostics run. A failing monitoring sink must
+            // not change recovery fencing or make a quarantined command appear recoverable again.
+        }
+    }
+
     private static async ValueTask RotateFenceAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -289,7 +436,8 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
                 execution_lease_expires_at_utc = @new_lease_expiry
             WHERE command_id = @command_id
               AND execution_token = @observed_execution_token
-              AND terminal_status IS NULL;
+              AND terminal_status IS NULL
+              AND recovery_abandoned_at_utc IS NULL;
             """;
 
         await using var command = new NpgsqlCommand(sql, connection, transaction);
@@ -353,5 +501,7 @@ public sealed class PostgresCommandRecoveryRepository : ICommandExecutionRecover
         DateTimeOffset? ExecutionLeaseExpiresAtUtc,
         int? TerminalStatus,
         string? TerminalReason,
-        DateTimeOffset? CompletedAtUtc);
+        DateTimeOffset? CompletedAtUtc,
+        DateTimeOffset? RecoveryAbandonedAtUtc,
+        string? RecoveryAbandonReason);
 }

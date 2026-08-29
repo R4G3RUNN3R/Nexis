@@ -11,7 +11,8 @@ public static class PostgresExecutionSchema
         "Nexis.Persistence.Postgres.Migrations.0002_outbox_delivery.sql",
         "Nexis.Persistence.Postgres.Migrations.0003_command_recovery.sql",
         "Nexis.Persistence.Postgres.Migrations.0004_equipment_owner.sql",
-        "Nexis.Persistence.Postgres.Migrations.0005_system_actor_identity.sql"
+        "Nexis.Persistence.Postgres.Migrations.0005_system_actor_identity.sql",
+        "Nexis.Persistence.Postgres.Migrations.0006_operational_quarantine.sql"
     };
 
     public static async ValueTask EnsureCreatedAsync(

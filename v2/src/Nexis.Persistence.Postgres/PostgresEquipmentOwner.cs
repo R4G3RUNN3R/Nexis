@@ -1,6 +1,7 @@
 using System.Data;
 using Nexis.Core.Contracts;
 using Nexis.Equipment.Contracts;
+using Nexis.Execution;
 using Nexis.Execution.Contracts;
 using Nexis.Identity.Contracts;
 using Nexis.Items.Contracts;
@@ -18,6 +19,25 @@ public sealed class PostgresEquipmentTransitionApplier : IPostgresOwnerTransitio
     private static readonly CommandReasonCode RevisionConflict = new("equipment.revision_conflict");
 
     public OwnerKey Owner => EquipmentSnapshot.OwnerKey;
+
+    public IReadOnlyList<AuthoritativeResourceKey> ResolveLockKeys(IOwnerTransition transition)
+    {
+        if (transition is not EquipItemTransition equip)
+        {
+            throw new InvalidOperationException(
+                $"Equipment PostgreSQL owner does not support transition '{transition.Contract.Name}' schema {transition.Contract.SchemaVersion}.");
+        }
+
+        var character = equip.CharacterId.Value.ToString("D");
+        var item = equip.ItemInstanceId.Value.ToString("D");
+        return CanonicalResourceLockOrder.Order(
+            new[]
+            {
+                new AuthoritativeResourceKey(Owner, "equipment.aggregate", character),
+                new AuthoritativeResourceKey(Owner, "equipment.binding", $"{character}/{item}")
+            }.Concat(equip.OccupiedSlots.Select(slot =>
+                new AuthoritativeResourceKey(Owner, "equipment.slot", $"{character}/{slot.Value}"))));
+    }
 
     public async ValueTask<PostgresOwnerTransitionResult> ApplyAsync(
         NpgsqlConnection connection,
