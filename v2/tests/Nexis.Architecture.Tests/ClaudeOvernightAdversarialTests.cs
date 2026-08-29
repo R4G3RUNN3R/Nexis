@@ -321,28 +321,17 @@ public sealed class ClaudeOvernightAdversarialTests
     // ---------------------------------------------------------------------------------------------
 
     [TestMethod]
-    public void AutomationBypassGuard_MustAssertOverANonEmptyProjectSet()
+    public void AutomationBypassGuard_MustRejectAnUnlistedProjectRegardlessOfItsName()
     {
-        var sourceDirectory = Path.Combine(FindSolutionDirectory(), "src");
+        var bypasses = AutomationArchitectureTests.FindMutationBypasses(new[]
+        {
+            (Project: "Nexis.Workers", Reference: "Nexis.Execution")
+        });
 
-        var prefixMatched = Directory
-            .EnumerateFiles(sourceDirectory, "*.csproj", SearchOption.AllDirectories)
-            .Select(static path => Path.GetFileNameWithoutExtension(path) ?? string.Empty)
-            .Where(static name =>
-                name.StartsWith("Nexis.Ciel", StringComparison.OrdinalIgnoreCase) ||
-                name.StartsWith("Nexis.Scheduling", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-
-        Assert.IsTrue(
-            prefixMatched.Length > 0,
-            "AutomationArchitectureTests.FutureCielAndSchedulingProjectsCannotReferenceMutationBypassAssemblies "
-            + "enumerates projects named Nexis.Ciel*/Nexis.Scheduling*, and no such project exists, so its "
-            + "loop body never executes and it passes over an empty set. It is also prefix-scoped, so a "
-            + "future automated component named anything else (Nexis.Workers, Nexis.Automation.Runtime) "
-            + "would never be guarded at all. Resolve by either (a) rewriting the guard as an explicit "
-            + "allowlist of composition-boundary projects permitted to reference mutation/persistence "
-            + "assemblies, with a negative control proving it fires, or (b) landing the first real "
-            + "automation project. Do not resolve it by deleting the guard.");
+        CollectionAssert.AreEqual(
+            new[] { "Nexis.Workers->Nexis.Execution" },
+            bypasses,
+            "The allowlist guard must reject an arbitrary future automated project without relying on its prefix.");
     }
 
     // ---------------------------------------------------------------------------------------------

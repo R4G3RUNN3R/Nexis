@@ -88,47 +88,59 @@ public sealed class AutomationArchitectureTests
     }
 
     [TestMethod]
-    public void FutureCielAndSchedulingProjectsCannotReferenceMutationBypassAssemblies()
+    public void OnlyExplicitCompositionProjectsMayReferenceMutationAssemblies()
     {
         var solutionDirectory = FindSolutionDirectory();
         var sourceDirectory = Path.Combine(solutionDirectory, "src");
-        var guardedProjects = Directory
+        var sourceProjects = Directory
             .EnumerateFiles(sourceDirectory, "*.csproj", SearchOption.AllDirectories)
-            .Where(static path =>
-            {
-                var projectName = Path.GetFileNameWithoutExtension(path) ?? string.Empty;
-                return projectName.StartsWith("Nexis.Ciel", StringComparison.OrdinalIgnoreCase) ||
-                       projectName.StartsWith("Nexis.Scheduling", StringComparison.OrdinalIgnoreCase);
-            })
             .ToArray();
 
-        var forbidden = new[]
-        {
-            "Nexis.Core",
-            "Nexis.Execution",
-            "Nexis.Execution.Contracts",
-            "Nexis.Persistence.Postgres"
-        };
+        Assert.IsTrue(sourceProjects.Length > 0, "The automation dependency guard must govern a non-empty source-project set.");
 
-        foreach (var projectPath in guardedProjects)
-        {
-            var document = XDocument.Load(projectPath);
-            var references = document
+        var dependencies = sourceProjects.SelectMany(projectPath =>
+            XDocument.Load(projectPath)
                 .Descendants("ProjectReference")
                 .Select(static element => element.Attribute("Include")?.Value ?? string.Empty)
                 .Select(static path => Path.GetFileNameWithoutExtension(path) ?? string.Empty)
                 .Where(static name => !string.IsNullOrWhiteSpace(name))
-                .ToArray();
+                .Select(reference => (Project: Path.GetFileNameWithoutExtension(projectPath)!, Reference: reference)));
 
-            var forbiddenReference = references.FirstOrDefault(reference =>
-                forbidden.Any(blocked => string.Equals(reference, blocked, StringComparison.OrdinalIgnoreCase)) ||
-                reference.StartsWith("Nexis.Modules.", StringComparison.OrdinalIgnoreCase));
+        var bypasses = FindMutationBypasses(dependencies);
 
-            Assert.IsNull(
-                forbiddenReference,
-                $"Automated component '{Path.GetFileNameWithoutExtension(projectPath)}' bypasses the approved command gateway via '{forbiddenReference}'.");
-        }
+        Assert.AreEqual(
+            0,
+            bypasses.Length,
+            "A project outside the explicit trusted composition allowlist references a mutation boundary: "
+            + string.Join(", ", bypasses));
     }
+
+    internal static string[] FindMutationBypasses(IEnumerable<(string Project, string Reference)> dependencies)
+    {
+        var allowed = new HashSet<(string Project, string Reference)>
+        {
+            ("Nexis.Host.Api", "Nexis.Core"),
+            ("Nexis.Host.Api", "Nexis.Modules.Audit"),
+            ("Nexis.Host.Api", "Nexis.Modules.Identity"),
+            ("Nexis.Modules.Equipment", "Nexis.Execution.Contracts"),
+            ("Nexis.Persistence.Postgres", "Nexis.Execution"),
+            ("Nexis.Persistence.Postgres", "Nexis.Execution.Contracts")
+        };
+
+        return dependencies
+            .Where(static dependency => IsMutationBoundary(dependency.Reference))
+            .Where(dependency => !allowed.Contains(dependency))
+            .Select(static dependency => $"{dependency.Project}->{dependency.Reference}")
+            .OrderBy(static dependency => dependency, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static bool IsMutationBoundary(string reference) =>
+        string.Equals(reference, "Nexis.Core", StringComparison.Ordinal) ||
+        string.Equals(reference, "Nexis.Execution", StringComparison.Ordinal) ||
+        string.Equals(reference, "Nexis.Execution.Contracts", StringComparison.Ordinal) ||
+        string.Equals(reference, "Nexis.Persistence.Postgres", StringComparison.Ordinal) ||
+        reference.StartsWith("Nexis.Modules.", StringComparison.Ordinal);
 
     private static string FindSolutionDirectory()
     {
