@@ -1,6 +1,15 @@
 # Changelog
 ## 2026-08-29
 
+### Nexis 2.0 privileged-entry attribution and decision freshness
+- attributed denied privileged command entry: `PrivilegedCommandEntryDecision` gains an always-populated `AttemptedByAccountId` while `ActingAccountId` deliberately stays null on refusal, so a denied actor is never presentable as acting authority yet the attempt is no longer anonymous
+- emitted a bounded `PrivilegedEntryDenied` operational signal on refusal, distinguishing missing capability from explicit deny, stale security context, actor mismatch and staff-actor-required; a denial never reaches a commit plan, so without this a privilege-escalation burst left no trace anywhere
+- kept raw identity out of the signal: attribution travels on the decision, while the signal carries only a SHA-256 actor discriminator, deliberately stable per actor rather than salted per attempt so repeated denied attempts are countable
+- recorded `EvaluatedSecurityVersion` and `EvaluatedAtUtc` on every privileged entry decision, authorized and denied, so a consumer can refuse a decision evaluated before a capability or password change; closed before any BFF consumes the boundary
+- public contract change: `PrivilegedCommandEntryDecision.Authorized`/`Denied` now require the evaluated security version and evaluation time, and `PrivilegedCommandEntryAuthorizer` takes an optional operational signal sink and `TimeProvider`
+- deliberate dependency widening: `Nexis.Execution` now references `Nexis.Operations.Contracts`, a stable non-authoritative leaf depending only on `Nexis.Kernel`; the architecture guard was updated explicitly rather than relaxed
+- verification: Release build of `Nexis.slnx` 0 warnings/0 errors; architecture suite 194 total, 191 passed, 3 failed, 0 skipped; disposable PostgreSQL integration suite 55 total, 55 passed, 0 failed, 0 skipped; the three failures are the open L3 History/Player Log findings
+
 ### Nexis 2.0 automated-ingress identity and command-integrity observability
 - added a non-empty, case-normalized closed `SystemActorKey` registry contract for the first real automated-command gateway while preserving construction of retired historical keys for recovery and replay
 - removed the zero-argument `TrustedActorContext.CreateSystem()` authority factory; every System actor construction now supplies an explicit key, guarded across public constructors and static factories in both Identity.Contracts and Execution.Contracts

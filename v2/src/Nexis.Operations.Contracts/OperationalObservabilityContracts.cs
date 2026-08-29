@@ -16,7 +16,8 @@ public enum OperationalConditionKind
     ReplayCorruption = 8,
     UnexpectedConcurrencyFailure = 9,
     CommandIdentityIntegrityViolation = 10,
-    AutomationIdentityRejected = 11
+    AutomationIdentityRejected = 11,
+    PrivilegedEntryDenied = 12
 }
 
 public enum OperationalSeverity

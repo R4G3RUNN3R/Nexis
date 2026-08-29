@@ -277,7 +277,10 @@ public sealed class PostgresOperationalQuarantineIntegrationTests
             new PlatformAuthorizationDecision(
                 PlatformAuthorizationOutcome.CapabilityMissing,
                 PostgresOperationalQuarantineService.RequiredCapability),
-            targetAccountId: null);
+            attemptedByAccountId: AccountId.New(),
+            targetAccountId: null,
+            evaluatedSecurityVersion: 7,
+            evaluatedAtUtc: Utc(11, 30));
         var context = new OperationalQuarantineActionContext(
             denied,
             CorrelationId.New(),
@@ -397,7 +400,9 @@ public sealed class PostgresOperationalQuarantineIntegrationTests
                 PlatformAuthorizationOutcome.Authorized,
                 PostgresOperationalQuarantineService.RequiredCapability),
             operatorId ?? AccountId.New(),
-            targetAccountId: null);
+            targetAccountId: null,
+            evaluatedSecurityVersion: 7,
+            evaluatedAtUtc: Utc(11, 30));
         return new OperationalQuarantineActionContext(
             decision,
             CorrelationId.New(),
