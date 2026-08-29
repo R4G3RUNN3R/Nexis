@@ -152,6 +152,17 @@ public sealed class PrivilegedCommandEntryAuthorizationTests
         Assert.IsNull(decision.ActingAccountId);
     }
 
+    [TestMethod]
+    public void PrivilegedDecisionCarriesSecurityVersionAndEvaluationTimeForFreshnessChecks()
+    {
+        var properties = typeof(PrivilegedCommandEntryDecision)
+            .GetProperties()
+            .ToDictionary(static property => property.Name, static property => property.PropertyType);
+
+        Assert.AreEqual(typeof(long), properties["EvaluatedSecurityVersion"]);
+        Assert.AreEqual(typeof(DateTimeOffset), properties["EvaluatedAtUtc"]);
+    }
+
     private static PrivilegedCommandEntryAuthorizer CreateAuthorizer(
         params (AccountRole Role, IReadOnlyCollection<PlatformCapabilityKey> Capabilities)[] bundles) =>
         new(new PlatformAuthorizationPolicy(bundles.ToDictionary(
