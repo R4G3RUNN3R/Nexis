@@ -60,6 +60,34 @@ public sealed class AutomationArchitectureTests
     }
 
     [TestMethod]
+    public void SystemActorRegistryIsClosedCaseNormalizedAndCannotBeEmpty()
+    {
+        Assert.ThrowsExactly<ArgumentException>(() => new SystemActorRegistry(Array.Empty<SystemActorKey>()));
+
+        var registry = new SystemActorRegistry(new[]
+        {
+            new SystemActorKey("NEXIS.SCHEDULER"),
+            new SystemActorKey("nexis.ciel")
+        });
+
+        Assert.IsTrue(registry.IsRegistered(new SystemActorKey("nexis.scheduler")));
+        Assert.IsTrue(registry.IsRegistered(new SystemActorKey("NEXIS.CIEL")));
+        Assert.IsFalse(registry.IsRegistered(new SystemActorKey("nexis.retired-authority")));
+    }
+
+    [TestMethod]
+    public void AutomatedGatewayContractRequiresAnExplicitSubmissionDisposition()
+    {
+        var submit = typeof(IAutomatedCommandGateway).GetMethod(nameof(IAutomatedCommandGateway.SubmitAsync));
+
+        Assert.IsNotNull(submit);
+        Assert.AreEqual(
+            typeof(ValueTask<AutomatedCommandSubmissionResult>),
+            submit.ReturnType,
+            "Automated ingress must make identity rejection explicit to its caller.");
+    }
+
+    [TestMethod]
     public void FutureCielAndSchedulingProjectsCannotReferenceMutationBypassAssemblies()
     {
         var solutionDirectory = FindSolutionDirectory();
