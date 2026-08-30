@@ -45,7 +45,7 @@ public sealed class ReplayCorpusTests
 
         var artifact = CreateExtractor().Extract(fixture.Capture);
 
-        Assert.AreEqual(ReplayCorpusVersion.V1, artifact.CorpusVersion);
+        Assert.AreEqual(ReplayCorpusVersion.V2, artifact.CorpusVersion);
         Assert.AreEqual(EquipItemIntent.IntentContract, artifact.IntentContract);
         Assert.IsTrue(artifact.VerifyIntegrity());
         StringAssert.Contains(artifact.CanonicalJson, "\"provenanceKind\":\"productionHistory\"");
@@ -143,7 +143,7 @@ public sealed class ReplayCorpusTests
         var nonCanonical = Assert.ThrowsExactly<FormatException>(() =>
             ReplayCorpusArtifact.Parse(" " + artifact.CanonicalJson));
         Assert.ThrowsExactly<NotSupportedException>(() =>
-            ReplayCorpusArtifact.Parse(artifact.CanonicalJson.Replace("\"corpusVersion\":1", "\"corpusVersion\":2", StringComparison.Ordinal)));
+            ReplayCorpusArtifact.Parse(artifact.CanonicalJson.Replace("\"corpusVersion\":2", "\"corpusVersion\":3", StringComparison.Ordinal)));
         StringAssert.Contains(exception.Message, "exact reviewed schema");
         StringAssert.Contains(nonCanonical.Message, "canonical");
         Assert.IsFalse(artifact.CanonicalJson.Contains("credential", StringComparison.OrdinalIgnoreCase));
@@ -534,6 +534,62 @@ public sealed class ReplayCorpusTests
                 fixture.Plan.AuditEntries),
             fixture.Capture.Metadata);
 
+    /// <summary>
+    /// Task 9. Equip's decision now depends on InventorySnapshot.Reservations. A codec that silently
+    /// dropped a rule-relevant input would report false semantic equivalence during Core-vNext
+    /// comparison, so the reviewed document must carry it. A holding owner key is not player data.
+    /// </summary>
+    [TestMethod]
+    public void ReplayArtifact_RetainsInventoryReservationsAsARuleRelevantInput()
+    {
+        var fixture = CreateReservationFixture();
+
+        var artifact = CreateExtractor().Extract(fixture.Capture);
+
+        Assert.AreEqual(ReplayCorpusVersion.V2, artifact.CorpusVersion);
+        StringAssert.Contains(artifact.CanonicalJson, "\"reservations\":");
+        StringAssert.Contains(artifact.CanonicalJson, "\"holdingOwner\":\"Marketplace\"");
+
+        var scenario = new EquipItemReplayScenarioCodec()
+            .Decode(artifact.CanonicalJson, new FixedRandomResolver(fixture.RandomReference));
+        var inventory = scenario.Request.Snapshots.OfType<InventorySnapshot>().Single();
+
+        Assert.AreEqual(1, inventory.Reservations.Count);
+        Assert.AreEqual(new OwnerKey("Marketplace"), inventory.Reservations[0].HoldingOwner);
+    }
+
+    /// <summary>
+    /// Task 9. The reserve transition is half of the authoritative multi-owner output. If the codec
+    /// retained only the Equipment binding, a candidate Core that stopped reserving in Inventory -
+    /// reopening the double-spend the M-reserve model exists to close - would replay as equivalent.
+    /// </summary>
+    [TestMethod]
+    public void ReplayArtifact_RetainsTheInventoryReserveTransitionAsDecidedOutput()
+    {
+        var fixture = CreateFixture(ReplayScenarioTag.Ordinary);
+        var artifact = CreateExtractor().Extract(fixture.Capture);
+        var codec = new EquipItemReplayScenarioCodec();
+
+        var scenario = codec.Decode(artifact.CanonicalJson, new FixedRandomResolver(fixture.RandomReference));
+        var replayed = new CoreRulesEngine().Evaluate(scenario.Request);
+
+        Assert.AreEqual(1, replayed.Transitions.OfType<ReserveInventoryItemTransition>().Count());
+        Assert.AreEqual(
+            scenario.ExpectedDecisionFingerprint,
+            codec.DecisionFingerprint(replayed),
+            "A replayed Equip must reproduce both owner transitions, not only the Equipment binding.");
+    }
+
+    [TestMethod]
+    public void ReplayArtifact_RejectsACorpusV1DocumentThatPredatesTheAvailabilityInput()
+    {
+        var artifact = CreateExtractor().Extract(CreateReservationFixture().Capture);
+        var downgraded = artifact.CanonicalJson.Replace(
+            "\"corpusVersion\":2", "\"corpusVersion\":1", StringComparison.Ordinal);
+
+        Assert.ThrowsExactly<NotSupportedException>(() => ReplayCorpusArtifact.Parse(downgraded));
+    }
+
     [TestMethod]
     public void Extract_FailsClosedForUnregisteredOrInconsistentHistoricalData()
     {
@@ -659,6 +715,7 @@ public sealed class ReplayCorpusTests
         root["execution"]!["terminalReason"] = "equipment.reviewed.failure";
         root["decision"]!["status"] = status;
         root["decision"]!["reason"] = "equipment.reviewed.failure";
+        root["decision"]!["reservationTransitions"] = new JsonArray();
         root["decision"]!["transitions"] = new JsonArray();
         root["decision"]!["events"] = new JsonArray();
         root["committedEvents"] = new JsonArray();
@@ -716,16 +773,28 @@ public sealed class ReplayCorpusTests
     }
 
     private static Fixture CreateFixture(params ReplayScenarioTag[] tags) =>
-        CreateFixture(includeCanonicalCollections: false, tags);
+        CreateFixture(includeCanonicalCollections: false, includeForeignReservation: false, tags);
 
     private static Fixture CreateCollectionFixture() =>
         CreateFixture(
             includeCanonicalCollections: true,
+            includeForeignReservation: false,
             ReplayScenarioTag.HighValue,
             ReplayScenarioTag.Exploit);
 
+    /// <summary>
+    /// A capture whose Inventory snapshot possesses a second item committed to another owner. The
+    /// intent item stays available, so the equip still succeeds while the reservation input is real.
+    /// </summary>
+    private static Fixture CreateReservationFixture() =>
+        CreateFixture(
+            includeCanonicalCollections: false,
+            includeForeignReservation: true,
+            ReplayScenarioTag.Ordinary);
+
     private static Fixture CreateFixture(
         bool includeCanonicalCollections,
+        bool includeForeignReservation,
         params ReplayScenarioTag[] tags)
     {
         var commandId = new CommandId(Guid.Parse("10000000-0000-0000-0000-000000000001"));
@@ -752,7 +821,16 @@ public sealed class ReplayCorpusTests
                 new InventoryItemReference(itemId, definitionKey),
                 new InventoryItemReference(helmetId, definitionKey)
             }
-            : new[] { new InventoryItemReference(itemId, definitionKey) };
+            : includeForeignReservation
+                ? new[]
+                {
+                    new InventoryItemReference(itemId, definitionKey),
+                    new InventoryItemReference(bootsId, definitionKey)
+                }
+                : new[] { new InventoryItemReference(itemId, definitionKey) };
+        var inventoryReservations = includeForeignReservation
+            ? new[] { new InventoryItemReservation(bootsId, new OwnerKey("Marketplace")) }
+            : Array.Empty<InventoryItemReservation>();
         var equipmentBindings = includeCanonicalCollections
             ? new[]
             {
@@ -785,7 +863,7 @@ public sealed class ReplayCorpusTests
             new EquipItemIntent(characterId, itemId, MainHandPlacement),
             new IAuthoritativeSnapshot[]
             {
-                new InventorySnapshot(characterId, 5, inventoryItems),
+                new InventorySnapshot(characterId, 5, inventoryItems, inventoryReservations),
                 new EquipmentSnapshot(characterId, 9, equipmentBindings),
                 new CombatParticipationSnapshot(characterId, 3, false)
             },

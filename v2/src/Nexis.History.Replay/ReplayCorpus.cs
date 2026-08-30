@@ -11,6 +11,13 @@ public readonly record struct ReplayCorpusVersion
 {
     public static ReplayCorpusVersion V1 { get; } = new(1);
 
+    /// <summary>
+    /// V2 retains the Inventory reservation availability input and the Inventory reserve transition
+    /// that the M-reserve equip rule decides from and emits. A V1 document cannot express them, so it
+    /// cannot prove semantic equivalence for the current rule and is rejected rather than replayed.
+    /// </summary>
+    public static ReplayCorpusVersion V2 { get; } = new(2);
+
     public ReplayCorpusVersion(int value)
     {
         if (value <= 0)
@@ -408,7 +415,7 @@ public sealed class ReplayCorpusExtractor
             throw new InvalidOperationException("Replay capture typed intent contradicts the authoritative command payload fingerprint.");
         }
 
-        if (artifact.CorpusVersion != ReplayCorpusVersion.V1 || artifact.IntentContract != contract)
+        if (artifact.CorpusVersion != ReplayCorpusVersion.V2 || artifact.IntentContract != contract)
         {
             throw new InvalidOperationException("Replay codec emitted an artifact for the wrong corpus or intent contract version.");
         }

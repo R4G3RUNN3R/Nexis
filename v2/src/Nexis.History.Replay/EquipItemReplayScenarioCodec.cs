@@ -84,7 +84,7 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             .OrderBy(static item => item.EventId)
             .ToArray();
         var document = new EquipReplayDocument(
-            ReplayCorpusVersion.V1.Value,
+            ReplayCorpusVersion.V2.Value,
             new ContractDocument(IntentContract.Name, IntentContract.SchemaVersion),
             capture.Metadata.ProvenanceKind,
             capture.Metadata.SourceFingerprint.Value,
@@ -122,6 +122,13 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
                         new ContractDocument(item.DefinitionKey.Contract.Name, item.DefinitionKey.Contract.SchemaVersion),
                         item.DefinitionKey.DefinitionId.Value))
                     .OrderBy(static item => item.ItemInstanceId)
+                    .ToArray(),
+                inventory.Reservations
+                    .Select(reservation => new InventoryReservationDocument(
+                        alias.PseudonymizeItem(reservation.ItemInstanceId.Value),
+                        reservation.HoldingOwner.Value,
+                        reservation.ReleaseRestriction?.DeclaringOwner.Value))
+                    .OrderBy(static reservation => reservation.ItemInstanceId)
                     .ToArray()),
             new EquipmentDocument(
                 equipment.Revision,
@@ -191,7 +198,8 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
                             new ItemInstanceId(item.ItemInstanceId),
                             new ContentDefinitionKey(
                                 new ContractDescriptor(item.DefinitionContract.Name, item.DefinitionContract.SchemaVersion),
-                                new ContentDefinitionId(item.DefinitionId))))),
+                                new ContentDefinitionId(item.DefinitionId)))),
+                    document.Inventory.Reservations.Select(static reservation => CreateReservation(reservation))),
                 new EquipmentSnapshot(
                     characterId,
                     document.Equipment.Revision,
@@ -232,20 +240,35 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             throw new InvalidOperationException("Equip Item replay rejects unreviewed result payload contracts.");
         }
 
-        var transitions = decision.Transitions.Select(transition =>
+        // The equip rule is a two-owner command, so the reviewed shape carries both owner-addressed
+        // transitions. Any other transition contract is unreviewed and fails closed.
+        foreach (var transition in decision.Transitions)
         {
-            if (transition is not EquipItemTransition equip)
+            if (transition is not (EquipItemTransition or ReserveInventoryItemTransition))
             {
                 throw new InvalidOperationException("Equip Item replay rejects unreviewed transition contracts.");
             }
+        }
 
-            return new TransitionDocument(
+        var reservationTransitions = decision.Transitions
+            .OfType<ReserveInventoryItemTransition>()
+            .Select(reserve => new ReservationTransitionDocument(
+                reserve.ExpectedRevision,
+                pseudonymizeCharacter(reserve.CharacterId.Value),
+                pseudonymizeItem(reserve.ItemInstanceId.Value),
+                reserve.HoldingOwner.Value))
+            .OrderBy(static reserve => reserve.ItemInstanceId)
+            .ToArray();
+        var transitions = decision.Transitions
+            .OfType<EquipItemTransition>()
+            .Select(equip => new TransitionDocument(
                 equip.ExpectedRevision,
                 pseudonymizeCharacter(equip.CharacterId.Value),
                 pseudonymizeItem(equip.ItemInstanceId.Value),
                 equip.PlacementKey.Value,
-                equip.OccupiedSlots.Select(static slot => slot.Value).Order(StringComparer.Ordinal).ToArray());
-        }).OrderBy(static transition => transition.ItemInstanceId).ToArray();
+                equip.OccupiedSlots.Select(static slot => slot.Value).Order(StringComparer.Ordinal).ToArray()))
+            .OrderBy(static transition => transition.ItemInstanceId)
+            .ToArray();
 
         var events = decision.Events.Select(domainEvent =>
         {
@@ -261,7 +284,12 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
                 equipped.OccupiedSlots.Select(static slot => slot.Value).Order(StringComparer.Ordinal).ToArray());
         }).OrderBy(static domainEvent => domainEvent.ItemInstanceId).ToArray();
 
-        return new DecisionDocument(decision.Status, decision.Reason?.Value, transitions, events);
+        return new DecisionDocument(
+            decision.Status,
+            decision.Reason?.Value,
+            reservationTransitions,
+            transitions,
+            events);
     }
 
     private static CommittedEventDocument NormalizeCommittedEvent(
@@ -304,7 +332,7 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
     private static EquipReplayDocument DeserializeCanonicalDocument(string canonicalJson)
     {
         var document = DeserializeDocument(canonicalJson);
-        if (document.CorpusVersion != ReplayCorpusVersion.V1.Value ||
+        if (document.CorpusVersion != ReplayCorpusVersion.V2.Value ||
             document.IntentContract != new ContractDocument(
                 EquipItemIntent.IntentContract.Name,
                 EquipItemIntent.IntentContract.SchemaVersion))
@@ -439,7 +467,17 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
 
     private sealed record InventoryDocument(
         long Revision,
-        InventoryItemDocument[] Items);
+        InventoryItemDocument[] Items,
+        InventoryReservationDocument[] Reservations);
+
+    /// <summary>
+    /// The M-reserve availability input. A holding owner key and a restriction's declaring owner key
+    /// are authoritative system names, not player data, so both are safe to retain verbatim.
+    /// </summary>
+    private sealed record InventoryReservationDocument(
+        Guid ItemInstanceId,
+        string HoldingOwner,
+        string? RestrictionDeclaringOwner);
 
     private sealed record InventoryItemDocument(
         Guid ItemInstanceId,
@@ -470,8 +508,20 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
     private sealed record DecisionDocument(
         CoreOutcomeStatus Status,
         string? Reason,
+        ReservationTransitionDocument[] ReservationTransitions,
         TransitionDocument[] Transitions,
         EventDocument[] Events);
+
+    /// <summary>
+    /// The Inventory half of the M-reserve equip decision. It is retained separately from the
+    /// Equipment binding transition because the two address different owners and carry different
+    /// typed evidence; collapsing them would hide which owner the rule actually committed to.
+    /// </summary>
+    private sealed record ReservationTransitionDocument(
+        long? ExpectedRevision,
+        Guid CharacterId,
+        Guid ItemInstanceId,
+        string HoldingOwner);
 
     private sealed record TransitionDocument(
         long? ExpectedRevision,
@@ -562,7 +612,8 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
                     new ItemInstanceId(item.ItemInstanceId),
                     new ContentDefinitionKey(
                         new ContractDescriptor(item.DefinitionContract.Name, item.DefinitionContract.SchemaVersion),
-                        new ContentDefinitionId(item.DefinitionId)))));
+                        new ContentDefinitionId(item.DefinitionId)))),
+                document.Inventory.Reservations.Select(static reservation => CreateReservation(reservation)));
             var equipment = new EquipmentSnapshot(
                 characterId,
                 document.Equipment.Revision,
@@ -658,6 +709,15 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             }
         }
 
+        foreach (var reservation in document.Inventory.Reservations)
+        {
+            ValidateSafeToken(reservation.HoldingOwner, "reservation holding owner");
+            if (reservation.RestrictionDeclaringOwner is not null)
+            {
+                ValidateSafeToken(reservation.RestrictionDeclaringOwner, "reservation restriction declaring owner");
+            }
+        }
+
         foreach (var binding in document.Equipment.Bindings)
         {
             ValidateSafeToken(binding.Placement, "equipment placement", 64);
@@ -680,6 +740,11 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
         if (document.Decision.Reason is not null)
         {
             ValidateSafeToken(document.Decision.Reason, "decision reason");
+        }
+
+        foreach (var reservation in document.Decision.ReservationTransitions)
+        {
+            ValidateSafeToken(reservation.HoldingOwner, "reservation transition holding owner");
         }
 
         foreach (var transition in document.Decision.Transitions)
@@ -798,6 +863,11 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             Comparer<Guid>.Default,
             "inventory items");
         RequireCanonicalOrder(
+            document.Inventory.Reservations,
+            static reservation => reservation.ItemInstanceId,
+            Comparer<Guid>.Default,
+            "inventory reservations");
+        RequireCanonicalOrder(
             document.Equipment.Bindings,
             static binding => binding.ItemInstanceId,
             Comparer<Guid>.Default,
@@ -825,6 +895,11 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
                 "content placement slots");
         }
 
+        RequireCanonicalOrder(
+            document.Decision.ReservationTransitions,
+            static reservation => reservation.ItemInstanceId,
+            Comparer<Guid>.Default,
+            "decision reservation transitions");
         RequireCanonicalOrder(
             document.Decision.Transitions,
             static transition => transition.ItemInstanceId,
@@ -912,6 +987,14 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             throw new InvalidOperationException("Replay committed-event metadata contradicts the authoritative execution identity.");
         }
 
+        var possessedItems = document.Inventory.Items
+            .Select(static item => item.ItemInstanceId)
+            .ToHashSet();
+        if (document.Inventory.Reservations.Any(reservation => !possessedItems.Contains(reservation.ItemInstanceId)))
+        {
+            throw new FormatException("Replay Inventory cannot reserve an item instance it does not possess.");
+        }
+
         var decisionEvents = document.Decision.Events
             .Select(EventFingerprint)
             .Order(StringComparer.Ordinal)
@@ -925,7 +1008,10 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             throw new InvalidOperationException("Replay decision events and committed event evidence are inconsistent.");
         }
 
-        if (document.Decision.Transitions.Any(transition =>
+        if (document.Decision.ReservationTransitions.Any(reservation =>
+                reservation.CharacterId != document.Intent.CharacterId ||
+                reservation.ItemInstanceId != document.Intent.ItemInstanceId) ||
+            document.Decision.Transitions.Any(transition =>
                 transition.CharacterId != document.Intent.CharacterId ||
                 transition.ItemInstanceId != document.Intent.ItemInstanceId ||
                 !StringComparer.Ordinal.Equals(transition.Placement, document.Intent.Placement)) ||
@@ -939,7 +1025,8 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
 
         if (document.Decision.Status is CoreOutcomeStatus.Rejected or CoreOutcomeStatus.TechnicalFailure)
         {
-            if (document.Decision.Transitions.Length != 0 ||
+            if (document.Decision.ReservationTransitions.Length != 0 ||
+                document.Decision.Transitions.Length != 0 ||
                 document.Decision.Events.Length != 0 ||
                 document.CommittedEvents.Length != 0)
             {
@@ -949,11 +1036,31 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             return;
         }
 
-        if (document.Decision.Transitions.Length != 1 ||
+        if (document.Decision.ReservationTransitions.Length != 1 ||
+            document.Decision.Transitions.Length != 1 ||
             document.Decision.Events.Length != 1 ||
             document.CommittedEvents.Length != 1)
         {
-            throw new InvalidOperationException("Successful Equip Item replay decisions require one transition and one committed semantic event.");
+            throw new InvalidOperationException(
+                "A successful Equip Item replay decision requires exactly one Inventory reserve transition, "
+                + "one Equipment binding transition and one committed semantic event.");
+        }
+
+        // The reserve transition must carry Inventory's own revision and name Equipment as the holder.
+        // A document claiming Equipment's revision, or naming a foreign holder, would describe an equip
+        // that never took the M-reserve availability answer from the authoritative owner.
+        var reservation = document.Decision.ReservationTransitions[0];
+        if (reservation.ExpectedRevision != document.Inventory.Revision ||
+            !StringComparer.Ordinal.Equals(reservation.HoldingOwner, EquipmentSnapshot.OwnerKey.Value))
+        {
+            throw new InvalidOperationException("Successful Equip Item replay reservation contradicts the Inventory owner revision or holder.");
+        }
+
+        // Under M-reserve the intent item must have been available. A retained snapshot that already
+        // reserved it could not have produced this success.
+        if (document.Inventory.Reservations.Any(existing => existing.ItemInstanceId == document.Intent.ItemInstanceId))
+        {
+            throw new InvalidOperationException("Retained Inventory availability cannot support the successful Equip Item decision.");
         }
 
         var transition = document.Decision.Transitions[0];
@@ -1011,6 +1118,13 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             throw new InvalidOperationException("Equip Item V1 replay decision uses a status that its reviewed rule cannot emit.");
         }
 
+        var reservations = document.ReservationTransitions.Select(static reservation =>
+            new ReserveInventoryItemTransition(
+                reservation.ExpectedRevision
+                    ?? throw new InvalidOperationException("Equip Item replay transitions require an expected revision."),
+                new CharacterId(reservation.CharacterId),
+                new ItemInstanceId(reservation.ItemInstanceId),
+                new OwnerKey(reservation.HoldingOwner)));
         var transitions = document.Transitions.Select(static transition => new EquipItemTransition(
             transition.ExpectedRevision
                 ?? throw new InvalidOperationException("Equip Item replay transitions require an expected revision."),
@@ -1019,17 +1133,28 @@ public sealed class EquipItemReplayScenarioCodec : IReplayScenarioCodec
             new EquipmentPlacementKey(transition.Placement),
             transition.OccupiedSlots.Select(static slot => new EquipmentSlotKey(slot))));
         var events = document.Events.Select(CreateEvent);
+        var mutates = document.ReservationTransitions.Length != 0 || document.Transitions.Length != 0 || document.Events.Length != 0;
         return document.Status switch
         {
             CoreOutcomeStatus.Succeeded when document.Reason is null =>
-                CoreDecision.Succeeded(transitions: transitions, events: events),
-            CoreOutcomeStatus.Rejected when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
+                CoreDecision.Succeeded(
+                    transitions: reservations.Cast<IOwnerTransition>().Concat(transitions),
+                    events: events),
+            CoreOutcomeStatus.Rejected when document.Reason is not null && !mutates =>
                 CoreDecision.Rejected(new CoreReasonCode(document.Reason)),
-            CoreOutcomeStatus.TechnicalFailure when document.Reason is not null && document.Transitions.Length == 0 && document.Events.Length == 0 =>
+            CoreOutcomeStatus.TechnicalFailure when document.Reason is not null && !mutates =>
                 CoreDecision.TechnicalFailure(new CoreReasonCode(document.Reason)),
             _ => throw new InvalidOperationException("Replay decision status, reason, and mutation shape are inconsistent.")
         };
     }
+
+    private static InventoryItemReservation CreateReservation(InventoryReservationDocument document) =>
+        new(
+            new ItemInstanceId(document.ItemInstanceId),
+            new OwnerKey(document.HoldingOwner),
+            document.RestrictionDeclaringOwner is null
+                ? null
+                : new ItemReleaseRestriction(new OwnerKey(document.RestrictionDeclaringOwner)));
 
     private static ItemEquippedEvent CreateEvent(EventDocument document) =>
         new(
