@@ -88,4 +88,40 @@ public sealed class MReserveUnequipVerticalTests
             items,
             new InventoryItemReservation[] { null! }));
     }
+
+    [TestMethod]
+    public void InventoryTransitions_AddressInventoryAndCarryTheHoldingOwner()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+
+        var reserve = new ReserveInventoryItemTransition(7, characterId, itemId, EquipmentSnapshot.OwnerKey);
+        var release = new ReleaseInventoryItemReservationTransition(7, characterId, itemId, EquipmentSnapshot.OwnerKey);
+
+        Assert.AreEqual(InventorySnapshot.OwnerKey, reserve.TargetOwner);
+        Assert.AreEqual(InventorySnapshot.OwnerKey, release.TargetOwner);
+        Assert.AreEqual("nexis.inventory.reserve-item", reserve.Contract.Name);
+        Assert.AreEqual("nexis.inventory.release-item-reservation", release.Contract.Name);
+        Assert.AreEqual(1, reserve.Contract.SchemaVersion);
+        Assert.AreEqual(1, release.Contract.SchemaVersion);
+        Assert.AreEqual(7L, reserve.ExpectedRevision);
+        Assert.AreEqual(EquipmentSnapshot.OwnerKey, release.HoldingOwner);
+        Assert.AreEqual(itemId, release.ItemInstanceId);
+    }
+
+    [TestMethod]
+    public void InventoryTransitions_RejectNegativeRevisionsAndEmptyIdentities()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            new ReserveInventoryItemTransition(-1, characterId, itemId, EquipmentSnapshot.OwnerKey));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            new ReleaseInventoryItemReservationTransition(-1, characterId, itemId, EquipmentSnapshot.OwnerKey));
+        Assert.ThrowsExactly<ArgumentNullException>(() =>
+            new ReserveInventoryItemTransition(0, characterId, itemId, null!));
+        Assert.ThrowsExactly<ArgumentNullException>(() =>
+            new ReleaseInventoryItemReservationTransition(0, characterId, itemId, null!));
+    }
 }
