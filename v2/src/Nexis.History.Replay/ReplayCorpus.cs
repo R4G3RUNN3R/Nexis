@@ -435,11 +435,42 @@ public sealed class ReplayCorpusExtractor
         var expectedStatus = (CommandTerminalStatus)capture.Decision.Status;
         if (capture.Plan.TerminalOutcome.Status != expectedStatus ||
             capture.Plan.TerminalOutcome.Reason?.Value != capture.Decision.Reason?.Value ||
-            !capture.Plan.Transitions.SequenceEqual(capture.Decision.Transitions) ||
+            !CarriesExactlyTheDecidedTransitions(capture.Plan.Transitions, capture.Decision.Transitions) ||
             !capture.Plan.Events.Select(static item => item.Descriptor).SequenceEqual(capture.Decision.Events))
         {
             throw new InvalidOperationException("Replay capture decision and terminal command plan are inconsistent.");
         }
+    }
+
+    /// <summary>
+    /// The commit plan builder deliberately canonicalizes transition order, and the persistence
+    /// committer orders again by canonical lock order, so plan order is not decision order for any
+    /// genuinely multi-owner command. The property the replay boundary must protect is that the plan
+    /// carries exactly the decided transitions - none added, dropped, substituted or duplicated -
+    /// which is a multiset comparison rather than a sequence comparison.
+    /// </summary>
+    private static bool CarriesExactlyTheDecidedTransitions(
+        IReadOnlyList<IOwnerTransition> planned,
+        IReadOnlyList<IOwnerTransition> decided)
+    {
+        if (planned.Count != decided.Count)
+        {
+            return false;
+        }
+
+        var unmatched = new List<IOwnerTransition>(decided);
+        foreach (var transition in planned)
+        {
+            var index = unmatched.FindIndex(candidate => candidate.Equals(transition));
+            if (index < 0)
+            {
+                return false;
+            }
+
+            unmatched.RemoveAt(index);
+        }
+
+        return unmatched.Count == 0;
     }
 }
 

@@ -464,6 +464,76 @@ public sealed class ReplayCorpusTests
 
 
 
+    /// <summary>
+    /// Plan correction 4. CommandCommitPlanBuilder deliberately canonicalizes transition order, so
+    /// comparing plan and decision transitions with an order-sensitive SequenceEqual asserted
+    /// something the architecture never promised. It passed only while every Core rule emitted a
+    /// single transition. The real invariant is that the plan carries exactly the decision's
+    /// transitions - none added, dropped, substituted or duplicated - regardless of order.
+    /// </summary>
+    [TestMethod]
+    public void Extract_AcceptsAMultiOwnerDecisionWhoseCanonicalPlanOrderDiffersFromEmissionOrder()
+    {
+        var fixture = CreateFixture(ReplayScenarioTag.Ordinary);
+
+        Assert.IsTrue(
+            fixture.Decision.Transitions.Count > 1,
+            "This guard is meaningless unless the captured decision is genuinely multi-owner.");
+        CollectionAssert.AreNotEqual(
+            fixture.Decision.Transitions.ToArray(),
+            fixture.Plan.Transitions.ToArray(),
+            "The plan builder is expected to have canonically reordered a multi-owner decision. If "
+            + "these are already identical this test no longer exercises the reordering case.");
+        CollectionAssert.AreEquivalent(
+            fixture.Decision.Transitions.ToArray(),
+            fixture.Plan.Transitions.ToArray());
+
+        var artifact = CreateExtractor().Extract(fixture.Capture);
+
+        Assert.AreEqual(EquipItemIntent.IntentContract, artifact.IntentContract);
+        Assert.IsTrue(artifact.VerifyIntegrity());
+    }
+
+    [TestMethod]
+    public void Extract_StillRejectsAPlanThatAddsDropsOrSubstitutesATransition()
+    {
+        var fixture = CreateFixture(ReplayScenarioTag.Ordinary);
+        var original = fixture.Plan.Transitions.ToArray();
+
+        // Dropped.
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            CreateExtractor().Extract(CaptureWithTransitions(fixture, original.Take(1))));
+
+        // Duplicated.
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            CreateExtractor().Extract(CaptureWithTransitions(fixture, original.Concat(original.Take(1)))));
+
+        // Substituted: a transition the decision never produced.
+        var foreign = new ReserveInventoryItemTransition(
+            123, fixture.CharacterId, ItemInstanceId.New(), EquipmentSnapshot.OwnerKey);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            CreateExtractor().Extract(CaptureWithTransitions(fixture, original.Skip(1).Append(foreign))));
+
+        // Added.
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            CreateExtractor().Extract(CaptureWithTransitions(fixture, original.Append(foreign))));
+    }
+
+    private static ReplayCapture CaptureWithTransitions(
+        Fixture fixture,
+        IEnumerable<IOwnerTransition> transitions) =>
+        new(
+            fixture.Request,
+            fixture.Decision,
+            new CommandCommitPlan(
+                fixture.Plan.Trace,
+                fixture.Plan.ExecutionToken,
+                fixture.Plan.TerminalOutcome,
+                transitions.ToArray(),
+                fixture.Plan.Events,
+                fixture.Plan.AuditEntries),
+            fixture.Capture.Metadata);
+
     [TestMethod]
     public void Extract_FailsClosedForUnregisteredOrInconsistentHistoricalData()
     {

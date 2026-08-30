@@ -68,6 +68,46 @@ constructing a *consistent* equipped state (binding **and** matching Equipment r
 
 This is a strictly-stronger change: no assertion is weakened and no reason code is removed.
 
+### Correction 4 (architecture defect, found during Task 3 execution) — replay trace validation cannot survive a multi-owner decision
+
+**Symptom.** Completing Task 3 turned 16 previously-green `ReplayCorpusTests` red, all with
+`InvalidOperationException: Replay capture decision and terminal command plan are inconsistent.`
+from `ReplayCorpusExtractor.ValidateTrace`.
+
+**Root cause — a latent pre-existing defect, exposed rather than caused by this slice.**
+`CommandCommitPlanBuilder.Build` deliberately canonicalizes transition order:
+
+```csharp
+var transitions = decision.Transitions
+    .OrderBy(static transition => transition.TargetOwner.Value, StringComparer.Ordinal)
+    ...
+```
+
+`ValidateTrace` then asserts:
+
+```csharp
+!capture.Plan.Transitions.SequenceEqual(capture.Decision.Transitions)
+```
+
+`SequenceEqual` is order-sensitive. So the check silently assumed plan order equals decision order —
+an assumption the plan builder explicitly breaks. With one transition the two orders coincide and the
+check passed vacuously. The equip rule now emits `[Reserve(Inventory), Equip(Equipment)]`, the builder
+canonicalizes to `[Equip(Equipment), Reserve(Inventory)]`, and the comparison fails.
+
+This is not specific to M-reserve. **Any** genuine multi-owner command whose Core rule emits
+transitions in non-canonical owner order would trip it, which means the C3 proof itself is blocked by
+it. It is exactly the class of latent single-owner assumption C3 exists to flush out.
+
+**Correction.** `ValidateTrace` compares the plan's transitions against the decision's transitions as
+an order-insensitive multiset. The property that actually matters — and that the check was written to
+protect — is *the plan carries exactly the decision's transitions: none added, none dropped, none
+substituted, none duplicated*. Order is not part of that promise, because canonicalizing it is the
+plan builder's documented job and the PostgreSQL committer reorders again by canonical lock order.
+
+This is a strict narrowing of one false assumption, not a weakened guard. Added-, dropped-,
+substituted- and duplicated-transition captures must all still be rejected, and Task 3 adds tests
+pinning each of those directions plus the multi-owner acceptance case.
+
 ### Correction 2 (factual) — this SDK cannot run `dotnet test`
 
 Every `Run: dotnet test ...` step in this plan fails on the installed SDK (10.0.111) with:
