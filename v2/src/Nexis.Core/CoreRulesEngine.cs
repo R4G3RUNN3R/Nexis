@@ -82,6 +82,7 @@ public sealed class CoreRulesEngine : ICoreRulesEngine
 
     private static ICoreRuleEvaluator[] CreateDefaultEvaluators() =>
     [
-        new EquipItemRuleEvaluator()
+        new EquipItemRuleEvaluator(),
+        new UnequipItemRuleEvaluator()
     ];
 }
