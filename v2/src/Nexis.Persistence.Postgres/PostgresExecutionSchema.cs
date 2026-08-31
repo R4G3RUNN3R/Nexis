@@ -13,7 +13,8 @@ public static class PostgresExecutionSchema
         "Nexis.Persistence.Postgres.Migrations.0004_equipment_owner.sql",
         "Nexis.Persistence.Postgres.Migrations.0005_system_actor_identity.sql",
         "Nexis.Persistence.Postgres.Migrations.0006_operational_quarantine.sql",
-        "Nexis.Persistence.Postgres.Migrations.0007_operational_signals.sql"
+        "Nexis.Persistence.Postgres.Migrations.0007_operational_signals.sql",
+        "Nexis.Persistence.Postgres.Migrations.0008_inventory_owner.sql"
     };
 
     public static async ValueTask EnsureCreatedAsync(

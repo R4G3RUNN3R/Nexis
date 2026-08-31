@@ -13,6 +13,7 @@
     <ProjectReference Include="..\Nexis.Operations.Contracts\Nexis.Operations.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Equipment.Contracts\Nexis.Equipment.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Inventory.Contracts\Nexis.Inventory.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Migrations\0001_execution_foundation.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0001_execution_foundation.sql" />
@@ -22,5 +23,6 @@
     <EmbeddedResource Include="Migrations\0005_system_actor_identity.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0005_system_actor_identity.sql" />
     <EmbeddedResource Include="Migrations\0006_operational_quarantine.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0006_operational_quarantine.sql" />
     <EmbeddedResource Include="Migrations\0007_operational_signals.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0007_operational_signals.sql" />
+    <EmbeddedResource Include="Migrations\0008_inventory_owner.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0008_inventory_owner.sql" />
   </ItemGroup>
 </Project>
