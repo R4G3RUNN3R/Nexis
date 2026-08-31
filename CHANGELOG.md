@@ -1,4 +1,21 @@
 # Changelog
+## 2026-08-31
+
+### Nexis 2.0 M-reserve item availability and the C3 real multi-owner gameplay proof
+- adopted the approved **M-reserve** availability model: Inventory owns possession *and* the single authoritative answer to whether an item instance is available; Equipment owns slot bindings only, and equipping never removes the item from Inventory as the superseded V1 `removeInventory`/`addInventory` mechanism did
+- added the typed availability vocabulary `InventoryItemReservation(ItemInstanceId, OwnerKey holdingOwner, ItemReleaseRestriction?)` and the `ReserveInventoryItemTransition` / `ReleaseInventoryItemReservationTransition` owner transitions; `InventorySnapshot` gains `Reservations` and moves to contract schema 2
+- made Equip a genuine two-owner command (Inventory reserves, Equipment binds) and added the inverse `UnequipItem` Core rule, typed contracts and canonical command codec; the availability check is ordered after the already-equipped check so re-equipping worn gear reports `equipment.item.already_equipped` rather than misattributing it to `equipment.item.reserved_elsewhere`
+- classified Equipment/Inventory disagreement about the same item (missing or foreign-held reservation) as TechnicalFailure rather than an in-world rejection, since neither is something the player did
+- added the real Inventory PostgreSQL owner and migration `0008`; `UNIQUE (item_instance_id)` on `inventory_item_reservations` is the structural no-double-spend guarantee enforced by the database rather than only by a C# check, and the release statement carries `restriction_declaring_owner IS NULL AND holding_owner = @o` so a restricted or foreign-held reservation is not releasable even if Core were bypassed or stale
+- delivered the C3 proof: `UnequipItem` clears the Equipment binding and releases the same Inventory reservation in one atomic, exactly-once, double-spend-proof command, proven against real PostgreSQL for the happy path, independent stale-Inventory and stale-Equipment rollback, repeated CommandId, concurrent unequips, an opposing stale reservation, and removal-restriction denial committing neither owner
+- fixed a latent single-owner assumption exposed rather than caused by this slice: `ReplayCorpusExtractor.ValidateTrace` compared plan and decision transitions with the order-sensitive `SequenceEqual` while `CommandCommitPlanBuilder` deliberately canonicalizes transition order, so any genuine multi-owner command would have tripped it; the comparison is now an order-insensitive multiset with added-, dropped-, substituted- and duplicated-transition cases still rejected
+- advanced the replay corpus to V2 so the rule-relevant Inventory availability input is retained; a V1 artifact now fails closed rather than reporting false semantic equivalence during Core-vNext comparison
+- added `MReserveFreedomRuleTests` guarding the approved freedom rule mechanically: stats, skills and knowledge are not equip or unequip gates, Nexis.Core takes no compile-time dependency on a capability owner, and neither equipment rule declares a capability-shaped rejection reason
+- reconciled the `STATE-OWNERSHIP.md` §8 self-contradiction (reference-only versus multi-owner equip) and the `COMMAND-EXECUTION.md` "Inventory precondition" equip example under M-reserve, and recorded the boundary plus the future curse integration seam in `ITEM-AVAILABILITY-RESERVATION.md`
+- no Curse owner, curse state, effect persistence, questline, purification path or balance value was created; the only curse-adjacent artefact is the typed `ItemReleaseRestriction(OwnerKey declaringOwner)` seam, deliberately empty of curse semantics
+- no protective test was weakened: the superseded single-owner equip assertions and the corpus V1 expectation were each replaced by strictly stronger assertions in the same file
+- verification: Release build of `Nexis.slnx` 0 warnings/0 errors; architecture suite 218 total, 215 passed, 3 failed, 0 skipped; disposable PostgreSQL integration suite on a fresh database 66 total, 66 passed, 0 failed, 0 skipped; the three architecture failures remain the open L3 History/Player Log findings
+
 ## 2026-08-29
 
 ### Nexis 2.0 privileged-entry attribution and decision freshness

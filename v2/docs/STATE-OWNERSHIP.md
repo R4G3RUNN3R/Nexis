@@ -239,9 +239,13 @@ This stays separate from Resources because a finite regenerating pool and an eli
 
 **Does not own** item ownership or durability.
 
-An equipped item remains an Inventory-owned item. Equipment stores a validated reference to it.
+An equipped item remains an Inventory-owned item. Equipment stores a validated reference to it, and
+Inventory records a reservation marking the item unavailable for other ownership-changing actions.
+This is the approved **M-reserve** model; see `ITEM-AVAILABILITY-RESERVATION.md`.
 
-Equip/unequip commonly forms an explicit atomic multi-owner operation between Inventory and Equipment.
+Equip and unequip are therefore explicit atomic multi-owner operations between Inventory and
+Equipment: equip reserves and binds, unequip unbinds and releases, and neither transfers possession.
+The superseded V1 model that removed the item from inventory on equip must not be reintroduced.
 
 ### 9. Effects
 
@@ -774,7 +778,8 @@ Use when the gameplay promise is invalid unless all related state changes commit
 
 Canonical examples:
 
-- **Equip item**: Inventory ownership/revision + Equipment slot assignment.
+- **Equip item**: Inventory reservation + Equipment slot assignment.
+- **Unequip item**: Equipment binding clear + Inventory reservation release.
 - **Buy marketplace listing**: Marketplace listing + Economy buyer/seller wallets + Inventory ownership transfer.
 - **Use consumable**: Inventory quantity + Resources result + Cooldown change + Effects change.
 - **Start paid education**: Economy debit + Education enrollment.

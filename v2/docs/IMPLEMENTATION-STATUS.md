@@ -159,21 +159,43 @@ The operational-observability RED/GREEN slice added `Nexis.Operations.Contracts`
 
 The reference Core implementation version remains `0.5.0-foundation`; the stable Core contract remains V1.
 
+## Real multi-owner gameplay proof (C3)
+
+`UnequipItem` under M-reserve is the first Nexis 2.0 operation that legitimately writes two real
+authoritative owners in one atomic command. The proof demonstrates:
+
+1. Equipment clears the equipped reference;
+2. Inventory releases the same item reservation;
+3. both transitions commit in one transaction or neither does, proven for a stale Inventory revision
+   and a stale Equipment revision independently;
+4. a repeated CommandId reconstructs the original outcome and never releases or duplicates twice;
+5. concurrent unequips produce exactly one winner, and an opposing reservation attempt from a stale
+   snapshot cannot double-spend the item;
+6. an unequip denied by an authoritative removal restriction commits neither owner transition, denied
+   independently by Core and by the Inventory persistence boundary;
+7. no invented balance value, cost, cooldown or content is involved.
+
+Possession is never created, destroyed or transferred. Stats, skills and knowledge are not equip
+prerequisites, and `MReserveFreedomRuleTests` asserts that mechanically.
+
+`ITEM-AVAILABILITY-RESERVATION.md` records the boundary and the explicit future curse integration
+seam. No Curse owner, curse state, questline or purification path exists.
+
 ## Foundation work still incomplete
 
 The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
 
 1. migration/reconciliation tooling before any v1-to-v2 state movement, still gated by unresolved human decisions;
-2. additional real owner-specific multi-owner gameplay proof where a legitimate approved rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
+2. broader multi-owner coverage across further gameplay domains, now that the first real two-owner proof (C3, `UnequipItem`) is delivered against real PostgreSQL;
 3. reproduction and resolution of valid threat-model findings, producer wiring for the operational surface, and the wider foundation stop-condition audit before broad gameplay implementation.
 
-The real multi-owner proof cannot currently proceed without inventing mechanics. `EquipItem` legitimately writes only Equipment while Inventory, Combat and Content are read-only prerequisites. No implemented Economy, Marketplace, Education, Resources or other gameplay transition contract supplies a second legitimate owner write, and creating a no-op Inventory transition or unapproved cost/reward/reservation would violate the ownership and research-before-canon rules.
+The real multi-owner proof is delivered. Under the approved M-reserve model, equip reserves the item instance in Inventory and binds it in Equipment, and `UnequipItem` unbinds and releases, so both are genuine two-owner commands writing two real authoritative owners rather than synthetic transactional owners. No mechanic, cost, cooldown, reward or content value was invented to achieve it, and possession never moves.
 
 Exact owner/domain contracts should continue to be introduced only when the corresponding gameplay design is sufficiently settled. Do not create generic state bags merely to make the architecture look more complete.
 
 ## Next safe implementation boundary
 
-The replay, privileged-entry and operational-observability foundation boundaries are implemented and adversarially covered. The next safe slice is evidence-first reproduction and resolution of Claude threat-model findings against the exact current branch, beginning with recovery corruption and poison outbox behavior. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
+The replay, privileged-entry, operational-observability and real multi-owner (C3) foundation boundaries are implemented and adversarially covered. The next safe slice is the account-scoped stable `PublicPlayerId` boundary, preserving one account = one player = one playable character with no slots, alts or campaign characters, followed by evidence-first reproduction and resolution of the three known L3 History/Player Log findings. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
 
 ## Verification discipline
 

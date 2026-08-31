@@ -173,7 +173,10 @@ Core receives only immutable current snapshots/content/context needed by the int
 Examples:
 
 - Marketplace purchase -> Marketplace listing transition + Economy debit/credit + Inventory ownership transfer.
-- Equip item -> Equipment slot transition, with Inventory ownership/revision precondition.
+- Equip item -> Inventory reservation transition + Equipment slot transition, committed atomically
+  under the approved M-reserve model.
+- Unequip item -> Equipment binding-clear transition + Inventory reservation-release transition,
+  committed atomically. Possession never moves.
 - Use consumable -> Inventory decrement + Resources change + Cooldown transition + Effects transition as applicable.
 - Paid education -> Economy debit + Education enrollment.
 
@@ -271,7 +274,8 @@ Succeeded and DomainFailed outcomes may carry owner transitions and authoritativ
 | --- | --- | --- |
 | Update preference | optimistic revision | actor ownership |
 | Start education | optimistic/domain revision | current prerequisites + Economy debit atomicity |
-| Equip item | optimistic Inventory/Equipment revisions | ownership + slot invariants |
+| Equip item | optimistic Inventory/Equipment revisions | availability reservation + slot invariants |
+| Unequip item | optimistic Inventory/Equipment revisions | canonical Equipment-then-Inventory lock order + release restriction |
 | Buy marketplace listing | ordered pessimistic/conditional locks | Marketplace + Economy + Inventory atomicity |
 | Direct transfer | ordered locks/reservations | Economy/Inventory ownership constraints + CommandId |
 | Guild treasury withdrawal | Guild authority snapshot + Economy wallet lock | current domain permission rechecked + audit |
