@@ -287,4 +287,362 @@ public sealed class PostgresUnequipItemMultiOwnerIntegrationTests
             public ulong NextUInt64() => 1;
         }
     }
+    [TestMethod]
+    public async Task UnequipItem_CommitsEquipmentClearAndInventoryReleaseAtomically()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+        await SeedEquippedItemAsync(characterId, itemId, reserve: true, bind: true);
+
+        var commit = await ExecuteUnequipAsync(characterId, itemId, CommandId.New(), "c3-happy");
+
+        Assert.AreEqual(CommandCommitDisposition.Committed, commit.Result.Disposition);
+
+        var equipment = await new PostgresEquipmentSnapshotReader(DataSource).ReadAsync(characterId);
+        Assert.AreEqual(2L, equipment.Revision);
+        Assert.AreEqual(0, equipment.Bindings.Count, "Equipment must have cleared the equipped reference.");
+        Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.equipment_binding_slots;"));
+
+        var inventory = await new PostgresInventorySnapshotReader(DataSource).ReadAsync(characterId);
+        Assert.AreEqual(2L, inventory.Revision);
+        Assert.IsNull(inventory.FindReservation(itemId), "Inventory must have released the same reservation.");
+        Assert.AreEqual(1, inventory.Items.Count, "Possession must be unchanged by unequip.");
+
+        Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.authoritative_events;"));
+        Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.outbox;"));
+        Assert.AreEqual(
+            1,
+            await ScalarIntAsync(
+                "SELECT count(*) FROM nexis_v2.authoritative_events "
+                + "WHERE contract_name = 'nexis.equipment.item-unequipped';"));
+    }
+
+    [TestMethod]
+    public async Task UnequipItem_StaleInventoryRevision_CommitsNeitherOwnerTransition()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+        await SeedEquippedItemAsync(characterId, itemId, reserve: true, bind: true);
+
+        var commit = await ExecuteUnequipAsync(
+            characterId,
+            itemId,
+            CommandId.New(),
+            "c3-stale-inventory",
+            beforeCommit: async () => await BumpRevisionAsync("nexis_v2.inventory_state", characterId));
+
+        Assert.AreEqual(CommandCommitDisposition.ConcurrencyConflict, commit.Result.Disposition);
+        await AssertNothingCommittedAsync(characterId, itemId);
+    }
+
+    [TestMethod]
+    public async Task UnequipItem_StaleEquipmentRevision_CommitsNeitherOwnerTransition()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+        await SeedEquippedItemAsync(characterId, itemId, reserve: true, bind: true);
+
+        var commit = await ExecuteUnequipAsync(
+            characterId,
+            itemId,
+            CommandId.New(),
+            "c3-stale-equipment",
+            beforeCommit: async () => await BumpRevisionAsync("nexis_v2.equipment_state", characterId));
+
+        Assert.AreEqual(CommandCommitDisposition.ConcurrencyConflict, commit.Result.Disposition);
+        Assert.AreEqual("equipment.revision_conflict", commit.Result.Reason?.Value);
+        Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.equipment_bindings;"));
+        Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.inventory_item_reservations;"));
+        Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.authoritative_events;"));
+        Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.outbox;"));
+    }
+
+    [TestMethod]
+    public async Task UnequipItem_RepeatedCommandId_IsExactlyOnceAndNeverReleasesTwice()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+        await SeedEquippedItemAsync(characterId, itemId, reserve: true, bind: true);
+        var commandId = CommandId.New();
+
+        var first = await ExecuteUnequipAsync(characterId, itemId, commandId, "c3-idempotent-1");
+        Assert.AreEqual(CommandCommitDisposition.Committed, first.Result.Disposition);
+
+        var replay = await new PostgresCommandReceiptRepository(DataSource).TryAcquireAsync(
+            new CommandReceiptAcquireRequest(
+                first.Identity,
+                first.Payload,
+                CorrelationId.New(),
+                Utc(10, 5),
+                new CommandExecutionLeaseRequest("c3-idempotent-2", TimeSpan.FromMinutes(1))));
+
+        Assert.AreEqual(CommandReceiptDisposition.DuplicateCompleted, replay.Disposition);
+        Assert.AreEqual(CommandTerminalStatus.Succeeded, replay.TerminalOutcome?.Status);
+
+        var inventory = await new PostgresInventorySnapshotReader(DataSource).ReadAsync(characterId);
+        Assert.AreEqual(2L, inventory.Revision, "A retried unequip must not advance the Inventory revision again.");
+        Assert.AreEqual(1, inventory.Items.Count, "A retried unequip must not duplicate the item.");
+        Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.authoritative_events;"));
+        Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.outbox;"));
+    }
+
+    [TestMethod]
+    public async Task ConcurrentUnequips_ProduceExactlyOneReleaseAndNoDoubleSpend()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+        await SeedEquippedItemAsync(characterId, itemId, reserve: true, bind: true);
+
+        // Both commands evaluate against the same pre-unequip snapshots, as two racing clients would.
+        var first = await PrepareUnequipAsync(characterId, itemId, CommandId.New(), "c3-race-a");
+        var second = await PrepareUnequipAsync(characterId, itemId, CommandId.New(), "c3-race-b");
+
+        var results = await Task.WhenAll(
+            Committer().CommitAsync(first.Plan).AsTask(),
+            Committer().CommitAsync(second.Plan).AsTask());
+
+        Assert.AreEqual(
+            1,
+            results.Count(static result => result.Disposition == CommandCommitDisposition.Committed),
+            "Exactly one concurrent unequip may win.");
+        Assert.AreEqual(
+            1,
+            results.Count(static result => result.Disposition == CommandCommitDisposition.ConcurrencyConflict));
+
+        var inventory = await new PostgresInventorySnapshotReader(DataSource).ReadAsync(characterId);
+        Assert.AreEqual(2L, inventory.Revision);
+        Assert.AreEqual(1, inventory.Items.Count, "The item must never be duplicated by a race.");
+        Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.inventory_item_reservations;"));
+        Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.authoritative_events;"));
+    }
+
+    [TestMethod]
+    public async Task OpposingReservationAfterUnequip_CannotDoubleSpendTheItem()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+        await SeedEquippedItemAsync(characterId, itemId, reserve: true, bind: true);
+
+        // A competing owner captured the pre-unequip Inventory snapshot and tries to escrow the
+        // item after the unequip has already advanced Inventory.
+        var opposing = new ReserveInventoryItemTransition(1, characterId, itemId, new OwnerKey("Marketplace"));
+
+        var unequip = await ExecuteUnequipAsync(characterId, itemId, CommandId.New(), "c3-opposing");
+        Assert.AreEqual(CommandCommitDisposition.Committed, unequip.Result.Disposition);
+
+        var stale = await ApplyDirectlyAsync(new PostgresInventoryTransitionApplier(), opposing);
+        Assert.AreEqual(PostgresOwnerTransitionDisposition.ConcurrencyConflict, stale.Disposition);
+        Assert.AreEqual("inventory.revision_conflict", stale.Reason?.Value);
+        Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.inventory_item_reservations;"));
+    }
+
+    [TestMethod]
+    public async Task UnequipDeniedByRemovalRestriction_CommitsNeitherOwnerTransition()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+        await SeedEquippedItemAsync(characterId, itemId, reserve: true, bind: true);
+        await SetReleaseRestrictionAsync(itemId, "Curse");
+
+        // 1. Core refuses before any transition exists.
+        var request = await BuildUnequipRequestAsync(characterId, itemId, CommandId.New());
+        var decision = new CoreRulesEngine().Evaluate(request);
+        Assert.AreEqual(CoreOutcomeStatus.Rejected, decision.Status);
+        Assert.AreEqual("equipment.unequip.release_restricted", decision.Reason?.Value);
+        Assert.AreEqual(0, decision.Transitions.Count);
+
+        // 2. The persistence boundary refuses independently, so a bypassed or stale Core cannot
+        //    commit the Equipment clear either. Both transitions are forced into one plan.
+        var forced = await PrepareForcedReleasePlanAsync(characterId, itemId, CommandId.New(), "c3-restricted");
+        var commit = await Committer().CommitAsync(forced);
+
+        Assert.AreEqual(CommandCommitDisposition.ConcurrencyConflict, commit.Disposition);
+        Assert.AreEqual("inventory.reservation_not_releasable", commit.Reason?.Value);
+        await AssertNothingCommittedAsync(characterId, itemId);
+    }
+
+    [TestMethod]
+    public async Task UnequipDeclaredLockKeys_CoverEveryResourceTheCommandWrites()
+    {
+        var characterId = CharacterId.New();
+        var itemId = ItemInstanceId.New();
+        var equipmentApplier = new PostgresEquipmentTransitionApplier();
+        var inventoryApplier = new PostgresInventoryTransitionApplier();
+
+        var unbind = new UnequipItemTransition(1, characterId, itemId, MainHandPlacement, new[] { MainHand });
+        var release = new ReleaseInventoryItemReservationTransition(1, characterId, itemId, EquipmentSnapshot.OwnerKey);
+
+        var declared = CanonicalResourceLockOrder.Order(
+                equipmentApplier.ResolveLockKeys(unbind).Concat(inventoryApplier.ResolveLockKeys(release)))
+            .Select(static key => key.ToString())
+            .ToArray();
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                $"Equipment/equipment.aggregate/{characterId.Value:D}",
+                $"Equipment/equipment.binding/{characterId.Value:D}/{itemId.Value:D}",
+                $"Equipment/equipment.slot/{characterId.Value:D}/main-hand",
+                $"Inventory/inventory.aggregate/{characterId.Value:D}",
+                $"Inventory/inventory.reservation/{characterId.Value:D}/{itemId.Value:D}"
+            },
+            declared,
+            "Both owners must declare every resource the unequip command touches, in one canonical order.");
+    }
+
+    private static async Task AssertNothingCommittedAsync(CharacterId characterId, ItemInstanceId itemId)
+    {
+        var equipment = await new PostgresEquipmentSnapshotReader(DataSource).ReadAsync(characterId);
+        Assert.AreEqual(1, equipment.Bindings.Count, "Equipment must not have cleared its binding.");
+        Assert.AreEqual(itemId, equipment.Bindings[0].ItemInstanceId);
+        Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.inventory_item_reservations;"));
+        Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.authoritative_events;"));
+        Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.outbox;"));
+        Assert.AreEqual(
+            0,
+            await ScalarIntAsync("SELECT count(*) FROM nexis_v2.command_receipts WHERE terminal_status IS NOT NULL;"));
+    }
+
+    private static async Task BumpRevisionAsync(string table, CharacterId characterId)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await ExecAsync(connection,
+            $"UPDATE {table} SET revision = revision + 1 WHERE character_id = @c;",
+            ("c", NpgsqlDbType.Uuid, characterId.Value));
+    }
+
+    private static PostgresAtomicCommandCommitter Committer() =>
+        new(
+            DataSource,
+            new IPostgresOwnerTransitionApplier[]
+            {
+                new PostgresEquipmentTransitionApplier(),
+                new PostgresInventoryTransitionApplier()
+            });
+
+    private static async Task<CoreEvaluationRequest> BuildUnequipRequestAsync(
+        CharacterId characterId,
+        ItemInstanceId itemId,
+        CommandId commandId)
+    {
+        var inventory = await new PostgresInventorySnapshotReader(DataSource).ReadAsync(characterId);
+        var equipment = await new PostgresEquipmentSnapshotReader(DataSource).ReadAsync(characterId);
+
+        return new CoreEvaluationRequest(
+            CoreContractVersion.V1,
+            new CoreEvaluationContext(
+                commandId,
+                CorrelationId.New(),
+                TrustedActorContext.CreatePlayer(AccountId.New(), characterId, 1),
+                Utc(10, 0),
+                new RuleVersion("unequip-proof-rules-v1"),
+                new ContentVersion("unequip-proof-v1"),
+                new FixedRandomFactory()),
+            new UnequipItemIntent(characterId, itemId),
+            new IAuthoritativeSnapshot[]
+            {
+                inventory,
+                equipment,
+                new CombatParticipationSnapshot(characterId, 1, false)
+            });
+    }
+
+    private static async Task<PreparedCommand> PrepareUnequipAsync(
+        CharacterId characterId,
+        ItemInstanceId itemId,
+        CommandId commandId,
+        string owner)
+    {
+        var request = await BuildUnequipRequestAsync(characterId, itemId, commandId);
+        var engine = new CoreRulesEngine();
+        var decision = engine.Evaluate(request);
+        Assert.AreEqual(CoreOutcomeStatus.Succeeded, decision.Status);
+
+        var payload = new UnequipItemCanonicalCommandCodec().Serialize(request.Intent);
+        var identity = CommandExecutionIdentityFactory.Create(request, payload);
+        var claim = await new PostgresCommandReceiptRepository(DataSource).TryAcquireAsync(
+            new CommandReceiptAcquireRequest(
+                identity,
+                payload,
+                request.Context.CorrelationId,
+                Utc(10, 0),
+                new CommandExecutionLeaseRequest(owner, TimeSpan.FromMinutes(1))));
+        Assert.AreEqual(CommandReceiptDisposition.Acquired, claim.Disposition);
+
+        var plan = new CommandCommitPlanBuilder().Build(
+            request,
+            payload.Fingerprint,
+            claim,
+            decision,
+            engine.Descriptor,
+            Utc(10, 0, 1));
+
+        return new PreparedCommand(identity, payload, plan);
+    }
+
+    private static async Task<CommandCommitPlan> PrepareForcedReleasePlanAsync(
+        CharacterId characterId,
+        ItemInstanceId itemId,
+        CommandId commandId,
+        string owner)
+    {
+        var equipment = await new PostgresEquipmentSnapshotReader(DataSource).ReadAsync(characterId);
+        var inventory = await new PostgresInventorySnapshotReader(DataSource).ReadAsync(characterId);
+        var binding = equipment.Bindings.Single(b => b.ItemInstanceId == itemId);
+
+        var request = await BuildUnequipRequestAsync(characterId, itemId, commandId);
+        var engine = new CoreRulesEngine();
+        var forcedDecision = CoreDecision.Succeeded(
+            transitions: new IOwnerTransition[]
+            {
+                new UnequipItemTransition(
+                    equipment.Revision, characterId, itemId, binding.PlacementKey, binding.OccupiedSlots),
+                new ReleaseInventoryItemReservationTransition(
+                    inventory.Revision, characterId, itemId, EquipmentSnapshot.OwnerKey)
+            },
+            events: new ICoreEventDescriptor[]
+            {
+                new ItemUnequippedEvent(characterId, itemId, binding.PlacementKey, binding.OccupiedSlots)
+            });
+
+        var payload = new UnequipItemCanonicalCommandCodec().Serialize(request.Intent);
+        var claim = await new PostgresCommandReceiptRepository(DataSource).TryAcquireAsync(
+            new CommandReceiptAcquireRequest(
+                CommandExecutionIdentityFactory.Create(request, payload),
+                payload,
+                request.Context.CorrelationId,
+                Utc(10, 0),
+                new CommandExecutionLeaseRequest(owner, TimeSpan.FromMinutes(1))));
+
+        return new CommandCommitPlanBuilder().Build(
+            request, payload.Fingerprint, claim, forcedDecision, engine.Descriptor, Utc(10, 0, 1));
+    }
+
+    private static async Task<ExecutedCommand> ExecuteUnequipAsync(
+        CharacterId characterId,
+        ItemInstanceId itemId,
+        CommandId commandId,
+        string owner,
+        Func<Task>? beforeCommit = null)
+    {
+        var prepared = await PrepareUnequipAsync(characterId, itemId, commandId, owner);
+        if (beforeCommit is not null)
+        {
+            await beforeCommit();
+        }
+
+        var result = await Committer().CommitAsync(prepared.Plan);
+        return new ExecutedCommand(prepared.Identity, prepared.Payload, result);
+    }
+
+    private sealed record PreparedCommand(
+        CommandExecutionIdentity Identity,
+        CanonicalCommandPayload Payload,
+        CommandCommitPlan Plan);
+
+    private sealed record ExecutedCommand(
+        CommandExecutionIdentity Identity,
+        CanonicalCommandPayload Payload,
+        CommandCommitResult Result);
+
 }

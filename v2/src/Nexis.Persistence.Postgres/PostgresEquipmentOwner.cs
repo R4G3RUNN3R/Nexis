@@ -17,25 +17,22 @@ namespace Nexis.Persistence.Postgres;
 public sealed class PostgresEquipmentTransitionApplier : IPostgresOwnerTransitionApplier
 {
     private static readonly CommandReasonCode RevisionConflict = new("equipment.revision_conflict");
+    private static readonly CommandReasonCode BindingMissing = new("equipment.binding_missing");
 
     public OwnerKey Owner => EquipmentSnapshot.OwnerKey;
 
     public IReadOnlyList<AuthoritativeResourceKey> ResolveLockKeys(IOwnerTransition transition)
     {
-        if (transition is not EquipItemTransition equip)
-        {
-            throw new InvalidOperationException(
-                $"Equipment PostgreSQL owner does not support transition '{transition.Contract.Name}' schema {transition.Contract.SchemaVersion}.");
-        }
+        var (characterId, itemInstanceId, slots) = Describe(transition);
+        var character = characterId.Value.ToString("D");
+        var item = itemInstanceId.Value.ToString("D");
 
-        var character = equip.CharacterId.Value.ToString("D");
-        var item = equip.ItemInstanceId.Value.ToString("D");
         return CanonicalResourceLockOrder.Order(
             new[]
             {
                 new AuthoritativeResourceKey(Owner, "equipment.aggregate", character),
                 new AuthoritativeResourceKey(Owner, "equipment.binding", $"{character}/{item}")
-            }.Concat(equip.OccupiedSlots.Select(slot =>
+            }.Concat(slots.Select(slot =>
                 new AuthoritativeResourceKey(Owner, "equipment.slot", $"{character}/{slot.Value}"))));
     }
 
@@ -49,15 +46,10 @@ public sealed class PostgresEquipmentTransitionApplier : IPostgresOwnerTransitio
         ArgumentNullException.ThrowIfNull(transaction);
         ArgumentNullException.ThrowIfNull(transition);
 
-        if (transition is not EquipItemTransition equip)
+        var (characterId, _, _) = Describe(transition);
+        if (transition.ExpectedRevision is not { } expectedRevision)
         {
-            throw new InvalidOperationException(
-                $"Equipment PostgreSQL owner does not support transition '{transition.Contract.Name}' schema {transition.Contract.SchemaVersion}.");
-        }
-
-        if (!equip.ExpectedRevision.HasValue)
-        {
-            throw new InvalidOperationException("Equip Item transitions require an optimistic Equipment revision.");
+            throw new InvalidOperationException("Equipment transitions require an optimistic Equipment revision.");
         }
 
         const string revisionSql = """
@@ -69,13 +61,20 @@ public sealed class PostgresEquipmentTransitionApplier : IPostgresOwnerTransitio
 
         await using (var revisionCommand = new NpgsqlCommand(revisionSql, connection, transaction))
         {
-            revisionCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, equip.CharacterId.Value);
-            revisionCommand.Parameters.AddWithValue("expected_revision", NpgsqlDbType.Bigint, equip.ExpectedRevision.Value);
+            revisionCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId.Value);
+            revisionCommand.Parameters.AddWithValue("expected_revision", NpgsqlDbType.Bigint, expectedRevision);
             if (await revisionCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
             {
                 return PostgresOwnerTransitionResult.ConcurrencyConflict(RevisionConflict);
             }
         }
+
+        if (transition is UnequipItemTransition unequip)
+        {
+            return await UnbindAsync(connection, transaction, unequip, cancellationToken).ConfigureAwait(false);
+        }
+
+        var equip = (EquipItemTransition)transition;
 
         const string bindingSql = """
             INSERT INTO nexis_v2.equipment_bindings (
@@ -108,6 +107,52 @@ public sealed class PostgresEquipmentTransitionApplier : IPostgresOwnerTransitio
 
         return PostgresOwnerTransitionResult.Applied();
     }
+
+    private static async ValueTask<PostgresOwnerTransitionResult> UnbindAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        UnequipItemTransition unequip,
+        CancellationToken cancellationToken)
+    {
+        // Slots are deleted explicitly before the binding so the write sequence is deterministic
+        // rather than depending on cascade ordering.
+        const string slotSql = """
+            DELETE FROM nexis_v2.equipment_binding_slots
+            WHERE character_id = @character_id
+              AND item_instance_id = @item_instance_id;
+            """;
+
+        await using (var slotCommand = new NpgsqlCommand(slotSql, connection, transaction))
+        {
+            slotCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, unequip.CharacterId.Value);
+            slotCommand.Parameters.AddWithValue("item_instance_id", NpgsqlDbType.Uuid, unequip.ItemInstanceId.Value);
+            await slotCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        const string bindingSql = """
+            DELETE FROM nexis_v2.equipment_bindings
+            WHERE character_id = @character_id
+              AND item_instance_id = @item_instance_id;
+            """;
+
+        await using var bindingCommand = new NpgsqlCommand(bindingSql, connection, transaction);
+        bindingCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, unequip.CharacterId.Value);
+        bindingCommand.Parameters.AddWithValue("item_instance_id", NpgsqlDbType.Uuid, unequip.ItemInstanceId.Value);
+
+        return await bindingCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1
+            ? PostgresOwnerTransitionResult.Applied()
+            : PostgresOwnerTransitionResult.ConcurrencyConflict(BindingMissing);
+    }
+
+    private static (CharacterId CharacterId, ItemInstanceId ItemInstanceId, EquipmentSlotSet Slots) Describe(
+        IOwnerTransition transition) =>
+        transition switch
+        {
+            EquipItemTransition equip => (equip.CharacterId, equip.ItemInstanceId, equip.OccupiedSlots),
+            UnequipItemTransition unequip => (unequip.CharacterId, unequip.ItemInstanceId, unequip.ReleasedSlots),
+            _ => throw new InvalidOperationException(
+                $"Equipment PostgreSQL owner does not support transition '{transition.Contract.Name}' schema {transition.Contract.SchemaVersion}.")
+        };
 }
 
 /// <summary>

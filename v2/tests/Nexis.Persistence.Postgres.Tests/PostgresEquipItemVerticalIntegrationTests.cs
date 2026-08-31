@@ -59,6 +59,9 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
             DROP TRIGGER IF EXISTS record_equipment_binding_write ON nexis_v2.equipment_bindings;
             DROP TRIGGER IF EXISTS record_equipment_slot_write ON nexis_v2.equipment_binding_slots;
             TRUNCATE TABLE
+                nexis_v2.inventory_item_reservations,
+                nexis_v2.inventory_items,
+                nexis_v2.inventory_state,
                 nexis_v2.equipment_binding_slots,
                 nexis_v2.equipment_bindings,
                 nexis_v2.equipment_state,
@@ -83,13 +86,16 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
         await SeedEquipmentStateAsync(characterId, revision: 1);
 
         var definition = SwordDefinition("iron-sword", "main-hand", MainHand);
+        await SeedInventoryStateAsync(characterId, itemId, new ContentDefinitionKey(definition.Contract, definition.DefinitionId), revision: 1);
         var request = await BuildRequestAsync(characterId, itemId, definition, new EquipmentPlacementKey("main-hand"));
         var engine = new CoreRulesEngine();
         var decision = engine.Evaluate(request);
 
         Assert.AreEqual(CoreOutcomeStatus.Succeeded, decision.Status);
-        Assert.AreEqual(1, decision.Transitions.Count);
-        Assert.AreEqual(EquipmentSnapshot.OwnerKey, decision.Transitions[0].TargetOwner);
+        Assert.AreEqual(2, decision.Transitions.Count);
+        CollectionAssert.AreEquivalent(
+            new[] { InventorySnapshot.OwnerKey, EquipmentSnapshot.OwnerKey },
+            decision.Transitions.Select(static transition => transition.TargetOwner).ToArray());
 
         var codec = new EquipItemCanonicalCommandCodec();
         var payload = codec.Serialize(request.Intent);
@@ -111,7 +117,11 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
             Utc(10, 0, 1));
         var committer = new PostgresAtomicCommandCommitter(
             DataSource,
-            new IPostgresOwnerTransitionApplier[] { new PostgresEquipmentTransitionApplier() });
+            new IPostgresOwnerTransitionApplier[]
+            {
+                new PostgresEquipmentTransitionApplier(),
+                new PostgresInventoryTransitionApplier()
+            });
 
         var commit = await committer.CommitAsync(plan);
 
@@ -125,6 +135,10 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
         Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.authoritative_events;"));
         Assert.AreEqual(1, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.outbox;"));
         Assert.AreEqual((int)CommandTerminalStatus.Succeeded, await ReadTerminalStatusAsync(request.Context.CommandId));
+
+        var inventoryAfterEquip = await new PostgresInventorySnapshotReader(DataSource).ReadAsync(characterId);
+        Assert.AreEqual(EquipmentSnapshot.OwnerKey, inventoryAfterEquip.FindReservation(itemId)?.HoldingOwner);
+        Assert.AreEqual(1, inventoryAfterEquip.Items.Count, "Equipping must not remove the item from Inventory.");
 
         var duplicate = await receiptRepository.TryAcquireAsync(new CommandReceiptAcquireRequest(
             CommandExecutionIdentityFactory.Create(request, payload),
@@ -143,6 +157,7 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
         var itemId = ItemInstanceId.New();
         await SeedEquipmentStateAsync(characterId, revision: 1);
         var definition = SwordDefinition("iron-sword", "main-hand", MainHand);
+        await SeedInventoryStateAsync(characterId, itemId, new ContentDefinitionKey(definition.Contract, definition.DefinitionId), revision: 1);
         var request = await BuildRequestAsync(characterId, itemId, definition, new EquipmentPlacementKey("main-hand"));
         var engine = new CoreRulesEngine();
         var decision = engine.Evaluate(request);
@@ -173,7 +188,11 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
             Utc(10, 0, 1));
         var commit = await new PostgresAtomicCommandCommitter(
             DataSource,
-            new IPostgresOwnerTransitionApplier[] { new PostgresEquipmentTransitionApplier() })
+            new IPostgresOwnerTransitionApplier[]
+            {
+                new PostgresEquipmentTransitionApplier(),
+                new PostgresInventoryTransitionApplier()
+            })
             .CommitAsync(plan);
 
         Assert.AreEqual(CommandCommitDisposition.ConcurrencyConflict, commit.Disposition);
@@ -183,6 +202,10 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
         Assert.AreEqual(0, persisted.Bindings.Count);
         Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.authoritative_events;"));
         Assert.AreEqual(0, await ScalarIntAsync("SELECT count(*) FROM nexis_v2.outbox;"));
+        Assert.AreEqual(
+            0,
+            await ScalarIntAsync("SELECT count(*) FROM nexis_v2.inventory_item_reservations;"),
+            "A rolled-back equip must not leave an orphaned Inventory reservation.");
         Assert.IsNull(await ReadTerminalStatusAsync(request.Context.CommandId));
     }
 
@@ -200,6 +223,7 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
                     new EquipmentPlacementKey("two-hand"),
                     new[] { MainHand, OffHand })
             });
+        await SeedInventoryStateAsync(characterId, itemId, new ContentDefinitionKey(definition.Contract, definition.DefinitionId), revision: 1);
         var request = await BuildRequestAsync(characterId, itemId, definition, new EquipmentPlacementKey("two-hand"));
         var engine = new CoreRulesEngine();
         var decision = engine.Evaluate(request);
@@ -223,7 +247,11 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
 
         var commit = await new PostgresAtomicCommandCommitter(
             DataSource,
-            new IPostgresOwnerTransitionApplier[] { new PostgresEquipmentTransitionApplier() })
+            new IPostgresOwnerTransitionApplier[]
+            {
+                new PostgresEquipmentTransitionApplier(),
+                new PostgresInventoryTransitionApplier()
+            })
             .CommitAsync(plan);
 
         Assert.AreEqual(CommandCommitDisposition.Committed, commit.Disposition);
@@ -301,6 +329,7 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
                     new EquipmentPlacementKey("two-hand"),
                     new[] { MainHand, OffHand })
             });
+        await SeedInventoryStateAsync(characterId, itemId, new ContentDefinitionKey(definition.Contract, definition.DefinitionId), revision: 1);
         var request = await BuildRequestAsync(
             characterId,
             itemId,
@@ -308,7 +337,7 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
             new EquipmentPlacementKey("two-hand"));
         var engine = new CoreRulesEngine();
         var decision = engine.Evaluate(request);
-        var transition = (EquipItemTransition)decision.Transitions.Single();
+        var transition = decision.Transitions.OfType<EquipItemTransition>().Single();
         var applier = new PostgresEquipmentTransitionApplier();
         var declared = applier.ResolveLockKeys(transition)
             .Select(static key => key.ToString())
@@ -332,7 +361,7 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
 
         var result = await new PostgresAtomicCommandCommitter(
             DataSource,
-            new IPostgresOwnerTransitionApplier[] { applier })
+            new IPostgresOwnerTransitionApplier[] { applier, new PostgresInventoryTransitionApplier() })
             .CommitAsync(plan);
         Assert.AreEqual(CommandCommitDisposition.Committed, result.Disposition);
 
@@ -390,10 +419,7 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
             new EquipItemIntent(characterId, itemId, placement),
             new IAuthoritativeSnapshot[]
             {
-                new InventorySnapshot(
-                    characterId,
-                    1,
-                    new[] { new InventoryItemReference(itemId, definitionKey) }),
+                await new PostgresInventorySnapshotReader(DataSource).ReadAsync(characterId),
                 equipment,
                 new CombatParticipationSnapshot(characterId, 1, false)
             },
@@ -412,6 +438,37 @@ public sealed class PostgresEquipItemVerticalIntegrationTests
                     new EquipmentPlacementKey(placement),
                     new[] { slot })
             });
+
+    private static async Task SeedInventoryStateAsync(
+        CharacterId characterId,
+        ItemInstanceId itemId,
+        ContentDefinitionKey definitionKey,
+        long revision)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await using (var state = new NpgsqlCommand(
+            "INSERT INTO nexis_v2.inventory_state(character_id, revision) VALUES (@c, @r);", connection))
+        {
+            state.Parameters.AddWithValue("c", NpgsqlDbType.Uuid, characterId.Value);
+            state.Parameters.AddWithValue("r", NpgsqlDbType.Bigint, revision);
+            await state.ExecuteNonQueryAsync();
+        }
+
+        await using var item = new NpgsqlCommand(
+            """
+            INSERT INTO nexis_v2.inventory_items(
+                character_id, item_instance_id, definition_contract_name,
+                definition_schema_version, definition_id)
+            VALUES (@c, @i, @n, @v, @d);
+            """,
+            connection);
+        item.Parameters.AddWithValue("c", NpgsqlDbType.Uuid, characterId.Value);
+        item.Parameters.AddWithValue("i", NpgsqlDbType.Uuid, itemId.Value);
+        item.Parameters.AddWithValue("n", NpgsqlDbType.Text, definitionKey.Contract.Name);
+        item.Parameters.AddWithValue("v", NpgsqlDbType.Integer, definitionKey.Contract.SchemaVersion);
+        item.Parameters.AddWithValue("d", NpgsqlDbType.Text, definitionKey.DefinitionId.Value);
+        await item.ExecuteNonQueryAsync();
+    }
 
     private static async Task SeedEquipmentStateAsync(CharacterId characterId, long revision)
     {
