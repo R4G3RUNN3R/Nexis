@@ -1,10 +1,10 @@
 # Nexis 2.0 Foundation Implementation Status
 
-_Status: rolling implementation checkpoint, updated 2026-08-27. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
+_Status: rolling implementation checkpoint, updated 2026-09-01. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
 
 ## Current branch
 
-`feature/nexis-v2-foundation-skeleton`
+`claude/nexis-v2-foundation-continuation-20260829`
 
 Draft PR #4 remains the integration surface and must remain draft until the complete foundation stop conditions in `AGENT-HANDOFF.md` are satisfied.
 
@@ -181,6 +181,31 @@ prerequisites, and `MReserveFreedomRuleTests` asserts that mechanically.
 `ITEM-AVAILABILITY-RESERVATION.md` records the boundary and the explicit future curse integration
 seam. No Curse owner, curse state, questline or purification path exists.
 
+## Public player identity boundary
+
+The account-scoped stable `PublicPlayerId` is implemented. One normal account is one player is one
+playable character, with no slots, alts or campaign characters, and `AccountId`, `CharacterId`,
+`PublicPlayerId` and display name remain four permanently distinct concepts.
+
+Proven mechanically:
+
+1. a display-name change leaves `AccountId`, `CharacterId` and `PublicPlayerId` unchanged;
+2. `PublicPlayerId` exposes no bridge to an internal identifier or actor authority, and no
+   `TrustedActorContext` factory accepts one;
+3. a forged client-supplied `PublicPlayerId` yields no controllable `CharacterId`;
+4. the public projection leaks neither `AccountId` nor `CharacterId`;
+5. the public projection leaks no role, capability, security-version or entitlement data, and its
+   member list is pinned to exactly two facts;
+6. no public identifier, including Hennet's, grants platform authority, even under a policy granting
+   the capability to every staff bundle;
+7. one-character-per-account is enforced by the `account_id` primary key without collapsing the
+   identifier types;
+8. concurrent provisioning converges on exactly one identity, with ordinals drawn from a sequence
+   rather than `max() + 1`.
+
+Immutability is enforced independently in the contract, in a database trigger refusing any identifier
+reassignment, and by uniqueness constraints. `PUBLIC-PLAYER-IDENTITY.md` records the boundary.
+
 ## Foundation work still incomplete
 
 The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
@@ -195,7 +220,7 @@ Exact owner/domain contracts should continue to be introduced only when the corr
 
 ## Next safe implementation boundary
 
-The replay, privileged-entry, operational-observability and real multi-owner (C3) foundation boundaries are implemented and adversarially covered. The next safe slice is the account-scoped stable `PublicPlayerId` boundary, preserving one account = one player = one playable character with no slots, alts or campaign characters, followed by evidence-first reproduction and resolution of the three known L3 History/Player Log findings. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
+The replay, privileged-entry, operational-observability, real multi-owner (C3) and public player identity foundation boundaries are implemented and adversarially covered. The next safe slice is evidence-first reproduction and resolution of the three known L3 History/Player Log findings. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
 
 ## Verification discipline
 

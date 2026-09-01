@@ -1,4 +1,20 @@
 # Changelog
+## 2026-09-01
+
+### Nexis 2.0 account-scoped stable public player identity
+- implemented the `PublicPlayerId` boundary required by `IDENTITY-AUTHORIZATION.md`: one normal account is one player is one playable character, with no slots, alts or campaign characters, and `AccountId`, `CharacterId`, `PublicPlayerId` and display name kept as four permanently distinct concepts
+- made `PublicPlayerId` deliberately non-GUID-shaped, so an accidental cast, reinterpretation or copy-paste between an internal identifier and the public one cannot compile rather than merely violating a naming convention
+- preserved V1's observable public player-number semantics without reusing, moving or modifying any V1 code or data: ordinal floor `1000000`, a reserved block of 20 never allocated to an ordinary player, first allocatable `P1000020`, rendered as `P` plus seven zero-padded digits
+- added migration `0009` with the Identity owner's private `player_identities` table; `account_id` is the primary key so an account cannot hold a second playable character, `character_id` is unique so a character cannot be controlled by a second account, and `public_player_ordinal` is unique so no race can mint a duplicate public identity
+- allocated public ordinals from a sequence rather than `max() + 1`, so concurrent provisioning cannot allocate the same ordinal twice; a race of eight provisioners for one account converges on exactly one identity and one row
+- made provisioning idempotent so a retried sign-in returns the original identity instead of minting a second public identifier, and raised a typed `PlayerIdentityConflictException` when a request contradicts a stored mapping rather than silently returning a different identity
+- enforced public-identifier immutability in three independent places: no setter on `PlayerIdentity`, a `refuse_player_identity_reassignment` database trigger rejecting any `UPDATE` that would change `account_id`, `character_id` or `public_player_ordinal`, and the uniqueness constraints; renaming is the only permitted mutation and changes no identifier
+- pinned the public projection to exactly two facts, `PublicPlayerId` and `DisplayName`, with tests asserting it exposes no `AccountId`, `CharacterId`, `AccountRole`, capability, security-version or entitlement member and no role/capability/entitlement-shaped member name; this enforces the Hennet boundary structurally rather than by reviewer vigilance
+- proved `PublicPlayerId` grants zero authority: it exposes no member returning an internal identifier or `TrustedActorContext`, no `TrustedActorContext` factory accepts one, `IPlatformAuthorizationPolicy` accepts neither it nor a display name, and Hennet's player actor receives no capability even under a policy granting that capability to every staff bundle
+- treated a client-supplied public identifier as a hostile assertion: control is resolved from the server-derived actor and a forged identifier yields no `CharacterId` at all, so it cannot authorize another character
+- corrected stale factual metadata in `AGENT-HANDOFF.md` and `IMPLEMENTATION-STATUS.md`, which still named the superseded `feature/nexis-v2-foundation-skeleton` working branch; no binding architecture was changed
+- verification: Release build of `Nexis.slnx` 0 warnings/0 errors; architecture suite 233 total, 230 passed, 3 failed, 0 skipped; disposable PostgreSQL integration suite on a fresh database 75 total, 75 passed, 0 failed, 0 skipped; the three architecture failures remain the open L3 History/Player Log findings, untouched by this slice
+
 ## 2026-08-31
 
 ### Nexis 2.0 M-reserve item availability and the C3 real multi-owner gameplay proof

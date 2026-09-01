@@ -1,10 +1,13 @@
 # Nexis 2.0 Agent Handoff
 
-_Status: foundation branch ready for build verification and continued implementation._
+_Status: foundation branch under continued implementation; updated 2026-09-01._
 
 ## Working branch
 
-`feature/nexis-v2-foundation-skeleton`
+`claude/nexis-v2-foundation-continuation-20260829`
+
+Earlier foundation work was carried on `feature/nexis-v2-foundation-skeleton`; that name is retained
+only as history. Draft PR #4 remains the integration surface and must remain draft.
 
 The existing/current Nexis application outside `v2/` is reference material and must remain untouched unless a task explicitly concerns preservation analysis or migration tooling.
 
