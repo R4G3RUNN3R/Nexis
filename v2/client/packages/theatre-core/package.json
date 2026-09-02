@@ -1,0 +1,21 @@
+{
+  "name": "@nexis/theatre-core",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Renderer-agnostic Nexis Visual Theatre presentation contracts. Pure presentation only: no gameplay authority, rendering, network, storage or randomness.",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

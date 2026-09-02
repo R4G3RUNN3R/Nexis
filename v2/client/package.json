@@ -1,0 +1,24 @@
+{
+  "name": "@nexis/theatre-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Nexis Visual Theatre client workspace: presentation-only packages with no gameplay authority.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "test:core": "npm run test --workspace @nexis/theatre-core",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}
