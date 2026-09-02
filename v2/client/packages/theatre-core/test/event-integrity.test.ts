@@ -65,8 +65,7 @@ describe('authoritative presentation stream integrity', () => {
 
   it('advances the cursor after every accepted event and rejects a replayed event', () => {
     const first = applyPresentationEvent(decodedSnapshot(), decodedEvent());
-    expect(first.kind).toBe('applied');
-    if (first.kind !== 'applied') return;
+    expect(first).toMatchObject({ kind: 'resyncRequired', reason: 'interactionProjectionStale' });
     expect(first.snapshot.eventCursor).toBe(8);
     expect(first.snapshot.actors[0]?.resources[0]?.current).toBe(80);
 
@@ -78,8 +77,8 @@ describe('authoritative presentation stream integrity', () => {
     const event = decodedEvent({ eventId: 'evt-42', sequence: 42 });
     const result = applyPresentationEvent(decodedSnapshot(41), event);
 
-    expect(result.kind).toBe('applied');
-    if (result.kind === 'applied') expect(result.snapshot.eventCursor).toBe(42);
+    expect(result).toMatchObject({ kind: 'resyncRequired', reason: 'interactionProjectionStale' });
+    expect(result.snapshot.eventCursor).toBe(42);
   });
 
   it.each([
@@ -99,11 +98,11 @@ describe('authoritative presentation stream integrity', () => {
     const resource = decodePresentationEvent({ contractVersion: 1, encounterId: 'encounter-1', eventId: 'evt-7', sequence: 7, type: 'resourceChanged', actorId: 'actor_hero', resultingResource: { resourceId: 'life', resultingValue: 1, resultingMaximum: 100 } });
     const ended = decodePresentationEvent({ contractVersion: 1, encounterId: 'encounter-1', eventId: 'evt-end', sequence: 7, type: 'encounterEnded', outcome: 'defeat' });
     if (!status.ok || !resource.ok || !ended.ok) throw new Error('fixture decode failed');
-    const applied = applyPresentationEvent(decodedSnapshot(), status.value);
-    if (applied.kind !== 'applied') throw new Error('status fixture did not apply');
+    const advanced = applyPresentationEvent(decodedSnapshot(), status.value);
+    expect(advanced).toMatchObject({ kind: 'resyncRequired', reason: 'interactionProjectionStale' });
 
-    expect(applyPresentationEvent(applied.snapshot, resource.value)).toMatchObject({ kind: 'resyncRequired', reason: 'staleOrDuplicate', snapshot: applied.snapshot });
-    expect(applyPresentationEvent(applied.snapshot, ended.value)).toMatchObject({ kind: 'resyncRequired', reason: 'staleOrDuplicate', snapshot: applied.snapshot });
-    expect(applied.snapshot.phase).toBe('active');
+    expect(applyPresentationEvent(advanced.snapshot, resource.value)).toMatchObject({ kind: 'resyncRequired', reason: 'staleOrDuplicate', snapshot: advanced.snapshot });
+    expect(applyPresentationEvent(advanced.snapshot, ended.value)).toMatchObject({ kind: 'resyncRequired', reason: 'staleOrDuplicate', snapshot: advanced.snapshot });
+    expect(advanced.snapshot.phase).toBe('active');
   });
 });

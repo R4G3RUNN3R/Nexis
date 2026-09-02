@@ -1,4 +1,4 @@
-import type { ApplyPresentationEventResult, BattlePresentationSnapshot, PresentationActor, PresentationEvent, PresentationPreferences, PresentationResource, PresentationResourceResult, PresentationStatus, TheatreViewerMode } from './contracts.ts';
+import type { ApplyPresentationEventResult, BattlePresentationSnapshot, PresentationActor, PresentationAttachment, PresentationEvent, PresentationPreferences, PresentationResource, PresentationResourceResult, PresentationStatus, TheatreIntent, TheatreViewerMode } from './contracts.ts';
 
 const MIN_PRESENTATION_SPEED = 0.25;
 const MAX_PRESENTATION_SPEED = 4;
@@ -6,27 +6,28 @@ export const DEFAULT_PRESENTATION_PREFERENCES: PresentationPreferences = Object.
 
 /** Applies exactly the next encounter event or returns an explicit resync requirement. */
 export function applyPresentationEvent(snapshot: BattlePresentationSnapshot, event: PresentationEvent): ApplyPresentationEventResult {
-  if (event.encounterId !== snapshot.encounterId) return resync(snapshot, 'wrongEncounter');
-  if (event.sequence <= snapshot.eventCursor) return resync(snapshot, 'staleOrDuplicate');
-  if (event.sequence !== snapshot.eventCursor + 1) return resync(snapshot, 'sequenceGap');
+  const owned = internalizeSnapshot(snapshot);
+  if (event.encounterId !== owned.encounterId) return resync(owned, 'wrongEncounter');
+  if (event.sequence <= owned.eventCursor) return resync(owned, 'staleOrDuplicate');
+  if (event.sequence !== owned.eventCursor + 1) return resync(owned, 'sequenceGap');
 
-  if (!eventReferencesExist(snapshot, event)) return resync(snapshot, 'invalidReference');
+  if (!eventReferencesExist(owned, event)) return resync(owned, 'invalidReference');
 
   let next: BattlePresentationSnapshot;
   switch (event.type) {
-    case 'damageApplied': case 'healingApplied': next = withResourceResult(snapshot, event.targetActorId, event.resultingResource); break;
-    case 'resourceChanged': next = withResourceResult(snapshot, event.actorId, event.resultingResource); break;
-    case 'statusApplied': next = withStatusApplied(snapshot, event.actorId, event.status); break;
-    case 'statusRemoved': next = withStatusRemoved(snapshot, event.actorId, event.statusInstanceId); break;
-    case 'actorDefeated': next = withActor(snapshot, event.actorId, (actor) => ({ ...actor, defeated: true })); break;
-    case 'turnChanged': next = { ...snapshot, roundNumber: event.roundNumber, activeActorId: event.activeActorId }; break;
-    case 'encounterEnded': next = { ...snapshot, phase: 'ended', outcome: event.outcome, activeActorId: null }; break;
-    case 'actorMoved': case 'skillActivated': case 'attackResolved': case 'itemUsed': case 'combatMessage': next = snapshot; break;
+    case 'damageApplied': case 'healingApplied': next = withResourceResult(owned, event.targetActorId, event.resultingResource); break;
+    case 'resourceChanged': next = withResourceResult(owned, event.actorId, event.resultingResource); break;
+    case 'statusApplied': next = withStatusApplied(owned, event.actorId, cloneStatus(event.status)); break;
+    case 'statusRemoved': next = withStatusRemoved(owned, event.actorId, event.statusInstanceId); break;
+    case 'actorDefeated': next = withActor(owned, event.actorId, (actor) => ({ ...actor, defeated: true })); break;
+    case 'turnChanged': next = { ...owned, roundNumber: event.roundNumber, activeActorId: event.activeActorId }; break;
+    case 'encounterEnded': next = { ...owned, phase: 'ended', outcome: event.outcome, activeActorId: null }; break;
+    case 'actorMoved': case 'skillActivated': case 'attackResolved': case 'itemUsed': case 'combatMessage': next = owned; break;
     default: return assertNever(event);
   }
 
   next = { ...next, eventCursor: event.sequence };
-  if (event.type === 'actorDefeated' || event.type === 'turnChanged' || event.type === 'encounterEnded') {
+  if (changesInteractionLegality(event.type)) {
     next = blockInteractions(next);
     return freeze({ kind: 'resyncRequired', reason: 'interactionProjectionStale', snapshot: freeze(next) });
   }
@@ -39,9 +40,26 @@ export function normalizePresentationPreferences(input: unknown): PresentationPr
   return freeze({ reducedMotion: candidate['reducedMotion'] === true, reducedShake: candidate['reducedShake'] === true, reducedFlashes: candidate['reducedFlashes'] === true, presentationSpeed: typeof speed === 'number' && Number.isFinite(speed) ? Math.min(MAX_PRESENTATION_SPEED, Math.max(MIN_PRESENTATION_SPEED, speed)) : 1 });
 }
 
-/** Global safety gate only; the authority still decides whether any submitted intent is legal. */
-export function canSubmitTheatreIntent(snapshot: BattlePresentationSnapshot, viewerMode: TheatreViewerMode): boolean {
-  return viewerMode === 'live' && snapshot.phase === 'active' && snapshot.interactionState === 'ready';
+/**
+ * Local safety/UX gate only. It refuses intents the latest authoritative projection
+ * already contradicts; the authority still revalidates every submitted intent.
+ */
+export function canSubmitTheatreIntent(snapshot: BattlePresentationSnapshot, viewerMode: TheatreViewerMode, intent: TheatreIntent): boolean {
+  if (viewerMode !== 'live') return false;
+  if (snapshot.phase !== 'active' || snapshot.interactionState !== 'ready') return false;
+  if (intent.contractVersion !== snapshot.contractVersion || intent.encounterId !== snapshot.encounterId) return false;
+  const targetActorId = 'targetActorId' in intent ? intent.targetActorId : undefined;
+  if (targetActorId === undefined) return true;
+  return snapshot.actors.some((actor) => actor.actorId === targetActorId && actor.isLegalTarget && !actor.defeated);
+}
+
+/** Every retained-state change can invalidate the offered action/target projection. */
+function changesInteractionLegality(type: PresentationEvent['type']): boolean {
+  switch (type) {
+    case 'damageApplied': case 'healingApplied': case 'resourceChanged': case 'statusApplied': case 'statusRemoved': case 'actorDefeated': case 'turnChanged': case 'encounterEnded': return true;
+    case 'actorMoved': case 'skillActivated': case 'attackResolved': case 'itemUsed': case 'combatMessage': return false;
+    default: return assertNever(type);
+  }
 }
 
 function eventReferencesExist(snapshot: BattlePresentationSnapshot, event: PresentationEvent): boolean {
@@ -59,6 +77,20 @@ function eventReferencesExist(snapshot: BattlePresentationSnapshot, event: Prese
     case 'combatMessage': case 'encounterEnded': return true;
     default: return assertNever(event);
   }
+}
+
+/** Rebuilds the caller's snapshot so results never freeze, mutate or alias caller-owned objects. */
+function internalizeSnapshot(snapshot: BattlePresentationSnapshot): BattlePresentationSnapshot {
+  return freeze({ contractVersion: snapshot.contractVersion, encounterId: snapshot.encounterId, revision: snapshot.revision, eventCursor: snapshot.eventCursor, phase: snapshot.phase, roundNumber: snapshot.roundNumber, activeActorId: snapshot.activeActorId, actors: snapshot.actors.map(cloneActor), outcome: snapshot.outcome, interactionState: snapshot.interactionState });
+}
+function cloneActor(actor: PresentationActor): PresentationActor {
+  return { actorId: actor.actorId, displayName: actor.displayName, side: actor.side, facing: actor.facing, visualKey: actor.visualKey, resources: actor.resources.map(cloneResource), statuses: actor.statuses.map(cloneStatus), attachments: actor.attachments.map(cloneAttachment), defeated: actor.defeated, isLegalTarget: actor.isLegalTarget };
+}
+function cloneResource(resource: PresentationResource): PresentationResource { return { resourceId: resource.resourceId, displayName: resource.displayName, current: resource.current, maximum: resource.maximum }; }
+function cloneAttachment(attachment: PresentationAttachment): PresentationAttachment { return { slotKey: attachment.slotKey, visualKey: attachment.visualKey }; }
+function cloneStatus(status: PresentationStatus): PresentationStatus {
+  if (status.kind === 'opaque') return { kind: 'opaque', instanceId: status.instanceId, displayName: status.displayName };
+  return { kind: 'known', instanceId: status.instanceId, statusId: status.statusId, displayName: status.displayName, polarity: status.polarity, ...(status.stacks === undefined ? {} : { stacks: status.stacks }), ...(status.remainingRounds === undefined ? {} : { remainingRounds: status.remainingRounds }) };
 }
 
 function withResourceResult(snapshot: BattlePresentationSnapshot, actorId: string, result: PresentationResourceResult): BattlePresentationSnapshot {

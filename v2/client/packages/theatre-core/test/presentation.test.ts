@@ -13,21 +13,19 @@ function event(fields: Record<string, unknown>): PresentationEvent { const decod
 describe('pure authoritative presentation application', () => {
   it('copies resulting values instead of calculating from display amounts', () => {
     const result = applyPresentationEvent(snapshot(), event({ type: 'damageApplied', targetActorId: 'actor_hero', displayAmount: 37, resultingResource: { resourceId: 'life', resultingValue: 55, resultingMaximum: 120 } }));
-    expect(result.kind).toBe('applied');
-    if (result.kind === 'applied') expect(result.snapshot.actors[0]?.resources[0]).toMatchObject({ current: 55, maximum: 120 });
+    expect(result).toMatchObject({ kind: 'resyncRequired', reason: 'interactionProjectionStale' });
+    expect(result.snapshot.actors[0]?.resources[0]).toMatchObject({ current: 55, maximum: 120 });
   });
 
   it('retains opaque status semantics without hidden identity or caller aliasing', () => {
     const input = { kind: 'opaque', instanceId: 'opaque-1', displayName: 'Unknown Effect' };
     const result = applyPresentationEvent(snapshot(), event({ type: 'statusApplied', actorId: 'actor_foe', status: input }));
     input.displayName = 'mutated';
-    expect(result.kind).toBe('applied');
-    if (result.kind === 'applied') {
-      const status = result.snapshot.actors[1]?.statuses[0];
-      expect(status).toEqual({ kind: 'opaque', instanceId: 'opaque-1', displayName: 'Unknown Effect' });
-      expect(status).not.toHaveProperty('statusId');
-      expect(Object.isFrozen(status)).toBe(true);
-    }
+    expect(result).toMatchObject({ kind: 'resyncRequired', reason: 'interactionProjectionStale' });
+    const status = result.snapshot.actors[1]?.statuses[0];
+    expect(status).toEqual({ kind: 'opaque', instanceId: 'opaque-1', displayName: 'Unknown Effect' });
+    expect(status).not.toHaveProperty('statusId');
+    expect(Object.isFrozen(status)).toBe(true);
   });
 
   it('advances display-only events without changing other presentation state', () => {

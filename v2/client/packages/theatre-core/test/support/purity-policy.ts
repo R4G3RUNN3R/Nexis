@@ -26,16 +26,30 @@ export function inspectPurePresentationSource(file: string, source: string): rea
       const callee = asNode(node['callee']);
       if (callee?.type === 'Identifier') { const name = String(callee['name']); const rule = DIRECT_GLOBAL_RULES[name]; if (rule !== undefined) add(rule, name); }
     }
-    if (node.type === 'MemberExpression' && node['computed'] !== true) {
-      const property = asNode(node['property']); const name = property?.type === 'Identifier' ? String(property['name']) : '';
-      const rule = MEMBER_RULES[name]; if (rule !== undefined) add(rule, name);
+    if (node.type === 'MemberExpression') {
+      const name = memberName(node);
+      if (name !== '') { const rule = MEMBER_RULES[name] ?? DIRECT_GLOBAL_RULES[name]; if (rule !== undefined) add(rule, name); }
       const object = asNode(node['object']);
       if (object?.type === 'Identifier') { const objectName = String(object['name']); const objectRule = DIRECT_GLOBAL_RULES[objectName]; if (objectRule !== undefined) add(objectRule, objectName); }
     }
+    if (node.type === 'VariableDeclarator') aliased(asNode(node['init']), add);
+    if (node.type === 'AssignmentExpression') aliased(asNode(node['right']), add);
   });
   return violations;
 }
 
+/** Computed string-literal access is the same escape hatch as dotted access. */
+function memberName(node: AstNode): string {
+  if (node['computed'] === true) return literalText(node['property']);
+  const property = asNode(node['property']);
+  return property?.type === 'Identifier' ? String(property['name']) : '';
+}
+/** Binding a forbidden global to a local name must not launder it past the callee check. */
+function aliased(source: AstNode | undefined, add: (rule: string, detail: string) => void): void {
+  if (source?.type !== 'Identifier') return;
+  const name = String(source['name']); const rule = DIRECT_GLOBAL_RULES[name];
+  if (rule !== undefined) add(rule, `alias of ${name}`);
+}
 function walk(value: unknown, visit: (node: AstNode) => void): void { if (Array.isArray(value)) { for (const item of value) walk(item, visit); return; } const node = asNode(value); if (node === undefined) return; visit(node); for (const [key, nested] of Object.entries(node)) if (key !== 'parent') walk(nested, visit); }
 function asNode(value: unknown): AstNode | undefined { return value !== null && typeof value === 'object' && typeof (value as Record<string, unknown>)['type'] === 'string' ? value as AstNode : undefined; }
 function literalText(value: unknown): string { const node = asNode(value); return node?.type === 'Literal' || node?.type === 'StringLiteral' ? String(node['value'] ?? '') : ''; }

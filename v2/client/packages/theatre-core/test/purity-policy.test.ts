@@ -15,6 +15,12 @@ describe('AST purity policy canaries', () => {
     ["crypto.getRandomValues(new Uint8Array(1))", 'randomness'],
     ["process.env['THEATRE_ENDPOINT']", 'environment'],
     ["document.cookie", 'storage'],
+    ["globalThis['fetch']('/combat')", 'fetch'],
+    ["new globalThis['WebSocket']('wss://example.invalid')", 'transport'],
+    ["globalThis['localStorage']", 'storage'],
+    ["const F = Function; new F('return 1');", 'dynamic code'],
+    ["const escape = globalThis.fetch;", 'fetch'],
+    ["let sink; sink = process;", 'environment'],
   ])('detects %s', (source, expectedRule) => {
     expect(inspectPurePresentationSource('canary.ts', source))
       .toEqual(expect.arrayContaining([expect.objectContaining({ rule: expectedRule })]));

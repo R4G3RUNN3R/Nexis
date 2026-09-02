@@ -8,6 +8,13 @@
 - deep-cloned and froze retained presentation data, replaced actor strings with opaque encounter-local selectors, and replaced substring purity checks with an AST/dependency/global guard over every publishable source extension
 - separated production source typechecking from Node/Vitest ambient test types; no gameplay authority, network, storage, persistence, identity or V1 implementation was added
 
+### Visual Theatre Task 1 review-fix round 2
+- **caller-owned alias safety**: `applyPresentationEvent` now rebuilds the incoming snapshot and any retained event status through explicit typed reconstruction before evaluating, so the public boundary no longer deep-freezes or aliases objects the caller still owns; accepted and resync results remain deeply frozen and are unaffected by later caller mutation, and no JSON round-trip cloning was introduced
+- **stale interaction projection**: extended interaction blocking from defeat/turn/encounter-end to every retained-state change (`damageApplied`, `healingApplied`, `resourceChanged`, `statusApplied`, `statusRemoved`), since each can invalidate the offered action/target projection; presentation-only cues (`actorMoved`, `skillActivated`, `attackResolved`, `itemUsed`, `combatMessage`) remain non-blocking
+- **intent safety gate**: `canSubmitTheatreIntent` now takes the actual `TheatreIntent` and additionally requires a matching contract version and encounter binding and refuses any target-bearing intent whose target is not currently offered as a legal, undefeated target; this remains a local safety/UX gate only and the authority still revalidates every submitted intent
+- **purity gate bypasses**: the AST guard now inspects computed string-literal member access and flags variable/assignment aliasing of a forbidden global, closing `globalThis['fetch'](…)`, `new globalThis['WebSocket'](…)`, `globalThis['localStorage']` and `const F = Function; new F(…)`; it stays a static test guard with no runtime code and no new dependency
+- verification: `npm run test:core` 7 files / 71 tests passed; `npm run typecheck` passed for both the production-source and test-tooling projects; `git diff --check` clean
+
 ## 2026-09-01
 
 ### Nexis 2.0 L3 History and Player Log resolution
