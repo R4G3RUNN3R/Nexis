@@ -206,13 +206,44 @@ Proven mechanically:
 Immutability is enforced independently in the contract, in a database trigger refusing any identifier
 reassignment, and by uniqueness constraints. `PUBLIC-PLAYER-IDENTITY.md` records the boundary.
 
+## L3 History and Player Log findings, resolved
+
+The three long-standing L3 REDs are green. Their original assertions in
+`ClaudeFoundationThreatModelTests` are byte-identical; no test was renamed, skipped or weakened.
+
+1. **TM-02, intra-command event order.** Every event of one command was stamped with the same
+   `EvaluationTimeUtc` and a null `CausationId`, and the events table had no ordering column, so a
+   multi-event command had no recoverable order. Events now carry a durable zero-based
+   `IntraCommandSequence` assigned from Core's emission order, persisted in `authoritative_events`
+   and `outbox` by migration `0010`, protected by `UNIQUE (command_id, intra_command_sequence)`, and
+   carried through outbox delivery. Each event also chains its `CausationId` to its predecessor, so
+   the order is reconstructible two independent ways.
+2. **TM-03, poisoned audit projection.** `SafePlayerReason` was unbounded free text while the Player
+   Log plain-text boundary rejects anything over its bound, so an immutable audit row could be
+   written that throws on every projection attempt. The reason is now validated at construction with
+   the same normalization and bound, and is rejected rather than truncated so a staff justification
+   is never silently altered. A test pins the two boundaries to identical decisions on adversarial
+   input, since a dependency cycle prevents sharing the code.
+3. **TM-04, silent player-history loss.** The projection registry keyed on name *and* schema version
+   and returned empty for anything unregistered, so bumping a projected contract's schema version
+   silently stopped producing player history. An unregistered contract **name** is still deliberately
+   internal and stays invisible; a registered name arriving at an unregistered schema version now
+   fails loudly and names only the offending contract. Fail-closed malformed-payload behaviour is
+   unchanged.
+
+Fixing TM-02 also surfaced a real migration defect: because `EnsureCreatedAsync` re-executes every
+migration file, an unguarded backfill re-derived sequences for rows that already carried
+authoritative values, overwriting real emission order and colliding with the uniqueness constraint.
+The add-and-backfill is now strictly one-time and a regression test pins that re-running migrations
+never renumbers committed events.
+
 ## Foundation work still incomplete
 
 The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
 
 1. migration/reconciliation tooling before any v1-to-v2 state movement, still gated by unresolved human decisions;
 2. broader multi-owner coverage across further gameplay domains, now that the first real two-owner proof (C3, `UnequipItem`) is delivered against real PostgreSQL;
-3. reproduction and resolution of valid threat-model findings, producer wiring for the operational surface, and the wider foundation stop-condition audit before broad gameplay implementation.
+3. producer wiring for the operational surface and the wider foundation stop-condition audit before broad gameplay implementation; the three L3 History/Player Log threat-model findings are now resolved.
 
 The real multi-owner proof is delivered. Under the approved M-reserve model, equip reserves the item instance in Inventory and binds it in Equipment, and `UnequipItem` unbinds and releases, so both are genuine two-owner commands writing two real authoritative owners rather than synthetic transactional owners. No mechanic, cost, cooldown, reward or content value was invented to achieve it, and possession never moves.
 
@@ -220,7 +251,7 @@ Exact owner/domain contracts should continue to be introduced only when the corr
 
 ## Next safe implementation boundary
 
-The replay, privileged-entry, operational-observability, real multi-owner (C3) and public player identity foundation boundaries are implemented and adversarially covered. The next safe slice is evidence-first reproduction and resolution of the three known L3 History/Player Log findings. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
+The replay, privileged-entry, operational-observability, real multi-owner (C3) and public player identity foundation boundaries are implemented and adversarially covered. The three known L3 History/Player Log findings are resolved. The next safe slice is producer wiring for the remaining operational-signal kinds (C5) and the wider foundation stop-condition audit. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
 
 ## Verification discipline
 

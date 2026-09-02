@@ -25,6 +25,9 @@ These contracts contain no PostgreSQL, EF, Npgsql, HTTP, UI, concrete Core, conc
 `PlayerLogProjectionRegistry` is fail closed:
 
 - an authoritative event produces no Player Log entry unless its exact contract name and schema version have one explicitly registered projector;
+- an event whose contract **name** has no registered projector at any schema version is deliberately internal and stays silently invisible;
+- an event whose contract name **is** projected but whose schema version has no registered projector is a misconfiguration, not a deliberate omission, and throws. Bumping a projected event's schema version would otherwise stop producing player history silently, which is indistinguishable from data loss. The diagnostic names only the offending contract and version and never enumerates the rest of the registry;
+- a registered projector that cannot read its payload still fails closed rather than returning an empty entry set;
 - duplicate registrations are rejected;
 - projectors must preserve the committed EventId, CorrelationId and occurrence time;
 - null entries or collections are rejected;
@@ -62,3 +65,18 @@ The projects introduced by this slice do not create Player Log tables, a query A
 Every new player-visible event schema requires a dedicated reviewed projector and tests proving exact audience, allowed disclosure, malformed-payload failure, hidden-field non-leakage and deterministic provenance. Knowledge-dependent events must consume an explicit trusted knowledge snapshot/policy at the projection boundary before they are registered; absence of that policy means no disclosure.
 
 This slice does not define new gameplay, world knowledge, retention periods, pagination, localization, notification delivery or Player Log persistence schema.
+
+## Intra-command event order
+
+Events committed by one command share one authoritative evaluation instant, so a Player Log renderer
+must not order them by `OccurredAtUtc`, by delivery arrival or by database row order. Each committed
+event carries a durable zero-based `IntraCommandSequence` assigned from Core's emission order and
+persisted alongside the event, and additionally chains its `CausationId` to its predecessor within
+the command. Order by `(CommandId, IntraCommandSequence)`.
+
+## Player-disclosable text bound
+
+`PlayerLogPlainText` bounds and normalizes plain text. Any write boundary that produces
+player-disclosable text must reject what this boundary cannot project, rather than committing a
+durable value that throws on every later projection attempt. See `AUDIT-BOUNDARY.md` for the Admin
+Audit case.

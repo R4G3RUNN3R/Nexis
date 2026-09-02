@@ -42,6 +42,56 @@ public enum AuditActionKind
 /// Immutable administrative audit fact. Player-visible material-effect projections are derived
 /// separately; the internal audit record itself is never rewritten to change what happened.
 /// </summary>
+/// <summary>
+/// Write-boundary rules for player-disclosable Admin Audit text.
+///
+/// Audit history is append-only and immutable, so a reason the Player Log cannot project would be a
+/// permanently poisoned row that throws on every projection attempt. The write boundary therefore
+/// applies exactly the normalization and bound the Player Log plain-text boundary applies, and
+/// rejects rather than truncates: silently shortening a staff-written reason would change the
+/// recorded justification for a privileged action.
+///
+/// Nexis.Audit.Contracts cannot reference Nexis.History.Contracts without a dependency cycle, so the
+/// rules are restated here and an architecture test asserts the two boundaries agree exactly on
+/// adversarial inputs. Drift fails the suite.
+/// </summary>
+public static class PlayerDisclosableAuditText
+{
+    /// <summary>Must equal the Player Log plain-text bound.</summary>
+    public const int MaximumLength = 512;
+
+    public static string Normalize(string value, string parameterName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value, parameterName);
+
+        var characters = value.Trim()
+            .Select(static character => char.IsControl(character) ? ' ' : character)
+            .ToArray();
+        var normalized = new string(characters);
+        while (normalized.Contains("  ", StringComparison.Ordinal))
+        {
+            normalized = normalized.Replace("  ", " ", StringComparison.Ordinal);
+        }
+
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new ArgumentException(
+                "Player-disclosable audit reason cannot normalize to an empty value.",
+                parameterName);
+        }
+
+        if (normalized.Length > MaximumLength)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                $"Player-disclosable audit reason cannot exceed {MaximumLength} characters. It is rejected "
+                + "rather than truncated so the recorded justification is never silently altered.");
+        }
+
+        return normalized;
+    }
+}
+
 public sealed record AuditEntry
 {
     public AuditEntry(
@@ -109,7 +159,11 @@ public sealed record AuditEntry
         OccurredAtUtc = occurredAtUtc;
         Action = action;
         Outcome = outcome;
-        SafePlayerReason = NormalizeOptional(safePlayerReason);
+        // Validated whenever supplied, not only for currently player-visible entries: the field is
+        // player-disclosable by definition and the row is immutable once written.
+        SafePlayerReason = string.IsNullOrWhiteSpace(safePlayerReason)
+            ? null
+            : PlayerDisclosableAuditText.Normalize(safePlayerReason, nameof(safePlayerReason));
         CaseReference = NormalizeOptional(caseReference);
         CorrelationId = correlationId;
         CausationEventId = causationEventId;

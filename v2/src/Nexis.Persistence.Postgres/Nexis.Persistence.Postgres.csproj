@@ -25,5 +25,6 @@
     <EmbeddedResource Include="Migrations\0007_operational_signals.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0007_operational_signals.sql" />
     <EmbeddedResource Include="Migrations\0008_inventory_owner.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0008_inventory_owner.sql" />
     <EmbeddedResource Include="Migrations\0009_player_identity.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0009_player_identity.sql" />
+    <EmbeddedResource Include="Migrations\0010_intra_command_event_order.sql" LogicalName="Nexis.Persistence.Postgres.Migrations.0010_intra_command_event_order.sql" />
   </ItemGroup>
 </Project>

@@ -304,10 +304,10 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         const string eventSql = """
             INSERT INTO nexis_v2.authoritative_events (
                 event_id, command_id, correlation_id, occurred_at_utc, causation_event_id,
-                contract_name, contract_schema_version, payload)
+                contract_name, contract_schema_version, payload, intra_command_sequence)
             VALUES (
                 @event_id, @command_id, @correlation_id, @occurred_at_utc, @causation_event_id,
-                @contract_name, @contract_schema_version, @payload);
+                @contract_name, @contract_schema_version, @payload, @intra_command_sequence);
             """;
 
         var envelope = serializedEvent.Envelope;
@@ -320,10 +320,12 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         const string outboxSql = """
             INSERT INTO nexis_v2.outbox (
                 event_id, command_id, correlation_id, occurred_at_utc,
-                contract_name, contract_schema_version, payload, available_at_utc)
+                contract_name, contract_schema_version, payload, available_at_utc,
+                intra_command_sequence)
             VALUES (
                 @event_id, @command_id, @correlation_id, @occurred_at_utc,
-                @contract_name, @contract_schema_version, @payload, @available_at_utc);
+                @contract_name, @contract_schema_version, @payload, @available_at_utc,
+                @intra_command_sequence);
             """;
 
         await using var outboxCommand = new NpgsqlCommand(outboxSql, connection, transaction);
@@ -356,6 +358,10 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         command.Parameters.AddWithValue("contract_name", NpgsqlDbType.Text, envelope.Descriptor.Contract.Name);
         command.Parameters.AddWithValue("contract_schema_version", NpgsqlDbType.Integer, envelope.Descriptor.Contract.SchemaVersion);
         command.Parameters.AddWithValue("payload", NpgsqlDbType.Jsonb, json);
+        command.Parameters.AddWithValue(
+            "intra_command_sequence",
+            NpgsqlDbType.Integer,
+            envelope.Metadata.IntraCommandSequence);
     }
 
     private static async ValueTask SafeRollbackAsync(

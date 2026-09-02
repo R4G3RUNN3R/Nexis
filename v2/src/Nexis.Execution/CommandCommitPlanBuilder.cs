@@ -52,16 +52,29 @@ public sealed class CommandCommitPlanBuilder
             request.Context.EvaluationTimeUtc);
 
         var terminalOutcome = MapTerminalOutcome(decision, completedAtUtc);
-        var eventEnvelopes = decision.Events
-            .Select(descriptor => new AuthoritativeEventEnvelope(
+        // Events committed by one command share one authoritative evaluation instant, so the instant
+        // cannot order them. Each event therefore carries an explicit zero-based intra-command
+        // sequence taken from Core's emission order, and chains its causation to the event before it,
+        // giving history a total order that survives persistence, replay and recovery.
+        var eventEnvelopes = new AuthoritativeEventEnvelope[decision.Events.Count];
+        EventId? previousEventId = null;
+        for (var sequence = 0; sequence < decision.Events.Count; sequence++)
+        {
+            var descriptor = decision.Events[sequence];
+            var eventId = EventId.New();
+
+            eventEnvelopes[sequence] = new AuthoritativeEventEnvelope(
                 new EventMetadata(
-                    EventId.New(),
+                    eventId,
                     request.Context.EvaluationTimeUtc,
                     receiptClaim.OriginalCorrelationId,
-                    null,
-                    descriptor.Contract.SchemaVersion),
-                descriptor))
-            .ToArray();
+                    previousEventId,
+                    descriptor.Contract.SchemaVersion,
+                    sequence),
+                descriptor);
+
+            previousEventId = eventId;
+        }
         var transitions = decision.Transitions
             .OrderBy(static transition => transition.TargetOwner.Value, StringComparer.Ordinal)
             .ThenBy(static transition => transition.Contract.Name, StringComparer.Ordinal)

@@ -15,7 +15,8 @@ public static class PostgresExecutionSchema
         "Nexis.Persistence.Postgres.Migrations.0006_operational_quarantine.sql",
         "Nexis.Persistence.Postgres.Migrations.0007_operational_signals.sql",
         "Nexis.Persistence.Postgres.Migrations.0008_inventory_owner.sql",
-        "Nexis.Persistence.Postgres.Migrations.0009_player_identity.sql"
+        "Nexis.Persistence.Postgres.Migrations.0009_player_identity.sql",
+        "Nexis.Persistence.Postgres.Migrations.0010_intra_command_event_order.sql"
     };
 
     public static async ValueTask EnsureCreatedAsync(

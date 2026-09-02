@@ -127,7 +127,7 @@ public sealed class PostgresOutboxStore
                   AND dead_lettered_at_utc IS NULL
                   AND available_at_utc <= @now_utc
                   AND (lease_expires_at_utc IS NULL OR lease_expires_at_utc <= @now_utc)
-                ORDER BY created_at_utc, event_id
+                ORDER BY created_at_utc, command_id, intra_command_sequence, event_id
                 FOR UPDATE SKIP LOCKED
                 LIMIT @maximum_items
             )
@@ -145,7 +145,8 @@ public sealed class PostgresOutboxStore
                       o.contract_name,
                       o.contract_schema_version,
                       o.payload::text,
-                      o.attempt_count;
+                      o.attempt_count,
+                      o.intra_command_sequence;
             """;
 
         var items = new List<PostgresOutboxDeliveryItem>();
@@ -167,7 +168,8 @@ public sealed class PostgresOutboxStore
                     new CorrelationId(reader.GetGuid(2)),
                     ToDateTimeOffset(reader.GetDateTime(3)),
                     new ContractDescriptor(reader.GetString(4), reader.GetInt32(5)),
-                    reader.GetString(6)),
+                    reader.GetString(6),
+                    reader.GetInt32(8)),
                 reader.GetInt32(7)));
         }
 
