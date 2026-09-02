@@ -1,80 +1,31 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
 import { describe, expect, it } from 'vitest';
+import { inspectPurePresentationSource } from './support/purity-policy.ts';
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url));
-const sourceRoot = join(packageRoot, 'src');
+const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as Record<string, unknown>;
+const publishRoots = Array.isArray(manifest['files']) ? manifest['files'].filter((value): value is string => typeof value === 'string') : [];
+const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 
-/**
- * theatre-core is pure presentation code. It may never gain gameplay authority,
- * a transport, persistence, randomness or dynamic code execution.
- */
-const FORBIDDEN_SOURCE_PATTERNS: readonly string[] = [
-  'fetch(',
-  'XMLHttpRequest',
-  'WebSocket',
-  'localStorage',
-  'sessionStorage',
-  'Math.random',
-  'crypto.getRandomValues',
-  'eval(',
-  'new Function',
-  'indexedDB',
-  'document.',
-  'window.',
-  'process.env',
-];
-
-function collectSourceFiles(directory: string): readonly string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(directory)) {
-    const absolute = join(directory, entry);
-    if (statSync(absolute).isDirectory()) {
-      found.push(...collectSourceFiles(absolute));
-    } else if (absolute.endsWith('.ts')) {
-      found.push(absolute);
-    }
-  }
-  return found;
+function collect(directory: string): readonly string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(directory)) { const absolute = join(directory, entry); if (statSync(absolute).isDirectory()) files.push(...collect(absolute)); else if (SOURCE_EXTENSIONS.has(extname(absolute))) files.push(absolute); }
+  return files;
 }
-
-const sourceFiles = collectSourceFiles(sourceRoot);
+const publishedSources = publishRoots.flatMap((root) => collect(join(packageRoot, root)));
 
 describe('theatre-core presentation purity', () => {
-  it('has source files to inspect', () => {
-    expect(sourceFiles.length).toBeGreaterThan(0);
+  it('AST-inspects every publishable source extension', () => {
+    expect(publishedSources.length).toBeGreaterThan(0);
+    const violations = publishedSources.flatMap((file) => inspectPurePresentationSource(relative(packageRoot, file), readFileSync(file, 'utf8')));
+    expect(violations).toEqual([]);
   });
 
-  it.each(FORBIDDEN_SOURCE_PATTERNS)('never uses %s', (pattern) => {
-    const offenders = sourceFiles.filter((file) => readFileSync(file, 'utf8').includes(pattern));
-    expect(offenders.map((file) => relative(packageRoot, file))).toEqual([]);
-  });
-
-  it('imports nothing outside its own relative sources', () => {
-    const externalImportPattern = /(?:^|\n)\s*(?:import|export)[^;\n]*?\sfrom\s+['"]([^'"]+)['"]/g;
-    const offenders: string[] = [];
-
-    for (const file of sourceFiles) {
-      const contents = readFileSync(file, 'utf8');
-      for (const match of contents.matchAll(externalImportPattern)) {
-        const specifier = match[1] ?? '';
-        if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
-          offenders.push(`${relative(packageRoot, file)} -> ${specifier}`);
-        }
-      }
-    }
-
-    expect(offenders).toEqual([]);
-  });
-
-  it('declares no runtime dependencies', () => {
-    const manifest: unknown = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
-    expect(manifest).toBeTypeOf('object');
-    const record = manifest as Record<string, unknown>;
-    expect(record['dependencies']).toBeUndefined();
-    expect(record['peerDependencies']).toBeUndefined();
-    expect(record['optionalDependencies']).toBeUndefined();
+  it('declares no runtime, peer, or optional dependencies', () => {
+    expect(manifest['dependencies']).toBeUndefined();
+    expect(manifest['peerDependencies']).toBeUndefined();
+    expect(manifest['optionalDependencies']).toBeUndefined();
   });
 });

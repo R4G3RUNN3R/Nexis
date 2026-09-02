@@ -16,6 +16,6 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
   }
 }

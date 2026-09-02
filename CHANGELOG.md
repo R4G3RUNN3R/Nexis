@@ -1,4 +1,13 @@
 # Changelog
+## 2026-09-02
+
+### Visual Theatre Task 1 presentation-contract hardening
+- versioned the snapshot, event and intent V1 wire contracts and added strict field-by-field decoders that reject unsupported versions, unknown variants/fields, invalid references and internal-looking actor identifiers
+- made presentation event application encounter-bound and cursor-strict, with explicit typed resync results for wrong, duplicate/stale, reversed, gapped or unaddressable events
+- blocked stale legal-target interaction after defeat, turn and encounter-end events until an authoritative replacement snapshot arrives, without deriving gameplay legality in the client
+- deep-cloned and froze retained presentation data, replaced actor strings with opaque encounter-local selectors, and replaced substring purity checks with an AST/dependency/global guard over every publishable source extension
+- separated production source typechecking from Node/Vitest ambient test types; no gameplay authority, network, storage, persistence, identity or V1 implementation was added
+
 ## 2026-09-01
 
 ### Nexis 2.0 L3 History and Player Log resolution
