@@ -1,6 +1,13 @@
 # Changelog
 ## 2026-09-02
 
+### Visual Theatre Task 2 Pixi lifecycle foundation
+- added the presentation-only `@nexis/theatre-pixi` package with an SSR-safe, client-invoked Pixi application factory; Pixi is dynamically imported only during `mount`, is initialized with explicit WebGL preference, and returns typed host-controlled fallback results when the browser capability or initialization is unavailable
+- added the replaceable `ITheatreRenderer` lifecycle (`mount`, `render`, `present`, `resize`, `dispose`) without actor rendering or gameplay behavior; duplicate/concurrent and invalid mounts fail closed, failed mounts retain no mounted state, and dispose removes the owned canvas, context-loss listener and resize observer before stopping/destroying the application and its owned stage/GPU resources
+- created the exact ordered stage containers for far background, environment, ground, actors, transient effects/projectiles, floating feedback and overlays; actor/effect population remains reserved for later approved tasks
+- pinned `pixi.js` exactly to `8.20.1`; official npm metadata reports MIT and the upstream `pixijs/pixijs` repository, so it satisfies the approved free/open-source commercial-use requirement while the exact pin and lockfile preserve reproducibility
+- TDD evidence: the first `npm run test:pixi` failed because all four Task 2 suites referenced the absent `src/index.ts`/API; a self-review regression then failed 1/4 focused fallback tests until partial mount setup rolled back its observer and listener; after implementation, 4 files / 13 tests passed, workspace strict typecheck passed for both theatre packages, and both full-tree and production-only `npm audit` reported 0 vulnerabilities
+
 ### Visual Theatre Task 1 presentation-contract hardening
 - versioned the snapshot, event and intent V1 wire contracts and added strict field-by-field decoders that reject unsupported versions, unknown variants/fields, invalid references and internal-looking actor identifiers
 - made presentation event application encounter-bound and cursor-strict, with explicit typed resync results for wrong, duplicate/stale, reversed, gapped or unaddressable events

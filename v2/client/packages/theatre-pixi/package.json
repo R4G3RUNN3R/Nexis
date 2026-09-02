@@ -1,0 +1,25 @@
+{
+  "name": "@nexis/theatre-pixi",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Presentation-only PixiJS renderer lifecycle for Nexis Visual Theatre.",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@nexis/theatre-core": "0.0.0",
+    "pixi.js": "8.20.1"
+  }
+}
