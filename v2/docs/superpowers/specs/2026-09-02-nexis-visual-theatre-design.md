@@ -1,6 +1,6 @@
 # Nexis Visual Theatre Design
 
-**Status:** Proposed for user review
+**Status:** APPROVED - user authorised implementation on 2 September 2026
 
 **Date:** 2 September 2026
 
@@ -103,7 +103,7 @@ Paid/commercial runtime/editor dependencies are rejected for this subsystem.
 
 The production character-animation path must be free/open-source and permit commercial use without a required paid licence. Candidate runtimes must pass licensing and security review before adoption.
 
-No candidate is approved by this spec. The runtime is an adapter behind a stable actor-renderer interface. A custom Pixi attachment/skeletal implementation remains an acceptable fallback if third-party runtime risk is not justified.
+The character-animation decision was resolved after focused security/licensing research: LoongBones is the approved free/MIT authoring workflow, while the production runtime will be a minimal Nexis-owned PixiJS v8 skeletal/attachment runtime behind the stable actor-renderer interface. A pinned, audited and vendored fork of pixi-dragonbones-runtime is contingency-only, not the default dependency. The runtime receives sanitized presentation assets only and has no network, persistence, auth, RNG or gameplay authority.
 
 ## Presentation data boundary
 
@@ -425,8 +425,7 @@ Phase 1 is acceptable for integration review when all of the following are true:
 
 The following remain intentionally open until evidence is available:
 
-1. Which free/open-source skeletal animation runtime, if any, is adopted after the security/licensing audit.
-2. Whether the selected runtime is consumed as a pinned package or a reviewed/vendored Nexis fork.
-3. Final visual asset format and authoring pipeline for character skins/equipment.
-4. Exact boundary/package layout when the visual client repository/platform integration is formally established.
+1. Final versioned Nexis actor asset format details are resolved by the separate approved skeletal-runtime spec and implementation plan, with LoongBones source converted through a Nexis validator/compiler.
+2. Exact future extraction/publishing boundary for reusable client packages remains open until the visual client repository/platform integration is formally established.
+3. Final production art direction and authored character/environment assets remain user-owned creative decisions outside the engine implementation.
 
