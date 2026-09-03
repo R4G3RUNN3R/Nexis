@@ -41,6 +41,48 @@ describe('theatre-pixi AST purity policy canaries', () => {
 
   it.each([
     [
+      'assignment and computed-key namespace aliases',
+      "let ns; ns = globalThis; const key = 'fetch'; ns[key]('/combat');",
+      'fetch',
+    ],
+    [
+      'destructured namespace member aliases',
+      "const { fetch: send } = globalThis; send('/combat');",
+      'fetch',
+    ],
+    [
+      'bindings that have left lexical scope',
+      "function local(fetch: (path: string) => void) { fetch('/local'); } fetch('/combat');",
+      'fetch',
+    ],
+    [
+      'computed dynamic-code constructor access',
+      "const key = 'constructor'; (() => {})[key]('return 1')();",
+      'dynamic code',
+    ],
+    [
+      'destructured dynamic-code constructor aliases',
+      "const { constructor: compile } = (() => {}); compile('return 1')();",
+      'dynamic code',
+    ],
+    [
+      'block bindings that have left lexical scope',
+      "{ const fetch = (path: string): string => path; fetch('/local'); } fetch('/combat');",
+      'fetch',
+    ],
+    [
+      'loop bindings that have left lexical scope',
+      "for (let fetch = () => undefined; false; ) { fetch(); } fetch('/combat');",
+      'fetch',
+    ],
+  ])('rejects %s', (_label, source, expectedRule) => {
+    expect(inspectPresentationRendererSource('adversarial.ts', source)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ rule: expectedRule })]),
+    );
+  });
+
+  it.each([
+    [
       'lazy pixi loading',
       "export async function load() { const { Application } = await import('pixi.js'); return new Application(); }",
     ],
@@ -65,6 +107,34 @@ describe('theatre-pixi AST purity policy canaries', () => {
       "import { helper } from './helper.ts';\nexport const scaled = (value: number): number => Math.min(helper(value), Number.MAX_SAFE_INTEGER);",
     ],
     ['object shorthand over declared bindings', 'const width = 1; export const size = { width };'],
+    [
+      'legitimately shadowed forbidden-looking parameters',
+      "export function invoke(fetch: (path: string) => void): void { fetch('/local'); }",
+    ],
+    [
+      'legitimately shadowed block locals',
+      "export function invoke(send: (path: string) => void): void { { const fetch = send; fetch('/local'); } }",
+    ],
+    [
+      'approved presentation capability through aliases and a computed constant',
+      "let browser; browser = globalThis; const capability = 'document'; export const documentRef = browser[capability];",
+    ],
+    [
+      'approved destructured presentation capabilities',
+      'const { document: documentRef } = globalThis; export { documentRef };',
+    ],
+    [
+      'local destructuring with a forbidden-looking property name',
+      "export function invoke(callbacks: { fetch: (path: string) => void }): void { const { fetch } = callbacks; fetch('/local'); }",
+    ],
+    [
+      'computed access on local presentation data',
+      "export const pick = (layers: Record<string, number>, name: string): number | null => layers[name] ?? null;",
+    ],
+    [
+      'function-scoped var bindings declared in a block',
+      "export function inspect(flag: boolean): unknown { if (flag) { var Worker = 1; } return Worker; }",
+    ],
   ])('allows %s', (_label, source) => {
     expect(inspectPresentationRendererSource('allowed.ts', source)).toEqual([]);
   });
