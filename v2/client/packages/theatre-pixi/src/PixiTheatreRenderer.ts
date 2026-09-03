@@ -4,8 +4,9 @@ import {
   LazyPixiApplicationFactory,
   type PixiApplicationFactory,
   type PixiApplicationHandle,
+  type PixiContainerHandle,
 } from './PixiApplicationFactory.ts';
-import { createStageLayers } from './stageLayers.ts';
+import { createStageLayers, type StageLayerName, type StageLayers } from './stageLayers.ts';
 
 const DEFAULT_MAXIMUM_RESOLUTION = 2;
 
@@ -31,6 +32,7 @@ export type TheatreMountResult =
 
 export interface ITheatreRenderer {
   mount(host: HTMLElement): Promise<TheatreMountResult>;
+  stageLayer(name: StageLayerName): PixiContainerHandle | null;
   render(snapshot: BattlePresentationSnapshot): void;
   present(event: PresentationEvent): void;
   resize(width: number, height: number): void;
@@ -91,6 +93,7 @@ export class PixiTheatreRenderer implements ITheatreRenderer {
   private state: RendererState = 'idle';
   private generation = 0;
   private application: PixiApplicationHandle | null = null;
+  private layers: StageLayers | null = null;
   private host: HTMLElement | null = null;
   private resizeObserver: ResizeObserverHandle | null = null;
   private contextLostListener: EventListener | null = null;
@@ -127,28 +130,30 @@ export class PixiTheatreRenderer implements ITheatreRenderer {
         preference: 'webgl',
       });
     } catch {
-      if (generation === this.generation) {
-        this.state = 'idle';
+      if (this.isCancelled(generation)) {
+        return { kind: 'rejected', reason: 'mountCancelled' };
       }
+      this.state = 'idle';
       return { kind: 'fallbackRequired', reason: 'initializationFailed' };
     }
 
-    if (creation.kind === 'unavailable') {
-      if (generation === this.generation) {
-        this.state = 'idle';
+    if (this.isCancelled(generation)) {
+      if (creation.kind === 'ready') {
+        this.destroyApplication(creation.application);
       }
-      return { kind: 'fallbackRequired', reason: creation.reason };
-    }
-    if (generation !== this.generation || this.state !== 'mounting') {
-      this.destroyApplication(creation.application);
       return { kind: 'rejected', reason: 'mountCancelled' };
+    }
+    if (creation.kind === 'unavailable') {
+      this.state = 'idle';
+      return { kind: 'fallbackRequired', reason: creation.reason };
     }
 
     const application = creation.application;
     let contextLostListener: EventListener | null = null;
     let resizeObserver: ResizeObserverHandle | null = null;
+    let layers: StageLayers | null = null;
     try {
-      createStageLayers(application.stage, (label) => application.createContainer(label));
+      layers = createStageLayers(application.stage, (label) => application.createContainer(label));
       host.appendChild(application.canvas);
       contextLostListener = (event) => event.preventDefault();
       application.canvas.addEventListener('webglcontextlost', contextLostListener);
@@ -162,6 +167,7 @@ export class PixiTheatreRenderer implements ITheatreRenderer {
       });
 
       this.application = application;
+      this.layers = layers;
       this.host = host;
       this.contextLostListener = contextLostListener;
       this.resizeObserver = resizeObserver;
@@ -179,6 +185,11 @@ export class PixiTheatreRenderer implements ITheatreRenderer {
       this.clearMountedReferences();
       return { kind: 'fallbackRequired', reason: 'initializationFailed' };
     }
+  }
+
+  /** Typed renderer-owned layer handle. It carries no gameplay authority and no raw Pixi internals. */
+  stageLayer(name: StageLayerName): PixiContainerHandle | null {
+    return this.layers?.[name] ?? null;
   }
 
   render(snapshot: BattlePresentationSnapshot): void {
@@ -228,8 +239,13 @@ export class PixiTheatreRenderer implements ITheatreRenderer {
     application.destroy();
   }
 
+  private isCancelled(generation: number): boolean {
+    return generation !== this.generation || this.state !== 'mounting';
+  }
+
   private clearMountedReferences(): void {
     this.application = null;
+    this.layers = null;
     this.host = null;
     this.resizeObserver = null;
     this.contextLostListener = null;

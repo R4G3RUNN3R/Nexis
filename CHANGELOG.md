@@ -1,4 +1,16 @@
 # Changelog
+## 2026-09-03
+
+### Visual Theatre Task 2 review hardening
+- **M1, accepted and fixed**: replaced the non-recursive, regex-based `theatre-pixi` purity check with a recursive AST policy (`test/support/pixi-purity-policy.ts`) comparable in rigor to the `theatre-core` guard; source discovery now walks nested directories and throws instead of passing vacuously on an empty publish root, so Task 3's `src/actors/**` files are covered automatically
+- the policy is fail-closed rather than a pure denylist: free identifiers must be locally declared or on an explicit ambient allowlist, `globalThis`/`window`/`self` members must be on a capability allowlist, and computed or non-literal global access is a violation; aliasing a global namespace into a local binding no longer launders the member check
+- the policy still permits exactly what this package legitimately needs: the lazy `await import('pixi.js')` boundary, `globalThis.document`, `globalThis.ResizeObserver`, `globalThis.devicePixelRatio` and canvas event listeners; a *static* `pixi.js` import, React/JSX, or any other external package is rejected
+- **L1, accepted and fixed**: `mount` now evaluates cancellation before the creation outcome, so a `create` call that resolves `unavailable` (or rejects) after `dispose` returns `rejected`/`mountCancelled` instead of a late `fallbackRequired` that would push a disposed host into fallback rendering
+- **L2, accepted and adapted**: the renderer now retains the typed `StageLayers` it creates and exposes `stageLayer(name)` returning the narrow `PixiContainerHandle` contract; handles are released on dispose and reissued fresh on remount, giving Task 3 typed layer access without leaking Pixi internals or adding gameplay authority
+- **L3, deferred with rationale**: `webglcontextrestored` re-initialization and background-tab idle/throttling are not Task 3 requirements and are recorded for the later lifecycle/integration tranche rather than implemented as unrelated scope now
+- **L4, accepted with no change**: mounting at 1x1 when the host reports zero size is correct, because the ResizeObserver corrects dimensions on the first observation and no gameplay value depends on the transient size
+- TDD evidence — RED: `npx vitest run` reported 3 failed files / 4 failed tests; both purity suites failed with `Cannot find module './support/pixi-purity-policy.ts'`, cancellation returned `{ kind: 'fallbackRequired' }` where `{ kind: 'rejected', reason: 'mountCancelled' }` was required, and `renderer.stageLayer is not a function`. GREEN: `npx vitest run` 7 files / 58 tests passed, `npm run test:core` 7 files / 71 tests passed, `npm run typecheck` clean for all four projects, `git diff --check` clean
+
 ## 2026-09-02
 
 ### Visual Theatre Task 2 Pixi lifecycle foundation
