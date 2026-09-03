@@ -75,6 +75,31 @@ describe('theatre-pixi AST purity policy canaries', () => {
       "for (let fetch = () => undefined; false; ) { fetch(); } fetch('/combat');",
       'fetch',
     ],
+    [
+      'object destructuring declaration defaults',
+      "const { send = fetch } = {}; send('/combat');",
+      'fetch',
+    ],
+    [
+      'nested object parameter defaults',
+      "function invoke({ send = fetch } = {}) { send('/combat'); }",
+      'fetch',
+    ],
+    [
+      'object destructuring assignment defaults',
+      "let compile; ({ compile = Function } = {}); compile('return 1')();",
+      'dynamic code',
+    ],
+    [
+      'array destructuring declaration defaults',
+      "const [store = localStorage] = []; store.getItem('x');",
+      'storage',
+    ],
+    [
+      'direct parameter defaults remain inspected',
+      "function invoke(send = fetch) { send('/combat'); }",
+      'fetch',
+    ],
   ])('rejects %s', (_label, source, expectedRule) => {
     expect(inspectPresentationRendererSource('adversarial.ts', source)).toEqual(
       expect.arrayContaining([expect.objectContaining({ rule: expectedRule })]),
@@ -134,6 +159,22 @@ describe('theatre-pixi AST purity policy canaries', () => {
     [
       'function-scoped var bindings declared in a block',
       "export function inspect(flag: boolean): unknown { if (flag) { var Worker = 1; } return Worker; }",
+    ],
+    [
+      'local object destructuring declaration defaults',
+      "const localSend = (path: string): string => path; const { send = localSend } = {}; export const result = send('/local');",
+    ],
+    [
+      'local nested object parameter defaults',
+      "const localSend = (path: string): string => path; export function invoke({ send = localSend } = {}): string { return send('/local'); }",
+    ],
+    [
+      'local object destructuring assignment defaults',
+      "const localCompile = (source: string): string => source; let compile; ({ compile = localCompile } = {}); export { compile };",
+    ],
+    [
+      'local array destructuring declaration defaults',
+      "const localStore = { getItem: (key: string): string => key }; const [store = localStore] = []; export const result = store.getItem('x');",
     ],
   ])('allows %s', (_label, source) => {
     expect(inspectPresentationRendererSource('allowed.ts', source)).toEqual([]);

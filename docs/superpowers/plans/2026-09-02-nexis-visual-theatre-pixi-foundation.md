@@ -112,3 +112,20 @@ Create `v2/client/package.json`, `v2/client/tsconfig.base.json`, packages `theat
 - [ ] Inspect dependency tree/license/audit output; unresolved advisories are blockers, not suppressed warnings.
 - [ ] Verify no V1, production config, secrets or unrelated authority code changed.
 - [ ] Commit `docs(theatre): record Pixi foundation integration`.
+
+## SDD / TDD Evidence Ledger
+
+### 2026-09-03 — Task 2 M1 purity fix round 2
+
+- Starting HEAD: `354542ebd3f28091b487d65d4588db8b42d24fc5`.
+- Scope: the static `theatre-pixi` AST policy and its canaries only; no renderer runtime,
+  dependency, V1 or Task 3 change.
+- RED: after adding adversarial and positive canaries first,
+  `npx vitest run test/purity-policy.test.ts` reported 4 failed / 56 passed. The four failures
+  were object declaration, nested object parameter, object destructuring assignment and array
+  declaration defaults whose executable RHS referenced `fetch`, `Function` or `localStorage`.
+  The direct simple parameter default and all local-default positives already passed.
+- GREEN: the focused policy passed 60/60 after recursively inspecting default RHS expressions in
+  function-parameter, variable-declaration and destructuring-assignment binding patterns.
+  `npm run test:pixi` passed 81/81, `npm run test:core` passed 71/71 and `npm run typecheck`
+  completed cleanly for the production and test TypeScript projects.

@@ -288,6 +288,7 @@ function analyzeNode(
       analyzeNode(init, activeScope, scopes, add);
       assignPattern(asNode(node['id']), valueOf(init, activeScope, add), activeScope, add);
     }
+    analyzePatternDefaults(asNode(node['id']), activeScope, scopes, add);
     return;
   }
   if (node.type === 'AssignmentExpression') {
@@ -297,6 +298,7 @@ function analyzeNode(
     }
     const left = asNode(node['left']);
     if (node['operator'] === '=' && left !== undefined && isBindingPattern(left)) {
+      analyzePatternDefaults(left, activeScope, scopes, add);
       assignPattern(left, valueOf(right, activeScope, add), activeScope, add);
     } else if (left !== undefined) {
       analyzeNode(left, activeScope, scopes, add);
@@ -622,19 +624,49 @@ function nearestFunctionScope(scope: Scope): Scope {
 }
 
 function analyzePatternDefaults(
-  pattern: AstNode,
+  pattern: AstNode | undefined,
   scope: Scope,
   scopes: WeakMap<object, Scope>,
   add: (rule: string, detail: string) => void,
 ): void {
-  if (pattern.type === 'AssignmentPattern') {
-    const right = asNode(pattern['right']);
-    if (right !== undefined) {
-      analyzeNode(right, scope, scopes, add);
-    }
+  if (pattern === undefined) {
+    return;
   }
-  for (const child of nodeArray(pattern['properties'] ?? pattern['elements'])) {
-    analyzePatternDefaults(child, scope, scopes, add);
+  switch (pattern.type) {
+    case 'AssignmentPattern': {
+      const right = asNode(pattern['right']);
+      if (right !== undefined) {
+        analyzeNode(right, scope, scopes, add);
+      }
+      analyzePatternDefaults(asNode(pattern['left']), scope, scopes, add);
+      return;
+    }
+    case 'ObjectPattern':
+      for (const property of nodeArray(pattern['properties'])) {
+        analyzePatternDefaults(
+          asNode(property['value']) ?? asNode(property['argument']),
+          scope,
+          scopes,
+          add,
+        );
+      }
+      return;
+    case 'ArrayPattern':
+      for (const element of nodeArray(pattern['elements'])) {
+        analyzePatternDefaults(element, scope, scopes, add);
+      }
+      return;
+    case 'RestElement':
+    case 'TSParameterProperty':
+      analyzePatternDefaults(
+        asNode(pattern['argument']) ?? asNode(pattern['parameter']),
+        scope,
+        scopes,
+        add,
+      );
+      return;
+    default:
+      return;
   }
 }
 
