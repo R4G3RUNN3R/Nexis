@@ -1,10 +1,13 @@
 # Nexis 2.0 Foundation Implementation Status
 
-_Status: rolling implementation checkpoint, updated 2026-09-01. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
+_Status: rolling implementation checkpoint, updated 2026-09-03. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
 
 ## Current branch
 
 `claude/nexis-v2-foundation-continuation-20260829`
+
+The C5 producer wiring and the Foundation stop-condition audit were carried on the side branch
+`claude/nexis-v2-c5-stop-audit-20260902`, based on `f72e8bc`, and are not yet integrated.
 
 Draft PR #4 remains the integration surface and must remain draft until the complete foundation stop conditions in `AGENT-HANDOFF.md` are satisfied.
 
@@ -22,7 +25,8 @@ The V2 branch now contains and has executable coverage for:
 - exact integer/rational arithmetic with explicit rounding and checked overflow;
 - golden/conformance comparison for baseline and replacement Core implementations;
 - versioned, provenance-tagged and content-addressed replay-corpus extraction/retention for the typed Equip Item V1 vertical, with keyed identity pseudonymization, restricted RNG references and deterministic Core re-execution;
-- stable operational-observability contracts plus a bounded thread-safe process-local health reporter covering recovery, fencing, outbox, retry, invariant, projection, replay and unexpected concurrency conditions without owning gameplay state;
+- stable operational-observability contracts, a bounded thread-safe process-local health reporter, and wired producers for every condition kind in the catalogue - recovery, fencing, outbox, poison, retry exhaustion, invariant violation, projection failure, replay rejection, replay corruption, unexpected concurrency, command-identity integrity and privileged-entry denial - none of which owns gameplay state or can change an authoritative outcome;
+- an executable guard rejecting any global `PlayerState`/`RuntimeState`/`CharacterState`/qualities/counters write model, any generic string-keyed ownership bag and any path/value owner transition, across both the referenced assembly surface and every project under `src/`;
 - CommandId idempotency receipts, canonical payload fingerprints, original-correlation retention and duplicate/integrity-violation handling;
 - canonical command codecs and durable crash-recovery payload rehydration without runtime type metadata;
 - atomic command commit plans covering owner transitions, terminal command outcome, authoritative history, outbox and state-changing Admin audit;
@@ -156,6 +160,8 @@ The subsequent privileged-entry RED/GREEN slice passed a Release build with **0 
 
 The operational-observability RED/GREEN slice added `Nexis.Operations.Contracts` and `Nexis.Operations`; solution restore passed, the Release build passed with **0 warnings, 0 errors**, and the complete Architecture/Core/execution/security/replay/operations executable passed **158/158**. The current slice provides structured sinks and health summaries; validated C7 fixes must wire producers as their quarantine, dead-letter and classification behavior is implemented.
 
+The C5 producer slice (`61f4064`) completed the remaining producer wiring. Because the interrupted partial work carried no durable RED evidence - its session log was empty and its test file did not compile - the partial patch was backed up, the six affected production files were restored to `f72e8bc`, and the behaviour was re-derived RED to GREEN rather than adopted unproven. Observed: Release build **0 warnings, 0 errors** on SDK 10.0.111; `ClaudeC5OperationalProducerTests` RED 10 failed of 18 then GREEN 18/18; `ClaudeC5PostgresOperationalProducerTests` RED 3 failed of 10 then GREEN 10/10 against a disposable `postgres:18.6-alpine` container; regression on the classes exercising the changed paths `ReplayCorpusTests` 25/25, `PostgresOutboxIntegrationTests` 8/8, `PostgresExecutionIntegrationTests` 19/19. No whole-suite run was performed and none is claimed.
+
 
 The reference Core implementation version remains `0.5.0-foundation`; the stable Core contract remains V1.
 
@@ -239,11 +245,15 @@ never renumbers committed events.
 
 ## Foundation work still incomplete
 
-The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
+The branch is materially further along, but PR #4 must remain draft.
+
+`FOUNDATION-STOP-CONDITION-AUDIT-2026-09-03.md` walked all thirteen `AGENT-HANDOFF.md` stop conditions and the required architecture-test list end to end and found **13 of 13 satisfied**, after closing the one genuine hole it identified: the prohibition on a global player-state blob was named in three binding documents but had no executable guard. Satisfying the stop conditions is the floor, not permission for broad fan-out.
+
+Remaining work is now gated rather than merely unfinished:
 
 1. migration/reconciliation tooling before any v1-to-v2 state movement, still gated by unresolved human decisions;
-2. broader multi-owner coverage across further gameplay domains, now that the first real two-owner proof (C3, `UnequipItem`) is delivered against real PostgreSQL;
-3. producer wiring for the operational surface and the wider foundation stop-condition audit before broad gameplay implementation; the three L3 History/Player Log threat-model findings are now resolved.
+2. further owner contracts, each introduced only when its gameplay design is settled, each arriving with its own sole-writer test; Economy, Travel, Resources, Marketplace and Recovery sole-writer guards cannot exist until then, and placeholder contracts must not be created to make the matrix look complete;
+3. the transport/Application slice, which must satisfy the API-purity and client-DTO stop conditions within itself rather than retrofitting them; `Nexis.Host.Api` remains a health/status stub with no command surface.
 
 The real multi-owner proof is delivered. Under the approved M-reserve model, equip reserves the item instance in Inventory and binds it in Equipment, and `UnequipItem` unbinds and releases, so both are genuine two-owner commands writing two real authoritative owners rather than synthetic transactional owners. No mechanic, cost, cooldown, reward or content value was invented to achieve it, and possession never moves.
 
@@ -251,7 +261,7 @@ Exact owner/domain contracts should continue to be introduced only when the corr
 
 ## Next safe implementation boundary
 
-The replay, privileged-entry, operational-observability, real multi-owner (C3) and public player identity foundation boundaries are implemented and adversarially covered. The three known L3 History/Player Log findings are resolved. The next safe slice is producer wiring for the remaining operational-signal kinds (C5) and the wider foundation stop-condition audit. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
+The replay, privileged-entry, operational-observability, real multi-owner (C3) and public player identity foundation boundaries are implemented and adversarially covered. The three known L3 History/Player Log findings are resolved. C5 producer wiring and the Foundation stop-condition audit are complete. The next safe slice is either the transport/Application boundary or the next owner contract whose gameplay design is settled, chosen by human decision rather than inferred. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
 
 ## Verification discipline
 
