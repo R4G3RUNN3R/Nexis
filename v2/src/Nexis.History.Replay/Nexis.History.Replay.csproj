@@ -9,5 +9,9 @@
     <ProjectReference Include="..\Nexis.Inventory.Contracts\Nexis.Inventory.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Kernel\Nexis.Kernel.csproj" />
+    <!-- Deliberate widening: Nexis.Operations.Contracts is a stable non-authoritative leaf that
+         depends only on Nexis.Kernel. The replay boundary reports artifact rejection and evidence
+         corruption through it. It grants no persistence, Core or mutation capability. -->
+    <ProjectReference Include="..\Nexis.Operations.Contracts\Nexis.Operations.Contracts.csproj" />
   </ItemGroup>
 </Project>

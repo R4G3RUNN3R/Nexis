@@ -3,6 +3,7 @@ using System.Text.Json;
 using Nexis.Core.Contracts;
 using Nexis.Execution;
 using Nexis.Execution.Contracts;
+using Nexis.Operations.Contracts;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -17,20 +18,30 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
     private static readonly CommandReasonCode OwnerLockKeysUnresolved = new("execution.owner.lock_keys_unresolved");
     private static readonly CommandReasonCode PersistenceFailure = new("execution.persistence.failed");
 
+    private static readonly OperationalComponentKey OperationalComponent = new("postgres.command-commit");
+    private static readonly OperationalReasonCode UnexpectedRollbackReason =
+        new("concurrency.unexpected_transaction_rollback");
+
     private readonly NpgsqlDataSource _dataSource;
     private readonly IReadOnlyDictionary<OwnerKey, IPostgresOwnerTransitionApplier> _appliers;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly IPostgresResourceLockAcquirer _resourceLockAcquirer;
+    private readonly IOperationalSignalSink? _operationalSignalSink;
+    private readonly TimeProvider _timeProvider;
 
     public PostgresAtomicCommandCommitter(
         NpgsqlDataSource dataSource,
         IEnumerable<IPostgresOwnerTransitionApplier>? ownerTransitionAppliers = null,
         JsonSerializerOptions? jsonOptions = null,
-        IPostgresResourceLockAcquirer? resourceLockAcquirer = null)
+        IPostgresResourceLockAcquirer? resourceLockAcquirer = null,
+        IOperationalSignalSink? operationalSignalSink = null,
+        TimeProvider? timeProvider = null)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _jsonOptions = jsonOptions is null ? new JsonSerializerOptions() : new JsonSerializerOptions(jsonOptions);
         _resourceLockAcquirer = resourceLockAcquirer ?? new PostgresAdvisoryResourceLockAcquirer();
+        _operationalSignalSink = operationalSignalSink;
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
         var appliers = new Dictionary<OwnerKey, IPostgresOwnerTransitionApplier>();
         foreach (var applier in ownerTransitionAppliers ?? Array.Empty<IPostgresOwnerTransitionApplier>())
@@ -149,12 +160,78 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
             await SafeRollbackAsync(transaction, cancellationToken).ConfigureAwait(false);
             throw;
         }
-        catch (PostgresException)
+        catch (PostgresException exception)
         {
+            // Expected optimistic conflicts never arrive here: a stale owner revision returns
+            // ConcurrencyConflict above without throwing, and both retryable transaction-rollback
+            // states are handled by the filtered catch that rethrows for bounded retry. What remains
+            // in SQLSTATE class 40 is a transaction-rollback failure the classifier deliberately does
+            // not retry, which is exactly the unexpected concurrency condition. Classification happens
+            // first, and the TechnicalFailure result below is unchanged by whether the signal is
+            // delivered.
             await SafeRollbackAsync(transaction, cancellationToken).ConfigureAwait(false);
+            if (IsUnexpectedConcurrencySqlState(exception.SqlState))
+            {
+                await ReportUnexpectedConcurrencyBestEffortAsync(plan, exception.SqlState).ConfigureAwait(false);
+            }
+
             return CommandCommitResult.TechnicalFailure(PersistenceFailure);
         }
     }
+
+    /// <summary>
+    /// PostgreSQL SQLSTATE class 40 is "transaction rollback". Serialization failure and deadlock are
+    /// the two states the transient classifier already owns and retries, so anything else in that
+    /// class is a concurrency failure nobody expected. Classes outside 40 are ordinary persistence
+    /// failures and are deliberately not reported here, so a constraint or syntax error cannot
+    /// masquerade as a concurrency incident.
+    /// </summary>
+    public static bool IsUnexpectedConcurrencySqlState(string? sqlState) =>
+        sqlState is { Length: 5 } &&
+        sqlState.StartsWith("40", StringComparison.Ordinal) &&
+        !PostgresTransientCommandFailureClassifier.IsRetryableSqlState(sqlState);
+
+    /// <summary>
+    /// Diagnostics cannot roll a committed transaction back, cannot un-roll-back an aborted one, and
+    /// cannot turn this TechnicalFailure into any other terminal outcome.
+    /// </summary>
+    private async ValueTask ReportUnexpectedConcurrencyBestEffortAsync(
+        CommandCommitPlan plan,
+        string? sqlState)
+    {
+        if (_operationalSignalSink is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _operationalSignalSink.ReportAsync(
+                new OperationalSignal(
+                    OperationalConditionKind.UnexpectedConcurrencyFailure,
+                    OperationalSeverity.Error,
+                    OperationalComponent,
+                    ReasonFor(sqlState),
+                    _timeProvider.GetUtcNow(),
+                    plan.Trace.Identity.CommandId,
+                    plan.Trace.CorrelationId),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Observability failure must never change a persistence outcome.
+        }
+    }
+
+    /// <summary>
+    /// SQLSTATE values are a fixed five-character alphanumeric catalogue, so appending one keeps the
+    /// reason token bounded while preserving the specific state for diagnosis. Anything not matching
+    /// that exact shape falls back to the bare reason rather than widening the token vocabulary.
+    /// </summary>
+    private static OperationalReasonCode ReasonFor(string? sqlState) =>
+        sqlState is { Length: 5 } && sqlState.All(char.IsAsciiLetterOrDigit)
+            ? new OperationalReasonCode($"{UnexpectedRollbackReason.Value}.{sqlState.ToLowerInvariant()}")
+            : UnexpectedRollbackReason;
 
     private ResolvedCommitPlan? ResolveCommitResources(
         IReadOnlyList<IOwnerTransition> transitions)

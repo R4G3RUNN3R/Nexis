@@ -1,3 +1,5 @@
+using Nexis.Operations.Contracts;
+
 namespace Nexis.History.Replay;
 
 public enum ReplayRetentionDisposition
@@ -13,14 +15,49 @@ public enum ReplayRetentionDisposition
 public sealed class FileReplayCorpusStore
 {
     private const string Extension = ".replay.v1.json";
-    private readonly string _rootPath;
 
-    public FileReplayCorpusStore(string rootPath)
+    private static readonly OperationalComponentKey OperationalComponent = new("replay.corpus-store");
+    private static readonly OperationalReasonCode SubmittedContentAddressMismatchReason =
+        new("replay.submitted_content_address_mismatch");
+    private static readonly OperationalReasonCode RetentionSizeExceededReason =
+        new("replay.retention_size_exceeded");
+    private static readonly OperationalReasonCode ScenarioCollisionReason =
+        new("replay.scenario_id_collision");
+    private static readonly OperationalReasonCode RetainedSizeExceededReason =
+        new("replay.retained_size_exceeded");
+    private static readonly OperationalReasonCode RetainedUnreviewedSchemaReason =
+        new("replay.retained_unreviewed_schema_version");
+    private static readonly OperationalReasonCode RetainedMalformedReason =
+        new("replay.retained_artifact_malformed");
+    private static readonly OperationalReasonCode RetainedContentAddressMismatchReason =
+        new("replay.retained_content_address_mismatch");
+    private readonly string _rootPath;
+    private readonly ReplayOperationalReporter _reporter;
+
+    public FileReplayCorpusStore(
+        string rootPath,
+        IOperationalSignalSink? operationalSignalSink = null,
+        TimeProvider? timeProvider = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         _rootPath = Path.GetFullPath(rootPath);
+        _reporter = new ReplayOperationalReporter(operationalSignalSink, timeProvider);
         Directory.CreateDirectory(_rootPath);
     }
+
+    private void ReportRejection(OperationalReasonCode reason) =>
+        _reporter.Report(
+            OperationalConditionKind.ReplayArtifactRejected,
+            OperationalSeverity.Warning,
+            OperationalComponent,
+            reason);
+
+    private void ReportCorruption(OperationalReasonCode reason) =>
+        _reporter.Report(
+            OperationalConditionKind.ReplayCorruption,
+            OperationalSeverity.Critical,
+            OperationalComponent,
+            reason);
 
     public string GetArtifactPath(ReplayScenarioId scenarioId)
     {
@@ -35,11 +72,13 @@ public sealed class FileReplayCorpusStore
         ArgumentNullException.ThrowIfNull(artifact);
         if (!artifact.VerifyIntegrity())
         {
+            ReportCorruption(SubmittedContentAddressMismatchReason);
             throw new InvalidDataException("Replay artifact failed content-address integrity verification.");
         }
         if (System.Text.Encoding.UTF8.GetByteCount(artifact.CanonicalJson) >
             ReplayCorpusArtifact.MaximumCanonicalJsonUtf8Bytes)
         {
+            ReportRejection(RetentionSizeExceededReason);
             throw new InvalidDataException("Replay artifact exceeds the reviewed retention size limit.");
         }
 
@@ -69,9 +108,15 @@ public sealed class FileReplayCorpusStore
         }
         catch (IOException) when (File.Exists(path))
         {
+            // ReadAsync owns every retained-artifact condition. When it throws it has already reported
+            // the precise reason, so this path adds nothing and exactly one signal describes one
+            // logical failure. Reaching the collision branch below instead means the retained bytes
+            // hash to this scenario ID while differing from the submitted JSON, which is a genuine
+            // content-address collision or same-address tamper and cannot be produced by a test.
             var retained = await ReadAsync(artifact.ScenarioId, cancellationToken);
             if (!StringComparer.Ordinal.Equals(retained.CanonicalJson, artifact.CanonicalJson))
             {
+                ReportCorruption(ScenarioCollisionReason);
                 throw new InvalidDataException("Replay scenario ID collision or existing artifact tampering detected.");
             }
 
@@ -95,6 +140,9 @@ public sealed class FileReplayCorpusStore
         var file = new FileInfo(path);
         if (file.Length > ReplayCorpusArtifact.MaximumCanonicalJsonUtf8Bytes)
         {
+            // Retention enforced this bound before writing, so a stored file above it has changed
+            // since it was written rather than merely failing an intake policy.
+            ReportCorruption(RetainedSizeExceededReason);
             throw new InvalidDataException("Retained replay artifact exceeds the reviewed ingestion size limit.");
         }
 
@@ -104,12 +152,23 @@ public sealed class FileReplayCorpusStore
         {
             artifact = ReplayCorpusArtifact.Parse(canonicalJson);
         }
-        catch (Exception exception) when (exception is FormatException or NotSupportedException)
+        catch (NotSupportedException exception)
         {
+            // The stored bytes parsed; the corpus simply has no reviewed codec for this corpus or
+            // intent contract version. That is a policy rejection, not damaged evidence.
+            ReportRejection(RetainedUnreviewedSchemaReason);
+            throw new InvalidDataException("Retained replay artifact is malformed or uses an unsupported schema.", exception);
+        }
+        catch (FormatException exception)
+        {
+            // Retention only ever writes envelopes that already parsed, so a stored artifact that no
+            // longer parses is damaged evidence rather than an unreviewed submission.
+            ReportCorruption(RetainedMalformedReason);
             throw new InvalidDataException("Retained replay artifact is malformed or uses an unsupported schema.", exception);
         }
         if (artifact.ScenarioId != scenarioId || !artifact.VerifyIntegrity())
         {
+            ReportCorruption(RetainedContentAddressMismatchReason);
             throw new InvalidDataException("Retained replay artifact does not match its content-addressed filename.");
         }
 

@@ -1,5 +1,6 @@
 using Nexis.Core.Contracts;
 using Nexis.Eventing.Contracts;
+using Nexis.Operations.Contracts;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -36,15 +37,56 @@ public enum ProjectionConsumeDisposition
 /// </summary>
 public sealed class PostgresProjectionConsumerExecutor
 {
+    private static readonly OperationalComponentKey OperationalComponent = new("postgres.projection-consumer");
+    private static readonly OperationalReasonCode SideEffectFailedReason = new("projection.side_effect_failed");
+    private static readonly OperationalReasonCode CheckpointCommitFailedReason =
+        new("projection.checkpoint_commit_failed");
+
     private readonly NpgsqlDataSource _dataSource;
     private readonly TimeProvider _timeProvider;
+    private readonly IOperationalSignalSink? _operationalSignalSink;
 
     public PostgresProjectionConsumerExecutor(
         NpgsqlDataSource dataSource,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IOperationalSignalSink? operationalSignalSink = null)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _operationalSignalSink = operationalSignalSink;
+    }
+
+    /// <summary>
+    /// Reporting is diagnostic only. A throwing or absent sink cannot commit a rolled-back
+    /// projection, cannot advance the checkpoint and cannot replace the original failure.
+    /// </summary>
+    private async ValueTask ReportProjectionFailureBestEffortAsync(
+        CommittedEventMessage message,
+        OperationalReasonCode reason)
+    {
+        if (_operationalSignalSink is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _operationalSignalSink.ReportAsync(
+                new OperationalSignal(
+                    OperationalConditionKind.ProjectionFailure,
+                    OperationalSeverity.Error,
+                    OperationalComponent,
+                    reason,
+                    _timeProvider.GetUtcNow(),
+                    message.CommandId,
+                    message.CorrelationId,
+                    message.EventId),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Monitoring failure never becomes a second projection failure.
+        }
     }
 
     public async ValueTask<ProjectionConsumeDisposition> ConsumeAsync(
@@ -84,8 +126,28 @@ public sealed class PostgresProjectionConsumerExecutor
             }
         }
 
-        await consumer.ApplyAsync(connection, transaction, message, cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        var reason = SideEffectFailedReason;
+        try
+        {
+            await consumer.ApplyAsync(connection, transaction, message, cancellationToken).ConfigureAwait(false);
+            reason = CheckpointCommitFailedReason;
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cooperative cancellation is not a projection defect. The uncommitted transaction still
+            // rolls back on disposal, so the checkpoint and side effect remain absent together.
+            throw;
+        }
+        catch (Exception)
+        {
+            // The projection has already failed authoritatively: the transaction is not committed, so
+            // neither the checkpoint nor the side effect survives and the event stays redeliverable.
+            // The original exception is rethrown unchanged for the caller to classify.
+            await ReportProjectionFailureBestEffortAsync(message, reason).ConfigureAwait(false);
+            throw;
+        }
+
         return ProjectionConsumeDisposition.Applied;
     }
 }

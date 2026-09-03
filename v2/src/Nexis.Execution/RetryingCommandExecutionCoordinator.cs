@@ -1,5 +1,6 @@
 using Nexis.Core.Contracts;
 using Nexis.Execution.Contracts;
+using Nexis.Operations.Contracts;
 
 namespace Nexis.Execution;
 
@@ -16,24 +17,34 @@ public sealed class RetryingCommandExecutionCoordinator
 {
     private static readonly CommandReasonCode ReceiptOwnershipLost = new("execution.receipt.ownership_lost");
 
+    private static readonly OperationalComponentKey OperationalComponent = new("execution.command-retry");
+    private static readonly OperationalReasonCode RetryExhaustedReason = new("execution.retry_exhausted");
+    private static readonly OperationalReasonCode PlanIdentityMismatchReason =
+        new("execution.retry_plan_receipt_identity_mismatch");
+    private static readonly OperationalReasonCode ExhaustionPlanInvalidReason =
+        new("execution.retry_exhaustion_plan_invalid");
+
     private readonly CommandReceiptCoordinator _receiptCoordinator;
     private readonly BoundedCommandRetryExecutor _retryExecutor;
     private readonly ICommandExecutionRecoveryRepository _recoveryRepository;
     private readonly CommandCommitCoordinator _commitCoordinator;
     private readonly TimeProvider _timeProvider;
+    private readonly IOperationalSignalSink? _operationalSignalSink;
 
     public RetryingCommandExecutionCoordinator(
         CommandReceiptCoordinator receiptCoordinator,
         BoundedCommandRetryExecutor retryExecutor,
         ICommandExecutionRecoveryRepository recoveryRepository,
         CommandCommitCoordinator commitCoordinator,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IOperationalSignalSink? operationalSignalSink = null)
     {
         _receiptCoordinator = receiptCoordinator ?? throw new ArgumentNullException(nameof(receiptCoordinator));
         _retryExecutor = retryExecutor ?? throw new ArgumentNullException(nameof(retryExecutor));
         _recoveryRepository = recoveryRepository ?? throw new ArgumentNullException(nameof(recoveryRepository));
         _commitCoordinator = commitCoordinator ?? throw new ArgumentNullException(nameof(commitCoordinator));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _operationalSignalSink = operationalSignalSink;
     }
 
     public async ValueTask<RetryingCommandExecutionResult> ExecuteAsync(
@@ -69,7 +80,7 @@ public sealed class RetryingCommandExecutionCoordinator
                 async (attemptNumber, token) =>
                 {
                     var plan = await buildAttempt(claim, attemptNumber, token).ConfigureAwait(false);
-                    ValidatePlanOwnsClaim(plan, request, claim);
+                    await ValidatePlanOwnsClaimAsync(plan, request, claim, attemptNumber).ConfigureAwait(false);
                     return await _commitCoordinator.CommitAsync(plan, token).ConfigureAwait(false);
                 },
                 (_, _, token) => _recoveryRepository.RenewLeaseAsync(
@@ -78,12 +89,26 @@ public sealed class RetryingCommandExecutionCoordinator
                     executionLease,
                     _timeProvider.GetUtcNow(),
                     token),
-                async (_, exception, token) =>
+                async (attemptNumber, exception, token) =>
                 {
                     var plan = await buildRetryExhausted(claim, exception, token).ConfigureAwait(false);
-                    ValidatePlanOwnsClaim(plan, request, claim);
-                    ValidateRetryExhaustionPlan(plan);
-                    return await _commitCoordinator.CommitAsync(plan, token).ConfigureAwait(false);
+                    await ValidatePlanOwnsClaimAsync(plan, request, claim, attemptNumber).ConfigureAwait(false);
+                    await ValidateRetryExhaustionPlanAsync(plan, request, claim, attemptNumber).ConfigureAwait(false);
+                    var exhaustedResult = await _commitCoordinator.CommitAsync(plan, token).ConfigureAwait(false);
+
+                    // The bounded executor has already classified every attempt as retryable and spent
+                    // the last one, and the TechnicalFailure terminal outcome has now been durably
+                    // attempted, so this reports a settled fact rather than predicting one. Lease loss
+                    // is deliberately not reported here: the retry bound was not reached, and the
+                    // recovery repository that owns the fence already reports that condition.
+                    await ReportBestEffortAsync(
+                        OperationalConditionKind.RetryExhausted,
+                        OperationalSeverity.Error,
+                        RetryExhaustedReason,
+                        request,
+                        claim,
+                        attemptNumber).ConfigureAwait(false);
+                    return exhaustedResult;
                 },
                 cancellationToken).ConfigureAwait(false);
 
@@ -97,27 +122,86 @@ public sealed class RetryingCommandExecutionCoordinator
         }
     }
 
-    private static void ValidatePlanOwnsClaim(
+    private async ValueTask ValidatePlanOwnsClaimAsync(
         CommandCommitPlan plan,
         CoreEvaluationRequest request,
-        CommandReceiptClaim claim)
+        CommandReceiptClaim claim,
+        int attemptNumber)
     {
         ArgumentNullException.ThrowIfNull(plan);
         if (plan.Trace.Identity.CommandId != request.Context.CommandId ||
             plan.ExecutionToken != claim.ExecutionToken ||
             plan.Trace.CorrelationId != claim.OriginalCorrelationId)
         {
+            // Classification is complete and the plan is about to be refused. Reporting before the
+            // throw cannot alter the refusal: an unowned plan never reaches the committer either way.
+            await ReportBestEffortAsync(
+                OperationalConditionKind.InvariantViolation,
+                OperationalSeverity.Critical,
+                PlanIdentityMismatchReason,
+                request,
+                claim,
+                attemptNumber).ConfigureAwait(false);
             throw new InvalidOperationException("Every retry plan must retain the acquired receipt identity, correlation and execution token.");
         }
     }
 
-    private static void ValidateRetryExhaustionPlan(CommandCommitPlan plan)
+    private async ValueTask ValidateRetryExhaustionPlanAsync(
+        CommandCommitPlan plan,
+        CoreEvaluationRequest request,
+        CommandReceiptClaim claim,
+        int attemptNumber)
     {
         if (plan.TerminalOutcome.Status != CommandTerminalStatus.TechnicalFailure ||
             plan.Transitions.Count != 0 ||
             plan.Events.Count != 0)
         {
+            await ReportBestEffortAsync(
+                OperationalConditionKind.InvariantViolation,
+                OperationalSeverity.Critical,
+                ExhaustionPlanInvalidReason,
+                request,
+                claim,
+                attemptNumber).ConfigureAwait(false);
             throw new InvalidOperationException("Retry exhaustion must terminalize as TechnicalFailure without owner transitions or authoritative events.");
+        }
+    }
+
+    /// <summary>
+    /// Diagnostics are never authoritative here. A missing, slow or throwing sink cannot change the
+    /// terminal command outcome, the receipt fence, the retry bound or the rethrown invariant failure.
+    /// </summary>
+    private async ValueTask ReportBestEffortAsync(
+        OperationalConditionKind kind,
+        OperationalSeverity severity,
+        OperationalReasonCode reason,
+        CoreEvaluationRequest request,
+        CommandReceiptClaim claim,
+        int attemptNumber)
+    {
+        if (_operationalSignalSink is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _operationalSignalSink.ReportAsync(
+                new OperationalSignal(
+                    kind,
+                    severity,
+                    OperationalComponent,
+                    reason,
+                    _timeProvider.GetUtcNow(),
+                    request.Context.CommandId,
+                    claim.OriginalCorrelationId,
+                    attemptCount: attemptNumber),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Observability must not convert a monitoring outage into a command failure, and must not
+            // suppress or replace the authoritative failure being reported.
         }
     }
 }

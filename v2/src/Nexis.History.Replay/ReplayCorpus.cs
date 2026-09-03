@@ -493,17 +493,46 @@ public interface IReplayVersionCompatibilityPolicy
 
 public sealed class ReplayCorpusRunner
 {
+    private static readonly Nexis.Operations.Contracts.OperationalComponentKey OperationalComponent =
+        new("replay.corpus-runner");
+    private static readonly Nexis.Operations.Contracts.OperationalReasonCode ContentAddressMismatchReason =
+        new("replay.run_content_address_mismatch");
+    private static readonly Nexis.Operations.Contracts.OperationalReasonCode CodecUnregisteredReason =
+        new("replay.codec_unregistered");
+    private static readonly Nexis.Operations.Contracts.OperationalReasonCode CoreContractUnsupportedReason =
+        new("replay.core_contract_version_unsupported");
+    private static readonly Nexis.Operations.Contracts.OperationalReasonCode CompatibilityUnapprovedReason =
+        new("replay.rule_content_compatibility_unapproved");
+
     private readonly IReadOnlyDictionary<ContractDescriptor, IReplayScenarioCodec> _codecs;
     private readonly IReplayVersionCompatibilityPolicy _compatibilityPolicy;
+    private readonly ReplayOperationalReporter _reporter;
 
     public ReplayCorpusRunner(
         IEnumerable<IReplayScenarioCodec> codecs,
-        IReplayVersionCompatibilityPolicy compatibilityPolicy)
+        IReplayVersionCompatibilityPolicy compatibilityPolicy,
+        Nexis.Operations.Contracts.IOperationalSignalSink? operationalSignalSink = null,
+        TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(codecs);
         _codecs = codecs.ToDictionary(static codec => codec.IntentContract);
         _compatibilityPolicy = compatibilityPolicy ?? throw new ArgumentNullException(nameof(compatibilityPolicy));
+        _reporter = new ReplayOperationalReporter(operationalSignalSink, timeProvider);
     }
+
+    private void ReportRejection(Nexis.Operations.Contracts.OperationalReasonCode reason) =>
+        _reporter.Report(
+            Nexis.Operations.Contracts.OperationalConditionKind.ReplayArtifactRejected,
+            Nexis.Operations.Contracts.OperationalSeverity.Warning,
+            OperationalComponent,
+            reason);
+
+    private void ReportCorruption(Nexis.Operations.Contracts.OperationalReasonCode reason) =>
+        _reporter.Report(
+            Nexis.Operations.Contracts.OperationalConditionKind.ReplayCorruption,
+            Nexis.Operations.Contracts.OperationalSeverity.Critical,
+            OperationalComponent,
+            reason);
 
     public ReplayComparison Run(
         ReplayCorpusArtifact artifact,
@@ -515,16 +544,21 @@ public sealed class ReplayCorpusRunner
         ArgumentNullException.ThrowIfNull(randomResolver);
         if (!artifact.VerifyIntegrity())
         {
+            ReportCorruption(ContentAddressMismatchReason);
             throw new InvalidDataException("Replay artifact content does not match its content-addressed scenario ID.");
         }
 
-        var codec = _codecs.TryGetValue(artifact.IntentContract, out var registered)
-            ? registered
-            : throw new KeyNotFoundException(
+        if (!_codecs.TryGetValue(artifact.IntentContract, out var codec))
+        {
+            ReportRejection(CodecUnregisteredReason);
+            throw new KeyNotFoundException(
                 $"No replay codec is registered for '{artifact.IntentContract.Name}' schema {artifact.IntentContract.SchemaVersion}.");
+        }
+
         var scenario = codec.Decode(artifact.CanonicalJson, randomResolver);
         if (!core.Supports(scenario.Request.ContractVersion))
         {
+            ReportRejection(CoreContractUnsupportedReason);
             throw new InvalidOperationException("Selected Core does not support the replay scenario contract version.");
         }
 
@@ -536,9 +570,14 @@ public sealed class ReplayCorpusRunner
                 scenario.Request.Context.RuleVersion,
                 scenario.Request.Context.ContentVersion))
         {
+            ReportRejection(CompatibilityUnapprovedReason);
             throw new InvalidOperationException(
                 "Selected Core has no explicit exact rule/content compatibility approval for the replay scenario.");
         }
+
+        // Everything below is a legitimate comparison result. A candidate Core that decides
+        // differently is the finding the corpus exists to produce, so divergence is returned rather
+        // than reported as an operational fault.
         var actual = core.Evaluate(scenario.Request);
         var actualFingerprint = codec.DecisionFingerprint(actual);
         var equivalent = StringComparer.Ordinal.Equals(actualFingerprint, scenario.ExpectedDecisionFingerprint);
