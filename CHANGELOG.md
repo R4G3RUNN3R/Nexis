@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-14
+
+### Search discovery baseline
+- added descriptive homepage title and meta description for Nexis
+- added canonical, robots, Open Graph, Twitter and VideoGame structured metadata
+- added real `robots.txt` and `sitemap.xml` files so crawler requests no longer need to fall through to the SPA shell
+- limited the sitemap to the public root while authenticated/game routes remain outside the deliberate SEO surface
+- no gameplay, state, authentication or routing behaviour changed
+
 ## 2026-04-19
 
 ### Ashen Crown page-enrichment and shell pass
