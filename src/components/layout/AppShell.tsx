@@ -17,6 +17,7 @@ import { getCityHubContent } from "../../data/cityHubData";
 import { acknowledgeProgressionEvent, getServerCityAcademy, type ServerProgressionEvent } from "../../lib/authApi";
 import { NAV_ICONS } from "../../assets/icons";
 import { applySidebarLinkOrder, type SidebarLinksPreference } from "../../data/sidebarCatalog";
+import { NexisBrand } from "../brand/NexisBrand";
 
 type AppShellProps = {
   title?: string;
@@ -269,8 +270,11 @@ export function AppShell({ title, hint, children }: AppShellProps) {
       <div className="app-main">
         <aside className="sidebar">
           <div className="sidebar-logo">
-            <div className="sidebar-logo__title">Nexis</div>
-            <div className="sidebar-logo__subtitle">Citizen command</div>
+            <NexisBrand className="sidebar-logo__mark" decorative />
+            <div className="sidebar-logo__copy">
+              <div className="sidebar-logo__title">Nexis</div>
+              <div className="sidebar-logo__subtitle">Citizen command</div>
+            </div>
           </div>
 
           <div className="player-card">

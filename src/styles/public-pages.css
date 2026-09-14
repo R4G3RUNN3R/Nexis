@@ -48,10 +48,21 @@
 }
 
 .public-topbar__logo {
-  font-size: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 24px;
   letter-spacing: 2px;
   color: #f2cf95;
   font-family: Georgia, serif;
+}
+
+.public-topbar__mark {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .public-topbar__tag {

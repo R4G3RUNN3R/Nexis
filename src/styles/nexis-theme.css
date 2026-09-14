@@ -105,13 +105,28 @@ select {
 }
 
 .sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 4px 10px;
   border-bottom: 1px solid var(--line-soft);
 }
 
+.sidebar-logo__mark {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.sidebar-logo__copy {
+  min-width: 0;
+}
+
 .sidebar-logo__title {
   font-family: var(--heading-font);
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -119,9 +134,9 @@ select {
 }
 
 .sidebar-logo__subtitle {
-  margin-top: 5px;
-  font-size: 11px;
-  letter-spacing: 0.18em;
+  margin-top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #7f9182;
 }

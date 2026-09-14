@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { requestPasswordReset } from "../lib/authApi";
+import { NexisBrand } from "../components/brand/NexisBrand";
 import "../styles/register.css";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -53,6 +54,7 @@ export default function ForgotPasswordPage() {
         />
         <div className="register-hero__overlay" />
         <div className="register-hero__title">
+          <NexisBrand className="register-hero__mark" decorative />
           <span className="register-hero__nexis">NEXIS</span>
           <span className="register-hero__sub">Password Recovery</span>
         </div>
@@ -60,6 +62,7 @@ export default function ForgotPasswordPage() {
 
       <div className="register-panel" role="main">
         <div className="register-panel__inner">
+          <NexisBrand className="register-panel__brand" decorative />
           <h1 className="register-heading">Reset Your Password</h1>
           <p className="register-subtext">
             Enter your account email and we&apos;ll send a reset link. Assuming the mail

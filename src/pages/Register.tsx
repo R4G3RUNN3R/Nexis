@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../state/AuthContext";
 import { GoogleAuthButton } from "../components/auth/GoogleAuthButton";
+import { NexisBrand } from "../components/brand/NexisBrand";
 import "../styles/register.css";
 
 const NAME_MIN = 2;
@@ -366,6 +367,7 @@ export default function RegisterPage({ initialMode = "register" }: AuthPageProps
         />
         <div className="register-hero__overlay" />
         <div className="register-hero__title">
+          <NexisBrand className="register-hero__mark" decorative />
           <span className="register-hero__nexis">NEXIS</span>
           <span className="register-hero__sub">Online Realm of Adventure</span>
         </div>
@@ -373,6 +375,7 @@ export default function RegisterPage({ initialMode = "register" }: AuthPageProps
 
       <div className="register-panel" role="main">
         <div className="register-panel__inner">
+          <NexisBrand className="register-panel__brand" decorative />
           <GoogleAuthButton redirectTarget={redirectTarget} />
           {mode === "register" ? (
             <RegisterForm onSwitch={goToLogin} redirectTarget={redirectTarget} />

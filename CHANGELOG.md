@@ -18,6 +18,14 @@
 - added `scripts/seo-regression.mjs` to lock the public/app-shell, crawler-policy and build-configuration contract
 - no gameplay, state, authentication, API or database behaviour changed
 
+### Nexis master-brand rollout (V1)
+- added the approved Nexis master mark to the live-era V1 shell without changing gameplay or navigation structure
+- kept the in-game sidebar and public header mark to 32px, with a 44px mobile authentication mark and a restrained 72px desktop authentication mark
+- replaced the generic letter favicon with a lightweight derivative of the approved Nexis master mark
+- added branding regression coverage so the assets and UI placements cannot silently grow into oversized artwork
+- deliberately did not backport V2 subsystem sigils into the V1 interface
+- no gameplay, state, authentication, API or database behaviour changed
+
 ## 2026-04-19
 
 ### Ashen Crown page-enrichment and shell pass

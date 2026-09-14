@@ -34,10 +34,10 @@ const tests = [
     assert.match(index, /<script\s+type="module"\s+src="\/src\/main\.tsx"><\/script>/i);
     assert.match(app, /<script\s+type="module"\s+src="\/src\/main\.tsx"><\/script>/i);
   }],
-  ["homepage uses a local static favicon", () => {
+  ["homepage uses the local Nexis master-mark favicon", () => {
     const html = read("index.html");
-    assert.match(html, /<link\s+rel="icon"[^>]+href="\/favicon\.svg"/i);
-    assert.ok(exists("public/favicon.svg"), "public/favicon.svg is missing");
+    assert.match(html, /<link\s+rel="icon"\s+type="image\/png"\s+href="\/brand\/nexis-favicon-64\.png"/i);
+    assert.ok(exists("public/brand/nexis-favicon-64.png"), "public/brand/nexis-favicon-64.png is missing");
   }],
   ["TypeScript Vite config is the sole config authority", () => {
     assert.ok(exists("vite.config.ts"), "vite.config.ts is missing");

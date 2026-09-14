@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { submitPasswordReset } from "../lib/authApi";
+import { NexisBrand } from "../components/brand/NexisBrand";
 import "../styles/register.css";
 
 const PASSWORD_MIN = 6;
@@ -62,6 +63,7 @@ export default function ResetPasswordPage() {
         />
         <div className="register-hero__overlay" />
         <div className="register-hero__title">
+          <NexisBrand className="register-hero__mark" decorative />
           <span className="register-hero__nexis">NEXIS</span>
           <span className="register-hero__sub">Choose a New Password</span>
         </div>
@@ -69,6 +71,7 @@ export default function ResetPasswordPage() {
 
       <div className="register-panel" role="main">
         <div className="register-panel__inner">
+          <NexisBrand className="register-panel__brand" decorative />
           <h1 className="register-heading">Set a New Password</h1>
           <p className="register-subtext">
             This replaces your old password and signs out existing sessions. A little

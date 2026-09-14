@@ -20,6 +20,7 @@
 
 @media (min-width: 800px) {
   .register-hero { display: block; }
+  .register-panel__brand { display: none; }
 }
 
 .register-hero__img {
@@ -47,6 +48,14 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.register-hero__mark {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .register-hero__nexis {
@@ -78,6 +87,15 @@
 .register-panel__inner {
   width: 100%;
   max-width: 360px;
+}
+
+.register-panel__brand {
+  width: 44px;
+  height: 44px;
+  display: block;
+  object-fit: cover;
+  border-radius: 50%;
+  margin: 0 0 14px;
 }
 
 .register-heading {

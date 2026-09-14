@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { confirmEmailChange } from "../lib/authApi";
+import { NexisBrand } from "../components/brand/NexisBrand";
 import "../styles/register.css";
 
 export default function ConfirmEmailChangePage() {
@@ -36,6 +37,7 @@ export default function ConfirmEmailChangePage() {
         />
         <div className="register-hero__overlay" />
         <div className="register-hero__title">
+          <NexisBrand className="register-hero__mark" decorative />
           <span className="register-hero__nexis">NEXIS</span>
           <span className="register-hero__sub">Confirm Your New Email</span>
         </div>
@@ -43,6 +45,7 @@ export default function ConfirmEmailChangePage() {
 
       <div className="register-panel" role="main">
         <div className="register-panel__inner">
+          <NexisBrand className="register-panel__brand" decorative />
           <h1 className="register-heading">Confirm Email Change</h1>
           <p className="register-subtext">
             Confirming this will make the new address your login email going forward.

@@ -1,5 +1,6 @@
 import { Link, NavLink } from "react-router-dom";
 import { ReactNode } from "react";
+import { NexisBrand } from "../brand/NexisBrand";
 
 const supportLinks: Array<[string, string]> = [
   ["News", "/news"],
@@ -20,7 +21,10 @@ export default function PublicPageShell({ title, subtitle, children }: PublicPag
     <div className="public-shell">
       <header className="public-topbar">
         <div className="public-topbar__brand">
-          <Link to="/" className="public-topbar__logo">Nexis</Link>
+          <Link to="/" className="public-topbar__logo" aria-label="Nexis home">
+            <NexisBrand className="public-topbar__mark" decorative />
+            <span>Nexis</span>
+          </Link>
           <span className="public-topbar__tag">Persistent browser RPG</span>
         </div>
 
