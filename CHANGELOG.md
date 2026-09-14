@@ -2,6 +2,13 @@
 
 ## 2026-09-14
 
+### Search discovery follow-up
+- added the Voidsmith Industries publisher logo to the homepage structured data so the live VideoGame schema validates cleanly
+- redirected the duplicate `/index.html` URL to the canonical `/` homepage
+- connected the existing `nexis.nexus` Search Console property to the portfolio SEO tooling and verified the homepage is submitted and indexed
+- corrected the live-operations runbook so future frontend deploys preserve the separate public indexable shell and private noindex application shell
+- no gameplay, state, authentication, API or database behaviour changed
+
 ### Search discovery baseline
 - added descriptive homepage title and meta description for Nexis
 - added canonical, robots, Open Graph, Twitter and VideoGame structured metadata

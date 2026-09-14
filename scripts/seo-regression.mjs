@@ -22,6 +22,13 @@ const tests = [
     assert.match(html, /<meta\s+name="robots"\s+content="index, follow, max-image-preview:large"\s*\/?>/i);
     assert.match(html, /<link\s+rel="canonical"\s+href="https:\/\/nexis\.nexus\/"\s*\/?>/i);
   }],
+  ["public homepage publisher schema includes the Voidsmith logo", () => {
+    const html = read("index.html");
+    const scripts = [...html.matchAll(/<script\s+type="application\/ld\+json">([\s\S]*?)<\/script>/gi)];
+    assert.ok(scripts.length > 0, "homepage JSON-LD is missing");
+    const schema = JSON.parse(scripts[0][1]);
+    assert.equal(schema.publisher?.logo, "https://voidsmithindustries.com/assets/images/logo.png");
+  }],
   ["application shell exists and is explicitly noindex", () => {
     assert.ok(exists("app.html"), "app.html is missing");
     const html = read("app.html");

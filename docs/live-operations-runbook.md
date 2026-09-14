@@ -17,26 +17,22 @@ The live server remains the source of truth during production repair work.
 
 ## Routing Contract
 
-**Corrected 2026-07-18 (Ticket 3 deploy) - the paragraph below previously
-described an intended split that was checked against two months of deploy
-backups and never actually existed in production.** Nginx's catch-all
-(`location /`) and the literal `/` route both serve `index.html`, not
-`app.html`, for everything except the exact `/app.html` path - so
-`index.html` is the real primary entry point today, not a distinct public
-landing page. In every historical backup checked (back to mid-May),
-`index.html` has always been a full copy of the Vite SPA build, identical
-in shape to `app.html`.
+**Superseded 2026-09-14 by the deliberate SEO shell split.** The public
+homepage and the application now use separate HTML shells while loading the
+same compiled React bundle.
 
-**Until this is deliberately redesigned, deploy the same build output to
-both `index.html` and `app.html`** so the fresh bundle is reachable from
-the real entry point. Deploying only to `app.html` (the old instruction)
-leaves most real traffic - anything landing on `/` or a deep link -
-running a stale bundle. See
-`docs/incident-profile-image-data-loss-20260717.md` ("Deployment and live
-verification") for how this was discovered.
-
+- Exact `/` serves `index.html`, the public indexable SEO shell.
+- Exact `/index.html` redirects permanently to `/` so the homepage has one public URL.
+- Exact `/app.html` serves the application shell with `noindex, nofollow, noarchive`.
+- All other non-static, non-API routes fall back to `app.html`, keeping login,
+  registration and game/deep routes outside the indexable SEO surface.
 - `/api/` proxies to the Node backend on `127.0.0.1:3001`.
-- Everything else falls back to `index.html` (in practice, the app shell).
+- Both shells must reference the same compiled React entrypoint, but they must
+  **not** be copied over one another. Replacing `app.html` with `index.html`
+  removes the noindex boundary and is a release-blocking regression.
+
+The earlier 2026-07-18 routing description is historical and must not be used
+as a deployment instruction after this split.
 
 ## Inspect Live State
 
@@ -77,24 +73,30 @@ Only restart the service when backend source or runtime configuration changed.
 
 ## Frontend Deploy
 
+Run the build as the `nexis` service user so Vite can replace the existing
+`dist/` output without changing ownership merely to make the command work.
+Deploy the built directory as-is: `dist/index.html` and `dist/app.html` are
+intentionally different files.
+
 ```bash
 cd /srv/nexis/source/NexisGame
-npm run build
-cp -a dist/index.html /srv/nexis/frontend/current/app.html
-cp -a dist/index.html /srv/nexis/frontend/current/index.html
-mkdir -p /srv/nexis/frontend/current/assets
-cp -a dist/assets/. /srv/nexis/frontend/current/assets/
+sudo -u nexis npm run build
+sudo cp -r dist/. /srv/nexis/frontend/current/
 ```
 
-Then verify both entry points reference the new build (see Routing Contract above for why both matter):
+Then verify the public/app boundary as well as the shared bundle:
 
 ```bash
 curl -I https://nexis.nexus/
-curl -I https://nexis.nexus/app.html
-curl -I https://nexis.nexus/assets/
-diff <(curl -s https://nexis.nexus/ | grep -o 'assets/index-[a-zA-Z0-9_-]*\.js') \
-     <(curl -s https://nexis.nexus/app.html | grep -o 'assets/index-[a-zA-Z0-9_-]*\.js')
+curl -I https://nexis.nexus/index.html
+curl -s https://nexis.nexus/app.html | grep -F 'noindex, nofollow, noarchive'
+! curl -s https://nexis.nexus/app.html | grep -F 'rel="canonical"'
+diff <(curl -s https://nexis.nexus/ | grep -o 'assets/main-[a-zA-Z0-9_-]*\.js') \
+     <(curl -s https://nexis.nexus/app.html | grep -o 'assets/main-[a-zA-Z0-9_-]*\.js')
 ```
+
+Expected routing after deploy: `/` is `200`, `/index.html` redirects to `/`,
+and `app.html` plus deep application routes remain noindex.
 
 ## Rollback
 
