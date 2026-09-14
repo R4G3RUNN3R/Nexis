@@ -6,6 +6,14 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: "index.html",
+          app: "app.html",
+        },
+      },
+    },
     server: {
       proxy: {
         "/api": {

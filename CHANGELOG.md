@@ -9,6 +9,15 @@
 - limited the sitemap to the public root while authenticated/game routes remain outside the deliberate SEO surface
 - no gameplay, state, authentication or routing behaviour changed
 
+### Search discovery hardening
+- added a substantial semantic public fallback to the homepage so meaningful Nexis content is available before JavaScript executes
+- added a separate `app.html` shell with explicit `noindex, nofollow, noarchive` policy for application and deep-route delivery
+- configured Vite to build both HTML shells from the same React entrypoint and verified they share the same compiled application bundle
+- added a local static favicon and expanded the VideoGame structured data without widening the indexable surface
+- made `vite.config.ts` the sole Vite configuration authority and prevented TypeScript from regenerating stale `vite.config.js` / `vite.config.d.ts` artifacts
+- added `scripts/seo-regression.mjs` to lock the public/app-shell, crawler-policy and build-configuration contract
+- no gameplay, state, authentication, API or database behaviour changed
+
 ## 2026-04-19
 
 ### Ashen Crown page-enrichment and shell pass

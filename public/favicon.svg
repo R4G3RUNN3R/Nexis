@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Nexis">
+  <rect width="64" height="64" rx="12" fill="#111417"/>
+  <path d="M16 48V16h8l16 21V16h8v32h-8L24 27v21z" fill="#b8793f"/>
+  <path d="M48 12h4v4h-4zM12 48h4v4h-4z" fill="#67d8e3"/>
+</svg>
