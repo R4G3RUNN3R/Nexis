@@ -59,10 +59,20 @@ const tests = [
     assert.match(config, /index\.html/, "public index.html input is missing");
     assert.match(config, /app\.html/, "application app.html input is missing");
   }],
-  ["crawler policy exposes only the public root sitemap URL", () => {
+  ["crawler policy exposes the intentional public information surface", () => {
     const sitemap = read("public/sitemap.xml");
     const locs = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1]);
-    assert.deepEqual(locs, ["https://nexis.nexus/"]);
+    assert.deepEqual(locs, [
+      "https://nexis.nexus/",
+      "https://nexis.nexus/news",
+      "https://nexis.nexus/rules",
+      "https://nexis.nexus/staff",
+      "https://nexis.nexus/contact",
+      "https://nexis.nexus/credits",
+    ]);
+    for (const loc of locs) {
+      assert.doesNotMatch(loc, /\/(login|register|app|profile)(?:$|[/?#])/i, "private application route leaked into sitemap");
+    }
     const robots = read("public/robots.txt");
     assert.match(robots, /Sitemap:\s*https:\/\/nexis\.nexus\/sitemap\.xml/i);
   }],
