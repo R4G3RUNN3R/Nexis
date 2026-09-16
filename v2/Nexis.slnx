@@ -7,6 +7,7 @@
     <Project Path="src/Nexis.Content.Registry/Nexis.Content.Registry.csproj" />
     <Project Path="src/Nexis.Items.Contracts/Nexis.Items.Contracts.csproj" />
     <Project Path="src/Nexis.Inventory.Contracts/Nexis.Inventory.Contracts.csproj" />
+    <Project Path="src/Nexis.Npcs.Contracts/Nexis.Npcs.Contracts.csproj" />
     <Project Path="src/Nexis.Equipment.Contracts/Nexis.Equipment.Contracts.csproj" />
     <Project Path="src/Nexis.Combat.Contracts/Nexis.Combat.Contracts.csproj" />
     <Project Path="src/Nexis.Automation.Contracts/Nexis.Automation.Contracts.csproj" />
