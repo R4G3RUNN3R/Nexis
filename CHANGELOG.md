@@ -1,13 +1,14 @@
 # Changelog
 ## 2026-09-16
 
-### Nexis 2.0 living-world NPC architecture design candidate
+### Nexis 2.0 living-world NPC architecture approved
 - consolidated the human-approved living-world decisions into `docs/superpowers/specs/2026-09-16-nexis-living-world-npc-simulation-design.md` without implementing gameplay or changing live/runtime state
 - designed a hybrid conserved population model: anonymous demographic cohorts remain aggregate until causal history requires an individual, then materialisation atomically transfers one person into a permanent persistent `NpcId`
 - defined progressive deterministic biography, 1:1 real-time ageing, sparse causal mortality, single shared NPC presence, Knowledge-vs-History separation, cold/warm/hot processing, Active Cast projection, and role succession with real vacancies and need pressure
 - proposed new bounded owners for NPC lifecycle, aggregate Population and Succession workflow plus a non-authoritative Simulation coordinator, while preserving existing Core/Application/owner/eventing/replay rules and existing domain ownership
 - preserved Sacred Grove resurrection canon by treating death as final by default but allowing explicit typed resurrection without erasing death history or automatically undoing downstream consequences
-- status remains design-only and pending final human review of the consolidated written specification; no binding V2 architecture documents, production code, database schema, deployment, merge or live service were changed
+- human approval received 2026-09-16; promoted the consolidated specification to `APPROVED DESIGN` and reconciled State Ownership, Core, command execution, canon, agent handoff and implementation-status documents around the approved boundaries
+- authorized implementation planning only: production code, database schema, deployment, merge, live services and V1/production data remain untouched
 
 ## 2026-09-03
 

@@ -1,6 +1,6 @@
 # Nexis 2.0 Foundation Implementation Status
 
-_Status: rolling implementation checkpoint, updated 2026-09-03. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
+_Status: rolling implementation checkpoint, updated 2026-09-16. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
 
 ## Current branch
 
@@ -243,6 +243,14 @@ authoritative values, overwriting real emission order and colliding with the uni
 The add-and-backfill is now strictly one-time and a regression test pins that re-running migrations
 never renumbers committed events.
 
+## Approved living-world programme, design only
+
+On 2026-09-16 the human approved `docs/superpowers/specs/2026-09-16-nexis-living-world-npc-simulation-design.md` as binding Nexis V2 design. The design adds three future authoritative boundaries, NPC Lifecycle, Population and Succession workflow, plus a non-authoritative Simulation coordinator, while preserving the existing Core/Application/owner/eventing/replay architecture.
+
+This approval is **not implementation evidence**. At this checkpoint there are no implemented NPC Lifecycle, Population, Succession or Simulation projects, no living-world PostgreSQL schema, no Active Cast runtime and no Scheduler/CIEL living-world business logic. No live deployment, v1/production database mutation or public capability claim is implied.
+
+The human-selected implementation programme begins with the NPC Lifecycle owner proof, followed by Population/materialisation and the remaining approved vertical slices. The detailed programme/first-slice plans live under `docs/superpowers/plans/`.
+
 ## Foundation work still incomplete
 
 The branch is materially further along, but PR #4 must remain draft.
@@ -261,7 +269,7 @@ Exact owner/domain contracts should continue to be introduced only when the corr
 
 ## Next safe implementation boundary
 
-The replay, privileged-entry, operational-observability, real multi-owner (C3) and public player identity foundation boundaries are implemented and adversarially covered. The three known L3 History/Player Log findings are resolved. C5 producer wiring and the Foundation stop-condition audit are complete. The next safe slice is either the transport/Application boundary or the next owner contract whose gameplay design is settled, chosen by human decision rather than inferred. Migration remains gated; no live source access, gameplay fan-out, generic migration bucket or canon change is authorized.
+The replay, privileged-entry, operational-observability, real multi-owner (C3) and public player identity foundation boundaries are implemented and adversarially covered. The three known L3 History/Player Log findings are resolved. C5 producer wiring and the Foundation stop-condition audit are complete. The human decision on 2026-09-16 selected the approved living-world programme as the next owner-design track, beginning with the narrowly bounded NPC Lifecycle owner proof. The transport/Application boundary remains independently pending and must not be invented inside the NPC slice. Migration remains gated; no live source access, broad gameplay fan-out, generic migration bucket or unrelated canon change is authorized.
 
 ## Verification discipline
 

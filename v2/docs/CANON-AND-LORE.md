@@ -37,6 +37,14 @@ A fixed enum, compass slot, UI layout, database shape, route model or other impl
 
 Replacing or merging an existing canonical world element requires explicit human approval stating that the existing element is being replaced, merged, retired or reinterpreted.
 
+### Living-world permanence
+
+Approved 2026-09-16: Nexis is one persistent living world in which persistent people age on a 1:1 real-world chronological clock and their survival/death can change later history. A role may acquire a successor; the person who held it is never silently replaced or reset. Once an NPC becomes a persistent individual, that identity remains part of world history even if the NPC later becomes computationally inactive or dies.
+
+Saving or killing a persistent person may therefore alter future families, relationships, jobs, leadership and local history rather than restoring a predetermined script. This permanence rule is product/world identity; exact demographic, mortality, succession and simulation formulas remain mechanics governed by the approved living-world specification.
+
+Sacred Grove resurrection remains exceptional rather than an ordinary respawn: a later approved resurrection mechanic may restore life, but it never erases the historical death or consequences that already occurred while the person was dead.
+
 The Ironhall/Akai Tetsu incident is the standing example: Ironhall was requested as a new city; replacing Akai Tetsu with Ironhall was not requested and was canon drift.
 
 ## Core academy/world canon

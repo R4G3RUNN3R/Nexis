@@ -316,23 +316,25 @@ If this system is not needed in the first playable v2 slice it may remain unimpl
 
 - dynamic world/global state.
 - active world events and world-instance conditions.
-- dynamic NPC/vendor stock or regional state where it is genuinely world-owned.
+- dynamic vendor/regional/world state where it is genuinely world-owned.
 - server/world epochs or world-phase state if introduced.
 
 **Does not own**
 
 - static content definitions.
-- a character's travel journey/current location.
-- player knowledge/discovery.
+- persistent NPC identity/lifecycle/personality facts.
+- anonymous demographic population cohort counts.
+- an actor's travel journey/current location.
+- actor knowledge/discovery/belief.
 
-Static city/route/location definitions belong to Content; character location belongs to Travel; discovered knowledge belongs to Knowledge.
+Static city/route/location definitions belong to Content; persistent NPC existence/lifecycle belongs to NPC Lifecycle; anonymous demographic cohorts belong to Population; actor location belongs to Travel; discovered knowledge/belief belongs to Knowledge.
 
 ### 14. Travel and Location
 
 **Owns authoritative state**
 
-- current authoritative character location.
-- in-transit journey state.
+- current authoritative location for supported physical actors, including player characters and persistent NPCs.
+- in-transit journey state for those actors.
 - origin/destination/departure/arrival/due state.
 - route/mode selection references.
 - arrival grace/state that is intrinsic to travel.
@@ -549,10 +551,11 @@ Core decides gains/losses and eligibility effects using Reputation snapshots.
 - bestiary/codex discovery.
 - item/world knowledge unlocks.
 - intelligence/reveal relationships needed for knowledge-aware presentation.
+- typed knowledge, observation and belief state for supported knowers, including player characters and persistent NPCs where gameplay requires it.
 
 **Does not own** World truth itself or player-facing history.
 
-Knowledge is central to preventing hidden-information leaks: projections consult Knowledge to decide what a character is entitled to know.
+Knowledge is central to preventing hidden-information leaks: projections consult Knowledge to decide what an actor is entitled to know or reasonably believe. Authoritative History/world truth does not automatically become NPC or player knowledge.
 
 There is no generic unbounded `qualities` dictionary serving as a second world/player model. Narrative flags belong to the owning Adventures/Contracts/Knowledge domain and are typed/versioned.
 
@@ -626,7 +629,9 @@ CIEL observes through authorized queries and requests gameplay changes through t
 - item definitions.
 - spell/skill/course definitions.
 - location/route definitions.
-- NPC/monster definitions.
+- NPC/monster definitions and canonical named-NPC templates.
+- species/ancestry lifecycle definitions.
+- role/succession policy definitions.
 - recipes.
 - achievement/title definitions.
 - static encounter/content data.
@@ -709,6 +714,55 @@ Enforcement is an explicit Admin/System command against the appropriate owner (f
 - materialized reporting views.
 
 These never become a write authority merely because they are fast to query.
+
+### 42. NPC Lifecycle
+
+**Owns authoritative state**
+
+- stable persistent `NpcId` identity.
+- materialisation provenance and the version references needed to explain/reproduce identity creation.
+- birth instant/date and birthplace reference where authoritative.
+- species/ancestry definition reference intrinsic to identity.
+- living/dead lifecycle state, death instant and authoritative death-cause reference.
+- lifecycle/mortality evaluation anchors required for deterministic elapsed-risk catch-up.
+- typed baseline personality/identity-shaping traits that belong to the person rather than another domain.
+
+**Does not own** money, item ownership, equipment, employment/office, travel/location, property, organization membership, social relationships, reputation, foreign-domain skill state, actor Knowledge, CIEL conversational memory or Scheduler due-work state.
+
+Chronological age is derived from immutable birth history and authoritative time; it is not a periodically incremented field. Materialised identity is permanent even when runtime simulation becomes cold. Death is final by default, while a future approved Sacred Grove resurrection command may explicitly transition a dead NPC back to living without erasing death history or downstream consequences.
+
+### 43. Population
+
+**Owns authoritative state**
+
+- anonymous living demographic cohort counts.
+- only the cohort dimensions required by approved demographic/materialisation rules.
+- aggregate demographic transition state required for Population invariants.
+- cohort revision/concurrency state.
+- materialisation reservation/conservation accounting required to prevent duplicate population creation.
+
+**Does not own** persistent NPC identities or their individual lives.
+
+Materialisation transfers one living person from an eligible anonymous cohort into one persistent NPC identity atomically. It creates identity, not population. Anonymous births/deaths/migration are still authoritative gameplay transitions and therefore execute through normal System command -> Application -> Core -> Population owner boundaries; Scheduler/workers never update cohort tables directly.
+
+### 44. Succession
+
+**Owns authoritative workflow state**
+
+- `SuccessionCaseId` and typed vacancy subject/reference.
+- originating owner/domain and vacancy cause/reference.
+- opened time, workflow status and need-pressure/evaluation state intrinsic to the case.
+- next evaluation anchor where semantically part of the workflow.
+- candidate references considered/selected where required for idempotency/audit.
+- final resolution reference.
+
+**Does not own** the vacant role, the candidate NPC, money/items/property, employment, guild/business governance, travel or any other foreign-domain fact.
+
+Succession resolves long-running role/service/office vacancies through normal commands against the owning domains. A role may be replaced; a dead or departed person is never silently replaced by a clone. A vacancy may remain unresolved when no valid candidate exists.
+
+### Non-authoritative Simulation coordinator
+
+Simulation is an orchestration/runtime component, not an authoritative owner. It may classify persistent NPCs as cold/warm/hot for processing purposes, request deterministic elapsed-time catch-up, prioritize bounded due work, dispatch approved System commands, apply backpressure and maintain ephemeral caches/metrics. It may not persist a hidden `NpcState`/`LivingWorldState`, bypass Core, write gameplay tables or turn relevance into different gameplay physics.
 
 ## Explicit removal of v1 catch-all concepts
 
@@ -831,7 +885,10 @@ Examples of likely aggregate roots or consistency units:
 - EquipmentLoadout per Character/loadout.
 - Wallet per economic owner.
 - MarketplaceListing per listing.
-- TravelJourney/Location state per Character.
+- TravelJourney/Location state per supported physical actor.
+- NPC lifecycle aggregate per persistent NpcId.
+- Population cohort per bounded demographic key.
+- SuccessionCase per typed vacancy identity.
 - HospitalEpisode per Character.
 - CombatEncounter per encounter.
 - EducationEnrollment per Character.
@@ -854,6 +911,9 @@ Examples conceptually:
 - `InventoryOwnershipSnapshot`.
 - `EquipmentSnapshot`.
 - `TravelSnapshot`.
+- `NpcLifecycleSnapshot`.
+- `PopulationCohortSnapshot`.
+- `SuccessionCaseSnapshot`.
 - `HospitalSnapshot`.
 - `JusticeSnapshot`.
 - `WalletSnapshot`.
@@ -879,6 +939,9 @@ Conceptually a result can contain transitions such as:
 - Inventory: transfer Item X from Seller to Buyer.
 - Marketplace: mark Listing Y sold.
 - Recognition: record qualifying observation/unlock if included in the same resolution.
+- Population: decrement one eligible anonymous cohort member during materialisation.
+- NPC Lifecycle: create one permanent identity or apply one validated lifecycle transition.
+- Succession: advance one vacancy-resolution workflow without directly mutating the role owner.
 
 There must not be a generic "patch path/value" transition such as `player.gold -= 20` or `player.inventory.sword += 1`.
 
@@ -970,6 +1033,14 @@ Before broad gameplay implementation, automated architecture/contract tests must
 18. client DTOs are not reused as persistence entities or trusted command state.
 19. owner snapshots include revision/version metadata where concurrency/replay requires it.
 20. cross-owner commands demonstrate atomic rollback when any participating owner transition fails.
+21. NPC Lifecycle is the sole writer for persistent NPC existence/lifecycle/personality-baseline facts.
+22. Population is the sole writer for anonymous demographic cohort counts and conservation state.
+23. materialisation proves atomic conservation: exactly one cohort member becomes exactly one persistent NpcId or neither change commits.
+24. Succession cannot directly write role-owner or NPC/Population private persistence.
+25. Simulation/Active Cast remain non-authoritative and cannot mutate owner state.
+26. relevance/cold-warm-hot classification cannot change deterministic gameplay semantics such as mortality.
+27. persistent NPC location is written only by Travel, never duplicated in NPC Lifecycle.
+28. Knowledge is distinct from authoritative History/world truth and hidden facts do not leak through projections/CIEL.
 
 ## Initial implementation order
 
@@ -989,6 +1060,8 @@ Foundation agents should first prove the ownership architecture with a narrow ve
 10. one deliberately multi-owner conformance scenario such as `EquipItem` or a synthetic purchase, proving snapshots -> Core -> typed transitions -> atomic owner persistence.
 
 Only after architecture tests prove these boundaries should agents fan out into Travel, Education, Combat, Marketplace, Skills, Magic, Guilds, Consortiums and the rest.
+
+The foundation stop-condition audit completed on 2026-09-03. For the approved living-world programme, the deliberate implementation order is now: NPC Lifecycle -> Population/materialisation -> progressive provenance/history -> Travel/presence/Active Cast -> mortality/death -> Social/family -> Employment/vacancy/Succession -> Knowledge/History -> Simulation/Scheduler -> CIEL intention/dialogue -> scale/recovery/adversarial proving. Each slice must arrive as a bounded tested owner/workflow proof rather than parallel placeholder fan-out.
 
 ## Non-goals
 

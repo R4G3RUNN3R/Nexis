@@ -1,6 +1,7 @@
 # Nexis 2.0 Living World, Persistent NPC, Population and Succession Design
 
-**Status:** REVIEW CANDIDATE - individual design decisions human-approved in chat; consolidated written specification pending final human review
+**Status:** APPROVED DESIGN
+**Approved:** 2026-09-16
 **Date:** 2026-09-16
 **Product:** Nexis 2.0
 **Scope:** Persistent societal NPCs, hybrid population simulation, materialisation, ageing, mortality, active-cast selection, background simulation and role succession
@@ -1413,4 +1414,4 @@ At the time this design was written:
 - NPC lifecycle, aggregate Population, Succession and Simulation components described here do not yet exist as implemented gameplay modules;
 - no live Nexis deployment, production migration or public capability claim is authorized by this document;
 - no V1/live database mutation is authorized;
-- final written-spec approval is required before implementation planning begins.
+- human approval was received on 2026-09-16; implementation planning is authorized, but implementation has not started.

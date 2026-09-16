@@ -78,9 +78,18 @@ Privileged read-only inspection stays on the authorized query path and remains a
 
 ### System command lane
 
-For timer/scheduler/world occurrences such as CompleteEducation, FinishTravel, ExpireListing, ResolveCooldown or ProcessWorldEvent.
+For timer/scheduler/world occurrences such as CompleteEducation, FinishTravel, ExpireListing, ResolveCooldown, ProcessWorldEvent, MaterialiseNpc, AdvancePopulationInterval, ResolveNpcLifecycleCheckpoint or AdvanceSuccessionCase.
 
-Schedulers own due-work mechanics, not gameplay outcomes. They issue trusted System Commands with stable occurrence identity. Application loads current owner snapshots, Core evaluates, and owners persist the result exactly as with other authoritative commands.
+Schedulers own due-work mechanics, not gameplay outcomes. They issue trusted System Commands with stable occurrence identity. Application loads current owner snapshots, Core evaluates, and owners persist the result exactly as with other authoritative commands. Aggregate Population transitions are not an exception: no scheduler/simulation worker updates cohort counts directly.
+
+### Autonomous NPC executor versus world performer
+
+A trusted System executor such as `nexis.scheduler` or `nexis.ciel` is infrastructure authority, not the in-world person who travelled, worked or made a decision. Autonomous NPC commands preserve both concepts separately:
+
+- `ActorContext` / `SystemActorKey` identifies the trusted executor that may submit the command;
+- a typed `NpcId` (or future implementation-neutral performer reference) identifies the in-world performer/subject when the intent semantics require one.
+
+`NpcId` is never an authentication credential or platform capability. History/events preserve the world performer separately from executor/security attribution so audit/recovery remain truthful. CIEL may propose typed intentions, but they enter through the same trusted System command boundary and receive no direct write path.
 
 ### Realtime command lane
 

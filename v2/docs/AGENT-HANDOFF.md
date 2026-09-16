@@ -1,6 +1,6 @@
 # Nexis 2.0 Agent Handoff
 
-_Status: foundation branch under continued implementation; updated 2026-09-01._
+_Status: foundation established; approved living-world programme queued; updated 2026-09-16._
 
 ## Working branch
 
@@ -33,6 +33,7 @@ Before implementing foundation code, read and preserve:
 - `v2/docs/COMPONENT-RELEASE-GATE.md`
 - `v2/docs/COMMAND-EXECUTION.md`
 - `v2/docs/IDENTITY-AUTHORIZATION.md`
+- `docs/superpowers/specs/2026-09-16-nexis-living-world-npc-simulation-design.md` for all NPC lifecycle, Population, materialisation, ageing/mortality, presence, Social/family, Succession, Knowledge, Simulation/Scheduler or CIEL living-world work.
 
 ### Precedence
 
@@ -85,7 +86,11 @@ Prove at minimum that:
 - no global authoritative `PlayerState`, `RuntimeState`, `CharacterState`, generic qualities or counters write model exists;
 - Inventory is the sole authoritative item-ownership writer;
 - Economy is the sole authoritative currency-balance writer;
-- Travel is the sole authoritative current-location/journey writer;
+- Travel is the sole authoritative current-location/journey writer for supported physical actors, including persistent NPCs;
+- NPC Lifecycle is the sole authoritative writer for persistent NPC identity/lifecycle/personality-baseline facts;
+- Population is the sole authoritative writer for anonymous demographic cohort/conservation state;
+- Succession owns vacancy-resolution workflow only and cannot directly mutate role owners;
+- Simulation/Active Cast are non-authoritative and cannot mutate gameplay owner state;
 - Resources is the sole authoritative resource-bar writer;
 - Equipment cannot create/delete item ownership;
 - Marketplace/Guilds/Consortiums cannot directly mutate Economy/Inventory state;
@@ -98,6 +103,27 @@ Prove at minimum that:
 - no authorization decision grants privilege from character name, title or client-supplied role state;
 - Account/platform capabilities, gameplay-domain roles and commercial entitlements remain separate;
 - a multi-owner command proves full atomic rollback when any participating transition cannot commit.
+
+
+## Approved living-world programme
+
+Human approval of the consolidated living-world design was received on 2026-09-16. The binding specification is `docs/superpowers/specs/2026-09-16-nexis-living-world-npc-simulation-design.md`.
+
+Implementation must proceed by bounded vertical slices in this order:
+
+1. NPC Lifecycle owner proof.
+2. Population owner + atomic materialisation proof.
+3. progressive provenance/history resolution.
+4. Travel/presence + Active Cast.
+5. mortality/death.
+6. Social/family.
+7. Employment/vacancy/Succession.
+8. Knowledge/History.
+9. Simulation/Scheduler runtime.
+10. CIEL intention/dialogue integration.
+11. scale/recovery/adversarial proving.
+
+The programme may not fan all domains out in parallel merely because the architecture now names them. Each slice inherits the engineering manual, TDD/architecture/security/replay requirements and must prove its own ownership before the next dependent slice treats it as stable.
 
 ## Next foundation slices
 
