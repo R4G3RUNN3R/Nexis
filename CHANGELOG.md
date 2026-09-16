@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-16
+
+### Voidsmith portfolio attribution
+- added a visible crawlable `Powered by Voidsmith Industries` link to the shared public-page footer
+- the attribution now covers the Nexis landing page and public News, Rules, Staff, Contact and Credits pages through the shared shell
+- added a branding regression guard so the Voidsmith attribution cannot silently disappear or become `nofollow`
+- no gameplay, authentication, API, database or player-state behaviour changed
+
 ## 2026-09-14
 
 ### Search discovery follow-up
