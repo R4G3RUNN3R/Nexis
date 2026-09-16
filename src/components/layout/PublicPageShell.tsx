@@ -58,6 +58,7 @@ export default function PublicPageShell({ title, subtitle, children }: PublicPag
       <footer className="public-footer">
         <div>Nexis public records</div>
         <div className="public-footer__links">
+          <a href="https://voidsmithindustries.com/" target="_blank" rel="noopener noreferrer">Powered by Voidsmith Industries</a>
           <Link to="/rules">Rules</Link>
           <Link to="/contact">Contact</Link>
           <Link to="/credits">Credits</Link>
