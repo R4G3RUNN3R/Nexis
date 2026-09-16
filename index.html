@@ -3,37 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>Nexis | Persistent Fantasy Browser RPG</title>
-    <meta name="description" content="Nexis is a persistent fantasy browser RPG where education, travel, reputation, guilds and long-term progression shape your place in a living world." />
+    <meta name="description" content="Nexis is a persistent fantasy browser RPG by Voidsmith Industries, built around character progression, education, travel, trade, factions and a living world." />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://nexis.nexus/" />
-    <link rel="icon" type="image/png" href="/brand/nexis-favicon-64.png" />
-
+    <link rel="icon" type="image/png" href="/brand/nexis-favicon-64.png" sizes="64x64" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Nexis" />
     <meta property="og:title" content="Nexis | Persistent Fantasy Browser RPG" />
-    <meta property="og:description" content="A persistent fantasy browser RPG where education, travel, reputation, guilds and long-term progression shape your place in a living world." />
+    <meta property="og:description" content="Build a character, learn, travel, trade and shape your place in a persistent fantasy world." />
     <meta property="og:url" content="https://nexis.nexus/" />
-    <meta property="og:image" content="https://voidsmithindustries.com/assets/images/nexis-screenshot.png" />
-
-    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Nexis | Persistent Fantasy Browser RPG" />
-    <meta name="twitter:description" content="A persistent fantasy browser RPG where education, travel, reputation, guilds and long-term progression shape your place in a living world." />
-    <meta name="twitter:image" content="https://voidsmithindustries.com/assets/images/nexis-screenshot.png" />
-
+    <meta name="twitter:description" content="A persistent fantasy browser RPG by Voidsmith Industries." />
+    <title>Nexis | Persistent Fantasy Browser RPG</title>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "VideoGame",
         "name": "Nexis",
         "url": "https://nexis.nexus/",
-        "image": "https://voidsmithindustries.com/assets/images/nexis-screenshot.png",
-        "description": "A persistent fantasy browser RPG where education, travel, reputation, guilds and long-term progression shape your place in a living world.",
-        "genre": ["Fantasy", "Role-Playing Game"],
-        "gamePlatform": "Web Browser",
+        "description": "A persistent fantasy browser RPG focused on character progression, education, travel, trade, organisations and a living world.",
         "applicationCategory": "Game",
-        "inLanguage": "en",
+        "gamePlatform": "Web Browser",
+        "genre": ["Role-playing game", "Fantasy", "Browser game"],
         "publisher": {
           "@type": "Organization",
           "name": "Voidsmith Industries",
@@ -42,51 +34,41 @@
         }
       }
     </script>
-
     <style>
-      .nexis-public-fallback {
-        box-sizing: border-box;
-        min-height: 100vh;
-        margin: 0;
-        padding: clamp(2rem, 5vw, 5rem) clamp(1.25rem, 6vw, 7rem);
-        color: #e9e4da;
-        background: #111417;
-        font-family: Georgia, "Times New Roman", serif;
-      }
-      .nexis-public-fallback__inner { max-width: 72rem; margin: 0 auto; }
-      .nexis-public-fallback__eyebrow { color: #67d8e3; letter-spacing: .16em; text-transform: uppercase; font: 600 .75rem/1.4 Arial, sans-serif; }
-      .nexis-public-fallback h1 { margin: .5rem 0 1rem; color: #d29a62; font-size: clamp(2.5rem, 7vw, 5.5rem); line-height: .95; }
-      .nexis-public-fallback h2 { margin-top: 2.25rem; color: #f0c28c; font-size: 1.35rem; }
-      .nexis-public-fallback p { max-width: 54rem; color: #c7c1b7; font: 400 1rem/1.75 Arial, sans-serif; }
-      .nexis-public-fallback__lead { font-size: 1.15rem !important; color: #e2ddd4 !important; }
-      .nexis-public-fallback__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; margin-top: 1.5rem; }
-      .nexis-public-fallback__card { border: 1px solid #34393d; border-radius: .35rem; padding: 1rem 1.1rem; background: #171b1f; }
-      .nexis-public-fallback__card h2 { margin-top: 0; }
-      .nexis-public-fallback__footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #34393d; }
+      .nexis-public-fallback { max-width: 1120px; margin: 0 auto; padding: 48px 24px 64px; color: #d7dce1; font-family: Inter, system-ui, sans-serif; }
+      .nexis-public-fallback h1, .nexis-public-fallback h2 { color: #f4f1ea; }
+      .nexis-public-fallback h1 { font-size: clamp(2rem, 6vw, 4.5rem); margin: 0 0 12px; }
+      .nexis-public-fallback h2 { margin-top: 0; font-size: 1.2rem; }
+      .nexis-public-fallback p { line-height: 1.7; }
+      .nexis-public-fallback__eyebrow { color: #c89559; text-transform: uppercase; letter-spacing: .16em; font-weight: 700; font-size: .75rem; }
+      .nexis-public-fallback__lead { max-width: 760px; font-size: 1.05rem; color: #adb5bd; }
+      .nexis-public-fallback__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 32px 0; }
+      .nexis-public-fallback__card { padding: 20px; border: 1px solid #2a343c; border-radius: 12px; background: #12171b; }
+      .nexis-public-fallback__footer { margin-top: 30px; color: #7e8993; font-size: .9rem; }
+      .nexis-public-fallback__footer a { color: #d29a62; }
     </style>
   </head>
-  <body>
+  <body style="margin:0;background:#0b0f12">
     <div id="root">
       <!-- NEXIS_PUBLIC_FALLBACK_START -->
-      <main id="nexis-public-fallback" class="nexis-public-fallback">
-        <div class="nexis-public-fallback__inner">
+      <main class="nexis-public-fallback">
+        <div>
           <p class="nexis-public-fallback__eyebrow">Voidsmith Industries presents</p>
           <h1>Nexis</h1>
-          <p class="nexis-public-fallback__lead">A persistent fantasy browser RPG built around long-term character growth, meaningful choices and a world that rewards planning as much as action.</p>
-
-          <section aria-labelledby="nexis-world-heading">
-            <h2 id="nexis-world-heading">Forge a life, not just a level</h2>
-            <p>Nexis treats progression as more than a climb through combat statistics. Education, travel, reputation, equipment, organisations and the places you choose to spend your time all contribute to the character you become. The result is a slower, interconnected form of progression where one decision can open opportunities in another part of the world and where development continues across many different systems rather than a single quest line.</p>
-          </section>
+          <p class="nexis-public-fallback__lead">Nexis is a persistent fantasy browser RPG where progression comes from what your character learns, owns, survives and builds over time. Enter a living world shaped by education, travel, organisations, trade, reputation and long-term character choices.</p>
 
           <div class="nexis-public-fallback__grid">
             <section class="nexis-public-fallback__card" aria-labelledby="nexis-progression-heading">
-              <h2 id="nexis-progression-heading">Long-term progression</h2>
-              <p>Study, improve skills, build resources and shape a character over time. Nexis is designed around accumulation, preparation and consequences, giving advancement room to feel earned instead of disposable.</p>
+              <h2 id="nexis-progression-heading">Character progression</h2>
+              <p>Develop your character through education, skills, equipment, property, work and reputation rather than a single linear level path.</p>
             </section>
-            <section class="nexis-public-fallback__card" aria-labelledby="nexis-world-heading-2">
-              <h2 id="nexis-world-heading-2">Travel and discovery</h2>
-              <p>Movement through the world connects cities, activities and opportunities. Exploration is part of progression itself, with location and access influencing what a character can pursue next.</p>
+            <section class="nexis-public-fallback__card" aria-labelledby="nexis-world-heading">
+              <h2 id="nexis-world-heading">A persistent world</h2>
+              <p>Travel between places, interact with institutions and organisations, and return to a world that keeps track of your choices and progress.</p>
+            </section>
+            <section class="nexis-public-fallback__card" aria-labelledby="nexis-economy-heading">
+              <h2 id="nexis-economy-heading">Trade and ownership</h2>
+              <p>Use markets, inventory, property and organisation systems to build a practical place in the economy instead of collecting disconnected rewards.</p>
             </section>
             <section class="nexis-public-fallback__card" aria-labelledby="nexis-social-heading">
               <h2 id="nexis-social-heading">Reputation and organisations</h2>
@@ -99,7 +81,7 @@
             <p>Nexis brings its systems together in a command-style interface designed for direct, repeatable play. Character management, travel, learning, trade and world activity live inside one persistent experience, letting short visits contribute to longer goals. The project is developed by Voidsmith Industries as an evolving browser RPG, with the public homepage kept separate from private game routes so search engines can understand the game without indexing personal or application-only screens.</p>
           </section>
 
-          <p class="nexis-public-fallback__footer">JavaScript is required to enter the interactive Nexis application.</p>
+          <p class="nexis-public-fallback__footer">Powered by <a href="https://voidsmithindustries.com/">Voidsmith Industries</a>. JavaScript is required to enter the interactive Nexis application.</p>
         </div>
       </main>
       <!-- NEXIS_PUBLIC_FALLBACK_END -->
