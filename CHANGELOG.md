@@ -2,6 +2,12 @@
 
 ## 2026-09-16
 
+### Public discovery expansion
+- expanded the Nexis sitemap from the homepage alone to the intentional public information surface: News, Rules, Staff, Contact and Credits
+- kept login, registration, profile and application routes out of the sitemap so private/player workflows do not become SEO landing pages
+- updated the SEO regression guard to lock the public sitemap contract and prevent private routes leaking into it
+- no gameplay, authentication, API, database or player-state behaviour changed
+
 ### Voidsmith portfolio attribution
 - added a visible crawlable `Powered by Voidsmith Industries` link to the shared public-page footer
 - the attribution now covers the Nexis landing page and public News, Rules, Staff, Contact and Credits pages through the shared shell
