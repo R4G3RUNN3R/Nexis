@@ -14,6 +14,7 @@
     <Project Path="src/Nexis.Operations.Contracts/Nexis.Operations.Contracts.csproj" />
     <Project Path="src/Nexis.Operations/Nexis.Operations.csproj" />
     <Project Path="src/Nexis.Modules.Equipment/Nexis.Modules.Equipment.csproj" />
+    <Project Path="src/Nexis.Modules.Npcs/Nexis.Modules.Npcs.csproj" />
     <Project Path="src/Nexis.Identity.Contracts/Nexis.Identity.Contracts.csproj" />
     <Project Path="src/Nexis.Modules.Identity/Nexis.Modules.Identity.csproj" />
     <Project Path="src/Nexis.Audit.Contracts/Nexis.Audit.Contracts.csproj" />

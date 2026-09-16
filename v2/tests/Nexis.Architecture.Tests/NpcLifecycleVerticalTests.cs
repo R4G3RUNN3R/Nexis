@@ -90,6 +90,57 @@ public sealed partial class NpcLifecycleVerticalTests
         CollectionAssert.AreEqual(first.Events.ToArray(), second.Events.ToArray());
     }
 
+    [TestMethod]
+    public void LifecycleCodec_RoundTripsCanonicalPayloadWithoutRuntimeTypeMetadata()
+    {
+        var codec = new Nexis.Modules.Npcs.EstablishNpcLifecycleCanonicalCommandCodec();
+        var intent = new EstablishNpcLifecycleIntent(
+            NpcId.New(),
+            new DateTimeOffset(2001, 2, 3, 4, 5, 6, TimeSpan.Zero));
+
+        var payload = codec.Serialize(intent);
+        var recovered = codec.Deserialize(payload);
+
+        Assert.AreEqual(intent, recovered);
+        Assert.IsFalse(payload.Json.Contains("$type", StringComparison.OrdinalIgnoreCase));
+        StringAssert.StartsWith(payload.Json, "{\"npcId\":");
+    }
+
+    [TestMethod]
+    public void LifecycleCodec_RejectsUnknownProperties()
+    {
+        var payload = Nexis.Execution.Contracts.CanonicalCommandPayload.FromTrustedJson(
+            "{\"npcId\":\"11111111-1111-1111-1111-111111111111\","
+            + "\"birthInstantUtc\":\"2001-02-03T04:05:06.0000000+00:00\","
+            + "\"unexpected\":true}");
+
+        Assert.ThrowsExactly<FormatException>(() =>
+            new Nexis.Modules.Npcs.EstablishNpcLifecycleCanonicalCommandCodec().Deserialize(payload));
+    }
+
+    [TestMethod]
+    public void LifecycleCodec_RejectsDuplicateProperties()
+    {
+        var payload = Nexis.Execution.Contracts.CanonicalCommandPayload.FromTrustedJson(
+            "{\"npcId\":\"11111111-1111-1111-1111-111111111111\","
+            + "\"npcId\":\"22222222-2222-2222-2222-222222222222\","
+            + "\"birthInstantUtc\":\"2001-02-03T04:05:06.0000000+00:00\"}");
+
+        Assert.ThrowsExactly<FormatException>(() =>
+            new Nexis.Modules.Npcs.EstablishNpcLifecycleCanonicalCommandCodec().Deserialize(payload));
+    }
+
+    [TestMethod]
+    public void LifecycleCodec_RejectsNonUtcBirthInstant()
+    {
+        var payload = Nexis.Execution.Contracts.CanonicalCommandPayload.FromTrustedJson(
+            "{\"npcId\":\"11111111-1111-1111-1111-111111111111\","
+            + "\"birthInstantUtc\":\"2001-02-03T05:05:06.0000000+01:00\"}");
+
+        Assert.ThrowsExactly<FormatException>(() =>
+            new Nexis.Modules.Npcs.EstablishNpcLifecycleCanonicalCommandCodec().Deserialize(payload));
+    }
+
     private static CoreDecision Evaluate(
         NpcId id,
         DateTimeOffset birth,

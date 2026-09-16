@@ -105,6 +105,7 @@ public sealed class ClaudeContinuationAutomationGuardTests
                 "Nexis.Host.Api->Nexis.Modules.Audit",
                 "Nexis.Host.Api->Nexis.Modules.Identity",
                 "Nexis.Modules.Equipment->Nexis.Execution.Contracts",
+                "Nexis.Modules.Npcs->Nexis.Execution.Contracts",
                 "Nexis.Persistence.Postgres->Nexis.Execution",
                 "Nexis.Persistence.Postgres->Nexis.Execution.Contracts"
             },
