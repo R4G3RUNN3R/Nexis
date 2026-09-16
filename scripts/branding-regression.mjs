@@ -39,6 +39,12 @@ const tests = [
     assert.match(shell, /<NexisBrand\s+className="public-topbar__mark"\s+decorative\s*\/>/);
     assert.match(css, /\.public-topbar__mark\s*\{[^}]*width:\s*32px;[^}]*height:\s*32px;/s);
   }],
+  ["public pages carry crawlable Voidsmith attribution", () => {
+    const shell = read("src/components/layout/PublicPageShell.tsx");
+    assert.match(shell, /href="https:\/\/voidsmithindustries\.com\/"/);
+    assert.match(shell, />Powered by Voidsmith Industries<\/a>/);
+    assert.doesNotMatch(shell, /nofollow/i);
+  }],
   ["authentication screens keep the brand restrained", () => {
     for (const relative of [
       "src/pages/Register.tsx",
