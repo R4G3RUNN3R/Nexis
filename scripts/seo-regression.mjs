@@ -76,7 +76,7 @@ const tests = [
       assert.ok(exists(file), `${file} is missing`);
       const html = read(file);
       assert.match(html, /<meta\s+name="robots"\s+content="index, follow, max-image-preview:large"\s*\/?>/i, `${file} must be indexable`);
-      assert.match(html, new RegExp(`<link\s+rel="canonical"\s+href="${canonical.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\s*\/?>`, "i"), `${file} must self-canonicalize`);
+      assert.ok(html.includes(`<link rel="canonical" href="${canonical}" />`), `${file} must self-canonicalize`);
       assert.match(html, new RegExp(`<title>[^<]*${titleFragment}`, "i"), `${file} needs a route-specific title`);
       assert.match(html, /<main\b/i, `${file} needs semantic fallback content`);
       assert.match(html, /<h1\b/i, `${file} needs an h1`);
@@ -90,7 +90,7 @@ const tests = [
     assert.ok(exists("ops/nginx/nexis-public-routes.conf"), "versioned public-route nginx snippet is missing");
     const nginx = read("ops/nginx/nexis-public-routes.conf");
     for (const slug of ["news", "rules", "staff", "contact", "credits"]) {
-      assert.match(nginx, new RegExp(`location\s*=\s*/${slug}\s*\{[\s\S]*?try_files\s+/${slug}\.html\s+=404;[\s\S]*?\}`, "i"), `/${slug} is not mapped to ${slug}.html`);
+      assert.ok(nginx.includes(`location = /${slug} {`) && nginx.includes(`try_files /${slug}.html =404;`), `/${slug} is not mapped to ${slug}.html`);
     }
   }],
   ["crawler policy exposes the intentional public information surface", () => {
