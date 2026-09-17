@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-17
+
+### Public route SEO delivery
+- added dedicated crawlable HTML documents for News, Rules, Staff, Contact and Credits with self-referential canonicals, route-specific metadata, semantic pre-JavaScript content and Voidsmith Industries publisher attribution
+- added a versioned nginx clean-route mapping so `/news`, `/rules`, `/staff`, `/contact` and `/credits` serve their matching public documents instead of the private `app.html` shell
+- added crawlable homepage links to the full public information surface and refreshed sitemap modification dates
+- expanded the SEO regression suite to guard public-route documents, clean-route nginx delivery and internal crawlable links
+- no gameplay, authentication, API, database or player-state behaviour changed
+
 ## 2026-09-16
 
 ### Public discovery expansion

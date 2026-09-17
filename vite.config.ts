@@ -10,6 +10,11 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           index: "index.html",
+          news: "news.html",
+          rules: "rules.html",
+          staff: "staff.html",
+          contact: "contact.html",
+          credits: "credits.html",
           app: "app.html",
         },
       },
