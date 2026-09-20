@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-20
+
+### SEO soft-404 hardening
+- changed the production routing contract so only declared Nexis application routes may receive the private `app.html` shell; arbitrary unknown paths now return a real HTTP 404
+- added an explicit `X-Robots-Tag: noindex, nofollow, noarchive` header on SPA-shell fallback responses
+- added the verified Voidsmith Industries logo URL to the Rules publisher schema
+- expanded SEO regression coverage and the live-operations runbook so a blanket 200 SPA fallback cannot silently return
+- no gameplay, authentication, API, database or player-state behaviour changed
+
+
 ## 2026-09-17
 
 ### Public route SEO delivery
