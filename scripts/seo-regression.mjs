@@ -93,6 +93,22 @@ const tests = [
       assert.ok(nginx.includes(`location = /${slug} {`) && nginx.includes(`try_files /${slug}.html =404;`), `/${slug} is not mapped to ${slug}.html`);
     }
   }],
+  ["nginx SPA fallback serves only declared client routes and rejects unknown paths", () => {
+    const nginx = read("ops/nginx/nexis-public-routes.conf");
+    assert.match(nginx, /location\s+@nexis_app\s*\{/);
+    assert.match(nginx, /return\s+404;/);
+    assert.match(nginx, /try_files\s+\/app\.html\s+=404;/);
+    for (const route of ["login", "home", "inventory", "search/advanced", "city/property-office"]) {
+      assert.ok(nginx.includes(route), `known client route missing from nginx SPA allowlist: ${route}`);
+    }
+  }],
+  ["rules publisher schema includes the Voidsmith logo", () => {
+    const html = read("rules.html");
+    const scripts = [...html.matchAll(/<script\s+type="application\/ld\+json">([\s\S]*?)<\/script>/gi)];
+    assert.ok(scripts.length > 0, "rules JSON-LD is missing");
+    const schema = JSON.parse(scripts[0][1]);
+    assert.equal(schema.publisher?.logo, "https://voidsmithindustries.com/assets/images/logo.png");
+  }],
   ["crawler policy exposes the intentional public information surface", () => {
     const sitemap = read("public/sitemap.xml");
     const locs = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1]);
