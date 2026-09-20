@@ -24,8 +24,11 @@ same compiled React bundle.
 - Exact `/` serves `index.html`, the public indexable SEO shell.
 - Exact `/index.html` redirects permanently to `/` so the homepage has one public URL.
 - Exact `/app.html` serves the application shell with `noindex, nofollow, noarchive`.
-- All other non-static, non-API routes fall back to `app.html`, keeping login,
-  registration and game/deep routes outside the indexable SEO surface.
+- Known login, registration and game/deep routes fall back to `app.html`, keeping
+  application routes outside the indexable SEO surface.
+- Unknown routes must return a real HTTP 404. The versioned
+  `ops/nginx/nexis-public-routes.conf` named `@nexis_app` allowlist is the
+  routing authority for this boundary; do not restore a blanket SPA fallback.
 - `/api/` proxies to the Node backend on `127.0.0.1:3001`.
 - Both shells must reference the same compiled React entrypoint, but they must
   **not** be copied over one another. Replacing `app.html` with `index.html`
@@ -95,8 +98,12 @@ diff <(curl -s https://nexis.nexus/ | grep -o 'assets/main-[a-zA-Z0-9_-]*\.js') 
      <(curl -s https://nexis.nexus/app.html | grep -o 'assets/main-[a-zA-Z0-9_-]*\.js')
 ```
 
+The canonical nginx fallback must be `try_files $uri $uri/ @nexis_app;` inside
+`location /`, with `ops/nginx/nexis-public-routes.conf` included before it.
+
 Expected routing after deploy: `/` is `200`, `/index.html` redirects to `/`,
-and `app.html` plus deep application routes remain noindex.
+`app.html` plus declared deep application routes remain noindex, and an arbitrary
+unknown path such as `/__seo_probe_missing__` returns HTTP `404`.
 
 ## Rollback
 
