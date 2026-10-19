@@ -136,7 +136,8 @@ public sealed class ClaudeC5GlobalStateBlobGuardTests
                      "Nexis.Execution",
                      "Nexis.Identity.Contracts",
                      "Nexis.Inventory.Contracts",
-                     "Nexis.Kernel"
+                     "Nexis.Kernel",
+                     "Nexis.Npcs.Contracts"
                  })
         {
             Assert.IsTrue(
