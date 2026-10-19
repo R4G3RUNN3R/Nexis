@@ -20,6 +20,21 @@ public sealed class PostgresOperationalSignalReporterTests
             Assert.AreEqual(1, sink.Calls);
             await InvokeAsync(sink);
             Assert.AreEqual(1, sink.Calls, "The pending sink must occupy the only reporting slot.");
+            sink.Release();
+            // After the first sink completes, its continuation must release the slot.
+            var recovered = false;
+            for (var attempt = 0; attempt < 30; attempt++)
+            {
+                var probe = new CountingSink();
+                await InvokeAsync(probe);
+                if (probe.Calls > 0)
+                {
+                    recovered = true;
+                    break;
+                }
+                await Task.Delay(20);
+            }
+            Assert.IsTrue(recovered, "The reporting slot must recover after the blocked sink completes.");
         }
         finally
         {
@@ -37,6 +52,17 @@ public sealed class PostgresOperationalSignalReporterTests
         var signal = new OperationalSignal(OperationalConditionKind.ProjectionFailure, OperationalSeverity.Error, new OperationalComponentKey("reporter-test"), new OperationalReasonCode("reporter.test"), DateTimeOffset.UtcNow);
         var task = (ValueTask)method.Invoke(null, new object?[] { sink, signal })!;
         await task.AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    private sealed class CountingSink : IOperationalSignalSink
+    {
+        private int _calls;
+        public int Calls => Volatile.Read(ref _calls);
+        public ValueTask ReportAsync(OperationalSignal signal, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _calls);
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class BlockingSink : IOperationalSignalSink
