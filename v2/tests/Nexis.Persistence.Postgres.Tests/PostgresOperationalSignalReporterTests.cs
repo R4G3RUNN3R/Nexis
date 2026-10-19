@@ -14,7 +14,9 @@ public sealed class PostgresOperationalSignalReporterTests
         var sink = new BlockingSink();
         try
         {
-            await InvokeAsync(sink);
+            var first = InvokeAsync(sink);
+            await sink.WaitUntilEnteredAsync().WaitAsync(TimeSpan.FromSeconds(2));
+            await first;
             Assert.AreEqual(1, sink.Calls);
             await InvokeAsync(sink);
             Assert.AreEqual(1, sink.Calls, "The pending sink must occupy the only reporting slot.");
@@ -40,13 +42,16 @@ public sealed class PostgresOperationalSignalReporterTests
     private sealed class BlockingSink : IOperationalSignalSink
     {
         private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _calls;
         public int Calls => Volatile.Read(ref _calls);
         public async ValueTask ReportAsync(OperationalSignal signal, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _calls);
+            _entered.TrySetResult();
             await _gate.Task;
         }
+        public Task WaitUntilEnteredAsync() => _entered.Task;
         public void Release() => _gate.TrySetResult();
     }
 }
