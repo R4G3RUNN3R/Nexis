@@ -65,6 +65,10 @@ Examples:
 - Combat owns persistent encounter/combat state; Core calculates legal actions, hit/damage/effects and resulting transitions using snapshots from the relevant owners and versioned content.
 - Education owns enrollment/completion/progress state; Content Registry owns course definitions; Core evaluates prerequisites, timing and reward transitions.
 - Travel owns current location/journey state; Content Registry owns route/location definitions; Core evaluates eligibility, cost, timing and arrival transitions.
+- NPC Lifecycle owns persistent person existence/lifecycle/personality-baseline facts; Population owns anonymous demographic cohorts; Content Registry owns species/lifecycle and static NPC definitions; Core evaluates materialisation, lifecycle and mortality rules from typed snapshots without becoming a second living-world owner.
+- Succession owns vacancy-resolution workflow state while Employment/Guilds/Consortiums/etc. continue to own the roles themselves; Core evaluates candidate/transition legality from the relevant typed snapshots.
+
+The approved living-world design does not introduce a second simulation rules engine. `Nexis.Simulation` may coordinate cold/warm/hot processing and dispatch work, but authoritative outcomes still pass through Application, the selected Core and the actual owners.
 
 The exact ownership boundaries are fixed by `STATE-OWNERSHIP.md` unless deliberately superseded by an approved architecture decision. Core/system responsibility remains: Core decides; owners persist their own facts.
 

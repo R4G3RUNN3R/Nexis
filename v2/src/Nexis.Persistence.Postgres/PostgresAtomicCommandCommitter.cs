@@ -1,7 +1,9 @@
 using System.Data;
 using System.Text.Json;
 using Nexis.Core.Contracts;
+using Nexis.Execution;
 using Nexis.Execution.Contracts;
+using Nexis.Operations.Contracts;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -13,19 +15,33 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
     private static readonly CommandReasonCode ReceiptOwnershipLost = new("execution.receipt.ownership_lost");
     private static readonly CommandReasonCode ReceiptAlreadyCompleted = new("execution.receipt.already_completed");
     private static readonly CommandReasonCode OwnerApplierMissing = new("execution.owner.applier_missing");
+    private static readonly CommandReasonCode OwnerLockKeysUnresolved = new("execution.owner.lock_keys_unresolved");
     private static readonly CommandReasonCode PersistenceFailure = new("execution.persistence.failed");
+
+    private static readonly OperationalComponentKey OperationalComponent = new("postgres.command-commit");
+    private static readonly OperationalReasonCode UnexpectedConcurrencyReason =
+        new("concurrency.unexpected_failure");
 
     private readonly NpgsqlDataSource _dataSource;
     private readonly IReadOnlyDictionary<OwnerKey, IPostgresOwnerTransitionApplier> _appliers;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly IPostgresResourceLockAcquirer _resourceLockAcquirer;
+    private readonly IOperationalSignalSink? _operationalSignalSink;
+    private readonly TimeProvider _timeProvider;
 
     public PostgresAtomicCommandCommitter(
         NpgsqlDataSource dataSource,
         IEnumerable<IPostgresOwnerTransitionApplier>? ownerTransitionAppliers = null,
-        JsonSerializerOptions? jsonOptions = null)
+        JsonSerializerOptions? jsonOptions = null,
+        IPostgresResourceLockAcquirer? resourceLockAcquirer = null,
+        IOperationalSignalSink? operationalSignalSink = null,
+        TimeProvider? timeProvider = null)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _jsonOptions = jsonOptions is null ? new JsonSerializerOptions() : new JsonSerializerOptions(jsonOptions);
+        _resourceLockAcquirer = resourceLockAcquirer ?? new PostgresAdvisoryResourceLockAcquirer();
+        _operationalSignalSink = operationalSignalSink;
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
         var appliers = new Dictionary<OwnerKey, IPostgresOwnerTransitionApplier>();
         foreach (var applier in ownerTransitionAppliers ?? Array.Empty<IPostgresOwnerTransitionApplier>())
@@ -59,6 +75,31 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
                     _jsonOptions)))
             .ToArray();
 
+        try
+        {
+            return await CommitAuthoritativelyAsync(plan, serializedEvents, cancellationToken).ConfigureAwait(false);
+        }
+        catch (PostgresException exception) when (
+            PostgresTransientCommandFailureClassifier.IsRetryableSqlState(exception.SqlState))
+        {
+            throw;
+        }
+        catch (PostgresException exception)
+        {
+            if (IsUnexpectedConcurrencySqlState(exception.SqlState))
+            {
+                await ReportUnexpectedConcurrencyBestEffortAsync(plan, exception.SqlState).ConfigureAwait(false);
+            }
+
+            return CommandCommitResult.TechnicalFailure(PersistenceFailure);
+        }
+    }
+
+    private async ValueTask<CommandCommitResult> CommitAuthoritativelyAsync(
+        CommandCommitPlan plan,
+        IReadOnlyList<SerializedEvent> serializedEvents,
+        CancellationToken cancellationToken)
+    {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
 
@@ -71,20 +112,27 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
                 return CommandCommitResult.TechnicalFailure(receiptVerification);
             }
 
-            foreach (var transition in plan.Transitions)
+            if (plan.Transitions.Any(transition => !_appliers.ContainsKey(transition.TargetOwner)))
             {
-                if (!_appliers.TryGetValue(transition.TargetOwner, out var applier))
-                {
-                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                    return CommandCommitResult.TechnicalFailure(OwnerApplierMissing);
-                }
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return CommandCommitResult.TechnicalFailure(OwnerApplierMissing);
+            }
 
-                var applyResult = await applier.ApplyAsync(
-                    connection,
-                    transaction,
-                    transition,
-                    cancellationToken).ConfigureAwait(false);
+            var resolvedPlan = ResolveCommitResources(plan.Transitions);
+            if (resolvedPlan is null)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return CommandCommitResult.TechnicalFailure(OwnerLockKeysUnresolved);
+            }
 
+            foreach (var resource in resolvedPlan.Resources)
+            {
+                await _resourceLockAcquirer.AcquireAsync(connection, transaction, resource, cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var item in resolvedPlan.Transitions)
+            {
+                var applyResult = await item.Applier.ApplyAsync(connection, transaction, item.Transition, cancellationToken).ConfigureAwait(false);
                 if (applyResult.Disposition == PostgresOwnerTransitionDisposition.ConcurrencyConflict)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
@@ -95,22 +143,12 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
 
             foreach (var serializedEvent in serializedEvents)
             {
-                await InsertEventAndOutboxAsync(
-                    connection,
-                    transaction,
-                    plan,
-                    serializedEvent,
-                    cancellationToken).ConfigureAwait(false);
+                await InsertEventAndOutboxAsync(connection, transaction, plan, serializedEvent, cancellationToken).ConfigureAwait(false);
             }
 
             foreach (var auditEntry in plan.AuditEntries)
             {
-                await PostgresAuditWriter.InsertAsync(
-                    connection,
-                    transaction,
-                    auditEntry,
-                    plan.Trace.Identity.CommandId,
-                    cancellationToken).ConfigureAwait(false);
+                await PostgresAuditWriter.InsertAsync(connection, transaction, auditEntry, plan.Trace.Identity.CommandId, cancellationToken).ConfigureAwait(false);
             }
 
             if (await CompleteReceiptAsync(connection, transaction, plan, cancellationToken).ConfigureAwait(false) != 1)
@@ -122,17 +160,105 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return CommandCommitResult.Committed();
         }
-        catch (PostgresException exception) when (
-            PostgresTransientCommandFailureClassifier.IsRetryableSqlState(exception.SqlState))
+        catch
         {
             await SafeRollbackAsync(transaction, cancellationToken).ConfigureAwait(false);
             throw;
         }
-        catch (PostgresException)
+    }
+
+    /// <summary>
+    /// Only SQLSTATEs whose PostgreSQL meaning is unambiguously concurrency-specific belong here.
+    /// Serialization failure and deadlock are handled by bounded retry; lock-not-available is the
+    /// remaining explicit concurrency failure. Generic transaction rollback, integrity rollback and
+    /// statement-completion-unknown are not relabeled as concurrency.
+    /// </summary>
+    public static bool IsUnexpectedConcurrencySqlState(string? sqlState) =>
+        string.Equals(sqlState, "55P03", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Diagnostics cannot roll a committed transaction back, cannot un-roll-back an aborted one, and
+    /// cannot turn this TechnicalFailure into any other terminal outcome.
+    /// </summary>
+    private async ValueTask ReportUnexpectedConcurrencyBestEffortAsync(
+        CommandCommitPlan plan,
+        string? sqlState)
+    {
+        await PostgresOperationalSignalReporter.ReportBestEffortAsync(
+            _operationalSignalSink,
+            new OperationalSignal(
+                OperationalConditionKind.UnexpectedConcurrencyFailure,
+                OperationalSeverity.Error,
+                OperationalComponent,
+                ReasonFor(sqlState),
+                _timeProvider.GetUtcNow(),
+                plan.Trace.Identity.CommandId,
+                plan.Trace.CorrelationId)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// SQLSTATE values are a fixed five-character alphanumeric catalogue, so appending one keeps the
+    /// reason token bounded while preserving the specific state for diagnosis. Anything not matching
+    /// that exact shape falls back to the bare reason rather than widening the token vocabulary.
+    /// </summary>
+    private static OperationalReasonCode ReasonFor(string? sqlState) =>
+        sqlState is { Length: 5 } && sqlState.All(char.IsAsciiLetterOrDigit)
+            ? new OperationalReasonCode($"{UnexpectedConcurrencyReason.Value}.{sqlState.ToLowerInvariant()}")
+            : UnexpectedConcurrencyReason;
+
+    private ResolvedCommitPlan? ResolveCommitResources(
+        IReadOnlyList<IOwnerTransition> transitions)
+    {
+        var resolved = new List<ResolvedTransition>(transitions.Count);
+        foreach (var transition in transitions)
         {
-            await SafeRollbackAsync(transaction, cancellationToken).ConfigureAwait(false);
-            return CommandCommitResult.TechnicalFailure(PersistenceFailure);
+            if (!_appliers.TryGetValue(transition.TargetOwner, out var applier))
+            {
+                return null;
+            }
+
+            IReadOnlyList<AuthoritativeResourceKey> keys;
+            try
+            {
+                keys = applier.ResolveLockKeys(transition);
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+            {
+                return null;
+            }
+
+            if (keys is null || keys.Count == 0 || keys.Any(static key => key is null))
+            {
+                return null;
+            }
+
+            var canonicalKeys = CanonicalResourceLockOrder.Order(keys);
+            if (canonicalKeys.Count == 0 || canonicalKeys.Any(key => key.Owner != applier.Owner))
+            {
+                return null;
+            }
+
+            resolved.Add(new ResolvedTransition(
+                transition,
+                applier,
+                canonicalKeys,
+                string.Join("\u001f", canonicalKeys.Select(static key => key.ToString()))));
         }
+
+        var globalOrder = CanonicalResourceLockOrder.Order(resolved.SelectMany(static item => item.Keys));
+        var positions = globalOrder
+            .Select(static (key, index) => new { key, index })
+            .ToDictionary(static item => item.key, static item => item.index);
+
+        var orderedTransitions = resolved
+            .OrderBy(item => item.Keys.Min(key => positions[key]))
+            .ThenBy(static item => item.Transition.Contract.Name, StringComparer.Ordinal)
+            .ThenBy(static item => item.Transition.Contract.SchemaVersion)
+            .ThenBy(static item => item.KeySignature, StringComparer.Ordinal)
+            .ThenBy(static item => item.Transition.ExpectedRevision)
+            .ToArray();
+
+        return new ResolvedCommitPlan(globalOrder, orderedTransitions);
     }
 
     private static async ValueTask<CommandReasonCode?> VerifyReceiptAsync(
@@ -145,7 +271,7 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
             SELECT lane, actor_account_id, actor_character_id, actor_system_key,
                    intent_name, intent_schema_version, payload_fingerprint,
                    original_correlation_id, terminal_status, terminal_reason, completed_at_utc,
-                   execution_token
+                   execution_token, recovery_abandoned_at_utc
             FROM nexis_v2.command_receipts
             WHERE command_id = @command_id
             FOR UPDATE;
@@ -162,10 +288,12 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
 
         var stored = PostgresCommandReceiptRepository.ReadReceipt(reader);
         var executionToken = reader.GetGuid(11);
+        var recoveryAbandoned = !reader.IsDBNull(12);
 
         if (!PostgresCommandReceiptRepository.Matches(plan.Trace.Identity, stored) ||
             stored.OriginalCorrelationId != plan.Trace.CorrelationId.Value ||
-            executionToken != plan.ExecutionToken.Value)
+            executionToken != plan.ExecutionToken.Value ||
+            recoveryAbandoned)
         {
             return ReceiptOwnershipLost;
         }
@@ -194,7 +322,8 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
                 execution_lease_expires_at_utc = NULL
             WHERE command_id = @command_id
               AND execution_token = @execution_token
-              AND terminal_status IS NULL;
+              AND terminal_status IS NULL
+              AND recovery_abandoned_at_utc IS NULL;
             """;
 
         await using var command = new NpgsqlCommand(sql, connection, transaction);
@@ -225,10 +354,10 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         const string eventSql = """
             INSERT INTO nexis_v2.authoritative_events (
                 event_id, command_id, correlation_id, occurred_at_utc, causation_event_id,
-                contract_name, contract_schema_version, payload)
+                contract_name, contract_schema_version, payload, intra_command_sequence)
             VALUES (
                 @event_id, @command_id, @correlation_id, @occurred_at_utc, @causation_event_id,
-                @contract_name, @contract_schema_version, @payload);
+                @contract_name, @contract_schema_version, @payload, @intra_command_sequence);
             """;
 
         var envelope = serializedEvent.Envelope;
@@ -241,10 +370,12 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         const string outboxSql = """
             INSERT INTO nexis_v2.outbox (
                 event_id, command_id, correlation_id, occurred_at_utc,
-                contract_name, contract_schema_version, payload, available_at_utc)
+                contract_name, contract_schema_version, payload, available_at_utc,
+                intra_command_sequence)
             VALUES (
                 @event_id, @command_id, @correlation_id, @occurred_at_utc,
-                @contract_name, @contract_schema_version, @payload, @available_at_utc);
+                @contract_name, @contract_schema_version, @payload, @available_at_utc,
+                @intra_command_sequence);
             """;
 
         await using var outboxCommand = new NpgsqlCommand(outboxSql, connection, transaction);
@@ -277,6 +408,10 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         command.Parameters.AddWithValue("contract_name", NpgsqlDbType.Text, envelope.Descriptor.Contract.Name);
         command.Parameters.AddWithValue("contract_schema_version", NpgsqlDbType.Integer, envelope.Descriptor.Contract.SchemaVersion);
         command.Parameters.AddWithValue("payload", NpgsqlDbType.Jsonb, json);
+        command.Parameters.AddWithValue(
+            "intra_command_sequence",
+            NpgsqlDbType.Integer,
+            envelope.Metadata.IntraCommandSequence);
     }
 
     private static async ValueTask SafeRollbackAsync(
@@ -295,4 +430,14 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
     }
 
     private sealed record SerializedEvent(AuthoritativeEventEnvelope Envelope, string Json);
+
+    private sealed record ResolvedTransition(
+        IOwnerTransition Transition,
+        IPostgresOwnerTransitionApplier Applier,
+        IReadOnlyList<AuthoritativeResourceKey> Keys,
+        string KeySignature);
+
+    private sealed record ResolvedCommitPlan(
+        IReadOnlyList<AuthoritativeResourceKey> Resources,
+        IReadOnlyList<ResolvedTransition> Transitions);
 }

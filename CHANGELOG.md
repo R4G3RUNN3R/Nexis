@@ -1,4 +1,188 @@
 # Changelog
+## 2026-09-16
+
+### Nexis 2.0 living-world NPC architecture approved
+- consolidated the human-approved living-world decisions into `docs/superpowers/specs/2026-09-16-nexis-living-world-npc-simulation-design.md` without implementing gameplay or changing live/runtime state
+- designed a hybrid conserved population model: anonymous demographic cohorts remain aggregate until causal history requires an individual, then materialisation atomically transfers one person into a permanent persistent `NpcId`
+- defined progressive deterministic biography, 1:1 real-time ageing, sparse causal mortality, single shared NPC presence, Knowledge-vs-History separation, cold/warm/hot processing, Active Cast projection, and role succession with real vacancies and need pressure
+- proposed new bounded owners for NPC lifecycle, aggregate Population and Succession workflow plus a non-authoritative Simulation coordinator, while preserving existing Core/Application/owner/eventing/replay rules and existing domain ownership
+- preserved Sacred Grove resurrection canon by treating death as final by default but allowing explicit typed resurrection without erasing death history or automatically undoing downstream consequences
+- human approval received 2026-09-16; promoted the consolidated specification to `APPROVED DESIGN` and reconciled State Ownership, Core, command execution, canon, agent handoff and implementation-status documents around the approved boundaries
+- authorized implementation planning only: production code, database schema, deployment, merge, live services and V1/production data remain untouched
+
+## 2026-09-03
+
+### Nexis 2.0 C5 operational-signal producer wiring
+- completed the operational-observability producer wiring the contracts slice had left pending: retry exhaustion, execution invariant violations, projection failure, unexpected concurrency failure, and the replay boundary's split between an artifact the corpus declines and evidence that has been damaged
+- established that the interrupted partial work carried no durable RED evidence - the session log was empty and the partial test file did not compile, so it had never run - backed the whole partial patch up under the coordination directory, restored all six affected production files to `f72e8bc`, then re-derived the tests and drove RED to GREEN rather than adopting unproven hunks
+- reported every condition only after its own authoritative classification is complete, so a signal describes a settled fact rather than predicting one; retry exhaustion is emitted after the bounded executor has spent its last attempt and the TechnicalFailure terminal outcome has been durably attempted
+- prevented duplicate-signal storms deliberately rather than incidentally: a retry abandoned because the lease moved is not reported as exhaustion, since the bound was not reached and the recovery repository already owns and reports that fence; replay retention over an occupied path delegates to the read path that owns the retained conditions, so one logical failure yields exactly one signal
+- separated replay artifact *rejection* from replay *corruption* as distinct conditions with distinct severities: a policy refusal of a structurally intact artifact is a routine result while the reviewed catalogue is narrow, whereas retained evidence that no longer matches what was written is an integrity incident against the historical record; a divergent Core comparison is neither and is returned as a result, never reported as a fault
+- classified unexpected concurrency by SQLSTATE class 40 minus the two states the transient classifier already retries, so an ordinary constraint error outside that class cannot masquerade as a contention incident and page whoever owns concurrency
+- gave replay signals no CommandId, CorrelationId or EventId at all, because a rejected or corrupt artifact cannot be trusted to yield those identifiers and inventing linkage from untrusted content is worse than omitting it
+- kept every producer best-effort behind an optional sink dependency, with tests proving a throwing sink changes neither the terminal command outcome, owner state, authoritative history, the retry bound, the receipt fence, the projection checkpoint nor the rethrown exception
+- widened `Nexis.History.Replay` to reference `Nexis.Operations.Contracts`, a stable non-authoritative leaf depending only on `Nexis.Kernel`, with a test pinning that the replay assembly still references no concrete Core, Operations implementation or PostgreSQL assembly
+- raised genuine server-side PostgreSQL errors in the integration tests rather than fabricating exceptions, and used a `DEFERRABLE INITIALLY DEFERRED` constraint so the checkpoint-commit failure case genuinely fails at COMMIT rather than inside the projector
+- reconciled `OPERATIONAL-OBSERVABILITY.md`, which had recorded these producers as pending, and recorded the one guard that is untestable by construction (the retention collision branch requires a SHA-256 collision) rather than claiming coverage for it
+- verification: `dotnet build Nexis.slnx -c Release` 0 warnings/0 errors on SDK 10.0.111; focused RED then GREEN on `ClaudeC5OperationalProducerTests` 10 failed of 18 then 18/18; focused RED then GREEN on `ClaudeC5PostgresOperationalProducerTests` 3 failed of 10 then 10/10 against a disposable `postgres:18.6-alpine` container; regression on the classes exercising the changed paths: `ReplayCorpusTests` 25/25, `PostgresOutboxIntegrationTests` 8/8, `PostgresExecutionIntegrationTests` 19/19
+- limitation: per `ENGINEERING-MANUAL.md` and `COMPONENT-RELEASE-GATE.md`, no whole-suite run was performed; only the classes above were executed and no whole-suite result is claimed
+
+### Nexis 2.0 Foundation stop-condition audit
+- walked all thirteen `AGENT-HANDOFF.md` stop conditions and the required architecture-test list once end to end, recording exact code and test evidence per item in `v2/docs/FOUNDATION-STOP-CONDITION-AUDIT-2026-09-03.md`
+- graded every item as Observed, Present or Absent and never blurred the three, so the audit distinguishes what this session actually ran from what merely exists in the repository
+- found one genuine hole: the prohibition on a global `PlayerState`/`RuntimeState`/`CharacterState`/qualities/counters write model is named in three binding documents and is the single failure mode `STATE-OWNERSHIP.md` exists to prevent, yet no executable test enforced it; the invariant held only because reviewers remembered it
+- closed it with `ClaudeC5GlobalStateBlobGuardTests`, rejecting a prohibited global state container, a generic string-keyed bag used as an ownership model, and a generic path/value owner transition
+- used two complementary scans because they have different reach: reflection inspects real member types across the referenced assemblies, while a source scan covers every project under `src/`, including `Nexis.Persistence.Postgres` and `Nexis.Host.Api`, which the architecture test project deliberately does not reference
+- added four non-vacuity tests proving each scan detects a real violation, so a scan that finds nothing is distinguishable from a scan that cannot find anything; the guard was green on its first real run, which is the correct outcome for a guard asserting an invariant that already held, and its value is that the next slice reintroducing the V1 shape now fails
+- classified the remaining gaps rather than papering over them: Economy/Travel/Resources/Marketplace/Recovery sole-writer tests cannot exist because those owners are deliberately unimplemented, and the API-purity and client-DTO conditions have no surface to constrain because `Nexis.Host.Api` is still a health/status stub; both are design-gated and are recorded as acceptance criteria the relevant future slice inherits up front
+- recorded that migration/reconciliation tooling remains gated on the unresolved human decision packet, and that no live, production or V1 database was contacted by this work
+- recorded a process observation for the release gate: PostgreSQL integration classes skip as Inconclusive without a connection string, so two stop conditions can look satisfied on a host that never ran them; no code change is proposed because the real control is the release gate's provisioned environment
+- result: 13 of 13 stop conditions satisfied, with the audit explicitly not claiming a whole-suite green run, not authorizing gameplay fan-out, and not authorizing deployment, merge or PR promotion; PR #4 remains draft
+
+## 2026-09-01
+
+### Nexis 2.0 L3 History and Player Log resolution
+- resolved all three long-standing L3 REDs without renaming, skipping or weakening them; their original assertions in `ClaudeFoundationThreatModelTests` remain byte-identical and now pass
+- **TM-02, intra-command event order**: every event of one command was stamped with the same evaluation instant and a null causation, and the events table had no ordering column, so a multi-event command had no recoverable order at all
+- gave `EventMetadata` and `CommittedEventMessage` a durable zero-based `IntraCommandSequence` assigned from Core's emission order, persisted by migration `0010` in both `authoritative_events` and `outbox`, protected by `UNIQUE (command_id, intra_command_sequence)` so one command structurally cannot commit two events claiming the same position, and carried through outbox claim ordering
+- additionally chained each event's `CausationId` to its predecessor within the command, so the authoritative order is reconstructible two independent ways from durable metadata rather than from equal timestamps, list identity or database row order
+- **TM-03, poisoned audit projection**: `SafePlayerReason` was unbounded free text while the Player Log plain-text boundary rejects anything over its bound, so an append-only immutable audit row could be committed that throws on every later projection attempt
+- validated player-disclosable audit reason text at construction using the same normalization and bound as `PlayerLogPlainText`, rejecting rather than truncating so a staff-written justification for a privileged action is never silently altered; validation applies whenever a reason is supplied, since the field is player-disclosable by definition and the row is immutable once written
+- pinned the two boundaries to identical decisions on adversarial input (length, control characters, collapsing whitespace, values that normalize away) because `Nexis.Audit.Contracts` cannot reference `Nexis.History.Contracts` without a dependency cycle, so drift now fails the suite instead of silently reopening the finding
+- **TM-04, silent player-history loss**: the projection registry keyed on contract name *and* schema version and returned empty for anything unregistered, so bumping a projected event's schema version silently stopped producing player history, which is indistinguishable from data loss
+- distinguished the two cases: an unregistered contract *name* remains deliberately internal and stays invisible, while a registered name arriving at an unregistered schema version now fails loudly as a misconfiguration; the diagnostic names only the offending contract and version and never enumerates the rest of the registry, and fail-closed malformed-payload behaviour is unchanged
+- fixed a real migration defect surfaced by the new order tests: because `EnsureCreatedAsync` re-executes every migration file, an unguarded backfill re-derived sequences for rows that already carried authoritative values, overwriting real emission order and colliding with the uniqueness constraint; the add-and-backfill is now strictly one-time, with a regression test pinning that re-running migrations never renumbers committed events
+- verification: Release build of `Nexis.slnx` 0 warnings/0 errors; architecture suite 248 total, 248 passed, 0 failed, 0 skipped; disposable PostgreSQL integration suite on a fresh database 81 total, 81 passed, 0 failed, 0 skipped; no previously green test regressed and no protective assertion was removed
+
+### Nexis 2.0 account-scoped stable public player identity
+- implemented the `PublicPlayerId` boundary required by `IDENTITY-AUTHORIZATION.md`: one normal account is one player is one playable character, with no slots, alts or campaign characters, and `AccountId`, `CharacterId`, `PublicPlayerId` and display name kept as four permanently distinct concepts
+- made `PublicPlayerId` deliberately non-GUID-shaped, so an accidental cast, reinterpretation or copy-paste between an internal identifier and the public one cannot compile rather than merely violating a naming convention
+- preserved V1's observable public player-number semantics without reusing, moving or modifying any V1 code or data: ordinal floor `1000000`, a reserved block of 20 never allocated to an ordinary player, first allocatable `P1000020`, rendered as `P` plus seven zero-padded digits
+- added migration `0009` with the Identity owner's private `player_identities` table; `account_id` is the primary key so an account cannot hold a second playable character, `character_id` is unique so a character cannot be controlled by a second account, and `public_player_ordinal` is unique so no race can mint a duplicate public identity
+- allocated public ordinals from a sequence rather than `max() + 1`, so concurrent provisioning cannot allocate the same ordinal twice; a race of eight provisioners for one account converges on exactly one identity and one row
+- made provisioning idempotent so a retried sign-in returns the original identity instead of minting a second public identifier, and raised a typed `PlayerIdentityConflictException` when a request contradicts a stored mapping rather than silently returning a different identity
+- enforced public-identifier immutability in three independent places: no setter on `PlayerIdentity`, a `refuse_player_identity_reassignment` database trigger rejecting any `UPDATE` that would change `account_id`, `character_id` or `public_player_ordinal`, and the uniqueness constraints; renaming is the only permitted mutation and changes no identifier
+- pinned the public projection to exactly two facts, `PublicPlayerId` and `DisplayName`, with tests asserting it exposes no `AccountId`, `CharacterId`, `AccountRole`, capability, security-version or entitlement member and no role/capability/entitlement-shaped member name; this enforces the Hennet boundary structurally rather than by reviewer vigilance
+- proved `PublicPlayerId` grants zero authority: it exposes no member returning an internal identifier or `TrustedActorContext`, no `TrustedActorContext` factory accepts one, `IPlatformAuthorizationPolicy` accepts neither it nor a display name, and Hennet's player actor receives no capability even under a policy granting that capability to every staff bundle
+- treated a client-supplied public identifier as a hostile assertion: control is resolved from the server-derived actor and a forged identifier yields no `CharacterId` at all, so it cannot authorize another character
+- corrected stale factual metadata in `AGENT-HANDOFF.md` and `IMPLEMENTATION-STATUS.md`, which still named the superseded `feature/nexis-v2-foundation-skeleton` working branch; no binding architecture was changed
+- verification: Release build of `Nexis.slnx` 0 warnings/0 errors; architecture suite 233 total, 230 passed, 3 failed, 0 skipped; disposable PostgreSQL integration suite on a fresh database 75 total, 75 passed, 0 failed, 0 skipped; the three architecture failures remain the open L3 History/Player Log findings, untouched by this slice
+
+## 2026-08-31
+
+### Nexis 2.0 M-reserve item availability and the C3 real multi-owner gameplay proof
+- adopted the approved **M-reserve** availability model: Inventory owns possession *and* the single authoritative answer to whether an item instance is available; Equipment owns slot bindings only, and equipping never removes the item from Inventory as the superseded V1 `removeInventory`/`addInventory` mechanism did
+- added the typed availability vocabulary `InventoryItemReservation(ItemInstanceId, OwnerKey holdingOwner, ItemReleaseRestriction?)` and the `ReserveInventoryItemTransition` / `ReleaseInventoryItemReservationTransition` owner transitions; `InventorySnapshot` gains `Reservations` and moves to contract schema 2
+- made Equip a genuine two-owner command (Inventory reserves, Equipment binds) and added the inverse `UnequipItem` Core rule, typed contracts and canonical command codec; the availability check is ordered after the already-equipped check so re-equipping worn gear reports `equipment.item.already_equipped` rather than misattributing it to `equipment.item.reserved_elsewhere`
+- classified Equipment/Inventory disagreement about the same item (missing or foreign-held reservation) as TechnicalFailure rather than an in-world rejection, since neither is something the player did
+- added the real Inventory PostgreSQL owner and migration `0008`; `UNIQUE (item_instance_id)` on `inventory_item_reservations` is the structural no-double-spend guarantee enforced by the database rather than only by a C# check, and the release statement carries `restriction_declaring_owner IS NULL AND holding_owner = @o` so a restricted or foreign-held reservation is not releasable even if Core were bypassed or stale
+- delivered the C3 proof: `UnequipItem` clears the Equipment binding and releases the same Inventory reservation in one atomic, exactly-once, double-spend-proof command, proven against real PostgreSQL for the happy path, independent stale-Inventory and stale-Equipment rollback, repeated CommandId, concurrent unequips, an opposing stale reservation, and removal-restriction denial committing neither owner
+- fixed a latent single-owner assumption exposed rather than caused by this slice: `ReplayCorpusExtractor.ValidateTrace` compared plan and decision transitions with the order-sensitive `SequenceEqual` while `CommandCommitPlanBuilder` deliberately canonicalizes transition order, so any genuine multi-owner command would have tripped it; the comparison is now an order-insensitive multiset with added-, dropped-, substituted- and duplicated-transition cases still rejected
+- advanced the replay corpus to V2 so the rule-relevant Inventory availability input is retained; a V1 artifact now fails closed rather than reporting false semantic equivalence during Core-vNext comparison
+- added `MReserveFreedomRuleTests` guarding the approved freedom rule mechanically: stats, skills and knowledge are not equip or unequip gates, Nexis.Core takes no compile-time dependency on a capability owner, and neither equipment rule declares a capability-shaped rejection reason
+- reconciled the `STATE-OWNERSHIP.md` §8 self-contradiction (reference-only versus multi-owner equip) and the `COMMAND-EXECUTION.md` "Inventory precondition" equip example under M-reserve, and recorded the boundary plus the future curse integration seam in `ITEM-AVAILABILITY-RESERVATION.md`
+- no Curse owner, curse state, effect persistence, questline, purification path or balance value was created; the only curse-adjacent artefact is the typed `ItemReleaseRestriction(OwnerKey declaringOwner)` seam, deliberately empty of curse semantics
+- no protective test was weakened: the superseded single-owner equip assertions and the corpus V1 expectation were each replaced by strictly stronger assertions in the same file
+- verification: Release build of `Nexis.slnx` 0 warnings/0 errors; architecture suite 218 total, 215 passed, 3 failed, 0 skipped; disposable PostgreSQL integration suite on a fresh database 66 total, 66 passed, 0 failed, 0 skipped; the three architecture failures remain the open L3 History/Player Log findings
+
+## 2026-08-29
+
+### Nexis 2.0 privileged-entry attribution and decision freshness
+- attributed denied privileged command entry: `PrivilegedCommandEntryDecision` gains an always-populated `AttemptedByAccountId` while `ActingAccountId` deliberately stays null on refusal, so a denied actor is never presentable as acting authority yet the attempt is no longer anonymous
+- emitted a bounded `PrivilegedEntryDenied` operational signal on refusal, distinguishing missing capability from explicit deny, stale security context, actor mismatch and staff-actor-required; a denial never reaches a commit plan, so without this a privilege-escalation burst left no trace anywhere
+- kept raw identity out of the signal: attribution travels on the decision, while the signal carries only a SHA-256 actor discriminator, deliberately stable per actor rather than salted per attempt so repeated denied attempts are countable
+- recorded `EvaluatedSecurityVersion` and `EvaluatedAtUtc` on every privileged entry decision, authorized and denied, so a consumer can refuse a decision evaluated before a capability or password change; closed before any BFF consumes the boundary
+- public contract change: `PrivilegedCommandEntryDecision.Authorized`/`Denied` now require the evaluated security version and evaluation time, and `PrivilegedCommandEntryAuthorizer` takes an optional operational signal sink and `TimeProvider`
+- deliberate dependency widening: `Nexis.Execution` now references `Nexis.Operations.Contracts`, a stable non-authoritative leaf depending only on `Nexis.Kernel`; the architecture guard was updated explicitly rather than relaxed
+- verification: Release build of `Nexis.slnx` 0 warnings/0 errors; architecture suite 194 total, 191 passed, 3 failed, 0 skipped; disposable PostgreSQL integration suite 55 total, 55 passed, 0 failed, 0 skipped; the three failures are the open L3 History/Player Log findings
+
+### Nexis 2.0 automated-ingress identity and command-integrity observability
+- added a non-empty, case-normalized closed `SystemActorKey` registry contract for the first real automated-command gateway while preserving construction of retired historical keys for recovery and replay
+- removed the zero-argument `TrustedActorContext.CreateSystem()` authority factory; every System actor construction now supplies an explicit key, guarded across public constructors and static factories in both Identity.Contracts and Execution.Contracts
+- replaced the vacuous CIEL/Scheduling prefix scan with a non-empty whole-source dependency scan and exact trusted-composition allowlist; a negative control proves an arbitrarily named future worker cannot reference mutation boundaries
+- fixed a residual vacuity in that same scan found under review: ProjectReference `Include` attributes use Windows separators, and on Linux `Path.GetFileNameWithoutExtension` does not split on `\`, so every reference parsed with its directory prefix attached, matched no mutation boundary, and left all allowlist entries as unreachable dead configuration; the scan is now bounded from below by tests asserting it parses bare assembly names, classifies a non-empty set, and observes exactly the reviewed eight references
+- reviewed and explicitly allowlisted two mutation-boundary references that the repaired scan made visible for the first time, `Nexis.Execution` and `Nexis.History.Replay` onto `Nexis.Execution.Contracts`; both are contracts-only and hold no mutation capability
+- recorded a RED architecture test for stale privileged-decision protection: `PrivilegedCommandEntryDecision` carries no evaluation time and no security version, so a future BFF could not refuse a decision evaluated before a capability or password change
+- made every non-terminal non-recoverable receipt operator-enumerable, including `canonical_payload IS NULL`, and routed it through the same explicit execution-token/state-fenced terminal TechnicalFailure resolution without automatic resurrection
+- pinned migration `0006`'s persisted `terminal_status = 5` assumption to `CommandTerminalStatus.TechnicalFailure` with an executable embedded-migration invariant so enum drift fails the suite
+- intentionally changed `IAutomatedCommandGateway.SubmitAsync` from `ValueTask` to `ValueTask<AutomatedCommandSubmissionResult>` before any implementation or caller exists, making unregistered-authority rejection an explicit public contract result
+- documented the five exact disposable-PostgreSQL behavioural acceptance tests the first real gateway must pass; runtime M6 enforcement remains a readiness condition because no real gateway exists, and no fake gameplay gateway was introduced
+- added durable append-only PostgreSQL operational signals for CommandId actor, intent-contract and canonical-payload integrity violations; signals link original and attempt correlations and carry only a SHA-256 actor discriminator rather than raw identity or payload
+- verification at this checkpoint: Release build of `Nexis.slnx` 0 warnings/0 errors; architecture suite 187 total, 183 passed, 4 failed, 0 skipped; disposable PostgreSQL integration suite 55 total, 55 passed, 0 failed, 0 skipped; the four architecture failures are the three open L3 History/Player Log findings and the deliberate O-4 RED above
+
+### Nexis 2.0 terminal-effect and recovery-authority contracts
+- reject owner transitions and authoritative events at the commit-plan boundary for Rejected, Conflict, Cancelled and TechnicalFailure outcomes while preserving both effects for DomainFailed
+- remove the public RecoveredCommandExecution overload that inferred Platform for a System-lane command; every recovery construction now supplies the historically persisted SystemActorKey explicitly
+- retain reflection guards against reintroducing any recovery constructor that accepts a lane without the corresponding SystemActorKey
+- public contract change: the 11-argument actor-substituting RecoveredCommandExecution constructor was deleted
+
+### Nexis 2.0 receipt-aware bounded command retry
+- compose receipt acquisition and retry at one Application boundary: acquire CommandId exactly once, then rebuild/revalidate/re-evaluate/commit each retry with the same fenced token instead of re-acquiring as DuplicateInProgress
+- renew the held lease between retryable attempts and abandon immediately when renewal is refused; PostgreSQL emits a bounded payload-free lease-fencing signal with CommandId and original CorrelationId
+- terminalize exhausted retryable failures as TechnicalFailure with zero owner transitions and zero authoritative events
+- real disposable-PostgreSQL evidence forces SQLSTATE 40001 inside attempt 1 and proves exactly one terminal outcome, owner mutation, history row and outbox row; also proves fence rotation blocks commit and exhaustion consumes no resources
+- verification: Release build 0 warnings/0 errors; focused H2 PostgreSQL 3/3 and complete PostgreSQL suite 47/47 before documentation reconciliation
+
+### Nexis 2.0 global canonical PostgreSQL resource locking
+- acquire every adapter-resolved authoritative resource in one global canonical transaction advisory-lock sweep before any owner transition applier executes; interleaved same-owner key sets can no longer regress to transition-local `a,c,b` acquisition
+- preserve adapter-side key resolution and Core replacement boundaries; lock identities remain private PostgreSQL infrastructure and use stable SHA-256-derived 64-bit advisory keys
+- add a real Equipment H1-C conformance guard that compares declared aggregate/binding/slot keys with the actual SQL write order captured by PostgreSQL triggers
+- RED/GREEN evidence: Claude's disposable-PostgreSQL interleaving probe failed at 42/43 with `a,c,b`, then the complete suite passed 44/44 after the global sweep and Equipment guard; Release build passed with 0 warnings/0 errors
+
+### Nexis 2.0 recovery, quarantine and outbox failure hardening
+- separated total outbox delivery attempts from event-specific poison attempts; unclassified and systemic transport failures now back off without consuming the poison ceiling, while explicit event-specific permanent failures alone can dead-letter an event
+- added capability-gated, payload-free operational quarantine listings plus fenced, atomically audited dead-letter requeue and command-recovery resolution paths; recovery quarantine now rotates the execution fence and can terminate as TechnicalFailure without becoming a permanent `DuplicateInProgress` trapdoor
+- added adapter-side authoritative resource-key resolution and deterministic transition ordering without leaking PostgreSQL locking vocabulary into Core contracts; a later slice must complete the global acquisition sweep for interleaved same-owner resources
+- documented the public `CommittedEventTransportException` classification contract and the controlled recovery/quarantine lifecycle
+- verification on the exact reviewed dirty slice: .NET SDK 10.0.111; Release build 0 warnings/0 errors; disposable PostgreSQL 17 suite 41/41; Architecture/Core/security/replay suite 159/162 with only the three pre-existing deliberate L3 RED tests still failing
+- no production/V1 access, deployment, push, merge, DNS/Caddy change or gameplay/canon value change occurred
+
+## 2026-08-28
+
+### Nexis 2.0 operational observability foundation
+- added stable `Nexis.Operations.Contracts` and a platform-neutral `Nexis.Operations` health reporter without introducing a monitoring product or authoritative gameplay state
+- represent command recovery, fencing, outbox delivery/poison, retry exhaustion, invariant, projection, replay rejection/corruption and unexpected concurrency conditions through bounded typed signals
+- expose thread-safe bounded health summaries with exact counts, highest severity and monotonic latest occurrence; exclude raw exceptions, arbitrary payloads, credentials and personal data from the contract
+- strict TDD RED evidence: the focused suite failed because the Operations projects/types did not exist; GREEN passed 5/5 after the minimum contracts and reporter implementation
+- verification: solution restore passed; Release build passed with 0 warnings/0 errors; complete Architecture/Core/execution/security/replay/operations executable passed 158/158
+- added `v2/docs/OPERATIONAL-OBSERVABILITY.md`; validated C7 fixes remain responsible for wiring producers while implementing quarantine, dead-letter, retry and failure-classification behavior
+
+
+### Nexis 2.0 privileged command-entry authorization boundary
+- added a stable Identity authorization-policy interface and reusable Execution entry authorizer for future real Admin commands without introducing fake admin gameplay
+- bind successful privileged entry to the trusted acting staff AccountId separately from the target AccountId so downstream atomic Admin Audit cannot substitute the target as actor
+- reject role-ordinal inference, commercial entitlement or actor-carried capability claims, Character identity, stale security state, target-security substitution, implicit grants and explicit-deny bypass at the command-entry boundary
+- strict TDD RED evidence: the focused boundary test project failed because the privileged entry authorizer/contracts did not exist; GREEN passed 7/7 after the minimum implementation
+- verification: Release build passed with 0 warnings/0 errors; complete Architecture/Core/execution/security/replay executable passed 153/153
+- C3 remains design-blocked: Equip Item legitimately writes Equipment only, and no second real owner mutation is specified without inventing an unapproved cost, reward, reservation or duplicate ownership fact
+
+## 2026-08-27
+
+### Nexis 2.0 replay corpus independent-review repair
+- reject successful replay execution evidence that also carries a contradictory terminal failure reason, with a RED-then-GREEN regression
+- document that retained provenance and command-payload fingerprints are corroborating metadata rather than origin attestation, and scope Equip Item's null-causation invariant to its direct-command event shape
+- hardened untrusted Equip Item replay ingestion so execution/committed-event identities, decision versus committed evidence, output intent identities, and successful owner/content prerequisites are re-established before artifacts are retained or replayed
+- reject normalization-changing source fingerprints, UTC timestamp spellings, definition IDs, placements and slots so semantically identical values cannot acquire different content-addressed scenario IDs
+- apply the reviewed identifier vocabulary and length limits to retained Core/rule/content versions, reasons, definition IDs, placements, slots and contract names; Equip Item artifacts now allow only the registered equippable-definition and item-equipped contracts
+- added adversarial parse and fail-closed file-store regressions plus encode -> parse -> decode/re-encode byte-stability coverage under strict TDD RED -> GREEN
+- verification: Release build passed with 0 warnings/0 errors; replay tests passed 14/14; complete Architecture executable passed 140/140; PostgreSQL integration executable reported 28/28 skipped because `NEXIS_TEST_POSTGRES_CONNECTION` is absent
+- no production access, deployment, push, merge, v1, migration, Education or Web changes were performed
+
+### Nexis 2.0 production-derived replay corpus boundary
+- added `Nexis.History.Replay` as an internal, replaceable replay extraction/execution/retention assembly that consumes existing typed Core request/decision and authoritative command trace/event contracts without introducing a second gameplay execution model
+- added versioned canonical JSON artifacts with SHA-256 content-addressed scenario identity, production/human/automated/synthetic provenance, ordinary/known-bug/exploit/concurrency/high-value tags, persistence outcome and evaluation timing
+- retained existing CommandId, original CorrelationId, EventId/causation, canonical payload fingerprint, Core implementation/contract, rule/content versions and authoritative UTC times
+- added the first explicit privacy-reviewed codec for Equip Item V1; private AccountId/CharacterId/ItemInstanceId values are keyed-pseudonymized while raw command JSON, capabilities, entitlements, security version, credentials, arbitrary metadata and unrestricted RNG material are structurally excluded
+- represented deterministic RNG only through an opaque restricted reference resolved at replay time; replay invokes compatible `ICoreRulesEngine` implementations without owner persistence or authoritative event emission
+- added immutable filesystem retention with duplicate recognition plus content/filename/collision/tamper detection; strict typed deserialization rejects unknown fields at every envelope level
+- kept replay corpus independent of Player Log, Admin Audit, PostgreSQL, HTTP/frontend types, concrete Core and production infrastructure
+- strict TDD RED evidence: the initial focused run failed because the replay project/types did not exist; a later self-review RED run failed both missing payload-fingerprint retention and acceptance of an injected credential field before the parser was hardened
+- verification from `v2/`: .NET SDK 10.0.111; restore passed; Release build passed with 0 warnings/0 errors; focused architecture/Core/security/replay suite passed 134/134; full solution passed 162 total, 134 succeeded, 28 skipped, 0 failed
+- all 28 skips are the existing PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is absent; no credentials were invented and no database, production source, live state, deployment, push or merge was used
+- added `v2/docs/CORE-REPLAY-CORPUS.md` and reconciled conformance/status truth; only Equip Item V1 is registered, and authorized offline production export/selection can now populate permanent corpus packs
+- player impact: none; this is isolated V2 Core/Foundation regression evidence infrastructure
+- remaining foundation work includes migration/reconciliation tooling, a real multi-owner gameplay write proof, operational observability, Staff/Admin policy integration and final threat-model/stop-condition review
+
 
 ## 2026-08-26
 

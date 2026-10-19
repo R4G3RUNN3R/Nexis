@@ -1,6 +1,7 @@
 using Nexis.Core.Contracts;
 using Nexis.Core.Rules;
 using Nexis.Core.Rules.Equipment;
+using Nexis.Core.Rules.Npcs;
 
 namespace Nexis.Core;
 
@@ -82,6 +83,8 @@ public sealed class CoreRulesEngine : ICoreRulesEngine
 
     private static ICoreRuleEvaluator[] CreateDefaultEvaluators() =>
     [
-        new EquipItemRuleEvaluator()
+        new EquipItemRuleEvaluator(),
+        new UnequipItemRuleEvaluator(),
+        new EstablishNpcLifecycleRuleEvaluator()
     ];
 }

@@ -33,7 +33,11 @@ public sealed class ExecutionArchitectureTests
                 "Nexis.Core.Contracts",
                 "Nexis.Execution.Contracts",
                 "Nexis.Identity.Contracts",
-                "Nexis.Kernel"
+                "Nexis.Kernel",
+                // Deliberate widening: Nexis.Operations.Contracts is a stable non-authoritative leaf
+                // that depends only on Nexis.Kernel. The privileged entry boundary emits a denial
+                // signal through it (finding C4). It grants no persistence or mutation capability.
+                "Nexis.Operations.Contracts"
             },
             references);
     }

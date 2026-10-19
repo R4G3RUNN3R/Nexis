@@ -6,5 +6,6 @@
     <ProjectReference Include="..\Nexis.Combat.Contracts\Nexis.Combat.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Equipment.Contracts\Nexis.Equipment.Contracts.csproj" />
     <ProjectReference Include="..\Nexis.Inventory.Contracts\Nexis.Inventory.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Npcs.Contracts\Nexis.Npcs.Contracts.csproj" />
   </ItemGroup>
 </Project>

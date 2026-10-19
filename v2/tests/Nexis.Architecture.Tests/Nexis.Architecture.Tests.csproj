@@ -7,13 +7,17 @@
     <ProjectReference Include="..\..\src\Nexis.Core.Contracts\Nexis.Core.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Core\Nexis.Core.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Content.Contracts\Nexis.Content.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Operations.Contracts\Nexis.Operations.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Operations\Nexis.Operations.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Content.Registry\Nexis.Content.Registry.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Inventory.Contracts\Nexis.Inventory.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Npcs.Contracts\Nexis.Npcs.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Equipment.Contracts\Nexis.Equipment.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Combat.Contracts\Nexis.Combat.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Automation.Contracts\Nexis.Automation.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Modules.Equipment\Nexis.Modules.Equipment.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.Modules.Npcs\Nexis.Modules.Npcs.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Modules.Identity\Nexis.Modules.Identity.csproj" />
     <ProjectReference Include="..\..\src\Nexis.Audit.Contracts\Nexis.Audit.Contracts.csproj" />
@@ -23,5 +27,6 @@
     <ProjectReference Include="..\..\src\Nexis.Eventing.Contracts\Nexis.Eventing.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.History.Contracts\Nexis.History.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Nexis.History.Projection\Nexis.History.Projection.csproj" />
+    <ProjectReference Include="..\..\src\Nexis.History.Replay\Nexis.History.Replay.csproj" />
   </ItemGroup>
 </Project>

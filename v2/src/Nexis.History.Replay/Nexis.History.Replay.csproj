@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Nexis.Combat.Contracts\Nexis.Combat.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Content.Contracts\Nexis.Content.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Core.Contracts\Nexis.Core.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Equipment.Contracts\Nexis.Equipment.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Execution.Contracts\Nexis.Execution.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Identity.Contracts\Nexis.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Inventory.Contracts\Nexis.Inventory.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Items.Contracts\Nexis.Items.Contracts.csproj" />
+    <ProjectReference Include="..\Nexis.Kernel\Nexis.Kernel.csproj" />
+    <!-- Deliberate widening: Nexis.Operations.Contracts is a stable non-authoritative leaf that
+         depends only on Nexis.Kernel. The replay boundary reports artifact rejection and evidence
+         corruption through it. It grants no persistence, Core or mutation capability. -->
+    <ProjectReference Include="..\Nexis.Operations.Contracts\Nexis.Operations.Contracts.csproj" />
+  </ItemGroup>
+</Project>

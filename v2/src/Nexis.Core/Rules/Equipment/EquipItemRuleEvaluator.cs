@@ -7,9 +7,11 @@ using Nexis.Kernel.Commands;
 namespace Nexis.Core.Rules.Equipment;
 
 /// <summary>
-/// First real Nexis V2 gameplay rule. Persistent loadout equipment is allowed only outside an
-/// active Combat encounter, never transfers possession out of Inventory, and binds only to an
-/// explicitly selected currently-empty data-defined placement.
+/// First real Nexis V2 gameplay rule, now under the approved M-reserve model. Persistent loadout
+/// equipment is allowed only outside an active Combat encounter, never transfers possession out of
+/// Inventory, reserves the item instance in Inventory so it cannot be double-spent, and binds only
+/// to an explicitly selected currently-empty data-defined placement. Stats, skills and knowledge
+/// are deliberately not equip prerequisites.
 /// </summary>
 internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
 {
@@ -26,6 +28,7 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
     private static readonly CoreReasonCode PlacementUnsupported = new("equipment.placement.unsupported");
     private static readonly CoreReasonCode AlreadyEquipped = new("equipment.item.already_equipped");
     private static readonly CoreReasonCode PlacementOccupied = new("equipment.placement.occupied");
+    private static readonly CoreReasonCode ItemReservedElsewhere = new("equipment.item.reserved_elsewhere");
 
     public ContractDescriptor IntentContract => EquipItemIntent.IntentContract;
 
@@ -127,6 +130,17 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
             return CoreDecision.Rejected(AlreadyEquipped);
         }
 
+        // M-reserve: Inventory holds the single authoritative answer to availability. An item
+        // already committed to any owner cannot simultaneously be committed to Equipment.
+        // Deliberately evaluated after the AlreadyEquipped check: under M-reserve an equipped item
+        // always carries an Equipment-held reservation, so checking availability first would make
+        // the more precise equipment.item.already_equipped reason unreachable and would misreport
+        // the player's own equipped item as committed to some other owner.
+        if (inventory.FindReservation(intent.ItemInstanceId) is not null)
+        {
+            return CoreDecision.Rejected(ItemReservedElsewhere);
+        }
+
         var occupiedSlots = equipment.Bindings
             .SelectMany(static binding => binding.OccupiedSlots)
             .ToHashSet();
@@ -135,6 +149,11 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
             return CoreDecision.Rejected(PlacementOccupied);
         }
 
+        var reservation = new ReserveInventoryItemTransition(
+            inventory.Revision,
+            intent.CharacterId,
+            intent.ItemInstanceId,
+            EquipmentSnapshot.OwnerKey);
         var transition = new EquipItemTransition(
             equipment.Revision,
             intent.CharacterId,
@@ -148,7 +167,7 @@ internal sealed class EquipItemRuleEvaluator : ICoreRuleEvaluator
             placement.OccupiedSlots);
 
         return CoreDecision.Succeeded(
-            transitions: new IOwnerTransition[] { transition },
+            transitions: new IOwnerTransition[] { reservation, transition },
             events: new ICoreEventDescriptor[] { domainEvent });
     }
 

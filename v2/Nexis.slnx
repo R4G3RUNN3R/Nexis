@@ -7,10 +7,14 @@
     <Project Path="src/Nexis.Content.Registry/Nexis.Content.Registry.csproj" />
     <Project Path="src/Nexis.Items.Contracts/Nexis.Items.Contracts.csproj" />
     <Project Path="src/Nexis.Inventory.Contracts/Nexis.Inventory.Contracts.csproj" />
+    <Project Path="src/Nexis.Npcs.Contracts/Nexis.Npcs.Contracts.csproj" />
     <Project Path="src/Nexis.Equipment.Contracts/Nexis.Equipment.Contracts.csproj" />
     <Project Path="src/Nexis.Combat.Contracts/Nexis.Combat.Contracts.csproj" />
     <Project Path="src/Nexis.Automation.Contracts/Nexis.Automation.Contracts.csproj" />
+    <Project Path="src/Nexis.Operations.Contracts/Nexis.Operations.Contracts.csproj" />
+    <Project Path="src/Nexis.Operations/Nexis.Operations.csproj" />
     <Project Path="src/Nexis.Modules.Equipment/Nexis.Modules.Equipment.csproj" />
+    <Project Path="src/Nexis.Modules.Npcs/Nexis.Modules.Npcs.csproj" />
     <Project Path="src/Nexis.Identity.Contracts/Nexis.Identity.Contracts.csproj" />
     <Project Path="src/Nexis.Modules.Identity/Nexis.Modules.Identity.csproj" />
     <Project Path="src/Nexis.Audit.Contracts/Nexis.Audit.Contracts.csproj" />
@@ -20,6 +24,7 @@
     <Project Path="src/Nexis.Eventing.Contracts/Nexis.Eventing.Contracts.csproj" />
     <Project Path="src/Nexis.History.Contracts/Nexis.History.Contracts.csproj" />
     <Project Path="src/Nexis.History.Projection/Nexis.History.Projection.csproj" />
+    <Project Path="src/Nexis.History.Replay/Nexis.History.Replay.csproj" />
     <Project Path="src/Nexis.Persistence.Postgres/Nexis.Persistence.Postgres.csproj" />
     <Project Path="src/Nexis.Host.Api/Nexis.Host.Api.csproj" />
   </Folder>

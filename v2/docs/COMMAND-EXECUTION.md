@@ -78,9 +78,18 @@ Privileged read-only inspection stays on the authorized query path and remains a
 
 ### System command lane
 
-For timer/scheduler/world occurrences such as CompleteEducation, FinishTravel, ExpireListing, ResolveCooldown or ProcessWorldEvent.
+For timer/scheduler/world occurrences such as CompleteEducation, FinishTravel, ExpireListing, ResolveCooldown, ProcessWorldEvent, MaterialiseNpc, AdvancePopulationInterval, ResolveNpcLifecycleCheckpoint or AdvanceSuccessionCase.
 
-Schedulers own due-work mechanics, not gameplay outcomes. They issue trusted System Commands with stable occurrence identity. Application loads current owner snapshots, Core evaluates, and owners persist the result exactly as with other authoritative commands.
+Schedulers own due-work mechanics, not gameplay outcomes. They issue trusted System Commands with stable occurrence identity. Application loads current owner snapshots, Core evaluates, and owners persist the result exactly as with other authoritative commands. Aggregate Population transitions are not an exception: no scheduler/simulation worker updates cohort counts directly.
+
+### Autonomous NPC executor versus world performer
+
+A trusted System executor such as `nexis.scheduler` or `nexis.ciel` is infrastructure authority, not the in-world person who travelled, worked or made a decision. Autonomous NPC commands preserve both concepts separately:
+
+- `ActorContext` / `SystemActorKey` identifies the trusted executor that may submit the command;
+- a typed `NpcId` (or future implementation-neutral performer reference) identifies the in-world performer/subject when the intent semantics require one.
+
+`NpcId` is never an authentication credential or platform capability. History/events preserve the world performer separately from executor/security attribution so audit/recovery remain truthful. CIEL may propose typed intentions, but they enter through the same trusted System command boundary and receive no direct write path.
 
 ### Realtime command lane
 
@@ -173,7 +182,10 @@ Core receives only immutable current snapshots/content/context needed by the int
 Examples:
 
 - Marketplace purchase -> Marketplace listing transition + Economy debit/credit + Inventory ownership transfer.
-- Equip item -> Equipment slot transition, with Inventory ownership/revision precondition.
+- Equip item -> Inventory reservation transition + Equipment slot transition, committed atomically
+  under the approved M-reserve model.
+- Unequip item -> Equipment binding-clear transition + Inventory reservation-release transition,
+  committed atomically. Possession never moves.
 - Use consumable -> Inventory decrement + Resources change + Cooldown transition + Effects transition as applicable.
 - Paid education -> Economy debit + Education enrollment.
 
@@ -221,7 +233,7 @@ Unique constraints, FKs, checks and atomic conditional updates are final structu
 
 Do not use blanket PostgreSQL `SERIALIZABLE` merely because it sounds safe.
 
-Use short transactions plus explicit owner concurrency rules. Infrastructure provides bounded whole-operation retry for retryable DB serialization/deadlock failures (for example SQLSTATE 40001/40P01). Each retry reloads current snapshots and re-runs rule evaluation as required.
+Use short transactions plus explicit owner concurrency rules. Infrastructure acquires the durable CommandId receipt once, then provides bounded retry only around the post-acquisition evaluation-and-commit region for retryable DB serialization/deadlock failures (for example SQLSTATE 40001/40P01). Every retry retains the same fenced execution token, renews its lease before continuing, reloads current snapshots and re-runs rule evaluation as required; retry exhaustion terminates as TechnicalFailure without owner transitions or authoritative events.
 
 Never automatically retry authorization failures, insufficient resources, invalid state, business-rule rejection or permanent constraint conflicts.
 
@@ -263,7 +275,7 @@ Core/execution distinguishes at least:
 - **DomainFailed** - technically successful gameplay resolution produced an in-world failure;
 - **TechnicalFailure** - infrastructure prevented completion and no success is claimed.
 
-A DomainFailed action may legitimately consume resources if that is the committed game rule. A TechnicalFailure must not masquerade as an in-world failure or consume resources unless an explicit durable gameplay outcome was actually committed.
+Succeeded and DomainFailed outcomes may carry owner transitions and authoritative events; a DomainFailed action may legitimately consume resources when that is the committed game rule. Rejected, Conflict, Cancelled and TechnicalFailure outcomes carry neither transitions nor authoritative events. A TechnicalFailure must never masquerade as an in-world failure.
 
 ## Example concurrency matrix
 
@@ -271,7 +283,8 @@ A DomainFailed action may legitimately consume resources if that is the committe
 | --- | --- | --- |
 | Update preference | optimistic revision | actor ownership |
 | Start education | optimistic/domain revision | current prerequisites + Economy debit atomicity |
-| Equip item | optimistic Inventory/Equipment revisions | ownership + slot invariants |
+| Equip item | optimistic Inventory/Equipment revisions | availability reservation + slot invariants |
+| Unequip item | optimistic Inventory/Equipment revisions | canonical Equipment-then-Inventory lock order + release restriction |
 | Buy marketplace listing | ordered pessimistic/conditional locks | Marketplace + Economy + Inventory atomicity |
 | Direct transfer | ordered locks/reservations | Economy/Inventory ownership constraints + CommandId |
 | Guild treasury withdrawal | Guild authority snapshot + Economy wallet lock | current domain permission rechecked + audit |

@@ -117,7 +117,7 @@ public sealed class CoreConformanceTests
     private static CoreEvaluationContext CreateContext(IDeterministicRandomFactory randomFactory) => new(
         StableCommandId,
         StableCorrelationId,
-        TrustedActorContext.CreateSystem(),
+        TrustedActorContext.CreateSystem(new SystemActorKey("tests.core-conformance")),
         new DateTimeOffset(2026, 8, 26, 8, 30, 0, TimeSpan.Zero),
         new RuleVersion("foundation-rules-v1"),
         new ContentVersion("foundation-content-v1"),

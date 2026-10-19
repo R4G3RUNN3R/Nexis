@@ -16,8 +16,16 @@ public sealed record CommittedEventMessage
         CorrelationId correlationId,
         DateTimeOffset occurredAtUtc,
         ContractDescriptor contract,
-        string payloadJson)
+        string payloadJson,
+        int intraCommandSequence = 0)
     {
+        if (intraCommandSequence < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(intraCommandSequence),
+                "Intra-command event sequence numbers start at 0.");
+        }
+
         if (eventId.Value == Guid.Empty)
         {
             throw new ArgumentException("Committed event messages require a non-empty EventId.", nameof(eventId));
@@ -46,6 +54,7 @@ public sealed record CommittedEventMessage
         CorrelationId = correlationId;
         OccurredAtUtc = occurredAtUtc;
         PayloadJson = payloadJson;
+        IntraCommandSequence = intraCommandSequence;
     }
 
     public EventId EventId { get; }
@@ -59,6 +68,13 @@ public sealed record CommittedEventMessage
     public ContractDescriptor Contract { get; }
 
     public string PayloadJson { get; }
+
+    /// <summary>
+    /// Zero-based position of this event among the events its command committed. Consumers that
+    /// must respect intra-command order sort by (CommandId, IntraCommandSequence) rather than by
+    /// OccurredAtUtc, which is identical for every event of one command.
+    /// </summary>
+    public int IntraCommandSequence { get; }
 }
 
 /// <summary>

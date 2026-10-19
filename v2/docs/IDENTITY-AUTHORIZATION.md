@@ -80,6 +80,8 @@ Rules:
 
 The exact public-ID format may be selected during persistence/API implementation, but its semantics are fixed by this contract.
 
+The format is now selected and implemented: `PublicPlayerId` is an ordinal rendered `P` plus seven zero-padded digits, preserving V1's public player-number semantics including its reserved low block. The implemented boundary, its structural database guarantees and its zero-authority proofs are recorded in `PUBLIC-PLAYER-IDENTITY.md`.
+
 ## Initial one-character policy
 
 Nexis 2.0 initially exposes one playable character per normal account.

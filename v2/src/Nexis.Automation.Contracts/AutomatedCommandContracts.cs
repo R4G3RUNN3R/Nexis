@@ -5,6 +5,46 @@ using Nexis.Kernel.Events;
 
 namespace Nexis.Automation.Contracts;
 
+public interface ISystemActorRegistry
+{
+    bool IsRegistered(SystemActorKey key);
+}
+
+public sealed class SystemActorRegistry : ISystemActorRegistry
+{
+    private readonly IReadOnlySet<SystemActorKey> _registered;
+
+    public SystemActorRegistry(IEnumerable<SystemActorKey> registered)
+    {
+        ArgumentNullException.ThrowIfNull(registered);
+        var keys = registered.ToHashSet();
+        if (keys.Count == 0)
+        {
+            throw new ArgumentException("The configured system actor registry cannot be empty.", nameof(registered));
+        }
+
+        _registered = keys;
+    }
+
+    public bool IsRegistered(SystemActorKey key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return _registered.Contains(key);
+    }
+}
+
+public enum AutomatedCommandSubmissionDisposition
+{
+    Accepted = 0,
+    UnregisteredSystemActor = 1
+}
+
+public sealed record AutomatedCommandSubmissionResult(AutomatedCommandSubmissionDisposition Disposition)
+{
+    public static AutomatedCommandSubmissionResult Accepted() => new(AutomatedCommandSubmissionDisposition.Accepted);
+    public static AutomatedCommandSubmissionResult UnregisteredSystemActor() => new(AutomatedCommandSubmissionDisposition.UnregisteredSystemActor);
+}
+
 /// <summary>
 /// Narrow trusted submission envelope for scheduler/CIEL/background automation. It can request
 /// authoritative work but cannot carry owner transitions, persistence handles or a precomputed
@@ -47,10 +87,12 @@ public sealed record AutomatedCommandRequest
 /// <summary>
 /// The only state-changing port intended for automated V2 components. Implementations belong to
 /// the trusted Application/execution composition boundary, not scheduler or CIEL assemblies.
+/// The first implementation must enforce the closed system-actor registry and the acceptance
+/// contract in AUTOMATED-COMMAND-GATEWAY.md before establishing CommandId identity.
 /// </summary>
 public interface IAutomatedCommandGateway
 {
-    ValueTask SubmitAsync(
+    ValueTask<AutomatedCommandSubmissionResult> SubmitAsync(
         AutomatedCommandRequest request,
         CancellationToken cancellationToken = default);
 }

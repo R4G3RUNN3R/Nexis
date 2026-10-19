@@ -19,7 +19,7 @@ public sealed class CoreContractBehaviorTests
         Assert.ThrowsExactly<ArgumentException>(() => new CoreEvaluationContext(
             CommandId.New(),
             CorrelationId.New(),
-            TrustedActorContext.CreateSystem(),
+            TrustedActorContext.CreateSystem(new SystemActorKey("tests.core-contracts")),
             localOffset,
             new RuleVersion("test-rules-v1"),
             new ContentVersion("test-content-v1"),
@@ -119,7 +119,7 @@ public sealed class CoreContractBehaviorTests
     private static CoreEvaluationContext CreateContext() => new(
         CommandId.New(),
         CorrelationId.New(),
-        TrustedActorContext.CreateSystem(),
+        TrustedActorContext.CreateSystem(new SystemActorKey("tests.core-contracts")),
         new DateTimeOffset(2026, 8, 26, 7, 0, 0, TimeSpan.Zero),
         new RuleVersion("test-rules-v1"),
         new ContentVersion("test-content-v1"),

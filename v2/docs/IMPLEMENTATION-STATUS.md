@@ -1,10 +1,13 @@
 # Nexis 2.0 Foundation Implementation Status
 
-_Status: rolling implementation checkpoint, updated 2026-08-26. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
+_Status: rolling implementation checkpoint, updated 2026-09-16. This file records progress only. It does not supersede `ENGINEERING-MANUAL.md` or any binding architecture/canon document._
 
 ## Current branch
 
-`feature/nexis-v2-foundation-skeleton`
+`claude/nexis-v2-foundation-continuation-20260829`
+
+The C5 producer wiring and the Foundation stop-condition audit were carried on the side branch
+`claude/nexis-v2-c5-stop-audit-20260902`, based on `f72e8bc`, and are not yet integrated.
 
 Draft PR #4 remains the integration surface and must remain draft until the complete foundation stop conditions in `AGENT-HANDOFF.md` are satisfied.
 
@@ -21,10 +24,13 @@ The V2 branch now contains and has executable coverage for:
 - deterministic Core evaluation inputs: authoritative UTC time, rule/content versions and replay-safe RNG factories;
 - exact integer/rational arithmetic with explicit rounding and checked overflow;
 - golden/conformance comparison for baseline and replacement Core implementations;
+- versioned, provenance-tagged and content-addressed replay-corpus extraction/retention for the typed Equip Item V1 vertical, with keyed identity pseudonymization, restricted RNG references and deterministic Core re-execution;
+- stable operational-observability contracts, a bounded thread-safe process-local health reporter, and wired producers for every condition kind in the catalogue - recovery, fencing, outbox, poison, retry exhaustion, invariant violation, projection failure, replay rejection, replay corruption, unexpected concurrency, command-identity integrity and privileged-entry denial - none of which owns gameplay state or can change an authoritative outcome;
+- an executable guard rejecting any global `PlayerState`/`RuntimeState`/`CharacterState`/qualities/counters write model, any generic string-keyed ownership bag and any path/value owner transition, across both the referenced assembly surface and every project under `src/`;
 - CommandId idempotency receipts, canonical payload fingerprints, original-correlation retention and duplicate/integrity-violation handling;
 - canonical command codecs and durable crash-recovery payload rehydration without runtime type metadata;
 - atomic command commit plans covering owner transitions, terminal command outcome, authoritative history, outbox and state-changing Admin audit;
-- canonical multi-resource lock ordering and bounded whole-command retries only for explicitly classified transient failures;
+- canonical global multi-resource lock acquisition plus receipt-aware bounded retries: receipt acquisition occurs once, each post-acquisition retry retains and renews the same fenced token, and exhaustion terminalizes as TechnicalFailure without owner resources/events;
 - PostgreSQL command receipt persistence, optimistic owner transition coordination, authoritative history, durable outbox and Admin audit in the dedicated `nexis_v2` schema;
 - command execution leases, expired-claim recovery, lease renewal/fencing and ambiguous-commit reconciliation by CommandId;
 - leased at-least-once PostgreSQL outbox delivery using EventId as the stable delivery identity;
@@ -37,7 +43,8 @@ The V2 branch now contains and has executable coverage for:
 - canonical value-equal `EquipmentSlotSet`, preventing replay/conformance divergence caused by collection reference identity;
 - narrow `IAutomatedCommandGateway`/`AutomatedCommandRequest` contracts allowing automated components to submit only a System principal, CommandId, CorrelationId and typed Core intent;
 - executable architecture guards preventing future `Nexis.Ciel*` and `Nexis.Scheduling*` projects from directly referencing concrete Core, concrete Execution, Execution internals, PostgreSQL or owner implementation modules;
-- executable Identity capability policy derived from current server security facts with exact capability checks, explicit-deny precedence, account binding and security-version freshness; role ordinals and commercial entitlements cannot grant platform authority.
+- executable Identity capability policy derived from current server security facts with exact capability checks, explicit-deny precedence, account binding and security-version freshness; role ordinals and commercial entitlements cannot grant platform authority;
+- reusable privileged command-entry authorization contracts/implementation that consume current Identity policy facts and preserve the trusted acting staff AccountId separately from the target identity for downstream atomic Admin Audit.
 
 ## First real gameplay vertical proof
 
@@ -90,6 +97,26 @@ The current slice proves:
 
 The slice adds no Player Log persistence, query API, runtime consumer registration or authoritative mutation path. `PLAYER-LOG-BOUNDARY.md` is the focused contract record.
 
+## Core replay corpus proof
+
+The internal replay corpus is now separate from Player Log and has an executable first typed scenario boundary.
+
+The current slice proves:
+
+1. historical `CoreEvaluationRequest`, `CoreDecision` and `CommandCommitPlan` facts are cross-validated before extraction;
+2. the existing CommandId, original CorrelationId, EventId/causation, canonical payload fingerprint, authoritative UTC time and Core/rule/content versions are retained;
+3. AccountId, CharacterId and ItemInstanceId are keyed-pseudonymized while rule-required equality relationships survive;
+4. raw command JSON, actor capabilities/entitlements/security version, raw RNG material, credentials and arbitrary extra fields cannot enter the artifact;
+5. restricted deterministic RNG is represented only by an opaque resolver reference and is supplied to Core at replay time;
+6. ordinary, known-bug, exploit, concurrency and high-value cases use typed canonical tags and provenance;
+7. semantically unordered typed inputs normalize to one SHA-256 content-addressed scenario;
+8. a compatible `ICoreRulesEngine` can replay the artifact without owner persistence or authoritative effects;
+9. immutable file retention deduplicates identical cases and detects tampering/collision;
+10. unknown intent schemas fail closed until an explicit privacy-reviewed codec is added.
+
+Only Equip Item schema V1 is registered. No production source was accessed and no real production record was harvested in this repository slice. Authorized offline production export/selection may now populate permanent corpus packs without granting live-database access. `CORE-REPLAY-CORPUS.md` is the focused boundary record.
+
+
 ## Current verification evidence
 
 Checkpoint `4de3b830c19c5659c042aa342d86e3361a0c05a7` passed the complete V2 workflow against disposable PostgreSQL 18.6 after the automated-authority/bypass changes:
@@ -125,24 +152,124 @@ On `new-voidsmith`, checkpoint `ec9239a` additionally passed restore and a Debug
 
 The Player Log finishing review independently reran the required workflow from `v2/` with .NET SDK 10.0.111: restore passed; Debug build passed with **0 warnings, 0 errors**; the full solution reported **154 total, 126 passed, 28 skipped, 0 failed**. All 28 skips are PostgreSQL integration tests because `NEXIS_TEST_POSTGRES_CONNECTION` is absent; this review created or used no database. The Player Log/History in-memory and architecture tests are included in the 126 passing tests.
 
+The replay corpus repair independently reran the required workflow from repository root with .NET SDK 10.0.111: Release build passed with **0 warnings, 0 errors**; the complete Architecture/Core/security/replay executable passed **140/140**; and the separate PostgreSQL integration executable reported **28 total, 0 passed, 28 skipped, 0 failed**. Across both executables, **168 tests were discovered: 140 passed and 28 skipped**. All skips are because `NEXIS_TEST_POSTGRES_CONNECTION` is absent. No credentials were invented and no database or production source was accessed.
+
+Checkpoint `14d7a46edeb6258ec865e8609f56e07a646b6a59` completed the remaining replay evidence hardening and passed a Release build with **0 warnings, 0 errors**, the complete Architecture/Core/execution/security/replay executable with **146/146**, and the disposable PostgreSQL 18.6 integration executable with **28/28** and no skips.
+
+The subsequent privileged-entry RED/GREEN slice passed a Release build with **0 warnings, 0 errors** and the complete Architecture/Core/execution/security/replay executable with **153/153**. The reusable boundary denies ordinal-role, entitlement, Character, stale-security, target-substitution, implicit-grant and explicit-deny bypasses while retaining the real acting staff AccountId only after authorization.
+
+The operational-observability RED/GREEN slice added `Nexis.Operations.Contracts` and `Nexis.Operations`; solution restore passed, the Release build passed with **0 warnings, 0 errors**, and the complete Architecture/Core/execution/security/replay/operations executable passed **158/158**. The current slice provides structured sinks and health summaries; validated C7 fixes must wire producers as their quarantine, dead-letter and classification behavior is implemented.
+
+The C5 producer slice (`61f4064`) completed the remaining producer wiring. Because the interrupted partial work carried no durable RED evidence - its session log was empty and its test file did not compile - the partial patch was backed up, the six affected production files were restored to `f72e8bc`, and the behaviour was re-derived RED to GREEN rather than adopted unproven. Observed: Release build **0 warnings, 0 errors** on SDK 10.0.111; `ClaudeC5OperationalProducerTests` RED 10 failed of 18 then GREEN 18/18; `ClaudeC5PostgresOperationalProducerTests` RED 3 failed of 10 then GREEN 10/10 against a disposable `postgres:18.6-alpine` container; regression on the classes exercising the changed paths `ReplayCorpusTests` 25/25, `PostgresOutboxIntegrationTests` 8/8, `PostgresExecutionIntegrationTests` 19/19. No whole-suite run was performed and none is claimed.
+
+
 The reference Core implementation version remains `0.5.0-foundation`; the stable Core contract remains V1.
+
+## Real multi-owner gameplay proof (C3)
+
+`UnequipItem` under M-reserve is the first Nexis 2.0 operation that legitimately writes two real
+authoritative owners in one atomic command. The proof demonstrates:
+
+1. Equipment clears the equipped reference;
+2. Inventory releases the same item reservation;
+3. both transitions commit in one transaction or neither does, proven for a stale Inventory revision
+   and a stale Equipment revision independently;
+4. a repeated CommandId reconstructs the original outcome and never releases or duplicates twice;
+5. concurrent unequips produce exactly one winner, and an opposing reservation attempt from a stale
+   snapshot cannot double-spend the item;
+6. an unequip denied by an authoritative removal restriction commits neither owner transition, denied
+   independently by Core and by the Inventory persistence boundary;
+7. no invented balance value, cost, cooldown or content is involved.
+
+Possession is never created, destroyed or transferred. Stats, skills and knowledge are not equip
+prerequisites, and `MReserveFreedomRuleTests` asserts that mechanically.
+
+`ITEM-AVAILABILITY-RESERVATION.md` records the boundary and the explicit future curse integration
+seam. No Curse owner, curse state, questline or purification path exists.
+
+## Public player identity boundary
+
+The account-scoped stable `PublicPlayerId` is implemented. One normal account is one player is one
+playable character, with no slots, alts or campaign characters, and `AccountId`, `CharacterId`,
+`PublicPlayerId` and display name remain four permanently distinct concepts.
+
+Proven mechanically:
+
+1. a display-name change leaves `AccountId`, `CharacterId` and `PublicPlayerId` unchanged;
+2. `PublicPlayerId` exposes no bridge to an internal identifier or actor authority, and no
+   `TrustedActorContext` factory accepts one;
+3. a forged client-supplied `PublicPlayerId` yields no controllable `CharacterId`;
+4. the public projection leaks neither `AccountId` nor `CharacterId`;
+5. the public projection leaks no role, capability, security-version or entitlement data, and its
+   member list is pinned to exactly two facts;
+6. no public identifier, including Hennet's, grants platform authority, even under a policy granting
+   the capability to every staff bundle;
+7. one-character-per-account is enforced by the `account_id` primary key without collapsing the
+   identifier types;
+8. concurrent provisioning converges on exactly one identity, with ordinals drawn from a sequence
+   rather than `max() + 1`.
+
+Immutability is enforced independently in the contract, in a database trigger refusing any identifier
+reassignment, and by uniqueness constraints. `PUBLIC-PLAYER-IDENTITY.md` records the boundary.
+
+## L3 History and Player Log findings, resolved
+
+The three long-standing L3 REDs are green. Their original assertions in
+`ClaudeFoundationThreatModelTests` are byte-identical; no test was renamed, skipped or weakened.
+
+1. **TM-02, intra-command event order.** Every event of one command was stamped with the same
+   `EvaluationTimeUtc` and a null `CausationId`, and the events table had no ordering column, so a
+   multi-event command had no recoverable order. Events now carry a durable zero-based
+   `IntraCommandSequence` assigned from Core's emission order, persisted in `authoritative_events`
+   and `outbox` by migration `0010`, protected by `UNIQUE (command_id, intra_command_sequence)`, and
+   carried through outbox delivery. Each event also chains its `CausationId` to its predecessor, so
+   the order is reconstructible two independent ways.
+2. **TM-03, poisoned audit projection.** `SafePlayerReason` was unbounded free text while the Player
+   Log plain-text boundary rejects anything over its bound, so an immutable audit row could be
+   written that throws on every projection attempt. The reason is now validated at construction with
+   the same normalization and bound, and is rejected rather than truncated so a staff justification
+   is never silently altered. A test pins the two boundaries to identical decisions on adversarial
+   input, since a dependency cycle prevents sharing the code.
+3. **TM-04, silent player-history loss.** The projection registry keyed on name *and* schema version
+   and returned empty for anything unregistered, so bumping a projected contract's schema version
+   silently stopped producing player history. An unregistered contract **name** is still deliberately
+   internal and stays invisible; a registered name arriving at an unregistered schema version now
+   fails loudly and names only the offending contract. Fail-closed malformed-payload behaviour is
+   unchanged.
+
+Fixing TM-02 also surfaced a real migration defect: because `EnsureCreatedAsync` re-executes every
+migration file, an unguarded backfill re-derived sequences for rows that already carried
+authoritative values, overwriting real emission order and colliding with the uniqueness constraint.
+The add-and-backfill is now strictly one-time and a regression test pins that re-running migrations
+never renumbers committed events.
+
+## Approved living-world programme, design only
+
+On 2026-09-16 the human approved `docs/superpowers/specs/2026-09-16-nexis-living-world-npc-simulation-design.md` as binding Nexis V2 design. The design adds three future authoritative boundaries, NPC Lifecycle, Population and Succession workflow, plus a non-authoritative Simulation coordinator, while preserving the existing Core/Application/owner/eventing/replay architecture.
+
+This approval is **not implementation evidence**. At this checkpoint there are no implemented NPC Lifecycle, Population, Succession or Simulation projects, no living-world PostgreSQL schema, no Active Cast runtime and no Scheduler/CIEL living-world business logic. No live deployment, v1/production database mutation or public capability claim is implied.
+
+The human-selected implementation programme begins with the NPC Lifecycle owner proof, followed by Population/materialisation and the remaining approved vertical slices. The detailed programme/first-slice plans live under `docs/superpowers/plans/`.
 
 ## Foundation work still incomplete
 
-The branch is materially further along, but PR #4 must remain draft. Remaining stop-condition work includes:
+The branch is materially further along, but PR #4 must remain draft.
 
-1. integration of the verified Identity capability policy into concrete Staff/Admin command entrypoints as those commands are introduced;
-2. production replay-corpus extraction/retention so real historical commands and known exploit/bug cases become permanent Core regression scenarios;
-3. migration/reconciliation tooling before any v1-to-v2 state movement;
-4. additional real owner-specific multi-owner gameplay proof where a legitimate rule actually writes more than one real owner, rather than relying only on synthetic transactional owners;
-5. observability/operational readiness around recovery workers, outbox workers, poison events, retry exhaustion and invariant failures;
-6. final threat-model/security review and the wider foundation stop-condition audit before broad gameplay implementation.
+`FOUNDATION-STOP-CONDITION-AUDIT-2026-09-03.md` walked all thirteen `AGENT-HANDOFF.md` stop conditions and the required architecture-test list end to end and found **13 of 13 satisfied**, after closing the one genuine hole it identified: the prohibition on a global player-state blob was named in three binding documents but had no executable guard. Satisfying the stop conditions is the floor, not permission for broad fan-out.
+
+Remaining work is now gated rather than merely unfinished:
+
+1. migration/reconciliation tooling before any v1-to-v2 state movement, still gated by unresolved human decisions;
+2. further owner contracts, each introduced only when its gameplay design is settled, each arriving with its own sole-writer test; Economy, Travel, Resources, Marketplace and Recovery sole-writer guards cannot exist until then, and placeholder contracts must not be created to make the matrix look complete;
+3. the transport/Application slice, which must satisfy the API-purity and client-DTO stop conditions within itself rather than retrofitting them; `Nexis.Host.Api` remains a health/status stub with no command surface.
+
+The real multi-owner proof is delivered. Under the approved M-reserve model, equip reserves the item instance in Inventory and binds it in Equipment, and `UnequipItem` unbinds and releases, so both are genuine two-owner commands writing two real authoritative owners rather than synthetic transactional owners. No mechanic, cost, cooldown, reward or content value was invented to achieve it, and possession never moves.
 
 Exact owner/domain contracts should continue to be introduced only when the corresponding gameplay design is sufficiently settled. Do not create generic state bags merely to make the architecture look more complete.
 
 ## Next safe implementation boundary
 
-The Player Log/history projection visibility boundary is now implemented and adversarially covered. The next safe foundation slice is **production replay-corpus extraction and retention**, using existing typed command/event/trace contracts so real historical commands and known exploit/bug cases can become permanent Core regression scenarios. This boundary must preserve privacy and restricted RNG/security data, and it does not authorize new gameplay rules or world/lore design. Concrete Staff/Admin command entrypoints must still consume the verified Identity policy when introduced.
+The replay, privileged-entry, operational-observability, real multi-owner (C3) and public player identity foundation boundaries are implemented and adversarially covered. The three known L3 History/Player Log findings are resolved. C5 producer wiring and the Foundation stop-condition audit are complete. The human decision on 2026-09-16 selected the approved living-world programme as the next owner-design track, beginning with the narrowly bounded NPC Lifecycle owner proof. The transport/Application boundary remains independently pending and must not be invented inside the NPC slice. Migration remains gated; no live source access, broad gameplay fan-out, generic migration bucket or unrelated canon change is authorized.
 
 ## Verification discipline
 

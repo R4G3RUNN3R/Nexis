@@ -7,7 +7,7 @@ namespace Nexis.Modules.Identity;
 /// Evaluates platform authority from current server-loaded Identity facts and exact policy bundles.
 /// AccountRole values are dictionary keys only; their numeric values never imply capability.
 /// </summary>
-public sealed class PlatformAuthorizationPolicy
+public sealed class PlatformAuthorizationPolicy : IPlatformAuthorizationPolicy
 {
     private readonly IReadOnlyDictionary<AccountRole, IReadOnlySet<PlatformCapabilityKey>> _roleBundles;
 

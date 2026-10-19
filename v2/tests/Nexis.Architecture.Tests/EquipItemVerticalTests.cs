@@ -101,18 +101,85 @@ public sealed class EquipItemVerticalTests
     }
 
     [TestMethod]
-    public void EquipSuccess_WritesOnlyEquipmentOwnerAndEmitsSemanticEvent()
+    public void EquipSuccess_ReservesInInventoryBindsInEquipmentAndEmitsSemanticEvent()
     {
         var fixture = CreateFixture();
         var decision = Evaluate(fixture);
 
         Assert.AreEqual(CoreOutcomeStatus.Succeeded, decision.Status);
-        Assert.AreEqual(1, decision.Transitions.Count);
-        Assert.IsInstanceOfType<EquipItemTransition>(decision.Transitions[0]);
-        Assert.AreEqual(EquipmentSnapshot.OwnerKey, decision.Transitions[0].TargetOwner);
-        Assert.IsFalse(decision.Transitions.Any(transition => transition.TargetOwner == InventorySnapshot.OwnerKey));
+        Assert.AreEqual(2, decision.Transitions.Count);
+
+        var reserve = (ReserveInventoryItemTransition)decision.Transitions[0];
+        Assert.AreEqual(InventorySnapshot.OwnerKey, reserve.TargetOwner);
+        Assert.AreEqual(fixture.ItemId, reserve.ItemInstanceId);
+        Assert.AreEqual(EquipmentSnapshot.OwnerKey, reserve.HoldingOwner);
+        Assert.AreEqual(fixture.Inventory.Revision, reserve.ExpectedRevision!.Value);
+
+        var bind = (EquipItemTransition)decision.Transitions[1];
+        Assert.AreEqual(EquipmentSnapshot.OwnerKey, bind.TargetOwner);
+        Assert.AreEqual(fixture.Equipment.Revision, bind.ExpectedRevision!.Value);
+
         Assert.AreEqual(1, decision.Events.Count);
         Assert.IsInstanceOfType<ItemEquippedEvent>(decision.Events[0]);
+    }
+
+    /// <summary>
+    /// M-reserve preserves the invariant the superseded single-owner assertion protected: equipping
+    /// commits the item to Equipment but never creates, destroys or transfers possession. Only
+    /// reserve/release transitions may address Inventory from this rule.
+    /// </summary>
+    [TestMethod]
+    public void EquipTransitions_NeverCreateOrDestroyItemPossession()
+    {
+        var decision = Evaluate(CreateFixture());
+
+        var inventoryTransitions = decision.Transitions
+            .Where(static transition => transition.TargetOwner == InventorySnapshot.OwnerKey)
+            .ToArray();
+
+        Assert.AreEqual(1, inventoryTransitions.Length);
+        Assert.IsInstanceOfType<ReserveInventoryItemTransition>(inventoryTransitions[0]);
+        Assert.IsFalse(
+            decision.Transitions.Any(static transition =>
+                transition.Contract.Name.Contains("possession", StringComparison.OrdinalIgnoreCase) ||
+                transition.Contract.Name.Contains("transfer", StringComparison.OrdinalIgnoreCase) ||
+                transition.Contract.Name.Contains("grant", StringComparison.OrdinalIgnoreCase) ||
+                transition.Contract.Name.Contains("remove", StringComparison.OrdinalIgnoreCase)),
+            "Equip must not emit an ownership-transferring Inventory transition. The superseded "
+            + "M-move model removed the item from inventory; STATE-OWNERSHIP.md section 8 forbids that.");
+    }
+
+    [TestMethod]
+    public void Equip_RejectsAnItemAlreadyReservedByAnotherOwner()
+    {
+        var fixture = CreateFixture(reservedBy: new OwnerKey("Marketplace"));
+        var decision = Evaluate(fixture);
+
+        Assert.AreEqual(CoreOutcomeStatus.Rejected, decision.Status);
+        Assert.AreEqual("equipment.item.reserved_elsewhere", decision.Reason?.Value);
+        Assert.AreEqual(0, decision.Transitions.Count);
+    }
+
+    /// <summary>
+    /// Reason-code reachability guard (plan correction 1). Under M-reserve a genuinely equipped item
+    /// always carries an Equipment-held Inventory reservation, so re-equipping it satisfies BOTH the
+    /// already-equipped condition and the reserved-elsewhere condition. The player-facing answer must
+    /// be the precise in-world one. If the availability check is ever moved ahead of the
+    /// already-equipped check, equipment.item.already_equipped becomes dead code and this fails.
+    /// </summary>
+    [TestMethod]
+    public void Equip_ReportsAlreadyEquippedRatherThanReservedElsewhereForItsOwnBinding()
+    {
+        var fixture = CreateFixture(equipItemInMainHand: true);
+        var decision = Evaluate(fixture);
+
+        Assert.AreEqual(CoreOutcomeStatus.Rejected, decision.Status);
+        Assert.AreEqual(
+            "equipment.item.already_equipped",
+            decision.Reason?.Value,
+            "An item this character already has equipped must be reported as already equipped, not "
+            + "as reserved elsewhere. Its own Equipment reservation is not a foreign commitment.");
+        Assert.AreEqual(0, decision.Transitions.Count);
     }
 
     [TestMethod]
@@ -227,7 +294,9 @@ public sealed class EquipItemVerticalTests
         ContentDefinitionKey? itemDefinitionKey = null,
         EquippableItemDefinition? definition = null,
         EquipmentPlacementKey? intentPlacement = null,
-        IEnumerable<EquippedItemBinding>? existingBindings = null)
+        IEnumerable<EquippedItemBinding>? existingBindings = null,
+        OwnerKey? reservedBy = null,
+        bool equipItemInMainHand = false)
     {
         var characterId = CharacterId.New();
         var itemId = ItemInstanceId.New();
@@ -244,13 +313,29 @@ public sealed class EquipItemVerticalTests
             ? new[] { new InventoryItemReference(itemId, itemDefinitionKey) }
             : Array.Empty<InventoryItemReference>();
 
+        // equipItemInMainHand builds the *consistent* equipped state M-reserve actually produces:
+        // an Equipment binding AND the matching Equipment-held Inventory reservation. Reusing the
+        // existingBindings parameter would not do, because that parameter deliberately describes
+        // other items' bindings and those fixtures must keep producing placement.occupied.
+        var bindings = equipItemInMainHand
+            ? new[] { new EquippedItemBinding(itemId, MainHandPlacement, new[] { MainHand }) }
+            : existingBindings ?? Array.Empty<EquippedItemBinding>();
+
+        var reservations = !includePossession
+            ? Array.Empty<InventoryItemReservation>()
+            : equipItemInMainHand
+                ? new[] { new InventoryItemReservation(itemId, EquipmentSnapshot.OwnerKey) }
+                : reservedBy is null
+                    ? Array.Empty<InventoryItemReservation>()
+                    : new[] { new InventoryItemReservation(itemId, reservedBy) };
+
         return new Fixture(
             characterId,
             actorCharacterId ?? characterId,
             itemId,
             intentPlacement ?? MainHandPlacement,
-            new InventorySnapshot(characterId, 5, items),
-            new EquipmentSnapshot(characterId, 9, existingBindings ?? Array.Empty<EquippedItemBinding>()),
+            new InventorySnapshot(characterId, 5, items, reservations),
+            new EquipmentSnapshot(characterId, 9, bindings),
             new CombatParticipationSnapshot(characterId, 3, inActiveCombat),
             definition,
             includeContent);

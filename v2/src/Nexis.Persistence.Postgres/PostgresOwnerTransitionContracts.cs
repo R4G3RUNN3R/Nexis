@@ -41,6 +41,13 @@ public interface IPostgresOwnerTransitionApplier
 {
     OwnerKey Owner { get; }
 
+    /// <summary>
+    /// Purely and completely identifies every authoritative resource the transition can lock or
+    /// conditionally update. The returned keys must describe the same order-sensitive SQL work as
+    /// <see cref="ApplyAsync"/>.
+    /// </summary>
+    IReadOnlyList<AuthoritativeResourceKey> ResolveLockKeys(IOwnerTransition transition);
+
     ValueTask<PostgresOwnerTransitionResult> ApplyAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
