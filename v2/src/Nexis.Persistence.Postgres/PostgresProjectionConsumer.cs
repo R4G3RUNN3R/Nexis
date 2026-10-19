@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Nexis.Core.Contracts;
 using Nexis.Eventing.Contracts;
 using Nexis.Operations.Contracts;
@@ -64,29 +65,17 @@ public sealed class PostgresProjectionConsumerExecutor
         CommittedEventMessage message,
         OperationalReasonCode reason)
     {
-        if (_operationalSignalSink is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await _operationalSignalSink.ReportAsync(
-                new OperationalSignal(
-                    OperationalConditionKind.ProjectionFailure,
-                    OperationalSeverity.Error,
-                    OperationalComponent,
-                    reason,
-                    _timeProvider.GetUtcNow(),
-                    message.CommandId,
-                    message.CorrelationId,
-                    message.EventId),
-                CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // Monitoring failure never becomes a second projection failure.
-        }
+        await PostgresOperationalSignalReporter.ReportBestEffortAsync(
+            _operationalSignalSink,
+            new OperationalSignal(
+                OperationalConditionKind.ProjectionFailure,
+                OperationalSeverity.Error,
+                OperationalComponent,
+                reason,
+                _timeProvider.GetUtcNow(),
+                message.CommandId,
+                message.CorrelationId,
+                message.EventId)).ConfigureAwait(false);
     }
 
     public async ValueTask<ProjectionConsumeDisposition> ConsumeAsync(
@@ -103,6 +92,21 @@ public sealed class PostgresProjectionConsumerExecutor
             return ProjectionConsumeDisposition.Ignored;
         }
 
+        var attempt = await ConsumeAuthoritativelyAsync(consumer, message, cancellationToken).ConfigureAwait(false);
+        if (attempt.Failure is not null)
+        {
+            await ReportProjectionFailureBestEffortAsync(message, attempt.Reason).ConfigureAwait(false);
+            attempt.Failure.Throw();
+        }
+
+        return attempt.Disposition;
+    }
+
+    private async ValueTask<ProjectionConsumeAttempt> ConsumeAuthoritativelyAsync(
+        IPostgresProjectionEventConsumer consumer,
+        CommittedEventMessage message,
+        CancellationToken cancellationToken)
+    {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -122,7 +126,7 @@ public sealed class PostgresProjectionConsumerExecutor
             if (await checkpoint.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0)
             {
                 await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                return ProjectionConsumeDisposition.AlreadyProcessed;
+                return ProjectionConsumeAttempt.Completed(ProjectionConsumeDisposition.AlreadyProcessed);
             }
         }
 
@@ -139,15 +143,39 @@ public sealed class PostgresProjectionConsumerExecutor
             // rolls back on disposal, so the checkpoint and side effect remain absent together.
             throw;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            // The projection has already failed authoritatively: the transaction is not committed, so
-            // neither the checkpoint nor the side effect survives and the event stays redeliverable.
-            // The original exception is rethrown unchanged for the caller to classify.
-            await ReportProjectionFailureBestEffortAsync(message, reason).ConfigureAwait(false);
-            throw;
+            var failure = ExceptionDispatchInfo.Capture(exception);
+            await SafeRollbackAsync(transaction).ConfigureAwait(false);
+            return ProjectionConsumeAttempt.Failed(failure, reason);
         }
 
-        return ProjectionConsumeDisposition.Applied;
+        return ProjectionConsumeAttempt.Completed(ProjectionConsumeDisposition.Applied);
+    }
+
+    private static async ValueTask SafeRollbackAsync(NpgsqlTransaction transaction)
+    {
+        try
+        {
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is NpgsqlException or InvalidOperationException)
+        {
+            // The original projection failure remains authoritative; disposal still closes scope.
+        }
+    }
+
+    private sealed record ProjectionConsumeAttempt(
+        ProjectionConsumeDisposition Disposition,
+        ExceptionDispatchInfo? Failure,
+        OperationalReasonCode Reason)
+    {
+        public static ProjectionConsumeAttempt Completed(ProjectionConsumeDisposition disposition) =>
+            new(disposition, null, SideEffectFailedReason);
+
+        public static ProjectionConsumeAttempt Failed(
+            ExceptionDispatchInfo failure,
+            OperationalReasonCode reason) =>
+            new(default, failure, reason);
     }
 }

@@ -74,6 +74,7 @@ public sealed class ClaudeC5PostgresOperationalProducerTests
     {
         const string sql = """
             TRUNCATE TABLE
+                nexis_v2.operational_signals,
                 nexis_v2.event_consumer_checkpoints,
                 nexis_v2.outbox,
                 nexis_v2.authoritative_events,
@@ -180,21 +181,57 @@ public sealed class ClaudeC5PostgresOperationalProducerTests
         Assert.AreEqual(0, await ReadCheckpointCountAsync(MarkerProjectionConsumer.Name, message.EventId));
     }
 
+    [TestMethod]
+    public async Task ProjectionFailure_DurableSignalUsesSameSingleConnectionPoolAfterRollback()
+    {
+        await using var singleConnectionDataSource = CreateSingleConnectionDataSource();
+        var message = await SeedEventAsync();
+        var executor = new PostgresProjectionConsumerExecutor(
+            singleConnectionDataSource,
+            new FixedTimeProvider(SignalTime),
+            new CancellationBoundDurableSink(singleConnectionDataSource));
+
+        var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await executor.ConsumeAsync(new MarkerProjectionConsumer(FailureMode.SideEffect), message));
+
+        StringAssert.Contains(exception.Message, "projection side effect");
+        Assert.AreEqual(1, await ReadDurableSignalCountAsync(message.EventId));
+        Assert.AreEqual(0, await ReadProjectionMarkerCountAsync());
+        Assert.AreEqual(0, await ReadCheckpointCountAsync(MarkerProjectionConsumer.Name, message.EventId));
+    }
+
+    [TestMethod]
+    public async Task ProjectionFailure_NeverCompletingSignalCannotSuppressOriginalException()
+    {
+        var message = await SeedEventAsync();
+        var executor = new PostgresProjectionConsumerExecutor(
+            DataSource,
+            new FixedTimeProvider(SignalTime),
+            new NeverCompletingOperationalSignalSink());
+
+        var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await executor
+                .ConsumeAsync(new MarkerProjectionConsumer(FailureMode.SideEffect), message)
+                .AsTask()
+                .WaitAsync(TimeSpan.FromSeconds(2)));
+
+        StringAssert.Contains(exception.Message, "projection side effect");
+    }
+
     // ---------------------------------------------------------------------------------------
     // Unexpected concurrency failure
     // ---------------------------------------------------------------------------------------
 
     /// <summary>
-    /// SQLSTATE class 40 is transaction rollback. Serialization failure and deadlock are the two
-    /// states the transient classifier already owns and retries, so any other class-40 state is a
-    /// concurrency failure nothing in the design expects.
+    /// Lock-not-available is explicitly concurrency-specific, but is not part of the bounded
+    /// automatic retry policy.
     /// </summary>
     [TestMethod]
-    public async Task UnexpectedClass40Rollback_ReportsOneSignalAndStillReturnsTechnicalFailure()
+    public async Task UnexpectedLockUnavailable_ReportsOneSignalAndStillReturnsTechnicalFailure()
     {
         var sink = new RecordingOperationalSignalSink();
         var plan = await BuildCommittablePlanAsync();
-        var committer = CreateCommitter(sink, "40002");
+        var committer = CreateCommitter(sink, "55P03");
 
         var result = await committer.CommitAsync(plan);
 
@@ -204,7 +241,7 @@ public sealed class ClaudeC5PostgresOperationalProducerTests
         Assert.AreEqual(OperationalConditionKind.UnexpectedConcurrencyFailure, signal.Kind);
         Assert.AreEqual(OperationalSeverity.Error, signal.Severity);
         Assert.AreEqual("postgres.command-commit", signal.Component.Value);
-        Assert.AreEqual("concurrency.unexpected_transaction_rollback.40002", signal.Reason.Value);
+        Assert.AreEqual("concurrency.unexpected_failure.55p03", signal.Reason.Value);
         Assert.AreEqual(plan.Trace.Identity.CommandId, signal.CommandId);
         Assert.AreEqual(plan.Trace.CorrelationId, signal.CorrelationId);
         Assert.AreEqual(SignalTime, signal.OccurredAtUtc);
@@ -249,15 +286,63 @@ public sealed class ClaudeC5PostgresOperationalProducerTests
     }
 
     [TestMethod]
+    [DataRow("40002")]
+    [DataRow("40003")]
+    public async Task NonConcurrencyTransactionRollback_ReportsNoConcurrencySignal(string sqlState)
+    {
+        var sink = new RecordingOperationalSignalSink();
+        var plan = await BuildCommittablePlanAsync();
+        var committer = CreateCommitter(sink, sqlState);
+
+        var result = await committer.CommitAsync(plan);
+
+        Assert.AreEqual(CommandCommitDisposition.TechnicalFailure, result.Disposition);
+        Assert.AreEqual("execution.persistence.failed", result.Reason?.Value);
+        Assert.AreEqual(0, sink.Signals.Count);
+    }
+
+    [TestMethod]
     public async Task ConcurrencySignalFailure_CannotChangeTheTerminalOutcomeOrCommitAnything()
     {
         var plan = await BuildCommittablePlanAsync();
-        var committer = CreateCommitter(new ThrowingOperationalSignalSink(), "40002");
+        var committer = CreateCommitter(new ThrowingOperationalSignalSink(), "55P03");
 
         var result = await committer.CommitAsync(plan);
 
         Assert.AreEqual(CommandCommitDisposition.TechnicalFailure, result.Disposition);
         Assert.AreEqual(0, await ReadCommittedEventCountAsync(plan.Trace.Identity.CommandId));
+    }
+
+    [TestMethod]
+    public async Task UnexpectedConcurrency_DurableSignalUsesSameSingleConnectionPoolAfterRollback()
+    {
+        await using var singleConnectionDataSource = CreateSingleConnectionDataSource();
+        var plan = await BuildCommittablePlanAsync();
+        var committer = new PostgresAtomicCommandCommitter(
+            singleConnectionDataSource,
+            new[] { new RaisingOwnerApplier(SyntheticOwner, "55P03") },
+            operationalSignalSink: new CancellationBoundDurableSink(singleConnectionDataSource),
+            timeProvider: new FixedTimeProvider(SignalTime));
+
+        var result = await committer.CommitAsync(plan);
+
+        Assert.AreEqual(CommandCommitDisposition.TechnicalFailure, result.Disposition);
+        Assert.AreEqual(1, await ReadDurableSignalCountAsync(commandId: plan.Trace.Identity.CommandId));
+        Assert.AreEqual(0, await ReadCommittedEventCountAsync(plan.Trace.Identity.CommandId));
+    }
+
+    [TestMethod]
+    public async Task UnexpectedConcurrency_NeverCompletingSignalCannotSuppressTechnicalFailure()
+    {
+        var plan = await BuildCommittablePlanAsync();
+        var committer = CreateCommitter(new NeverCompletingOperationalSignalSink(), "55P03");
+
+        var result = await committer
+            .CommitAsync(plan)
+            .AsTask()
+            .WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.AreEqual(CommandCommitDisposition.TechnicalFailure, result.Disposition);
     }
 
     [TestMethod]
@@ -396,6 +481,42 @@ public sealed class ClaudeC5PostgresOperationalProducerTests
             connection);
         command.Parameters.AddWithValue("command_id", NpgsqlDbType.Uuid, commandId.Value);
         return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task<int> ReadDurableSignalCountAsync(
+        EventId? eventId = null,
+        CommandId? commandId = null)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT count(*) FROM nexis_v2.operational_signals
+            WHERE (@event_id IS NULL OR event_id = @event_id)
+              AND (@command_id IS NULL OR command_id = @command_id);
+            """,
+            connection);
+        command.Parameters.AddWithValue(
+            "event_id",
+            NpgsqlDbType.Uuid,
+            eventId.HasValue ? eventId.Value.Value : DBNull.Value);
+        command.Parameters.AddWithValue(
+            "command_id",
+            NpgsqlDbType.Uuid,
+            commandId.HasValue ? commandId.Value.Value : DBNull.Value);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static NpgsqlDataSource CreateSingleConnectionDataSource()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("NEXIS_TEST_POSTGRES_CONNECTION")
+            ?? throw new InvalidOperationException("The PostgreSQL connection string is unavailable.");
+        var builder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            MaxPoolSize = 1,
+            MinPoolSize = 0,
+            ApplicationName = $"nexis-c5-single-{Guid.NewGuid():N}"
+        };
+        return NpgsqlDataSource.Create(builder.ConnectionString);
     }
 
     private static async Task RaiseSqlStateAsync(
@@ -555,6 +676,26 @@ public sealed class ClaudeC5PostgresOperationalProducerTests
     {
         public ValueTask ReportAsync(OperationalSignal signal, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("The operational sink is unavailable.");
+    }
+
+    private sealed class CancellationBoundDurableSink(NpgsqlDataSource dataSource) : IOperationalSignalSink
+    {
+        private readonly PostgresOperationalSignalSink _inner = new(dataSource);
+
+        public async ValueTask ReportAsync(
+            OperationalSignal signal,
+            CancellationToken cancellationToken = default)
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromMilliseconds(500));
+            await _inner.ReportAsync(signal, timeout.Token);
+        }
+    }
+
+    private sealed class NeverCompletingOperationalSignalSink : IOperationalSignalSink
+    {
+        public ValueTask ReportAsync(OperationalSignal signal, CancellationToken cancellationToken = default) =>
+            new(Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken));
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider

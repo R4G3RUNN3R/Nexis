@@ -19,8 +19,8 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
     private static readonly CommandReasonCode PersistenceFailure = new("execution.persistence.failed");
 
     private static readonly OperationalComponentKey OperationalComponent = new("postgres.command-commit");
-    private static readonly OperationalReasonCode UnexpectedRollbackReason =
-        new("concurrency.unexpected_transaction_rollback");
+    private static readonly OperationalReasonCode UnexpectedConcurrencyReason =
+        new("concurrency.unexpected_failure");
 
     private readonly NpgsqlDataSource _dataSource;
     private readonly IReadOnlyDictionary<OwnerKey, IPostgresOwnerTransitionApplier> _appliers;
@@ -75,6 +75,31 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
                     _jsonOptions)))
             .ToArray();
 
+        try
+        {
+            return await CommitAuthoritativelyAsync(plan, serializedEvents, cancellationToken).ConfigureAwait(false);
+        }
+        catch (PostgresException exception) when (
+            PostgresTransientCommandFailureClassifier.IsRetryableSqlState(exception.SqlState))
+        {
+            throw;
+        }
+        catch (PostgresException exception)
+        {
+            if (IsUnexpectedConcurrencySqlState(exception.SqlState))
+            {
+                await ReportUnexpectedConcurrencyBestEffortAsync(plan, exception.SqlState).ConfigureAwait(false);
+            }
+
+            return CommandCommitResult.TechnicalFailure(PersistenceFailure);
+        }
+    }
+
+    private async ValueTask<CommandCommitResult> CommitAuthoritativelyAsync(
+        CommandCommitPlan plan,
+        IReadOnlyList<SerializedEvent> serializedEvents,
+        CancellationToken cancellationToken)
+    {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
 
@@ -102,21 +127,12 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
 
             foreach (var resource in resolvedPlan.Resources)
             {
-                await _resourceLockAcquirer.AcquireAsync(
-                    connection,
-                    transaction,
-                    resource,
-                    cancellationToken).ConfigureAwait(false);
+                await _resourceLockAcquirer.AcquireAsync(connection, transaction, resource, cancellationToken).ConfigureAwait(false);
             }
 
             foreach (var item in resolvedPlan.Transitions)
             {
-                var applyResult = await item.Applier.ApplyAsync(
-                    connection,
-                    transaction,
-                    item.Transition,
-                    cancellationToken).ConfigureAwait(false);
-
+                var applyResult = await item.Applier.ApplyAsync(connection, transaction, item.Transition, cancellationToken).ConfigureAwait(false);
                 if (applyResult.Disposition == PostgresOwnerTransitionDisposition.ConcurrencyConflict)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
@@ -127,22 +143,12 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
 
             foreach (var serializedEvent in serializedEvents)
             {
-                await InsertEventAndOutboxAsync(
-                    connection,
-                    transaction,
-                    plan,
-                    serializedEvent,
-                    cancellationToken).ConfigureAwait(false);
+                await InsertEventAndOutboxAsync(connection, transaction, plan, serializedEvent, cancellationToken).ConfigureAwait(false);
             }
 
             foreach (var auditEntry in plan.AuditEntries)
             {
-                await PostgresAuditWriter.InsertAsync(
-                    connection,
-                    transaction,
-                    auditEntry,
-                    plan.Trace.Identity.CommandId,
-                    cancellationToken).ConfigureAwait(false);
+                await PostgresAuditWriter.InsertAsync(connection, transaction, auditEntry, plan.Trace.Identity.CommandId, cancellationToken).ConfigureAwait(false);
             }
 
             if (await CompleteReceiptAsync(connection, transaction, plan, cancellationToken).ConfigureAwait(false) != 1)
@@ -154,42 +160,21 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return CommandCommitResult.Committed();
         }
-        catch (PostgresException exception) when (
-            PostgresTransientCommandFailureClassifier.IsRetryableSqlState(exception.SqlState))
+        catch
         {
             await SafeRollbackAsync(transaction, cancellationToken).ConfigureAwait(false);
             throw;
         }
-        catch (PostgresException exception)
-        {
-            // Expected optimistic conflicts never arrive here: a stale owner revision returns
-            // ConcurrencyConflict above without throwing, and both retryable transaction-rollback
-            // states are handled by the filtered catch that rethrows for bounded retry. What remains
-            // in SQLSTATE class 40 is a transaction-rollback failure the classifier deliberately does
-            // not retry, which is exactly the unexpected concurrency condition. Classification happens
-            // first, and the TechnicalFailure result below is unchanged by whether the signal is
-            // delivered.
-            await SafeRollbackAsync(transaction, cancellationToken).ConfigureAwait(false);
-            if (IsUnexpectedConcurrencySqlState(exception.SqlState))
-            {
-                await ReportUnexpectedConcurrencyBestEffortAsync(plan, exception.SqlState).ConfigureAwait(false);
-            }
-
-            return CommandCommitResult.TechnicalFailure(PersistenceFailure);
-        }
     }
 
     /// <summary>
-    /// PostgreSQL SQLSTATE class 40 is "transaction rollback". Serialization failure and deadlock are
-    /// the two states the transient classifier already owns and retries, so anything else in that
-    /// class is a concurrency failure nobody expected. Classes outside 40 are ordinary persistence
-    /// failures and are deliberately not reported here, so a constraint or syntax error cannot
-    /// masquerade as a concurrency incident.
+    /// Only SQLSTATEs whose PostgreSQL meaning is unambiguously concurrency-specific belong here.
+    /// Serialization failure and deadlock are handled by bounded retry; lock-not-available is the
+    /// remaining explicit concurrency failure. Generic transaction rollback, integrity rollback and
+    /// statement-completion-unknown are not relabeled as concurrency.
     /// </summary>
     public static bool IsUnexpectedConcurrencySqlState(string? sqlState) =>
-        sqlState is { Length: 5 } &&
-        sqlState.StartsWith("40", StringComparison.Ordinal) &&
-        !PostgresTransientCommandFailureClassifier.IsRetryableSqlState(sqlState);
+        string.Equals(sqlState, "55P03", StringComparison.Ordinal);
 
     /// <summary>
     /// Diagnostics cannot roll a committed transaction back, cannot un-roll-back an aborted one, and
@@ -199,28 +184,16 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
         CommandCommitPlan plan,
         string? sqlState)
     {
-        if (_operationalSignalSink is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await _operationalSignalSink.ReportAsync(
-                new OperationalSignal(
-                    OperationalConditionKind.UnexpectedConcurrencyFailure,
-                    OperationalSeverity.Error,
-                    OperationalComponent,
-                    ReasonFor(sqlState),
-                    _timeProvider.GetUtcNow(),
-                    plan.Trace.Identity.CommandId,
-                    plan.Trace.CorrelationId),
-                CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // Observability failure must never change a persistence outcome.
-        }
+        await PostgresOperationalSignalReporter.ReportBestEffortAsync(
+            _operationalSignalSink,
+            new OperationalSignal(
+                OperationalConditionKind.UnexpectedConcurrencyFailure,
+                OperationalSeverity.Error,
+                OperationalComponent,
+                ReasonFor(sqlState),
+                _timeProvider.GetUtcNow(),
+                plan.Trace.Identity.CommandId,
+                plan.Trace.CorrelationId)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -230,8 +203,8 @@ public sealed class PostgresAtomicCommandCommitter : IAtomicCommandCommitter
     /// </summary>
     private static OperationalReasonCode ReasonFor(string? sqlState) =>
         sqlState is { Length: 5 } && sqlState.All(char.IsAsciiLetterOrDigit)
-            ? new OperationalReasonCode($"{UnexpectedRollbackReason.Value}.{sqlState.ToLowerInvariant()}")
-            : UnexpectedRollbackReason;
+            ? new OperationalReasonCode($"{UnexpectedConcurrencyReason.Value}.{sqlState.ToLowerInvariant()}")
+            : UnexpectedConcurrencyReason;
 
     private ResolvedCommitPlan? ResolveCommitResources(
         IReadOnlyList<IOwnerTransition> transitions)
