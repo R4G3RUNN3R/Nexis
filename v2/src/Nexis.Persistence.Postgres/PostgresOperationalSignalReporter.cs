@@ -20,7 +20,7 @@ internal static class PostgresOperationalSignalReporter
             return;
         }
 
-        using var timeout = new CancellationTokenSource(ReportingTimeout);
+        var timeout = new CancellationTokenSource(ReportingTimeout);
         Task? report = null;
         try
         {
@@ -39,6 +39,7 @@ internal static class PostgresOperationalSignalReporter
         {
             if (report is null)
             {
+                timeout.Dispose();
                 ReportingSlot.Release();
             }
             else
@@ -48,8 +49,15 @@ internal static class PostgresOperationalSignalReporter
                 _ = report.ContinueWith(
                     completed =>
                     {
-                        _ = completed.Exception;
-                        ReportingSlot.Release();
+                        try
+                        {
+                            _ = completed.Exception;
+                        }
+                        finally
+                        {
+                            timeout.Dispose();
+                            ReportingSlot.Release();
+                        }
                     },
                     CancellationToken.None,
                     TaskContinuationOptions.ExecuteSynchronously,
