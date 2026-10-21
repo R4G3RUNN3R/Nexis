@@ -42,6 +42,23 @@ public sealed class PostgresOperationalSignalReporterTests
         }
     }
 
+    [TestMethod]
+    public async Task SynchronouslyBlockingSink_DoesNotBlockAuthoritativeCaller()
+    {
+        var sink = new SynchronouslyBlockingSink();
+        try
+        {
+            var caller = InvokeAsync(sink);
+            await sink.WaitUntilEnteredAsync().WaitAsync(TimeSpan.FromSeconds(2));
+            await caller.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.AreEqual(1, sink.Calls);
+        }
+        finally
+        {
+            sink.Release();
+        }
+    }
+
     private static async Task InvokeAsync(IOperationalSignalSink sink)
     {
         var reporter = typeof(PostgresExecutionSchema).Assembly.GetType(
@@ -52,6 +69,23 @@ public sealed class PostgresOperationalSignalReporterTests
         var signal = new OperationalSignal(OperationalConditionKind.ProjectionFailure, OperationalSeverity.Error, new OperationalComponentKey("reporter-test"), new OperationalReasonCode("reporter.test"), DateTimeOffset.UtcNow);
         var task = (ValueTask)method.Invoke(null, new object?[] { sink, signal })!;
         await task.AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    private sealed class SynchronouslyBlockingSink : IOperationalSignalSink
+    {
+        private readonly ManualResetEventSlim _gate = new(false);
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _calls;
+        public int Calls => Volatile.Read(ref _calls);
+        public ValueTask ReportAsync(OperationalSignal signal, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _calls);
+            _entered.TrySetResult();
+            _gate.Wait();
+            return ValueTask.CompletedTask;
+        }
+        public Task WaitUntilEnteredAsync() => _entered.Task;
+        public void Release() => _gate.Set();
     }
 
     private sealed class CountingSink : IOperationalSignalSink
